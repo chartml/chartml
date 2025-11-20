@@ -5,6 +5,7 @@
   "description": "ChartML - A declarative markup language for creating beautiful, interactive data visualizations",
   "scripts": {
     "build": "pnpm --filter './packages/*' run build",
+    "build:packages": "cd packages/core && npm run build && cd ../chart-pie && npm run build && cd ../chart-scatter && npm run build && cd ../chart-metric && npm run build && cd ../react && npm run build && cd ../markdown-common && npm run build",
     "test": "pnpm --filter './packages/*' run test",
     "docs:dev": "pnpm --filter docs run docs:dev",
     "docs:build": "pnpm --filter docs run docs:build",
