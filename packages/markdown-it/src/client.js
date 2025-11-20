@@ -4,7 +4,7 @@
  */
 
 import { ChartML } from '@chartml/core';
-import { createErrorElement, getColSpanClass } from '../../markdown-common/src/index.js';
+import { createErrorElement, getColSpanClass } from '@chartml/markdown-common';
 import yaml from 'js-yaml';
 
 /**
