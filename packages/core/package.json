@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "description": "A declarative markup language for creating beautiful, interactive data visualizations",
   "type": "module",
-  "main": "src/index.js",
-  "module": "src/index.js",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
   "exports": {
     ".": {
-      "import": "./src/index.js"
+      "import": "./dist/index.js"
     },
-    "./style.css": "./src/chartml.css"
+    "./style.css": "./dist/style.css"
   },
   "files": [
     "dist",

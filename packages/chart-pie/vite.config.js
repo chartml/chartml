@@ -10,10 +10,11 @@ export default defineConfig({
       formats: ['es']
     },
     rollupOptions: {
-      external: ['d3'],  // Only externalize d3, bundle @chartml/core
+      external: ['d3', '@chartml/core'],
       output: {
         globals: {
-          d3: 'd3'
+          d3: 'd3',
+          '@chartml/core': 'ChartML'
         }
       }
     },

@@ -10,7 +10,7 @@ export default defineConfig({
       formats: ['es']
     },
     rollupOptions: {
-      external: ['react', 'react-dom', '@chartml/core'],
+      external: ['react', 'react-dom', '@chartml/core', '@chartml/chart-pie', '@chartml/chart-scatter', '@chartml/chart-metric'],
       output: {
         globals: {
           react: 'React',
