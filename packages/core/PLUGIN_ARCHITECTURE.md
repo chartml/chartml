@@ -438,26 +438,6 @@ import ganttRenderer from '@acme/chartml-chart-gantt';
 chartml.registerChartRenderer('gantt', ganttRenderer);
 ```
 
-## Migration Strategy
-
-### Phase 1: Current (Keep D3 in Core)
-- ✅ D3 renderers remain in `@chartml/core`
-- ✅ Establish plugin architecture
-- ✅ Create data source and middleware plugins
-- ✅ Export chart renderers for backward compatibility
-
-### Phase 2: Extract Renderers (Gradual)
-- Extract renderers to `@chartml/chart-*` packages
-- Core re-exports them with deprecation warnings
-- Update documentation
-- Give users 6-12 months to migrate
-
-### Phase 3: Pure Plugin Architecture
-- Remove chart renderers from core
-- Core is pure orchestration (~10kb)
-- Users explicitly install renderer packages
-- Benefits: tree-shaking, smaller bundles, faster builds
-
 ## Plugin Discovery
 
 **NPM Search**:
@@ -514,13 +494,6 @@ const chartml = new ChartML({ autoRegister: true });
 // Scans node_modules for @chartml/* packages and registers them
 ```
 
-### Plugin Marketplace (Future)
-- Browse plugins at chartml.org
-- User ratings and reviews
-- Download statistics
-- Security audits
-- Featured plugins
-
 ### Plugin Templates (Future)
 ```bash
 npm create @chartml/plugin my-chart-plugin
@@ -536,4 +509,3 @@ The plugin architecture makes ChartML:
 - **Community-Driven**: Anyone can contribute plugins
 - **Future-Proof**: Easy to evolve without breaking changes
 
-This architecture positions ChartML for long-term success as an open source project.
