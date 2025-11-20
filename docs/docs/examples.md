@@ -3,9 +3,7 @@
 Comprehensive examples demonstrating all ChartML v1.0 features including reusable sources, interactive parameters, chart types, and data aggregations. All examples in this file are validated against the JSON schema.
 
 **Related Documents:**
-- **Specification**: [`SPECIFICATION.md`](./SPECIFICATION.md) - Complete ChartML v1.0 language reference
-- **JSON Schema**: [`chartml_schema.json`](./chartml_schema.json) - Validation rules
-- **Overview**: [`README.md`](./README.md) - Directory index and guidelines
+- **Specification**: [ChartML Specification](/spec/) - Complete ChartML v1.0 language reference
 
 ---
 
