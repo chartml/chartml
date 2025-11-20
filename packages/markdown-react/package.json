@@ -1,6 +1,6 @@
 {
   "name": "@chartml/markdown-react",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "React-markdown plugin for rendering ChartML code blocks",
   "type": "module",
   "main": "./src/index.js",
