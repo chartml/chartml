@@ -26,11 +26,11 @@
     "markdown-it": "^14.0.0"
   },
   "dependencies": {
-    "@chartml/core": "file:../core",
-    "@chartml/markdown-common": "file:../markdown-common",
-    "@chartml/chart-pie": "file:../chart-pie",
-    "@chartml/chart-scatter": "file:../chart-scatter",
-    "@chartml/chart-metric": "file:../chart-metric"
+    "@chartml/core": "^1.0.0",
+    "@chartml/markdown-common": "^1.0.0",
+    "@chartml/chart-pie": "^1.0.0",
+    "@chartml/chart-scatter": "^1.0.0",
+    "@chartml/chart-metric": "^1.0.0"
   },
   "repository": {
     "type": "git",

@@ -16,11 +16,11 @@
   "author": "ChartML Team",
   "license": "MIT",
   "dependencies": {
-    "@chartml/chart-metric": "file:../chart-metric",
-    "@chartml/chart-pie": "file:../chart-pie",
-    "@chartml/chart-scatter": "file:../chart-scatter",
-    "@chartml/core": "file:../core",
-    "@chartml/markdown-common": "file:../markdown-common",
+    "@chartml/chart-metric": "^1.0.0",
+    "@chartml/chart-pie": "^1.0.0",
+    "@chartml/chart-scatter": "^1.0.0",
+    "@chartml/core": "^1.0.0",
+    "@chartml/markdown-common": "^1.0.0",
     "js-yaml": "^4.1.0"
   },
   "peerDependencies": {

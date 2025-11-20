@@ -17,23 +17,11 @@ export default defineConfig({
     /\/examples\/index$/
   ],
 
-  // Vite configuration - resolve workspace packages
+  // Vite configuration
   vite: {
     server: {
       host: '0.0.0.0',  // Listen on all network interfaces
       port: 5175
-    },
-    resolve: {
-      alias: {
-        '@chartml/core': resolve(__dirname, '../../../packages/core/dist/index.js'),
-        '@chartml/markdown-common': resolve(__dirname, '../../../packages/markdown-common/dist/index.js'),
-        '@chartml/chart-pie': resolve(__dirname, '../../../packages/chart-pie/dist/index.js'),
-        '@chartml/chart-scatter': resolve(__dirname, '../../../packages/chart-scatter/dist/index.js'),
-        '@chartml/chart-metric': resolve(__dirname, '../../../packages/chart-metric/dist/index.js')
-      }
-    },
-    optimizeDeps: {
-      exclude: ['@chartml/core', '@chartml/markdown-it', '@chartml/markdown-common', '@chartml/chart-pie', '@chartml/chart-scatter', '@chartml/chart-metric']
     }
   },
 
