@@ -1,0 +1,35 @@
+/**
+ * Shared styles for ChartML markdown plugins
+ *
+ * Used by both @chartml/markdown-react and @chartml/markdown-it
+ * Apps can override by passing their own containerClassName
+ */
+
+/* Default container styling for charts */
+.chartml-chart-container {
+  padding: 1.5rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1rem;
+}
+
+/* Block wrapper for markdown-it plugin */
+.chartml-block {
+  margin: 1rem 0;
+}
+
+/* Error message styling - consistent across all plugins */
+.chartml-error {
+  padding: 1rem;
+  background: #fef2f2;
+  color: #991b1b;
+  border-left: 4px solid #dc2626;
+  border-radius: 4px;
+  margin: 1rem 0;
+}
+
+.chartml-error strong {
+  font-weight: 600;
+}

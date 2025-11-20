@@ -1,0 +1,29 @@
+{
+  "name": "@chartml/markdown-react",
+  "version": "1.0.0",
+  "description": "React-markdown plugin for rendering ChartML code blocks",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "keywords": [
+    "chartml",
+    "react-markdown",
+    "charts",
+    "visualization"
+  ],
+  "author": "ChartML Team",
+  "license": "MIT",
+  "dependencies": {
+    "@chartml/chart-metric": "file:../chart-metric",
+    "@chartml/chart-pie": "file:../chart-pie",
+    "@chartml/chart-scatter": "file:../chart-scatter",
+    "@chartml/core": "file:../core",
+    "@chartml/markdown-common": "file:../markdown-common",
+    "js-yaml": "^4.1.0"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1 || ^19.0.0"
+  }
+}

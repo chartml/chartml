@@ -1,0 +1,45 @@
+{
+  "name": "@chartml/markdown-common",
+  "version": "1.0.0",
+  "description": "Shared utilities and styles for ChartML markdown plugins",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./styles.css": "./src/styles.css"
+  },
+  "files": [
+    "dist",
+    "src/styles.css",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
+  },
+  "keywords": [
+    "chartml",
+    "markdown",
+    "shared",
+    "utilities"
+  ],
+  "author": "Jason Adams",
+  "license": "MIT",
+  "dependencies": {
+    "@chartml/core": "file:../core"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chartml/chartml.git",
+    "directory": "packages/markdown-common"
+  },
+  "homepage": "https://chartml.org"
+}

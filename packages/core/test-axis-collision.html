@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Axis Label Collision Test</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-top: 0;
+    }
+    #chart {
+      margin: 20px 0;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Axis Label Collision Test</h1>
+    <p>Testing that x-axis label doesn't collide with rotated category labels</p>
+    <div id="chart"></div>
+  </div>
+
+  <script type="module">
+    import { ChartML } from './dist/index.js';
+
+    const spec = `
+data:
+  - category: "Very Long Category Name A"
+    value: 45
+  - category: "Very Long Category Name B"
+    value: 67
+  - category: "Very Long Category Name C"
+    value: 89
+  - category: "Very Long Category Name D"
+    value: 56
+  - category: "Very Long Category Name E"
+    value: 78
+  - category: "Very Long Category Name F"
+    value: 91
+  - category: "Very Long Category Name G"
+    value: 43
+  - category: "Very Long Category Name H"
+    value: 65
+
+visualize:
+  type: bar
+  columns: category
+  rows: value
+  axes:
+    x:
+      label: "Product Categories (This should not overlap with category labels above)"
+    left:
+      label: "Sales Volume"
+  style:
+    width: 760
+    height: 400
+`;
+
+    const chartml = new ChartML({
+      defaultPalette: ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b']
+    });
+
+    chartml.render(spec, document.getElementById('chart'));
+  </script>
+</body>
+</html>

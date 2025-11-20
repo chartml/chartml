@@ -1,0 +1,49 @@
+{
+  "name": "@chartml/chart-metric",
+  "version": "1.0.0",
+  "description": "Metric card chart renderer plugin for ChartML",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
+  },
+  "keywords": [
+    "chartml",
+    "chart",
+    "metric",
+    "kpi",
+    "card",
+    "visualization",
+    "d3"
+  ],
+  "author": "Jason Adams",
+  "license": "MIT",
+  "dependencies": {
+    "@chartml/core": "^1.0.0"
+  },
+  "peerDependencies": {
+    "d3": "^7.9.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chartml/chartml.git",
+    "directory": "packages/chart-metric"
+  },
+  "homepage": "https://chartml.org"
+}

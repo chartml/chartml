@@ -1,0 +1,1013 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "oneOf": [
+    { "$ref": "#/definitions/Source" },
+    { "$ref": "#/definitions/Params" },
+    { "$ref": "#/definitions/StyleComponent" },
+    { "$ref": "#/definitions/Config" },
+    { "$ref": "#/definitions/Chart" },
+    { "$ref": "#/definitions/ComponentArray" }
+  ],
+  "definitions": {
+    "Source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Inline data source",
+          "required": ["type", "version", "name", "provider", "rows"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "source" },
+            "version": { "const": 1 },
+            "name": { "type": "string", "description": "Unique source identifier" },
+            "provider": { "const": "inline" },
+            "rows": { "type": "array", "description": "Inline data rows" }
+          }
+        },
+        {
+          "type": "object",
+          "description": "API source",
+          "required": ["type", "version", "name", "provider", "endpoint"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "source" },
+            "version": { "const": 1 },
+            "name": { "type": "string", "description": "Unique source identifier" },
+            "provider": { "const": "api" },
+            "endpoint": { "type": "string", "description": "API endpoint URL" },
+            "cache": {
+              "type": "object",
+              "properties": {
+                "ttl": { "type": "string", "description": "Time to live (e.g., '6h', '1d')" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Params": {
+      "type": "object",
+      "required": ["type", "version", "params"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "params",
+          "description": "Component type identifier"
+        },
+        "version": {
+          "type": "number",
+          "const": 1,
+          "description": "ChartML version"
+        },
+        "params": {
+          "type": "array",
+          "description": "Parameter definitions",
+          "items": {
+            "$ref": "#/definitions/Parameter"
+          }
+        }
+      }
+    },
+    "StyleComponent": {
+      "type": "object",
+      "required": ["type", "version", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "style",
+          "description": "Component type identifier"
+        },
+        "version": {
+          "type": "number",
+          "const": 1,
+          "description": "ChartML version"
+        },
+        "name": {
+          "type": "string",
+          "description": "Unique style identifier"
+        },
+        "colors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Color palette"
+        },
+        "grid": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "boolean",
+              "description": "Show vertical grid lines"
+            },
+            "y": {
+              "type": "boolean",
+              "description": "Show horizontal grid lines"
+            },
+            "color": {
+              "type": "string",
+              "description": "Grid line color"
+            },
+            "opacity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Grid line opacity (0-1)"
+            },
+            "dashArray": {
+              "type": "string",
+              "description": "Dash pattern for grid lines"
+            }
+          }
+        },
+        "height": {
+          "type": "number",
+          "description": "Default chart height in pixels"
+        },
+        "showDots": {
+          "type": "boolean",
+          "description": "Show dots on line charts"
+        },
+        "strokeWidth": {
+          "type": "number",
+          "description": "Line thickness"
+        },
+        "fonts": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "object",
+              "properties": {
+                "family": { "type": "string" },
+                "size": { "type": "number" },
+                "weight": { "type": "number" },
+                "color": { "type": "string" }
+              }
+            },
+            "axis": {
+              "type": "object",
+              "properties": {
+                "family": { "type": "string" },
+                "size": { "type": "number" },
+                "color": { "type": "string" }
+              }
+            },
+            "dataLabel": {
+              "type": "object",
+              "properties": {
+                "family": { "type": "string" },
+                "size": { "type": "number" },
+                "weight": { "type": "number" }
+              }
+            }
+          }
+        },
+        "legend": {
+          "type": "object",
+          "properties": {
+            "position": {
+              "type": "string",
+              "enum": ["top", "right", "bottom", "left", "none"],
+              "description": "Legend position"
+            },
+            "orientation": {
+              "type": "string",
+              "enum": ["horizontal", "vertical"],
+              "description": "Legend orientation"
+            }
+          }
+        }
+      }
+    },
+    "Config": {
+      "type": "object",
+      "required": ["type", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "config",
+          "description": "Component type identifier"
+        },
+        "version": {
+          "type": "number",
+          "const": 1,
+          "description": "ChartML version"
+        },
+        "style": {
+          "description": "Default style for all charts in this scope",
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Reference to a named style"
+            },
+            {
+              "type": "object",
+              "description": "Inline style definition",
+              "properties": {
+                "colors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "grid": {
+                  "type": "object",
+                  "properties": {
+                    "x": { "type": "boolean" },
+                    "y": { "type": "boolean" },
+                    "color": { "type": "string" },
+                    "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "dashArray": { "type": "string" }
+                  }
+                },
+                "height": { "type": "number" },
+                "showDots": { "type": "boolean" },
+                "strokeWidth": { "type": "number" },
+                "fonts": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "object",
+                      "properties": {
+                        "family": { "type": "string" },
+                        "size": { "type": "number" },
+                        "weight": { "type": "number" },
+                        "color": { "type": "string" }
+                      }
+                    },
+                    "axis": {
+                      "type": "object",
+                      "properties": {
+                        "family": { "type": "string" },
+                        "size": { "type": "number" },
+                        "color": { "type": "string" }
+                      }
+                    },
+                    "dataLabel": {
+                      "type": "object",
+                      "properties": {
+                        "family": { "type": "string" },
+                        "size": { "type": "number" },
+                        "weight": { "type": "number" }
+                      }
+                    }
+                  }
+                },
+                "legend": {
+                  "type": "object",
+                  "properties": {
+                    "position": {
+                      "type": "string",
+                      "enum": ["top", "right", "bottom", "left", "none"]
+                    },
+                    "orientation": {
+                      "type": "string",
+                      "enum": ["horizontal", "vertical"]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "Chart": {
+      "type": "object",
+      "required": ["type", "version", "data", "visualize"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "chart",
+          "description": "Component type identifier"
+        },
+        "version": {
+          "type": "number",
+          "const": 1,
+          "description": "ChartML version"
+        },
+        "title": {
+          "type": "string",
+          "description": "Chart title"
+        },
+        "params": {
+          "type": "array",
+          "description": "Chart-level parameters",
+          "items": {
+            "$ref": "#/definitions/Parameter"
+          }
+        },
+        "layout": {
+          "$ref": "#/definitions/Layout"
+        },
+        "style": {
+          "type": "string",
+          "description": "Reference to a named style component"
+        },
+        "data": {
+          "$ref": "#/definitions/Data"
+        },
+        "aggregate": {
+          "$ref": "#/definitions/Aggregate"
+        },
+        "visualize": {
+          "$ref": "#/definitions/Visualize"
+        }
+      }
+    },
+    "ComponentArray": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/Source" },
+          { "$ref": "#/definitions/Params" },
+          { "$ref": "#/definitions/StyleComponent" },
+          { "$ref": "#/definitions/Config" },
+          { "$ref": "#/definitions/Chart" }
+        ]
+      },
+      "description": "Array of ChartML components (any mix of Source, Params, Style, Config, or Chart)"
+    },
+    "Parameter": {
+      "type": "object",
+      "required": ["id", "type", "label", "default"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Parameter identifier"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["multiselect", "select", "daterange", "number", "text"],
+          "description": "Parameter type"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Available options (for select/multiselect)"
+        },
+        "default": {
+          "description": "Default value"
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "Placeholder text"
+        },
+        "layout": {
+          "$ref": "#/definitions/Layout"
+        }
+      }
+    },
+    "Layout": {
+      "type": "object",
+      "properties": {
+        "colSpan": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 12,
+          "description": "Grid column span (1-12)"
+        }
+      }
+    },
+    "Data": {
+      "description": "Data source for the chart - can be a string reference to a named Source or an inline Source definition",
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Reference to a named Source by name"
+        },
+        {
+          "type": "object",
+          "description": "Inline data rows",
+          "required": ["provider", "rows"],
+          "additionalProperties": false,
+          "properties": {
+            "provider": { "const": "inline" },
+            "rows": { "type": "array", "description": "Inline data rows" }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Inline API source",
+          "required": ["provider", "endpoint"],
+          "additionalProperties": false,
+          "properties": {
+            "provider": { "const": "api" },
+            "endpoint": { "type": "string", "description": "API endpoint URL" },
+            "cache": {
+              "type": "object",
+              "properties": {
+                "ttl": { "type": "string", "description": "Time to live (e.g., '6h', '1d')" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Aggregate": {
+      "type": "object",
+      "description": "Data aggregation specification",
+      "additionalProperties": false,
+      "properties": {
+        "dimensions": {
+          "type": "array",
+          "description": "Group by columns",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "column": {
+                    "type": "string",
+                    "description": "Column expression or name"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "Output field name"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["string", "number", "date"],
+                    "description": "Data type for casting"
+                  }
+                },
+                "required": ["column", "name"]
+              }
+            ]
+          }
+        },
+        "measures": {
+          "type": "array",
+          "description": "Aggregations and calculated fields",
+          "items": {
+            "type": "object",
+            "properties": {
+              "column": {
+                "type": "string",
+                "description": "Column to aggregate"
+              },
+              "aggregation": {
+                "type": "string",
+                "enum": [
+                  "sum", "count", "avg", "min", "max",
+                  "countDistinct", "median", "stddev", "variance",
+                  "percentile25", "percentile50", "percentile75",
+                  "percentile90", "percentile95", "percentile99"
+                ],
+                "description": "Aggregation function"
+              },
+              "expression": {
+                "type": "string",
+                "description": "SQL expression for calculated measure"
+              },
+              "name": {
+                "type": "string",
+                "description": "Output column name"
+              }
+            },
+            "required": ["name"]
+          }
+        },
+        "filters": {
+          "type": "object",
+          "description": "Filter conditions",
+          "properties": {
+            "combinator": {
+              "type": "string",
+              "enum": ["and", "or"],
+              "description": "Logical operator combining filter rules (default: 'and')"
+            },
+            "rules": {
+              "type": "array",
+              "description": "Array of filter rule objects",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "description": "Filter rule for null checks (no value required)",
+                    "properties": {
+                      "field": {
+                        "type": "string",
+                        "description": "Field name to filter on"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": ["isNull", "isNotNull"],
+                        "description": "Null check operator"
+                      }
+                    },
+                    "required": ["field", "operator"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "description": "Filter rule with value",
+                    "properties": {
+                      "field": {
+                        "type": "string",
+                        "description": "Field name to filter on"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": [
+                          "=", "!=", ">", ">=", "<", "<=",
+                          "in", "notIn", "contains", "startsWith", "endsWith",
+                          "between"
+                        ],
+                        "description": "Comparison operator"
+                      },
+                      "value": {
+                        "description": "Filter value (string, number, array)"
+                      }
+                    },
+                    "required": ["field", "operator", "value"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "sort": {
+          "type": "array",
+          "description": "Sort order",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "description": "Field name to sort by"
+              },
+              "direction": {
+                "type": "string",
+                "enum": ["asc", "desc"],
+                "description": "Sort direction"
+              }
+            },
+            "required": ["field", "direction"]
+          }
+        },
+        "limit": {
+          "type": "number",
+          "description": "Maximum rows to return"
+        }
+      }
+    },
+    "Visualize": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["bar", "line", "area", "pie", "doughnut", "scatter", "table", "metric"],
+          "description": "Chart type"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["grouped", "stacked", "normalized"],
+          "description": "Chart mode (for bar/area charts)"
+        },
+        "orientation": {
+          "type": "string",
+          "enum": ["vertical", "horizontal"],
+          "description": "Bar chart orientation"
+        },
+        "rows": {
+          "description": "Y-axis field(s)",
+          "oneOf": [
+            { "type": "string" },
+            { "$ref": "#/definitions/RowsObject" },
+            {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  { "type": "string" },
+                  { "$ref": "#/definitions/RowsObject" }
+                ]
+              }
+            }
+          ]
+        },
+        "columns": {
+          "description": "X-axis field(s) or table columns",
+          "oneOf": [
+            { "type": "string" },
+            { "$ref": "#/definitions/ColumnsObject" },
+            {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  { "type": "string" },
+                  { "$ref": "#/definitions/ColumnsObject" }
+                ]
+              }
+            }
+          ]
+        },
+        "marks": {
+          "$ref": "#/definitions/Marks"
+        },
+        "value": {
+          "type": "string",
+          "description": "Value field (for metric charts)"
+        },
+        "label": {
+          "type": "string",
+          "description": "Label text (for metric charts)"
+        },
+        "format": {
+          "type": "string",
+          "description": "Number format (for metric charts)"
+        },
+        "compareWith": {
+          "type": "string",
+          "description": "Comparison field (for metric charts)"
+        },
+        "invertTrend": {
+          "type": "boolean",
+          "description": "Invert trend colors (for metric charts)"
+        },
+        "axes": {
+          "$ref": "#/definitions/Axes"
+        },
+        "annotations": {
+          "type": "array",
+          "description": "Reference lines, bands, and markers",
+          "items": {
+            "$ref": "#/definitions/Annotation"
+          }
+        },
+        "style": {
+          "$ref": "#/definitions/Style"
+        }
+      }
+    },
+    "RowsObject": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "Field name from aggregated data"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label for this field"
+        },
+        "mark": {
+          "type": "string",
+          "enum": ["bar", "line", "area", "dot"],
+          "description": "Visual mark type override"
+        },
+        "color": {
+          "type": "string",
+          "description": "Color override (hex or CSS color)"
+        },
+        "axis": {
+          "type": "string",
+          "enum": ["left", "right"],
+          "description": "Which Y-axis to use (for dual axis charts)"
+        },
+        "format": {
+          "type": "string",
+          "description": "Number/date format string"
+        },
+        "dataLabels": {
+          "$ref": "#/definitions/DataLabels"
+        }
+      },
+      "required": ["field"]
+    },
+    "ColumnsObject": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "Field name from aggregated data"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label for this field"
+        },
+        "width": {
+          "oneOf": [
+            { "type": "number" },
+            { "type": "string", "const": "auto" }
+          ],
+          "description": "Column width in pixels or 'auto'"
+        },
+        "format": {
+          "type": "string",
+          "description": "Number/date format string"
+        },
+        "align": {
+          "type": "string",
+          "enum": ["left", "center", "right"],
+          "description": "Text alignment for table columns"
+        }
+      },
+      "required": ["field"]
+    },
+    "DataLabels": {
+      "type": "object",
+      "properties": {
+        "show": {
+          "type": "boolean",
+          "description": "Whether to show data labels"
+        },
+        "position": {
+          "type": "string",
+          "enum": ["top", "center", "bottom"],
+          "description": "Label position relative to mark"
+        },
+        "format": {
+          "type": "string",
+          "description": "Number format for labels"
+        },
+        "color": {
+          "type": "string",
+          "description": "Label text color"
+        },
+        "fontSize": {
+          "type": "number",
+          "description": "Label font size in pixels"
+        }
+      }
+    },
+    "Marks": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "description": "Color grouping field",
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "object",
+              "properties": {
+                "field": { "type": "string" },
+                "label": { "type": "string" }
+              },
+              "required": ["field"]
+            }
+          ]
+        },
+        "size": {
+          "description": "Size encoding field",
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "object",
+              "properties": {
+                "field": { "type": "string" },
+                "label": { "type": "string" }
+              },
+              "required": ["field"]
+            }
+          ]
+        },
+        "shape": {
+          "description": "Shape encoding field",
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "object",
+              "properties": {
+                "field": { "type": "string" },
+                "label": { "type": "string" }
+              },
+              "required": ["field"]
+            }
+          ]
+        },
+        "text": {
+          "description": "Text encoding field",
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Field name containing text values"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "description": "Field name containing text values"
+                },
+                "format": {
+                  "type": "string",
+                  "description": "Number/date format string"
+                }
+              },
+              "required": ["field"]
+            }
+          ]
+        }
+      }
+    },
+    "Axes": {
+      "type": "object",
+      "properties": {
+        "left": {
+          "$ref": "#/definitions/Axis"
+        },
+        "right": {
+          "$ref": "#/definitions/Axis"
+        },
+        "x": {
+          "$ref": "#/definitions/Axis"
+        }
+      }
+    },
+    "Axis": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "Axis label text"
+        },
+        "format": {
+          "type": "string",
+          "description": "Number/date format string"
+        },
+        "min": {
+          "type": "number",
+          "description": "Minimum axis value"
+        },
+        "max": {
+          "type": "number",
+          "description": "Maximum axis value"
+        }
+      }
+    },
+    "Annotation": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["line", "band"],
+          "description": "Annotation type"
+        },
+        "axis": {
+          "type": "string",
+          "enum": ["left", "right", "x"],
+          "description": "Which axis to attach to"
+        },
+        "value": {
+          "description": "Value for line (number or string for x-axis)"
+        },
+        "from": {
+          "description": "Start value for band"
+        },
+        "to": {
+          "description": "End value for band"
+        },
+        "orientation": {
+          "type": "string",
+          "enum": ["horizontal", "vertical"],
+          "description": "Line/band orientation"
+        },
+        "label": {
+          "type": "string",
+          "description": "Annotation label"
+        },
+        "labelPosition": {
+          "type": "string",
+          "enum": ["start", "center", "end"],
+          "description": "Label position"
+        },
+        "color": {
+          "type": "string",
+          "description": "Color (hex or CSS color)"
+        },
+        "strokeWidth": {
+          "type": "number",
+          "description": "Line width"
+        },
+        "strokeColor": {
+          "type": "string",
+          "description": "Stroke color (for bands)"
+        },
+        "dashArray": {
+          "type": "string",
+          "description": "Dash pattern (e.g., '5,5')"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Opacity (0-1)"
+        }
+      }
+    },
+    "Style": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "type": "number",
+          "description": "Chart height in pixels"
+        },
+        "colors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Color palette"
+        },
+        "grid": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "boolean",
+              "description": "Show vertical grid lines"
+            },
+            "y": {
+              "type": "boolean",
+              "description": "Show horizontal grid lines"
+            },
+            "color": {
+              "type": "string",
+              "description": "Grid line color"
+            },
+            "opacity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Grid line opacity (0-1)"
+            },
+            "dashArray": {
+              "type": "string",
+              "description": "Dash pattern for grid lines"
+            }
+          }
+        },
+        "showDots": {
+          "type": "boolean",
+          "description": "Show dots on line charts"
+        },
+        "strokeWidth": {
+          "type": "number",
+          "description": "Line thickness"
+        },
+        "fonts": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "object",
+              "properties": {
+                "family": { "type": "string" },
+                "size": { "type": "number" },
+                "weight": { "type": "number" },
+                "color": { "type": "string" }
+              }
+            },
+            "axis": {
+              "type": "object",
+              "properties": {
+                "family": { "type": "string" },
+                "size": { "type": "number" },
+                "color": { "type": "string" }
+              }
+            },
+            "dataLabel": {
+              "type": "object",
+              "properties": {
+                "family": { "type": "string" },
+                "size": { "type": "number" },
+                "weight": { "type": "number" }
+              }
+            }
+          }
+        },
+        "legend": {
+          "type": "object",
+          "properties": {
+            "position": {
+              "type": "string",
+              "enum": ["top", "right", "bottom", "left", "none"],
+              "description": "Legend position"
+            },
+            "orientation": {
+              "type": "string",
+              "enum": ["horizontal", "vertical"],
+              "description": "Legend orientation"
+            }
+          }
+        }
+      }
+    }
+  }
+}

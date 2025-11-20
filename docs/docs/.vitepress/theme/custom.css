@@ -1,0 +1,174 @@
+/* ============================================
+   ChartML Documentation Site - Custom Styles
+   ============================================ */
+
+/* Color System */
+:root {
+  /* Status Colors - Light Mode */
+  --error-bg: #fef2f2;
+  --error-text: #991b1b;
+  --error-border: #dc2626;
+  --error-dark: #7f1d1d;
+
+  --success-bg: #f0fdf4;
+  --success-text: #166534;
+  --success-border: #22c55e;
+
+  --warning-bg: #fffbeb;
+  --warning-text: #92400e;
+  --warning-border: #fbbf24;
+
+  --info-bg: #eff6ff;
+  --info-text: #1e40af;
+  --info-border: #3b82f6;
+
+  /* Spacing Scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Component Spacing */
+  --margin-block: 1.5rem;
+  --margin-chart: 2rem;
+  --margin-section: 2.5rem;
+  --padding-container: 1rem;
+  --padding-card: 1.5rem;
+  --padding-button: 0.5rem 1.25rem;
+
+  /* Typography Scale */
+  --font-size-h1: 2rem;
+  --font-size-h2: 1.5rem;
+  --font-size-h3: 1.25rem;
+  --font-size-h4: 1.125rem;
+  --font-size-base: 1rem;
+  --font-size-sm: 0.875rem;
+  --font-size-xs: 0.75rem;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.7;
+
+  /* Border & Radius */
+  --border-width-thin: 1px;
+  --border-width-medium: 2px;
+  --border-width-thick: 4px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}
+
+/* Dark Mode Overrides */
+.dark {
+  --error-bg: #450a0a;
+  --error-text: #fca5a5;
+  --error-border: #dc2626;
+  --error-dark: #fecaca;
+
+  --success-bg: #14532d;
+  --success-text: #86efac;
+  --success-border: #22c55e;
+
+  --warning-bg: #451a03;
+  --warning-text: #fde047;
+  --warning-border: #fbbf24;
+
+  --info-bg: #1e3a8a;
+  --info-text: #93c5fd;
+  --info-border: #3b82f6;
+}
+
+/* ============================================
+   Component Styles
+   ============================================ */
+
+/* ChartML Block - Used by markdown-it plugin */
+/* Use default ChartML styles - no custom container styling */
+.vp-doc .chartml-block {
+  margin: var(--margin-chart) 0;
+}
+
+/* Error Messages - Standardized across all components */
+.error-message {
+  padding: var(--padding-container);
+  background: var(--error-bg);
+  color: var(--error-text);
+  border-left: var(--border-width-thick) solid var(--error-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  margin: var(--margin-block) 0;
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+}
+
+.error-message strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--error-dark);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Chart Preview Component */
+.chart-preview {
+  margin: var(--margin-block) 0;
+  border: var(--border-width-thin) solid var(--vp-c-divider);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--vp-c-bg);
+}
+
+.chart-container {
+  position: relative;
+  padding: var(--padding-container);
+  min-height: 400px;
+}
+
+/* Button Styles */
+.btn {
+  padding: var(--padding-button);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-block;
+}
+
+.btn-primary {
+  background: var(--vp-c-brand-1);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--vp-c-brand-2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.btn-secondary {
+  background: var(--vp-c-bg-mute);
+  color: var(--vp-c-text-1);
+  border: var(--border-width-thin) solid var(--vp-c-divider);
+}
+
+.btn-secondary:hover {
+  background: var(--vp-c-bg-soft);
+  border-color: var(--vp-c-brand-1);
+}
+
+.btn.copied {
+  background: var(--success-border);
+  color: white;
+}

@@ -1,0 +1,17 @@
+# Source files
+src/
+
+# Build artifacts
+node_modules/
+*.log
+
+# Development files
+.git/
+.gitignore
+vite.config.js
+package-lock.json
+
+# Tests
+test/
+*.test.js
+*.spec.js

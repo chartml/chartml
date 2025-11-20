@@ -1,0 +1,25 @@
+/**
+ * Styles for ChartML markdown-react plugin
+ * Imports shared styles from @chartml/markdown-common
+ */
+
+@import '@chartml/markdown-common/styles.css';
+
+/* Hide pre/code styling for chartml blocks */
+pre:has(> code.language-chartml) {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+pre > code.language-chartml {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  display: block;
+}

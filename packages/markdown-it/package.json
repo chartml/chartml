@@ -1,0 +1,41 @@
+{
+  "name": "@chartml/markdown-it",
+  "version": "1.0.0",
+  "description": "markdown-it plugin for rendering ChartML code blocks",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "chartml",
+    "markdown-it",
+    "markdown",
+    "charts",
+    "visualization"
+  ],
+  "author": "Jason Adams",
+  "license": "MIT",
+  "peerDependencies": {
+    "markdown-it": "^14.0.0"
+  },
+  "dependencies": {
+    "@chartml/core": "file:../core",
+    "@chartml/markdown-common": "file:../markdown-common",
+    "@chartml/chart-pie": "file:../chart-pie",
+    "@chartml/chart-scatter": "file:../chart-scatter",
+    "@chartml/chart-metric": "file:../chart-metric"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chartml/chartml.git",
+    "directory": "packages/markdown-it"
+  },
+  "homepage": "https://chartml.org"
+}
