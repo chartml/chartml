@@ -100,7 +100,7 @@ cache:                      # Optional - cache configuration
 ### Examples
 
 **Inline Source:**
-```yaml
+```chartml
 type: source
 version: 1
 name: sample_data
@@ -532,7 +532,7 @@ visualize:
 ```
 
 5. **Dual-Axis Chart**
-```yaml
+```chartml
 visualize:
   type: bar
   columns: month
@@ -1100,7 +1100,7 @@ layout:
 
 Dashboard-level parameters (affect all charts):
 
-```yaml
+```chartml
 type: params
 version: 1
 params:
