@@ -4,7 +4,7 @@ import SideBySideExample from '../components/SideBySideExample.vue';
 import MarkdownEditor from '../components/MarkdownEditor.vue';
 import FeatureCard from '../components/FeatureCard.vue';
 import { renderAllCharts } from '@chartml/markdown-it/client';
-import '../../../../packages/core/dist/style.css';
+import '@chartml/core/style.css';
 import './custom.css';
 
 // Import ChartML plugins for auto-registration
