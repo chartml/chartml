@@ -22,7 +22,7 @@
 import React, { useRef, useEffect } from 'react';
 import yaml from 'js-yaml';
 import { DefaultParamsRenderer } from './DefaultParamsRenderer.jsx';
-import { getExpectedDimensions, getColSpanClass } from '../../markdown-common/src/index.js';
+import { getExpectedDimensions, getColSpanClass } from '@chartml/markdown-common';
 
 /**
  * Create ChartML components for react-markdown
