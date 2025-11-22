@@ -31,6 +31,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
+import '@chartml/markdown-it/styles.css';
 
 const props = defineProps({
   source: {
@@ -104,12 +105,13 @@ async function renderPreview() {
     await import('@chartml/chart-scatter');
     await import('@chartml/chart-metric');
 
-    // Create markdown-it instance with ChartML plugin
+    // Create markdown-it instance and add ChartML plugin
     const md = markdownIt({
       html: true,
       linkify: true,
       typographer: true
     });
+
     md.use(chartMLPlugin);
 
     // Render markdown to HTML

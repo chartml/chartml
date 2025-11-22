@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "description": "ChartML - A declarative markup language for creating beautiful, interactive data visualizations",
+  "workspaces": [
+    "packages/*",
+    "docs"
+  ],
   "scripts": {
-    "build": "pnpm --filter './packages/*' run build",
+    "build": "npm run build --workspaces --if-present",
     "build:packages": "cd packages/core && npm run build && cd ../chart-pie && npm run build && cd ../chart-scatter && npm run build && cd ../chart-metric && npm run build && cd ../react && npm run build && cd ../markdown-common && npm run build",
-    "test": "pnpm --filter './packages/*' run test",
-    "docs:dev": "pnpm --filter docs run docs:dev",
-    "docs:build": "pnpm --filter docs run docs:build",
-    "clean": "pnpm --filter './packages/*' exec rm -rf dist node_modules && rm -rf docs/node_modules docs/.vitepress/dist docs/.vitepress/cache"
+    "test": "npm test --workspaces --if-present",
+    "docs:dev": "npm run docs:dev --workspace=docs",
+    "docs:build": "npm run docs:build --workspace=docs",
+    "clean": "rm -rf packages/*/dist packages/*/node_modules docs/node_modules docs/.vitepress/dist docs/.vitepress/cache"
   },
   "keywords": [
     "chartml",
@@ -28,7 +32,7 @@
   "homepage": "https://chartml.org",
   "engines": {
     "node": ">=18.0.0",
-    "pnpm": ">=8.0.0"
+    "npm": ">=9.0.0"
   },
   "devDependencies": {
     "documentation": "^14.0.3",

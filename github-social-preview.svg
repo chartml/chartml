@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a1a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2d2d2d;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="640" fill="url(#bgGradient)"/>
+
+  <!-- Decorative pattern -->
+  <g opacity="0.05">
+    <rect x="0" y="0" width="1280" height="640" fill="none" stroke="#3eaf7c" stroke-width="1" stroke-dasharray="10,10"/>
+    <line x1="0" y1="160" x2="1280" y2="160" stroke="#3eaf7c" stroke-width="1"/>
+    <line x1="0" y1="320" x2="1280" y2="320" stroke="#3eaf7c" stroke-width="1"/>
+    <line x1="0" y1="480" x2="1280" y2="480" stroke="#3eaf7c" stroke-width="1"/>
+    <line x1="320" y1="0" x2="320" y2="640" stroke="#3eaf7c" stroke-width="1"/>
+    <line x1="640" y1="0" x2="640" y2="640" stroke="#3eaf7c" stroke-width="1"/>
+    <line x1="960" y1="0" x2="960" y2="640" stroke="#3eaf7c" stroke-width="1"/>
+  </g>
+
+  <!-- Logo (scaled up 3x and centered left) -->
+  <g transform="translate(180, 170)">
+    <!-- Background circle -->
+    <circle cx="150" cy="150" r="144" fill="#3eaf7c" opacity="0.15"/>
+
+    <!-- Bar chart icon -->
+    <rect x="60" y="150" width="36" height="75" fill="#3eaf7c" rx="6"/>
+    <rect x="108" y="105" width="36" height="120" fill="#3eaf7c" rx="6"/>
+    <rect x="156" y="135" width="36" height="90" fill="#3eaf7c" rx="6"/>
+    <rect x="204" y="84" width="36" height="141" fill="#3eaf7c" rx="6"/>
+
+    <!-- Text "ML" -->
+    <text x="150" y="66" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#f0f0f0" text-anchor="middle">ML</text>
+  </g>
+
+  <!-- Main title -->
+  <text x="580" y="280" font-family="Arial, sans-serif" font-size="96" font-weight="bold" fill="#f0f0f0" filter="url(#glow)">ChartML</text>
+
+  <!-- Subtitle -->
+  <text x="580" y="350" font-family="Arial, sans-serif" font-size="36" fill="#3eaf7c" font-weight="500">Declarative Data Visualization</text>
+
+  <!-- Tagline -->
+  <text x="580" y="410" font-family="Arial, sans-serif" font-size="28" fill="#b0b0b0">Simple markup language for beautiful charts</text>
+
+  <!-- Code example snippet -->
+  <g transform="translate(580, 440)">
+    <rect width="560" height="140" fill="#1a1a1a" stroke="#3eaf7c" stroke-width="2" rx="8" opacity="0.8"/>
+    <text x="20" y="35" font-family="monospace" font-size="20" fill="#3eaf7c">visualize:</text>
+    <text x="40" y="65" font-family="monospace" font-size="20" fill="#f0f0f0">type: bar</text>
+    <text x="40" y="95" font-family="monospace" font-size="20" fill="#f0f0f0">columns: month</text>
+    <text x="40" y="125" font-family="monospace" font-size="20" fill="#f0f0f0">rows: revenue</text>
+  </g>
+</svg>

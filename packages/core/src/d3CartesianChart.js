@@ -1386,7 +1386,7 @@ function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWid
   // Legend text is 11px at y=11 within group, so extends from legendY to (legendY + 11)
   const hasXAxisLabel = axes?.x?.label;
   const xAxisLabelHeight = hasXAxisLabel ? 20 : 0; // Space occupied by x-axis label
-  const gap = 40; // Gap between legend and x-axis tick labels/label (increased to prevent overlap)
+  const gap = 5; // Small gap between legend and x-axis label (or bottom)
 
   const legendY = height - legendSpace - xAxisLabelHeight - gap;
 

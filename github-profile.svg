@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#2d2d2d" rx="64"/>
+
+  <!-- Background circle with glow effect -->
+  <circle cx="256" cy="256" r="200" fill="#3eaf7c" opacity="0.15"/>
+
+  <!-- Bar chart icon (centered and scaled) -->
+  <rect x="130" y="280" width="48" height="100" fill="#3eaf7c" rx="8"/>
+  <rect x="198" y="220" width="48" height="160" fill="#3eaf7c" rx="8"/>
+  <rect x="266" y="250" width="48" height="130" fill="#3eaf7c" rx="8"/>
+  <rect x="334" y="200" width="48" height="180" fill="#3eaf7c" rx="8"/>
+
+  <!-- Text "ML" at top -->
+  <text x="256" y="180" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#f0f0f0" text-anchor="middle">ML</text>
+
+  <!-- Small "Chart" text at bottom -->
+  <text x="256" y="420" font-family="Arial, sans-serif" font-size="36" font-weight="600" fill="#3eaf7c" text-anchor="middle">Chart</text>
+</svg>
