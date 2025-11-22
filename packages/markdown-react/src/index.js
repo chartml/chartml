@@ -17,6 +17,24 @@
  *   {markdown}
  * </Markdown>
  * ```
+ *
+ * With custom code renderer:
+ * ```jsx
+ * import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+ * import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+ *
+ * const { code, pre } = ChartMLCodeBlock({
+ *   chartmlInstance,
+ *   codeRenderer: ({ lang, inline, children }) => {
+ *     if (inline) return <code>{children}</code>;
+ *     return (
+ *       <SyntaxHighlighter language={lang} style={vscDarkPlus}>
+ *         {String(children)}
+ *       </SyntaxHighlighter>
+ *     );
+ *   }
+ * });
+ * ```
  */
 
 import React, { useRef, useEffect } from 'react';
@@ -32,9 +50,10 @@ import { getExpectedDimensions, getColSpanClass } from '@chartml/markdown-common
  * @param {string} options.containerClassName - Optional custom className for chart container (defaults to 'chartml-chart-container')
  * @param {Function} options.chartWrapper - Optional wrapper component to add chrome (receives spec, chartmlInstance, onChartRender as props)
  * @param {Function} options.paramsWrapper - Optional wrapper component for params blocks (receives params from spec.params)
+ * @param {Function} options.codeRenderer - Optional custom renderer for non-ChartML code blocks (receives { lang, inline, className, children, ...props })
  * @returns {Object} { code, pre } - React components for code blocks and pre wrapper
  */
-export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartml-chart-container', chartWrapper, paramsWrapper }) {
+export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartml-chart-container', chartWrapper, paramsWrapper, codeRenderer }) {
   if (!chartmlInstance) {
     throw new Error('ChartMLCodeBlock requires a chartmlInstance');
   }
@@ -48,8 +67,13 @@ export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartm
     const match = /language-(\w+)/.exec(className || '');
     const lang = match ? match[1] : '';
 
-    // Only handle chartml code blocks - return default rendering for others
+    // Only handle chartml code blocks - delegate to custom renderer or react-markdown's default
     if (lang !== 'chartml') {
+      // If a custom code renderer is provided, use it for non-ChartML blocks
+      if (codeRenderer) {
+        return codeRenderer({ lang, inline, className, children, ...props });
+      }
+      // Otherwise, let react-markdown handle it with its default renderer
       return React.createElement('code', { className, ...props }, children);
     }
 

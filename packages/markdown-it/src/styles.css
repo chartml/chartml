@@ -1,5 +1,5 @@
 /**
- * Default styles for code blocks rendered by @chartml/markdown-react
+ * Default styles for code blocks rendered by @chartml/markdown-it
  * Import this CSS in your app for basic code block styling
  */
 
@@ -31,6 +31,10 @@ code {
 }
 
 /* ChartML blocks don't need code styling */
-.chartml-chart-container {
+.chartml-block {
   margin: 16px 0;
+}
+
+.chartml-container {
+  min-height: 200px;
 }
