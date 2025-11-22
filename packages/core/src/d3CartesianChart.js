@@ -1386,7 +1386,7 @@ function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWid
   // Legend text is 11px at y=11 within group, so extends from legendY to (legendY + 11)
   const hasXAxisLabel = axes?.x?.label;
   const xAxisLabelHeight = hasXAxisLabel ? 20 : 0; // Space occupied by x-axis label
-  const gap = 5; // Small gap between legend and x-axis label (or bottom)
+  const gap = 40; // Gap between legend and x-axis tick labels/label (increased to prevent overlap)
 
   const legendY = height - legendSpace - xAxisLabelHeight - gap;
 
@@ -1683,15 +1683,19 @@ function renderHorizontalBarChart(container, data, config) {
     marginLeft = Math.min(Math.ceil(maxLabelWidth) + 15, 250);
   }
 
-  // Calculate dynamic marginBottom for x-axis label
+  // Calculate dynamic marginBottom for x-axis label and legend
+  const hasLegend = rows.length > 1;
   let marginBottom;
   if (config.marginBottom !== undefined) {
     marginBottom = config.marginBottom;
   } else {
     // Check if x-axis label exists (can be in axes.x.label or axes.left.label for horizontal charts)
     const hasXAxisLabel = axes.x?.label || axes.left?.label;
-    // Need more space for axis label (14px font) + tick labels (12px) + spacing
-    marginBottom = hasXAxisLabel ? 50 : 30;
+    // Need more space for axis label (14px font) + tick labels (12px) + spacing + legend (if present)
+    // Base: 30px (tick labels) or 50px (tick labels + axis label)
+    // Add 30px for legend if present
+    const baseMargin = hasXAxisLabel ? 50 : 30;
+    marginBottom = hasLegend ? baseMargin + 30 : baseMargin;
   }
 
   container.innerHTML = '';
@@ -1880,6 +1884,7 @@ function renderHorizontalBarChart(container, data, config) {
 
   if (normalizedRows.length > 1) {
     const legendX = marginLeft;
+    // Position legend in the bottom margin area, centered vertically
     const legendY = height - marginBottom / 2;
     const legendItemWidth = Math.min(150, chartWidth / normalizedRows.length);
 
