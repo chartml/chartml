@@ -14,6 +14,139 @@ const AXIS_LABEL_FONT_SIZE = '12px';
 const AXIS_LABEL_FONT_FAMILY = 'system-ui';
 
 /**
+ * CHART.JS TWO-PASS APPROACH - STEP 1: Calculate Margin
+ *
+ * Measure labels BEFORE rendering chart to determine required bottom margin.
+ * This is how Chart.js does it elegantly - measure first, render once with correct layout.
+ *
+ * @param {Array} data - Chart data
+ * @param {string} xField - Field name for x-axis
+ * @param {Function} xScale - D3 scale for x-axis
+ * @param {number} chartWidth - Width available for chart
+ * @returns {Object} { marginNeeded, rotationDegrees }
+ */
+function calculateXAxisMargin(data, xField, xScale, chartWidth) {
+  if (data.length === 0) return { marginNeeded: 40, rotationDegrees: 0 };
+
+  // Create temporary SVG to measure labels
+  const tempSvg = d3.select('body').append('svg')
+    .style('position', 'absolute')
+    .style('visibility', 'hidden');
+
+  const tempAxis = d3.axisBottom(xScale);
+  const tempG = tempSvg.append('g').call(tempAxis);
+
+  const labels = tempG.selectAll('text');
+  const labelCount = labels.size();
+
+  if (labelCount === 0) {
+    tempSvg.remove();
+    return { marginNeeded: 40, rotationDegrees: 0 };
+  }
+
+  // Apply font styling before measuring
+  labels
+    .style('font-size', AXIS_LABEL_FONT_SIZE)
+    .style('font-family', AXIS_LABEL_FONT_FAMILY);
+
+  // Measure labels
+  let maxLabelWidth = 0;
+  let maxLabelHeight = 0;
+
+  labels.each(function() {
+    const bbox = this.getBBox();
+    maxLabelWidth = Math.max(maxLabelWidth, bbox.width);
+    maxLabelHeight = Math.max(maxLabelHeight, bbox.height);
+  });
+
+  tempSvg.remove();
+
+  // Calculate if rotation is needed
+  const tickWidth = chartWidth / labelCount;
+  const labelMargin = 6;
+  const wouldOverlap = (maxLabelWidth + labelMargin) > tickWidth;
+
+  if (!wouldOverlap) {
+    // Horizontal labels fit fine
+    return { marginNeeded: 40, rotationDegrees: 0 };
+  }
+
+  // Calculate optimal rotation angle (Chart.js algorithm)
+  const maxRotation = 45;
+  const rotationRadians = Math.asin(Math.min((maxLabelHeight + labelMargin) / tickWidth, 1));
+  const rotationDegrees = Math.min(Math.max(rotationRadians * (180 / Math.PI), 0), maxRotation);
+
+  // Calculate margin needed for rotated labels
+  // Rotated label height = width * sin(angle) + height * cos(angle)
+  const radians = rotationDegrees * (Math.PI / 180);
+  const rotatedHeight = maxLabelWidth * Math.sin(radians) + maxLabelHeight * Math.cos(radians);
+
+  // Add some padding
+  const marginNeeded = Math.ceil(rotatedHeight) + 10;
+
+  return { marginNeeded, rotationDegrees };
+}
+
+/**
+ * CHART.JS TWO-PASS APPROACH - STEP 2: Apply Rotation
+ *
+ * Apply the pre-calculated rotation to axis labels.
+ * Also implements Highcharts progressive strategy: if rotation isn't enough, skip labels.
+ *
+ * @param {Selection} xAxis - D3 selection of the x-axis group
+ * @param {number} chartWidth - Available chart width in pixels
+ * @param {boolean} isDateScale - Whether this is a time/date scale
+ * @param {number} rotationDegrees - Pre-calculated rotation angle from Step 1
+ * @returns {void}
+ */
+function handleXAxisLabelOverlap(xAxis, chartWidth, isDateScale, rotationDegrees) {
+  const labels = xAxis.selectAll('text');
+  const labelCount = labels.size();
+
+  if (labelCount === 0) return;
+
+  // Apply font styling
+  labels
+    .style('font-size', AXIS_LABEL_FONT_SIZE)
+    .style('font-family', AXIS_LABEL_FONT_FAMILY);
+
+  if (rotationDegrees === 0) {
+    // No rotation needed - horizontal labels
+    labels.style('text-anchor', 'middle');
+    return;
+  }
+
+  // Apply the pre-calculated rotation
+  labels
+    .style('text-anchor', 'end')
+    .attr('transform', `rotate(-${rotationDegrees})`)
+    .attr('dx', '-0.5em')
+    .attr('dy', '0.15em');
+
+  // Progressive approach: If rotation isn't enough, skip labels (Highcharts strategy)
+  // Measure if rotated labels still overlap significantly
+  let maxLabelWidth = 0;
+  labels.each(function() {
+    const bbox = this.getBBox();
+    maxLabelWidth = Math.max(maxLabelWidth, bbox.width);
+  });
+
+  const tickWidth = chartWidth / labelCount;
+  const labelMargin = 6;
+  const radians = rotationDegrees * (Math.PI / 180);
+  const rotatedWidth = maxLabelWidth * Math.cos(radians);
+  const overlapRatio = (rotatedWidth + labelMargin) / tickWidth;
+
+  if (overlapRatio > 1.5 && labelCount > 8) {
+    labels.each(function(d, i) {
+      if (i % 2 === 1) {
+        d3.select(this).style('opacity', 0);
+      }
+    });
+  }
+}
+
+/**
  * Setup SVG container with proper dimensions and margins
  */
 function setupSvgContainer(container, width, height, marginTop, marginRight, marginBottom, marginLeft) {
@@ -444,15 +577,11 @@ function applySampledLabels(xAxisGenerator, domain, maxLabels) {
 /**
  * Add axes and labels
  */
-function addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, marginLeft, marginRight, marginBottom, isDateScale, mode, container, data, xField, width) {
+function addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, marginLeft, marginRight, marginBottom, isDateScale, mode, container, data, xField, width, labelRotationDegrees) {
   const { x, yLeft, yRight } = scales;
 
   // Create X axis generator
   let xAxisGenerator = d3.axisBottom(x);
-
-  // Determine label strategy for categorical x-axis
-  let labelStrategy = null;
-  let labelWidths = [];
 
   if (isDateScale) {
     // For time scales, use hybrid approach:
@@ -483,28 +612,12 @@ function addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, marginL
       const formatter = createFormatter(axes.x.format, 'date');
       xAxisGenerator = xAxisGenerator.tickFormat(formatter);
     } else {
-      // Force UTC formatting to avoid timezone issues
+      // Force UTC formatting to avoid timezone issues and multi-line format
+      // Use %b %d format for consistency (no year on every tick)
       xAxisGenerator = xAxisGenerator.tickFormat(d3.utcFormat('%b %d'));
     }
   } else {
-    // For categorical axes, use intelligent label strategy
-    const domain = x.domain();
-    const labels = domain.map(d => String(d));
-
-    // Determine best strategy based on label widths and available space
-    labelStrategy = determineLabelStrategy(labels, chartWidth, axes.x || {});
-    labelWidths = measureLabelWidths(labels);
-
-    // Apply sampling strategy if needed (must be done before rendering)
-    if (labelStrategy.strategy === 'sampled') {
-      xAxisGenerator = applySampledLabels(
-        xAxisGenerator,
-        domain,
-        labelStrategy.metadata.maxLabelsToShow
-      );
-    }
-
-    // Apply formatting for categorical axes if specified
+    // For categorical axes, apply formatting if specified
     if (axes.x?.format) {
       const formatter = createFormatter(axes.x.format, 'auto');
       xAxisGenerator = xAxisGenerator.tickFormat(formatter);
@@ -516,42 +629,10 @@ function addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, marginL
     .attr('transform', `translate(0,${chartHeight})`)
     .call(xAxisGenerator);
 
-  // Apply label strategy for categorical axes
-  let additionalMargin = 0;
-  if (!isDateScale && labelStrategy) {
-    // Create tooltip for truncated labels (reuse existing container tooltip)
-    const tooltip = d3.select(container).select('.chart-tooltip');
-
-    switch (labelStrategy.strategy) {
-      case 'horizontal':
-        additionalMargin = applyHorizontalLabels(xAxis);
-        break;
-      case 'rotated':
-        additionalMargin = applyRotatedLabels(
-          xAxis,
-          labelStrategy.metadata.rotationAngle,
-          labelWidths
-        );
-        break;
-      case 'truncated':
-        additionalMargin = applyTruncatedLabels(
-          xAxis,
-          labelStrategy.metadata.maxLabelWidth,
-          tooltip,
-          container
-        );
-        break;
-      case 'sampled':
-        // Sampled strategy already applied to xAxisGenerator
-        additionalMargin = applyHorizontalLabels(xAxis);
-        break;
-    }
-  } else if (isDateScale) {
-    // For date scales, apply standard styling
-    xAxis.selectAll('text')
-      .style('font-size', AXIS_LABEL_FONT_SIZE)
-      .style('font-family', AXIS_LABEL_FONT_FAMILY);
-  }
+  // Apply comprehensive overlap prevention for ALL axis types (categorical, date, numeric)
+  // This replaces the old piecemeal approach with a unified solution based on Chart.js/Highcharts
+  // Step 2 of Chart.js two-pass: apply the pre-calculated rotation
+  handleXAxisLabelOverlap(xAxis, chartWidth, isDateScale, labelRotationDegrees);
 
   // For date scales with inset range, extend the axis line to full chart width
   if (isDateScale) {
@@ -1974,43 +2055,49 @@ export function renderD3CartesianChart(container, data, config) {
   // Check if this is a date scale (do this inline to avoid duplicate declaration)
   const hasDateValues = data.length > 0 && data[0][xField] instanceof Date;
 
+  // CHART.JS TWO-PASS APPROACH: Calculate margin BEFORE creating the chart
+  // Step 1: Create temporary scale to measure labels
   let marginBottom;
+  let labelRotationDegrees = 0;
+
   if (config.marginBottom !== undefined) {
     // User explicitly set margin, honor it
     marginBottom = config.marginBottom;
-  } else if (hasDateValues) {
-    // Date scales use D3's built-in formatting and tick reduction
-    // No rotation needed, so use standard margin
-    // Add extra space if there's an x-axis title
+  } else {
     const hasXAxisLabel = axes.x?.label;
     const axisLabelSpace = hasXAxisLabel ? 20 : 0;
-    marginBottom = 30 + legendSpace + axisLabelSpace;
-  } else {
-    // Categorical axes - estimate chart width to measure labels
-    const estimatedChartWidth = width - marginLeft - marginRight;
-    const domain = data.map(d => d[xField]);
-    const labels = domain.map(d => String(d));
 
-    // Determine strategy to get required margin
-    const prelimStrategy = determineLabelStrategy(labels, estimatedChartWidth, axes.x || {});
+    // Create temporary scale for measurement (same logic as createScales)
+    const tempChartWidth = width - marginLeft - marginRight;
+    let tempXScale;
 
-    if (prelimStrategy.strategy === 'rotated' && prelimStrategy.metadata.requiredMargin) {
-      // Use calculated margin based on actual label widths
-      // Add extra space for x-axis label if present (to avoid collision with rotated category labels)
-      const hasXAxisLabel = axes.x?.label;
-      const axisLabelSpace = hasXAxisLabel ? 25 : 0;
-      marginBottom = prelimStrategy.metadata.requiredMargin + legendSpace + axisLabelSpace;
-    } else if (prelimStrategy.strategy === 'horizontal') {
-      // Add extra space for x-axis label if present
-      const hasXAxisLabel = axes.x?.label;
-      const axisLabelSpace = hasXAxisLabel ? 20 : 0;
-      marginBottom = 30 + legendSpace + axisLabelSpace;
+    if (hasDateValues) {
+      const uniqueDates = new Set(data.map(d => d[xField].getTime()));
+      const dataPointCount = uniqueDates.size;
+      let inset = 30;
+      if (dataPointCount >= 2) {
+        inset = tempChartWidth / (2 * dataPointCount);
+      }
+      tempXScale = d3.scaleUtc()
+        .domain(d3.extent(data, d => d[xField]))
+        .range([inset, tempChartWidth - inset]);
     } else {
-      // Fallback for other strategies
-      const hasXAxisLabel = axes.x?.label;
-      const axisLabelSpace = hasXAxisLabel ? 20 : 0;
-      marginBottom = 50 + legendSpace + axisLabelSpace;
+      tempXScale = d3.scaleBand()
+        .domain(data.map(d => d[xField]))
+        .range([0, tempChartWidth])
+        .padding(0.2);
     }
+
+    // Calculate required margin based on label measurements
+    const { marginNeeded, rotationDegrees } = calculateXAxisMargin(
+      data,
+      xField,
+      tempXScale,
+      tempChartWidth
+    );
+
+    labelRotationDegrees = rotationDegrees;
+    marginBottom = marginNeeded + legendSpace + axisLabelSpace;
   }
 
   // Normalize rows to include mark type
@@ -2137,7 +2224,7 @@ export function renderD3CartesianChart(container, data, config) {
   const tooltip = createChartTooltip(container);
 
   // Add axes and labels
-  addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, finalMarginLeft, finalMarginRight, marginBottom, isDateScale, mode, container, data, xField, width);
+  addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, finalMarginLeft, finalMarginRight, marginBottom, isDateScale, mode, container, data, xField, width, labelRotationDegrees);
 
   // Add grid lines
   addGridLines(g, scales, chartWidth, chartHeight, config.style?.grid);
