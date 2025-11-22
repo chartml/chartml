@@ -62,7 +62,9 @@ function calculateXAxisMargin(data, xField, xScale, chartWidth) {
   tempSvg.remove();
 
   // Calculate if rotation is needed
-  const tickWidth = chartWidth / labelCount;
+  // For band scales, use step() to get actual spacing including padding
+  // For continuous scales (time/linear), divide evenly
+  const tickWidth = xScale.bandwidth ? xScale.step() : (chartWidth / labelCount);
   const labelMargin = 6;
   const wouldOverlap = (maxLabelWidth + labelMargin) > tickWidth;
 
@@ -94,12 +96,13 @@ function calculateXAxisMargin(data, xField, xScale, chartWidth) {
  * Also implements Highcharts progressive strategy: if rotation isn't enough, skip labels.
  *
  * @param {Selection} xAxis - D3 selection of the x-axis group
+ * @param {Function} xScale - D3 scale for x-axis
  * @param {number} chartWidth - Available chart width in pixels
  * @param {boolean} isDateScale - Whether this is a time/date scale
  * @param {number} rotationDegrees - Pre-calculated rotation angle from Step 1
  * @returns {void}
  */
-function handleXAxisLabelOverlap(xAxis, chartWidth, isDateScale, rotationDegrees) {
+function handleXAxisLabelOverlap(xAxis, xScale, chartWidth, isDateScale, rotationDegrees) {
   const labels = xAxis.selectAll('text');
   const labelCount = labels.size();
 
@@ -131,15 +134,23 @@ function handleXAxisLabelOverlap(xAxis, chartWidth, isDateScale, rotationDegrees
     maxLabelWidth = Math.max(maxLabelWidth, bbox.width);
   });
 
-  const tickWidth = chartWidth / labelCount;
+  // For band scales, use step() to get actual spacing including padding
+  // For continuous scales (time/linear), divide evenly
+  const tickWidth = xScale.bandwidth ? xScale.step() : (chartWidth / labelCount);
   const labelMargin = 6;
   const radians = rotationDegrees * (Math.PI / 180);
   const rotatedWidth = maxLabelWidth * Math.cos(radians);
   const overlapRatio = (rotatedWidth + labelMargin) / tickWidth;
 
+  // Progressive label skipping based on overlap severity
+  // Chart.js approach: calculate how many labels can actually fit
   if (overlapRatio > 1.5 && labelCount > 8) {
+    // Calculate skip interval needed to eliminate overlap with comfortable spacing
+    // Divide by 2 to provide visual breathing room between labels
+    const skipInterval = Math.ceil(overlapRatio / 2);
+
     labels.each(function(d, i) {
-      if (i % 2 === 1) {
+      if (i % skipInterval !== 0) {
         d3.select(this).style('opacity', 0);
       }
     });
@@ -632,7 +643,7 @@ function addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, marginL
   // Apply comprehensive overlap prevention for ALL axis types (categorical, date, numeric)
   // This replaces the old piecemeal approach with a unified solution based on Chart.js/Highcharts
   // Step 2 of Chart.js two-pass: apply the pre-calculated rotation
-  handleXAxisLabelOverlap(xAxis, chartWidth, isDateScale, labelRotationDegrees);
+  handleXAxisLabelOverlap(xAxis, x, chartWidth, isDateScale, labelRotationDegrees);
 
   // For date scales with inset range, extend the axis line to full chart width
   if (isDateScale) {
