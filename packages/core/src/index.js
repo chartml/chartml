@@ -880,9 +880,26 @@ export class ChartML {
       );
     }
 
+    // Create onSpecChange callback (similar to params callback at line 861-876)
+    // This allows chart renderers to request re-renders with modified specs (e.g., for sorting)
+    const onSpecChange = async (modifications) => {
+      // Build modified spec from originalSpec (preserving all other sections)
+      const modifiedSpec = {
+        ...originalSpec,
+        aggregate: {
+          ...(originalSpec.aggregate || {}),
+          ...(modifications.aggregate || {})
+        }
+      };
+
+      // Re-render chart with modified spec
+      await this._renderChartWithParams(chartContainer, { ...options, spec: modifiedSpec, onSpecChange });
+    };
+
     // Render the chart and get metadata (includes resolved dimensions with plugin defaults)
     // Pass spec explicitly instead of relying on this.currentSpec
-    const chartMetadata = await this._renderChartWithParams(chartContainer, { ...options, spec: parsedSpec });
+    // Pass onSpecChange callback for interactive features like sorting
+    const chartMetadata = await this._renderChartWithParams(chartContainer, { ...options, spec: parsedSpec, onSpecChange });
 
     // Return Chart instance for programmatic control (refresh, getMetadata)
     // Pass ORIGINAL spec (before param resolution) so Chart can re-resolve on rerender
@@ -1008,6 +1025,14 @@ export class ChartML {
         instanceConfig
       );
 
+      // Pass onSpecChange callback from options (created in render() method with originalSpec in scope)
+      // This enables interactive features like table sorting without violating architectural boundaries
+      const enhancedConfig = {
+        ...config,
+        spec: context.resolvedSpec,  // Pass the resolved spec to renderer (for reading current state)
+        onSpecChange: options.onSpecChange  // Pass through callback from render()
+      };
+
       // Check if a renderer is registered (instance first, then global registry)
       let renderer = this.chartRenderers.get(chartType);
       if (!renderer) {
@@ -1022,8 +1047,8 @@ export class ChartML {
         );
       }
 
-      // Call the registered renderer
-      renderer(container, chartData, config);
+      // Call the registered renderer with enhanced config including onSpecChange callback
+      renderer(container, chartData, enhancedConfig);
 
       // Render title if present (after chart renderer, so it doesn't get cleared)
       // Insert at the beginning of the container
