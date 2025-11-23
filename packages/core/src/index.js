@@ -899,11 +899,20 @@ export class ChartML {
     // Render the chart and get metadata (includes resolved dimensions with plugin defaults)
     // Pass spec explicitly instead of relying on this.currentSpec
     // Pass onSpecChange callback for interactive features like sorting
-    const chartMetadata = await this._renderChartWithParams(chartContainer, { ...options, spec: parsedSpec, onSpecChange });
+    try {
+      const chartMetadata = await this._renderChartWithParams(chartContainer, { ...options, spec: parsedSpec, onSpecChange });
 
-    // Return Chart instance for programmatic control (refresh, getMetadata)
-    // Pass ORIGINAL spec (before param resolution) so Chart can re-resolve on rerender
-    return new Chart(this, originalSpec, container, options, chartMetadata);
+      // Return Chart instance for programmatic control (refresh, getMetadata)
+      // Pass ORIGINAL spec (before param resolution) so Chart can re-resolve on rerender
+      return new Chart(this, originalSpec, container, options, chartMetadata);
+    } catch (error) {
+      // If onError callback provided in options, call it
+      // This allows React/markdown wrappers to handle errors in component state
+      if (options.onError) {
+        options.onError(error);
+      }
+      throw error;  // Still throw for external handlers
+    }
   }
 
   /**
@@ -1077,6 +1086,10 @@ export class ChartML {
     } catch (error) {
       // Hide loading indicator on error
       hideLoadingIndicator(loadingIndicator);
+
+      // Call onError hook if provided
+      this._emitHook('onError', error);
+
       throw error;
     }
   }

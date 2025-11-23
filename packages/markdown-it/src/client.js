@@ -81,8 +81,25 @@ export async function renderAllCharts() {
           // Append to DOM BEFORE rendering so offsetWidth is available for responsive sizing
           gridWrapper.appendChild(gridItem);
 
-          // Render chart into grid item (now has correct offsetWidth)
-          await chartml.render(chartSpec, gridItem);
+          try {
+            // Render chart into grid item (now has correct offsetWidth)
+            // Use onError callback to handle errors per-chart instead of catching at block level
+            await chartml.render(chartSpec, gridItem, {
+              onError: (error) => {
+                // Display error inline for this specific chart
+                console.error('[ChartML markdown-it] Chart render error:', error);
+                gridItem.innerHTML = '';
+                const errorElement = createErrorElement(error);
+                gridItem.appendChild(errorElement);
+              }
+            });
+          } catch (error) {
+            // Catch sync errors and display inline
+            console.error('[ChartML markdown-it] Chart render error:', error);
+            gridItem.innerHTML = '';
+            const errorElement = createErrorElement(error);
+            gridItem.appendChild(errorElement);
+          }
         }
       }
     } catch (error) {
