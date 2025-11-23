@@ -4,8 +4,7 @@
   "private": true,
   "description": "ChartML - A declarative markup language for creating beautiful, interactive data visualizations",
   "workspaces": [
-    "packages/*",
-    "docs"
+    "packages/*"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
