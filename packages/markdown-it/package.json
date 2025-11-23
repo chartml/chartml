@@ -1,13 +1,23 @@
 {
   "name": "@chartml/markdown-it",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "markdown-it plugin for rendering ChartML code blocks",
   "type": "module",
   "main": "src/index.js",
   "exports": {
-    ".": "./src/index.js",
-    "./client": "./src/client.js",
-    "./styles.css": "./src/styles.css"
+    ".": {
+      "import": "./src/index.js",
+      "require": "./src/index.js"
+    },
+    "./client": {
+      "import": "./src/client.js",
+      "require": "./src/client.js"
+    },
+    "./styles.css": {
+      "import": "./src/styles.css",
+      "require": "./src/styles.css",
+      "default": "./src/styles.css"
+    }
   },
   "files": [
     "src",
