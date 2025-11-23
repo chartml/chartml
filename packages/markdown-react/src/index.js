@@ -209,11 +209,14 @@ export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartm
  * @param {ChartML} props.chartmlInstance - ChartML instance
  * @param {string} [props.className] - CSS class for container
  * @param {Function} [props.onChartRender] - Callback with Chart instance
+ * @param {Function} [props.onError] - Callback when chart rendering fails
+ * @param {Object} [props.context] - Optional context object passed to ChartML (for error tracking, etc.)
  */
-export function ChartMLChart({ spec, chartmlInstance, className = '', onChartRender }) {
+export function ChartMLChart({ spec, chartmlInstance, className = '', onChartRender, onError, context }) {
   const containerRef = useRef(null);
   const chartInstanceRef = useRef(null);
   const [expectedHeight, setExpectedHeight] = React.useState(null);
+  const [renderError, setRenderError] = React.useState(null);
 
   // Calculate expected height BEFORE rendering to prevent layout shift
   // Uses shared utility from markdown-common
@@ -232,25 +235,47 @@ export function ChartMLChart({ spec, chartmlInstance, className = '', onChartRen
 
     const renderChart = async () => {
       if (containerRef.current && spec) {
-        // Render chart and get Chart instance
-        const chartInstance = await chartmlInstance.render(spec, containerRef.current);
-        chartInstanceRef.current = chartInstance;
+        try {
+          // Clear previous error on new render attempt
+          setRenderError(null);
 
-        // Update height from Chart instance metadata (in case it differs from pre-render calculation)
-        const metadata = chartInstance.getMetadata();
-        if (metadata?.dimensions?.height) {
-          setExpectedHeight(metadata.dimensions.height);
-        }
+          // Render chart and get Chart instance
+          // Pass context and onError callback to ChartML core
+          const chartInstance = await chartmlInstance.render(spec, containerRef.current, {
+            context,  // Pass through context (e.g., chartId for error tracking)
+            onError: (error) => {
+              // Capture async errors from ChartML core (data sources, middleware)
+              setRenderError(error);
+              if (onError) {
+                onError(error);
+              }
+            }
+          });
+          chartInstanceRef.current = chartInstance;
 
-        // Call optional callback with Chart instance (for chrome)
-        if (onChartRender) {
-          onChartRender(chartInstance);
-        }
+          // Update height from Chart instance metadata (in case it differs from pre-render calculation)
+          const metadata = chartInstance.getMetadata();
+          if (metadata?.dimensions?.height) {
+            setExpectedHeight(metadata.dimensions.height);
+          }
 
-        // Mark initial render complete
-        if (isInitialRender) {
-          isInitialRender = false;
-          ignoreResizeUntil = Date.now() + 1000;
+          // Call optional callback with Chart instance (for chrome)
+          if (onChartRender) {
+            onChartRender(chartInstance);
+          }
+
+          // Mark initial render complete
+          if (isInitialRender) {
+            isInitialRender = false;
+            ignoreResizeUntil = Date.now() + 1000;
+          }
+        } catch (error) {
+          // Capture sync errors (YAML parsing, validation, etc.)
+          console.error('[ChartMLChart] Render error:', error);
+          setRenderError(error);
+          if (onError) {
+            onError(error);
+          }
         }
       }
     };
@@ -276,9 +301,29 @@ export function ChartMLChart({ spec, chartmlInstance, className = '', onChartRen
     };
   }, [spec, chartmlInstance]); // NOTE: onChartRender NOT in deps to avoid infinite loop
 
-  return React.createElement('div', {
-    ref: containerRef,
-    className: `${className} relative`,  // Add relative positioning for loading indicator
-    style: expectedHeight ? { minHeight: `${expectedHeight}px` } : undefined
-  });
+  return React.createElement(React.Fragment, null, [
+    // Show error if chart failed to render
+    renderError && React.createElement('div', {
+      key: 'error',
+      className: 'chartml-error',
+      style: {
+        padding: '1rem',
+        background: '#fef2f2',
+        color: '#991b1b',
+        borderLeft: '4px solid #dc2626',
+        borderRadius: '4px',
+        marginBottom: '1rem'
+      }
+    }, [
+      React.createElement('strong', { key: 'label' }, 'Chart Error: '),
+      renderError.message || 'Failed to render chart'
+    ]),
+    // Chart container (always rendered so ref is valid)
+    React.createElement('div', {
+      key: 'container',
+      ref: containerRef,
+      className: `${className} relative`,  // Add relative positioning for loading indicator
+      style: expectedHeight ? { minHeight: `${expectedHeight}px` } : undefined
+    })
+  ]);
 }
