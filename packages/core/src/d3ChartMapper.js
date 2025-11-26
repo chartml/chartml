@@ -259,11 +259,11 @@ export function mapToMetricCard(visualizeSpec, data) {
 
   return {
     value: currentValue,
-    label: label || value,
+    label: label || null,  // Only show label if explicitly provided
     format: format || null,
     comparison,
     align: style.align || 'center',  // Default to center alignment
-    showLabel: style.showLabel !== false  // Default to true, can be disabled
+    showLabel: !!label  // Only show label if explicitly provided (ignore style.showLabel legacy)
   };
 }
 

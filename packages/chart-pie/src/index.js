@@ -14,7 +14,7 @@
  */
 
 import * as d3 from 'd3';
-import { globalRegistry, createChartTooltip, positionTooltip } from '@chartml/core';
+import { globalRegistry, createChartTooltip, positionTooltip, createLegend } from '@chartml/core';
 
 /**
  * Create a pie/doughnut chart renderer
@@ -126,10 +126,15 @@ export function createPieChartRenderer() {
     const g = svg.append('g')
       .attr('transform', `translate(${cx}, ${cy})`);
 
+    // Will be set after legend creation for bidirectional hover
+    let legendResult = null;
+
     // Add slices with hover effects
-    g.selectAll('path')
+    const slices = g.selectAll('path')
       .data(arcs)
       .join('path')
+      .attr('class', 'pie-slice')
+      .attr('data-index', (d, i) => i)
       .attr('d', arc)
       .attr('fill', (d, i) => pieColors[i % pieColors.length])
       .attr('stroke', 'white')
@@ -137,16 +142,31 @@ export function createPieChartRenderer() {
       .style('opacity', 0.9)
       .style('cursor', 'pointer')
       .on('mouseenter', function(event, d) {
+        const i = parseInt(d3.select(this).attr('data-index'));
         const category = d.data[categoryField];
         const value = d.data[valueField];
         const percentage = ((value / total) * 100).toFixed(1);
 
-        // Enlarge slice
-        d3.select(this)
-          .transition()
-          .duration(200)
-          .attr('d', arcHover)
-          .style('opacity', 1);
+        // Enlarge this slice and dim others
+        slices.each(function(_, idx) {
+          if (idx === i) {
+            d3.select(this)
+              .transition()
+              .duration(200)
+              .attr('d', arcHover)
+              .style('opacity', 1);
+          } else {
+            d3.select(this)
+              .transition()
+              .duration(200)
+              .style('opacity', 0.7);
+          }
+        });
+
+        // Highlight corresponding legend item
+        if (legendResult) {
+          legendResult.highlight(i);
+        }
 
         // Show tooltip
         tooltip
@@ -157,113 +177,65 @@ export function createPieChartRenderer() {
         positionTooltip(tooltip, event);
       })
       .on('mouseleave', function() {
-        // Reset slice
-        d3.select(this)
+        // Reset all slices
+        slices
           .transition()
           .duration(200)
           .attr('d', arc)
           .style('opacity', 0.9);
 
+        // Reset legend
+        if (legendResult) {
+          legendResult.reset();
+        }
+
         // Hide tooltip
         tooltip.style('opacity', 0);
       });
 
-    // Create legend with responsive positioning
-    // Use right-side legend for wide charts (>= 400px), bottom legend for narrow charts
-    // (legendOnRight already calculated above in dimensions section)
-    let legend;
-    if (legendOnRight) {
-      // Legend on right side
-      legend = svg.append('g')
-        .attr('transform', `translate(${width - 150}, 20)`);
+    // Create legend using unified utility
+    // Position at bottom with smart wrapping and overflow handling
+    const legendItems = arcs.map((d, i) => ({
+      label: d.data[categoryField],
+      color: pieColors[i % pieColors.length],
+      mark: 'pie',
+      field: categoryField,
+      index: i
+    }));
 
-      legend.selectAll('g')
-        .data(arcs)
-        .join('g')
-        .attr('transform', (d, i) => `translate(0, ${i * 25})`)
-        .each(function(d, i) {
-          const g = d3.select(this);
-          const category = d.data[categoryField];
-          const percentage = ((d.data[valueField] / total) * 100).toFixed(1);
-          const color = pieColors[i % pieColors.length];
-
-          g.append('rect')
-            .attr('width', 18)
-            .attr('height', 18)
-            .attr('rx', 3)
-            .attr('fill', color);
-
-          g.append('text')
-            .attr('x', 25)
-            .attr('y', 13)
-            .attr('font-size', 12)
-            .attr('fill', '#374151')
-            .text(category);
-
-          g.append('text')
-            .attr('x', 25)
-            .attr('y', 25)
-            .attr('font-size', 10)
-            .attr('fill', '#6b7280')
-            .text(`${percentage}%`);
+    const legendY = height - 60; // Position near bottom
+    legendResult = createLegend(svg, legendItems, {
+      x: 0,
+      y: legendY,
+      width: width,
+      align: 'center',
+      maxRows: 3,
+      onItemHover: (item) => {
+        // Highlight corresponding slice, dim others
+        slices.each(function(_, idx) {
+          if (idx === item.index) {
+            d3.select(this)
+              .transition()
+              .duration(200)
+              .attr('d', arcHover)
+              .style('opacity', 1);
+          } else {
+            d3.select(this)
+              .transition()
+              .duration(200)
+              .style('opacity', 0.7);
+          }
         });
-    } else {
-      // Legend at bottom (horizontal layout)
-      // Calculate horizontal spacing first to determine how many rows we need
-      const itemWidth = 120; // Approximate width per legend item
-      const itemsPerRow = Math.max(1, Math.floor((width - 40) / itemWidth));
-      const numRows = Math.ceil(arcs.length / itemsPerRow);
-
-      // Calculate actual legend width (for centering)
-      const actualItemsInLastRow = arcs.length % itemsPerRow || itemsPerRow;
-      const legendWidth = Math.min(arcs.length, itemsPerRow) * itemWidth;
-
-      // Each legend item needs about 30px of vertical space (18px rect + 25px for bottom text)
-      const rowHeight = 30;
-      const legendHeight = numRows * rowHeight;
-
-      // Center legend horizontally and position at bottom with padding
-      const legendX = (width - legendWidth) / 2;
-      const legendY = height - legendHeight - 10; // 10px bottom padding
-
-      legend = svg.append('g')
-        .attr('transform', `translate(${legendX}, ${legendY})`);
-
-      legend.selectAll('g')
-        .data(arcs)
-        .join('g')
-        .attr('transform', (d, i) => {
-          const col = i % itemsPerRow;
-          const row = Math.floor(i / itemsPerRow);
-          return `translate(${col * itemWidth}, ${row * rowHeight})`;
-        })
-        .each(function(d, i) {
-          const g = d3.select(this);
-          const category = d.data[categoryField];
-          const percentage = ((d.data[valueField] / total) * 100).toFixed(1);
-          const color = pieColors[i % pieColors.length];
-
-          g.append('rect')
-            .attr('width', 18)
-            .attr('height', 18)
-            .attr('rx', 3)
-            .attr('fill', color);
-
-          g.append('text')
-            .attr('x', 25)
-            .attr('y', 13)
-            .attr('font-size', 12)
-            .attr('fill', '#374151')
-            .text(category);
-
-          g.append('text')
-            .attr('x', 25)
-            .attr('y', 25)
-            .attr('font-size', 10)
-            .attr('fill', '#6b7280')
-            .text(`${percentage}%`);
-        });
-    }
+      },
+      onItemLeave: () => {
+        // Reset all slices
+        slices
+          .transition()
+          .duration(200)
+          .attr('d', arc)
+          .style('opacity', 0.9);
+      }
+    });
 
     // Append SVG to container
     container.appendChild(svg.node());

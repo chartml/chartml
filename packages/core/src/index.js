@@ -1315,6 +1315,9 @@ export { resolveParamReferences, extractParamReferences, validateParamReferences
 // Tooltip Utilities (for custom chart renderers)
 export { createChartTooltip, positionTooltip } from './tooltipUtils.js';
 
+// Legend Utilities (unified legend rendering for all chart types)
+export { createLegend, calculateLegendLayout, calculateLegendHeight } from './legendUtils.js';
+
 // Label Utilities (for axis labels, legends, collision detection)
 export {
   measureLabelWidths,

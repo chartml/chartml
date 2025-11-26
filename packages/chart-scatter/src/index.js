@@ -13,7 +13,7 @@
  */
 
 import * as d3 from 'd3';
-import { globalRegistry, createChartTooltip, positionTooltip, determineLabelStrategy, applyLabelStrategy } from '@chartml/core';
+import { globalRegistry, createChartTooltip, positionTooltip, determineLabelStrategy, applyLabelStrategy, createLegend } from '@chartml/core';
 
 /**
  * Create a scatter plot renderer
@@ -210,6 +210,7 @@ export function createScatterPlotRenderer() {
       .data(data)
       .join('circle')
       .attr('class', 'dot')
+      .attr('data-category', d => colorField ? d[colorField] : '')
       .attr('cx', d => x(d[xField]))
       .attr('cy', d => y(d[yField]))
       .attr('r', d => sizeField ? sizeScale(d[sizeField]) : defaultRadius)
@@ -266,56 +267,58 @@ export function createScatterPlotRenderer() {
       .duration(600)
       .attr('r', d => sizeField ? sizeScale(d[sizeField]) : defaultRadius);
 
-    // Add legend if colorField is provided - positioned below the chart
+    // Add legend if colorField is provided - using unified utility with hover
     if (colorField) {
       const categories = [...new Set(data.map(d => d[colorField]))];
 
       // Position legend using the pre-calculated margin values
-      const baseTickLabelSpace = 20; // Base space for tick labels
+      const baseTickLabelSpace = 20;
       const labelExtraSpace = labelStrategy.metadata.requiredMargin || 0;
       const axisLabelSpace = xAxisLabel ? 25 : 0;
       const legendPadding = 10;
       const legendY = marginTop + chartHeight + baseTickLabelSpace + labelExtraSpace + axisLabelSpace + legendPadding;
 
-      const legend = svg.append('g')
-        .attr('transform', `translate(${marginLeft}, ${legendY})`);
+      const legendItems = categories.map((category, idx) => ({
+        label: String(category),
+        color: colorScale(category),
+        mark: 'scatter',
+        field: colorField,
+        category: category,
+        index: idx
+      }));
 
-      // Calculate legend width to center it
-      const idealLegendItemWidth = 100;
-      const minLegendItemWidth = 60;
-      const maxTotalWidth = chartWidth - 20;
-      let legendItemWidth = idealLegendItemWidth;
+      // Helper to get dots by category
+      const getDotsByCategory = (category) => {
+        return svg.selectAll('.dot').filter(function() {
+          return d3.select(this).attr('data-category') === String(category);
+        });
+      };
 
-      // If legend would be too wide, reduce item width
-      if (categories.length * idealLegendItemWidth > maxTotalWidth) {
-        legendItemWidth = Math.max(minLegendItemWidth, maxTotalWidth / categories.length);
-      }
-
-      const totalLegendWidth = categories.length * legendItemWidth;
-      const legendStartX = Math.max(0, (chartWidth - totalLegendWidth) / 2);
-
-      categories.forEach((category, index) => {
-        const legendRow = legend.append('g')
-          .attr('transform', `translate(${legendStartX + index * legendItemWidth}, 0)`);
-
-        legendRow.append('circle')
-          .attr('cx', 7)
-          .attr('cy', 7)
-          .attr('r', 5)
-          .attr('fill', colorScale(category))
-          .attr('stroke', 'white')
-          .attr('stroke-width', 1.5);
-
-        // Truncate label text if needed
-        const labelText = String(category).length > 15 ? String(category).substring(0, 12) + '...' : category;
-
-        legendRow.append('text')
-          .attr('x', 18)
-          .attr('y', 11)
-          .style('font-size', '11px')
-          .style('font-family', 'system-ui')
-          .style('fill', '#374151')
-          .text(labelText);
+      createLegend(svg, legendItems, {
+        x: marginLeft,
+        y: legendY,
+        width: chartWidth,
+        align: 'center',
+        maxRows: 2,
+        onItemHover: (item) => {
+          // Highlight dots in this category, dim others
+          svg.selectAll('.dot').each(function() {
+            const dot = d3.select(this);
+            const dotCategory = dot.attr('data-category');
+            if (dotCategory === String(item.category)) {
+              dot.transition().duration(200).attr('opacity', 1);
+            } else {
+              dot.transition().duration(200).attr('opacity', 0.7);
+            }
+          });
+        },
+        onItemLeave: () => {
+          // Reset all dots
+          svg.selectAll('.dot')
+            .transition()
+            .duration(200)
+            .attr('opacity', 0.8);
+        }
       });
     }
   };
