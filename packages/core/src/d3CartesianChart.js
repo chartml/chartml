@@ -1518,21 +1518,31 @@ function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWid
     align: 'center',
     maxRows: 3,
     onItemHover: (item) => {
-      // Highlight this series, dim others (subtle dimming)
+      // Highlight this series, dim others relative to their current opacity
       legendItems.forEach((otherItem) => {
         const elements = getSeriesElements(otherItem.field);
         if (otherItem.field === item.field) {
           elements.transition().duration(200).style('opacity', 1);
         } else {
-          elements.transition().duration(200).style('opacity', 0.7);
+          // Dim by multiplying current opacity by 0.7
+          elements.each(function() {
+            const el = d3.select(this);
+            const currentOpacity = parseFloat(el.attr('opacity') || el.style('opacity')) || 0.9;
+            el.attr('data-original-opacity', currentOpacity);
+            el.transition().duration(200).style('opacity', currentOpacity * 0.7);
+          });
         }
       });
     },
     onItemLeave: () => {
-      // Reset all series
+      // Reset all series to their original opacity
       legendItems.forEach((item) => {
         const elements = getSeriesElements(item.field);
-        elements.transition().duration(200).style('opacity', 0.9);
+        elements.each(function() {
+          const el = d3.select(this);
+          const originalOpacity = parseFloat(el.attr('data-original-opacity')) || 0.9;
+          el.transition().duration(200).style('opacity', originalOpacity);
+        });
       });
     }
   });
@@ -2006,21 +2016,31 @@ function renderHorizontalBarChart(container, data, config) {
       align: 'center',
       maxRows: 2,
       onItemHover: (item) => {
-        // Highlight this series, dim others (subtle dimming)
+        // Highlight this series, dim others relative to their current opacity
         legendItems.forEach((otherItem) => {
           const bars = getBarsByField(otherItem.field);
           if (otherItem.field === item.field) {
             bars.transition().duration(200).style('opacity', 1);
           } else {
-            bars.transition().duration(200).style('opacity', 0.7);
+            // Dim by multiplying current opacity by 0.7
+            bars.each(function() {
+              const el = d3.select(this);
+              const currentOpacity = parseFloat(el.attr('opacity') || el.style('opacity')) || 0.9;
+              el.attr('data-original-opacity', currentOpacity);
+              el.transition().duration(200).style('opacity', currentOpacity * 0.7);
+            });
           }
         });
       },
       onItemLeave: () => {
-        // Reset all series
+        // Reset all series to their original opacity
         legendItems.forEach((item) => {
           const bars = getBarsByField(item.field);
-          bars.transition().duration(200).style('opacity', 0.9);
+          bars.each(function() {
+            const el = d3.select(this);
+            const originalOpacity = parseFloat(el.attr('data-original-opacity')) || 0.9;
+            el.transition().duration(200).style('opacity', originalOpacity);
+          });
         });
       }
     });
@@ -2155,11 +2175,29 @@ export function renderD3CartesianChart(container, data, config) {
   if (leftRows.length > 0) {
     const tempChartHeight = height - marginTop - marginBottom;
 
-    // Calculate extent for left axis
+    // Calculate extent for left axis - must match createScales logic
     const leftFields = leftRows.map(r => r.field);
-    const allLeftValues = data.flatMap(d => leftFields.map(field => d[field] || 0));
-    let yLeftMin = Math.min(0, d3.min(allLeftValues) || 0);
-    let yLeftMax = d3.max(allLeftValues) || 1;
+    const leftMarks = leftRows.map(r => r.mark || type);
+    const areaCount = leftMarks.filter(m => m === 'area').length;
+    const barCount = leftMarks.filter(m => m === 'bar').length;
+    const hasNormalizedAreas = areaCount > 1 && mode === 'normalized';
+    const hasStackedBars = barCount > 1 && mode === 'stacked';
+    const hasStackedAreas = areaCount > 1 && mode === 'stacked';
+
+    let yLeftMin, yLeftMax;
+    if (hasNormalizedAreas) {
+      // For normalized (100% stacked) areas, scale is always 0-1
+      yLeftMin = 0;
+      yLeftMax = 1;
+    } else if (hasStackedBars || hasStackedAreas) {
+      // For stacked bars/areas, sum all values at each x point
+      yLeftMin = 0;
+      yLeftMax = d3.max(data, d => d3.sum(leftFields, field => d[field] || 0));
+    } else {
+      const allLeftValues = data.flatMap(d => leftFields.map(field => d[field] || 0));
+      yLeftMin = Math.min(0, d3.min(allLeftValues) || 0);
+      yLeftMax = d3.max(allLeftValues) || 1;
+    }
 
     if (axes.left?.min !== undefined) yLeftMin = axes.left.min;
     if (axes.left?.max !== undefined) yLeftMax = axes.left.max;
@@ -2173,9 +2211,10 @@ export function renderD3CartesianChart(container, data, config) {
     }
 
     const ticks = tempYLeft.ticks(5);
-    const formatter = axes.left?.format
-      ? createFormatter(axes.left.format)
-      : d3.format(',');
+    // For normalized mode, format as percentage
+    const formatter = hasNormalizedAreas
+      ? d3.format('.0%')
+      : (axes.left?.format ? createFormatter(axes.left.format) : d3.format(','));
 
     const tickLabels = ticks.map(t => formatter(t));
     const labelWidths = measureLabelWidths(tickLabels, AXIS_LABEL_FONT_SIZE, AXIS_LABEL_FONT_FAMILY);

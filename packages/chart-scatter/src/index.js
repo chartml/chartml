@@ -301,23 +301,26 @@ export function createScatterPlotRenderer() {
         align: 'center',
         maxRows: 2,
         onItemHover: (item) => {
-          // Highlight dots in this category, dim others
+          // Highlight dots in this category, dim others relative to their current opacity
           svg.selectAll('.dot').each(function() {
             const dot = d3.select(this);
             const dotCategory = dot.attr('data-category');
             if (dotCategory === String(item.category)) {
               dot.transition().duration(200).attr('opacity', 1);
             } else {
-              dot.transition().duration(200).attr('opacity', 0.7);
+              const currentOpacity = parseFloat(dot.attr('opacity') || dot.style('opacity')) || 0.8;
+              dot.attr('data-original-opacity', currentOpacity);
+              dot.transition().duration(200).attr('opacity', currentOpacity * 0.7);
             }
           });
         },
         onItemLeave: () => {
-          // Reset all dots
-          svg.selectAll('.dot')
-            .transition()
-            .duration(200)
-            .attr('opacity', 0.8);
+          // Reset all dots to their original opacity
+          svg.selectAll('.dot').each(function() {
+            const dot = d3.select(this);
+            const originalOpacity = parseFloat(dot.attr('data-original-opacity')) || 0.8;
+            dot.transition().duration(200).attr('opacity', originalOpacity);
+          });
         }
       });
     }
