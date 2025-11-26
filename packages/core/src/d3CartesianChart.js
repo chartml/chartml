@@ -1054,9 +1054,7 @@ function renderStackedBars(g, data, barRows, x, yScale, chartHeight, colors, too
       .attr('class', function() {
         // Inherit class from parent group for individual rect selection
         const key = d3.select(this.parentNode).datum().key;
-        const cls = `bar bar-${sanitizeClassName(key)}`;
-        console.log('[renderStackedBars] rect class:', cls);
-        return cls;
+        return `bar bar-${sanitizeClassName(key)}`;
       })
       .attr('x', d => {
         if (isDateScale) {
@@ -1509,9 +1507,7 @@ function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWid
   const getSeriesElements = (field) => {
     const sanitized = sanitizeClassName(field);
     const selector = `.bar-${sanitized}, .line-${sanitized}, .area-${sanitized}, .dots-${sanitized}`;
-    const elements = svg.selectAll(selector);
-    console.log('[addLegend] getSeriesElements', { field, sanitized, selector, count: elements.size() });
-    return elements;
+    return svg.selectAll(selector);
   };
 
   // Use unified legend utility with hover callbacks
