@@ -8,6 +8,7 @@
 import * as d3 from 'd3';
 import { createFormatter } from './formatters.js';
 import { createChartTooltip, positionTooltip } from './tooltipUtils.js';
+import { createLegend, calculateLegendHeight } from './legendUtils.js';
 
 // Axis label styling constants
 const AXIS_LABEL_FONT_SIZE = '12px';
@@ -946,10 +947,11 @@ function renderBarMark(g, data, row, x, yScale, chartHeight, color, tooltip, con
     xOffset = (bandwidth - barWidth) / 2;
   }
 
-  const bars = g.selectAll(`.bar-${row.field}`)
+  const sanitizedField = sanitizeClassName(row.field);
+  const bars = g.selectAll(`.bar-${sanitizedField}`)
     .data(data)
     .join('rect')
-    .attr('class', `bar bar-${row.field}`)
+    .attr('class', `bar bar-${sanitizedField}`)
     .attr('x', d => {
       if (isDateScale) {
         // Center the bar on the date point
@@ -1043,12 +1045,19 @@ function renderStackedBars(g, data, barRows, x, yScale, chartHeight, colors, too
     const groups = g.selectAll('g.stack')
       .data(series)
       .join('g')
-      .attr('class', 'stack')
+      .attr('class', d => `stack bar-${sanitizeClassName(d.key)}`)
       .attr('fill', (d, i) => barRows[i].color || colors[i]);
 
     groups.selectAll('rect')
       .data(d => d)
       .join('rect')
+      .attr('class', function() {
+        // Inherit class from parent group for individual rect selection
+        const key = d3.select(this.parentNode).datum().key;
+        const cls = `bar bar-${sanitizeClassName(key)}`;
+        console.log('[renderStackedBars] rect class:', cls);
+        return cls;
+      })
       .attr('x', d => {
         if (isDateScale) {
           // Center the bar on the date point
@@ -1130,6 +1139,7 @@ function renderStackedBars(g, data, barRows, x, yScale, chartHeight, colors, too
     groups.selectAll('rect')
       .data(d => fields.map((key, i) => ({ key, value: d[key], xValue: d[xField], row: barRows[i] })))
       .join('rect')
+      .attr('class', d => `bar bar-${sanitizeClassName(d.key)}`)
       .attr('x', d => x1(d.key))
       .attr('width', x1.bandwidth())
       .attr('fill', d => d.row.color || colors[fields.indexOf(d.key)])
@@ -1209,9 +1219,10 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
     .y(d => yScale(d[row.field] || 0));
 
   // Draw line
+  const sanitizedField = sanitizeClassName(row.field);
   const path = g.append('path')
     .datum(validData)
-    .attr('class', `line line-${row.field}`)
+    .attr('class', `line line-${sanitizedField}`)
     .attr('fill', 'none')
     .attr('stroke', color)
     .attr('stroke-width', 3)
@@ -1228,8 +1239,6 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
     .attr('stroke-dashoffset', 0);
 
   // Add hover targets for tooltip (always present, even when dots are hidden)
-  const sanitizedField = sanitizeClassName(row.field);
-
   // Create invisible hover circles that are always there to capture mouse events
   const hoverTargets = g.selectAll(`.hover-target-${sanitizedField}`)
     .data(validData)
@@ -1361,8 +1370,10 @@ function renderAreaMarks(g, data, areaRows, x, yScale, chartHeight, colors, xFie
       .y1(d => yScale(d[1]));
 
     series.forEach((s, index) => {
+      const sanitizedField = sanitizeClassName(areaRows[index].field);
       const path = g.append('path')
         .datum(s)
+        .attr('class', `area area-${sanitizedField}`)
         .attr('fill', areaRows[index].color || colors[index])
         .attr('opacity', fillOpacity)
         .attr('d', area)
@@ -1403,8 +1414,10 @@ function renderAreaMarks(g, data, areaRows, x, yScale, chartHeight, colors, xFie
       .y1(d => yScale(d[1]));
 
     series.forEach((s, index) => {
+      const sanitizedField = sanitizeClassName(areaRows[index].field);
       const path = g.append('path')
         .datum(s)
+        .attr('class', `area area-${sanitizedField}`)
         .attr('fill', areaRows[index].color || colors[index])
         .attr('opacity', fillOpacity)
         .attr('d', area)
@@ -1432,6 +1445,7 @@ function renderAreaMarks(g, data, areaRows, x, yScale, chartHeight, colors, xFie
   } else {
     // Overlapping areas
     areaRows.forEach((row, index) => {
+      const sanitizedField = sanitizeClassName(row.field);
       const area = d3.area()
         .curve(curve)
         .x(d => isDateScale ? x(d[xField]) : (x(d[xField]) + x.bandwidth() / 2))
@@ -1440,6 +1454,7 @@ function renderAreaMarks(g, data, areaRows, x, yScale, chartHeight, colors, xFie
 
       const path = g.append('path')
         .datum(data)
+        .attr('class', `area area-${sanitizedField}`)
         .attr('fill', row.color || colors[index])
         .attr('opacity', fillOpacity)
         .attr('d', area)
@@ -1468,87 +1483,62 @@ function renderAreaMarks(g, data, areaRows, x, yScale, chartHeight, colors, xFie
 }
 
 /**
- * Add legend below chart
+ * Add legend below chart using unified legend utility
+ * With bidirectional hover interaction between legend and chart elements
  */
 function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWidth, legendSpace, axes) {
-  if (rows.length <= 1) return;
+  if (rows.length <= 1) return null;
 
   // Position legend in the space reserved for it, accounting for x-axis label if present
-  // X-axis label is at y = height - 5, with ~14px font size, so occupies roughly (height - 20) to (height - 5)
-  // Legend text is 11px at y=11 within group, so extends from legendY to (legendY + 11)
   const hasXAxisLabel = axes?.x?.label;
-  const xAxisLabelHeight = hasXAxisLabel ? 20 : 0; // Space occupied by x-axis label
-  const gap = 5; // Small gap between legend and x-axis label (or bottom)
+  const xAxisLabelHeight = hasXAxisLabel ? 20 : 0;
+  const gap = 5;
 
   const legendY = height - legendSpace - xAxisLabelHeight - gap;
 
-  const legend = svg.append('g')
-    .attr('transform', `translate(${marginLeft}, ${legendY})`);
+  // Convert rows to legend items format
+  const legendItems = rows.map((row, idx) => ({
+    label: row.label || row.field,
+    color: row.color || colors[idx],
+    mark: row.mark || 'bar',
+    field: row.field,
+    index: idx
+  }));
 
-  // First pass: measure actual text widths to calculate spacing
-  const legendItems = [];
-  const tempGroup = legend.append('g').style('opacity', 0); // Hidden group for measurement
+  // Helper to get all series elements (bars, lines, areas, dots)
+  const getSeriesElements = (field) => {
+    const sanitized = sanitizeClassName(field);
+    const selector = `.bar-${sanitized}, .line-${sanitized}, .area-${sanitized}, .dots-${sanitized}`;
+    const elements = svg.selectAll(selector);
+    console.log('[addLegend] getSeriesElements', { field, sanitized, selector, count: elements.size() });
+    return elements;
+  };
 
-  rows.forEach((row, idx) => {
-    const labelText = (row.label || row.field);
-    const tempText = tempGroup.append('text')
-      .style('font-size', '11px')
-      .style('font-family', AXIS_LABEL_FONT_FAMILY)
-      .text(labelText);
-
-    const textWidth = tempText.node().getComputedTextLength();
-    const itemWidth = 18 + textWidth + 20; // symbol (18px) + text + padding (20px)
-
-    legendItems.push({
-      row,
-      labelText,
-      textWidth,
-      itemWidth,
-      idx
-    });
-  });
-
-  tempGroup.remove(); // Clean up measurement group
-
-  // Calculate total width needed and center the legend group
-  const totalLegendWidth = legendItems.reduce((sum, item) => sum + item.itemWidth, 0);
-  const legendStartX = Math.max(0, (chartWidth - totalLegendWidth) / 2);
-
-  // Second pass: render with proper spacing
-  let currentX = legendStartX;
-  legendItems.forEach((item) => {
-    const legendRow = legend.append('g')
-      .attr('transform', `translate(${currentX}, 0)`);
-
-    // Use appropriate symbol for mark type
-    const mark = item.row.mark || 'bar';
-    if (mark === 'bar' || mark === 'area') {
-      legendRow.append('rect')
-        .attr('width', 12)
-        .attr('height', 12)
-        .attr('rx', 2)
-        .attr('fill', item.row.color || colors[item.idx]);
-    } else if (mark === 'line') {
-      legendRow.append('line')
-        .attr('x1', 0)
-        .attr('y1', 6)
-        .attr('x2', 12)
-        .attr('y2', 6)
-        .attr('stroke', item.row.color || colors[item.idx])
-        .attr('stroke-width', 3);
+  // Use unified legend utility with hover callbacks
+  return createLegend(svg, legendItems, {
+    x: marginLeft,
+    y: legendY,
+    width: chartWidth,
+    align: 'center',
+    maxRows: 3,
+    onItemHover: (item) => {
+      // Highlight this series, dim others (subtle dimming)
+      legendItems.forEach((otherItem) => {
+        const elements = getSeriesElements(otherItem.field);
+        if (otherItem.field === item.field) {
+          elements.transition().duration(200).style('opacity', 1);
+        } else {
+          elements.transition().duration(200).style('opacity', 0.7);
+        }
+      });
+    },
+    onItemLeave: () => {
+      // Reset all series
+      legendItems.forEach((item) => {
+        const elements = getSeriesElements(item.field);
+        elements.transition().duration(200).style('opacity', 0.9);
+      });
     }
-
-    // Add text label (already measured, no truncation needed since we sized to fit)
-    legendRow.append('text')
-      .attr('x', 18)
-      .attr('y', 11)
-      .style('font-size', '11px')
-      .style('font-family', AXIS_LABEL_FONT_FAMILY)
-      .style('fill', '#374151')
-      .text(item.labelText);
-
-    // Move to next position
-    currentX += item.itemWidth;
   });
 }
 
@@ -1785,9 +1775,9 @@ function renderHorizontalBarChart(container, data, config) {
     const hasXAxisLabel = axes.x?.label || axes.left?.label;
     // Need more space for axis label (14px font) + tick labels (12px) + spacing + legend (if present)
     // Base: 30px (tick labels) or 50px (tick labels + axis label)
-    // Add 30px for legend if present
+    // Add 50px for legend if present (allows for 2 rows at 20px each + padding)
     const baseMargin = hasXAxisLabel ? 50 : 30;
-    marginBottom = hasLegend ? baseMargin + 30 : baseMargin;
+    marginBottom = hasLegend ? baseMargin + 50 : baseMargin;
   }
 
   container.innerHTML = '';
@@ -1851,9 +1841,27 @@ function renderHorizontalBarChart(container, data, config) {
   const xAxisFormat = axes.left?.format || axes.x?.format;
   const xFormatter = xAxisFormat ? createFormatter(xAxisFormat, 'auto') : null;
 
+  // Calculate how many numeric labels can fit without overlapping
+  // For horizontal bar charts, x-axis shows numeric values (0, 10,000, 20,000, etc.)
+  const xDomain = x.domain();
+  const maxValue = xDomain[1];
+
+  // Estimate max label width based on the largest formatted value
+  const sampleLabel = xFormatter
+    ? xFormatter(maxValue)
+    : maxValue.toLocaleString();
+  const estimatedLabelWidth = measureLabelWidths([sampleLabel], AXIS_LABEL_FONT_SIZE, AXIS_LABEL_FONT_FAMILY)[0];
+
+  // Calculate max ticks that fit (add 20px padding between labels)
+  const minLabelSpacing = estimatedLabelWidth + 20;
+  const maxFittableTicks = Math.max(2, Math.floor(chartWidth / minLabelSpacing));
+
+  // Use the smaller of 5 (default) or what actually fits
+  const tickCount = Math.min(5, maxFittableTicks);
+
   g.append('g')
     .attr('transform', `translate(0,${chartHeight})`)
-    .call(d3.axisBottom(x).ticks(5).tickFormat(xFormatter || (d => d)))
+    .call(d3.axisBottom(x).ticks(tickCount).tickFormat(xFormatter || (d => d)))
     .selectAll('text')
     .style('font-size', AXIS_LABEL_FONT_SIZE)
     .style('font-family', AXIS_LABEL_FONT_FAMILY);
@@ -1898,6 +1906,7 @@ function renderHorizontalBarChart(container, data, config) {
       g.selectAll(`.bar-${sanitizeClassName(row.field)}`)
         .data(serie)
         .join('rect')
+        .attr('class', `bar bar-${sanitizeClassName(row.field)}`)
         .attr('y', d => y(d.data[xField]) + yOffset)
         .attr('x', d => x(d[0]))
         .attr('width', d => x(d[1]) - x(d[0]))
@@ -1928,6 +1937,7 @@ function renderHorizontalBarChart(container, data, config) {
       g.selectAll(`.bar-${sanitizeClassName(row.field)}`)
         .data(data)
         .join('rect')
+        .attr('class', `bar bar-${sanitizeClassName(row.field)}`)
         .attr('y', d => y(d[xField]) + yOffset + ySubgroup(row.field))
         .attr('x', 0)
         .attr('width', d => x(d[row.field] || 0))
@@ -1974,30 +1984,49 @@ function renderHorizontalBarChart(container, data, config) {
       });
   }
 
+  // Add legend using unified utility with hover interaction
   if (normalizedRows.length > 1) {
-    const legendX = marginLeft;
-    // Position legend in the bottom margin area, centered vertically
-    const legendY = height - marginBottom / 2;
-    const legendItemWidth = Math.min(150, chartWidth / normalizedRows.length);
+    // Position legend below the x-axis: marginTop + chartHeight + axis space (25px) + padding (10px)
+    const legendY = marginTop + chartHeight + 35;
 
-    const legend = svg.append('g')
-      .attr('transform', `translate(${legendX}, ${legendY})`);
+    const legendItems = normalizedRows.map((row, idx) => ({
+      label: row.label,
+      color: row.color,
+      mark: 'bar',
+      field: row.field,
+      index: idx
+    }));
 
-    normalizedRows.forEach((row, i) => {
-      const itemX = i * legendItemWidth;
-      legend.append('rect')
-        .attr('x', itemX)
-        .attr('y', 0)
-        .attr('width', 12)
-        .attr('height', 12)
-        .attr('fill', row.color);
-      legend.append('text')
-        .attr('x', itemX + 18)
-        .attr('y', 11)
-        .style('font-size', AXIS_LABEL_FONT_SIZE)
-        .style('font-family', AXIS_LABEL_FONT_FAMILY)
-        .style('fill', '#374151')
-        .text(row.label);
+    // Helper to get bars by field
+    const getBarsByField = (field) => {
+      const sanitized = sanitizeClassName(field);
+      return svg.selectAll(`.bar-${sanitized}`);
+    };
+
+    createLegend(svg, legendItems, {
+      x: marginLeft,
+      y: legendY,
+      width: chartWidth,
+      align: 'center',
+      maxRows: 2,
+      onItemHover: (item) => {
+        // Highlight this series, dim others (subtle dimming)
+        legendItems.forEach((otherItem) => {
+          const bars = getBarsByField(otherItem.field);
+          if (otherItem.field === item.field) {
+            bars.transition().duration(200).style('opacity', 1);
+          } else {
+            bars.transition().duration(200).style('opacity', 0.7);
+          }
+        });
+      },
+      onItemLeave: () => {
+        // Reset all series
+        legendItems.forEach((item) => {
+          const bars = getBarsByField(item.field);
+          bars.transition().duration(200).style('opacity', 0.9);
+        });
+      }
     });
   }
 }

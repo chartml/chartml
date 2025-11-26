@@ -1,6 +1,6 @@
 {
   "name": "@chartml/chart-pie",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Pie and doughnut chart renderer plugin for ChartML",
   "type": "module",
   "main": "dist/index.js",
