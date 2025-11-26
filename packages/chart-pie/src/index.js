@@ -211,29 +211,33 @@ export function createPieChartRenderer() {
       align: 'center',
       maxRows: 3,
       onItemHover: (item) => {
-        // Highlight corresponding slice, dim others
+        // Highlight corresponding slice, dim others relative to their current opacity
         slices.each(function(_, idx) {
+          const el = d3.select(this);
           if (idx === item.index) {
-            d3.select(this)
-              .transition()
+            el.transition()
               .duration(200)
               .attr('d', arcHover)
               .style('opacity', 1);
           } else {
-            d3.select(this)
-              .transition()
+            const currentOpacity = parseFloat(el.attr('opacity') || el.style('opacity')) || 0.9;
+            el.attr('data-original-opacity', currentOpacity);
+            el.transition()
               .duration(200)
-              .style('opacity', 0.7);
+              .style('opacity', currentOpacity * 0.7);
           }
         });
       },
       onItemLeave: () => {
-        // Reset all slices
-        slices
-          .transition()
-          .duration(200)
-          .attr('d', arc)
-          .style('opacity', 0.9);
+        // Reset all slices to their original opacity
+        slices.each(function() {
+          const el = d3.select(this);
+          const originalOpacity = parseFloat(el.attr('data-original-opacity')) || 0.9;
+          el.transition()
+            .duration(200)
+            .attr('d', arc)
+            .style('opacity', originalOpacity);
+        });
       }
     });
 
