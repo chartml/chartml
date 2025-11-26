@@ -1209,9 +1209,12 @@ export class ChartML {
           try {
             const pluginDefaults = renderer.getDefaultDimensions(parsedSpec, null);
             if (pluginDefaults?.height) {
+              // If plugin says includesTitle: true, don't add extra title height
+              // (the plugin's height already accounts for title space)
+              const extraTitleHeight = pluginDefaults.includesTitle ? 0 : titleHeight;
               return {
                 width: pluginDefaults.width || explicitWidth || null,
-                height: pluginDefaults.height + titleHeight
+                height: pluginDefaults.height + extraTitleHeight
               };
             }
           } catch (error) {

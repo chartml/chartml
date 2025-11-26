@@ -1,6 +1,6 @@
 {
   "name": "@chartml/chart-metric",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Metric card chart renderer plugin for ChartML",
   "type": "module",
   "main": "dist/index.js",

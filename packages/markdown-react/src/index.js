@@ -147,7 +147,7 @@ export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartm
       // Use shared utility from markdown-common
       return React.createElement(
         'div',
-        { className: 'grid grid-cols-12 gap-4', style: { margin: '1rem 0' } },
+        { className: 'grid grid-cols-12 gap-2', style: { margin: '0.5rem 0' } },
         chartComponents.map((chart, idx) => {
           // Get colSpan from chart layout (defaults to 12 for full width)
           const colSpan = chart?.layout?.colSpan || 12;

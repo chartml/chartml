@@ -139,7 +139,8 @@ export function createMetricRenderer() {
 
   // Implement optional ChartML plugin interface for custom default dimensions
   // Metric cards are much shorter than standard charts
-  renderMetric.getDefaultDimensions = () => ({ height: 150 });
+  // includesTitle: true means the height already accounts for title space (title renders inside the card)
+  renderMetric.getDefaultDimensions = () => ({ height: 120, includesTitle: true });
 
   return renderMetric;
 }
