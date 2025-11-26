@@ -63,8 +63,8 @@ export async function renderAllCharts() {
 
         // Create grid wrapper for charts (matches React plugin)
         const gridWrapper = document.createElement('div');
-        gridWrapper.className = 'grid grid-cols-12 gap-4';
-        gridWrapper.style.margin = '1rem 0';
+        gridWrapper.className = 'grid grid-cols-12 gap-2';
+        gridWrapper.style.margin = '0.5rem 0';
 
         // Append grid to DOM first so child elements can measure their width
         container.appendChild(gridWrapper);
