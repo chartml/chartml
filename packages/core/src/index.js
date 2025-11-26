@@ -1060,13 +1060,16 @@ export class ChartML {
       renderer(container, chartData, enhancedConfig);
 
       // Render title if present (after chart renderer, so it doesn't get cleared)
-      // Insert at the beginning of the container
+      // Reuse existing title element if present (prevents duplicates on re-renders like sorting)
       if (context.resolvedSpec.title) {
-        const titleDiv = document.createElement('div');
-        titleDiv.className = 'chart-title';
-        titleDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 8px;';
+        let titleDiv = container.querySelector('.chart-title');
+        if (!titleDiv) {
+          titleDiv = document.createElement('div');
+          titleDiv.className = 'chart-title';
+          titleDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 8px;';
+          container.insertBefore(titleDiv, container.firstChild);
+        }
         titleDiv.textContent = context.resolvedSpec.title;
-        container.insertBefore(titleDiv, container.firstChild);
       }
 
       // Hide loading indicator after successful render
