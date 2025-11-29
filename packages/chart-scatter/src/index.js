@@ -301,21 +301,24 @@ export function createScatterPlotRenderer() {
         align: 'center',
         maxRows: 2,
         onItemHover: (item) => {
-          // Highlight dots in this category, dim others relative to their current opacity
+          // Highlight dots in this category, dim others
           svg.selectAll('.dot').each(function() {
             const dot = d3.select(this);
             const dotCategory = dot.attr('data-category');
             if (dotCategory === String(item.category)) {
               dot.transition().duration(200).attr('opacity', 1);
             } else {
-              const currentOpacity = parseFloat(dot.attr('opacity') || dot.style('opacity')) || 0.8;
-              dot.attr('data-original-opacity', currentOpacity);
-              dot.transition().duration(200).attr('opacity', currentOpacity * 0.7);
+              // Only save original opacity if not already saved (prevents cumulative dimming)
+              if (!dot.attr('data-original-opacity')) {
+                const currentOpacity = parseFloat(dot.attr('opacity') || dot.style('opacity')) || 0.8;
+                dot.attr('data-original-opacity', currentOpacity);
+              }
+              dot.transition().duration(200).attr('opacity', 0.3);
             }
           });
         },
         onItemLeave: () => {
-          // Reset all dots to their original opacity
+          // Reset all dots to their original opacity (keep data-original-opacity for fast item-to-item hover)
           svg.selectAll('.dot').each(function() {
             const dot = d3.select(this);
             const originalOpacity = parseFloat(dot.attr('data-original-opacity')) || 0.8;
