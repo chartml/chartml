@@ -1518,24 +1518,27 @@ function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWid
     align: 'center',
     maxRows: 3,
     onItemHover: (item) => {
-      // Highlight this series, dim others relative to their current opacity
+      // Highlight this series, dim others
       legendItems.forEach((otherItem) => {
         const elements = getSeriesElements(otherItem.field);
         if (otherItem.field === item.field) {
           elements.transition().duration(200).style('opacity', 1);
         } else {
-          // Dim by multiplying current opacity by 0.7
+          // Dim to fixed opacity (not cumulative)
           elements.each(function() {
             const el = d3.select(this);
-            const currentOpacity = parseFloat(el.attr('opacity') || el.style('opacity')) || 0.9;
-            el.attr('data-original-opacity', currentOpacity);
-            el.transition().duration(200).style('opacity', currentOpacity * 0.7);
+            // Only save original opacity if not already saved (prevents cumulative dimming)
+            if (!el.attr('data-original-opacity')) {
+              const currentOpacity = parseFloat(el.attr('opacity') || el.style('opacity')) || 0.9;
+              el.attr('data-original-opacity', currentOpacity);
+            }
+            el.transition().duration(200).style('opacity', 0.3);
           });
         }
       });
     },
     onItemLeave: () => {
-      // Reset all series to their original opacity
+      // Reset all series to their original opacity (keep data-original-opacity for fast item-to-item hover)
       legendItems.forEach((item) => {
         const elements = getSeriesElements(item.field);
         elements.each(function() {
@@ -2016,24 +2019,27 @@ function renderHorizontalBarChart(container, data, config) {
       align: 'center',
       maxRows: 2,
       onItemHover: (item) => {
-        // Highlight this series, dim others relative to their current opacity
+        // Highlight this series, dim others
         legendItems.forEach((otherItem) => {
           const bars = getBarsByField(otherItem.field);
           if (otherItem.field === item.field) {
             bars.transition().duration(200).style('opacity', 1);
           } else {
-            // Dim by multiplying current opacity by 0.7
+            // Dim to fixed opacity (not cumulative)
             bars.each(function() {
               const el = d3.select(this);
-              const currentOpacity = parseFloat(el.attr('opacity') || el.style('opacity')) || 0.9;
-              el.attr('data-original-opacity', currentOpacity);
-              el.transition().duration(200).style('opacity', currentOpacity * 0.7);
+              // Only save original opacity if not already saved (prevents cumulative dimming)
+              if (!el.attr('data-original-opacity')) {
+                const currentOpacity = parseFloat(el.attr('opacity') || el.style('opacity')) || 0.9;
+                el.attr('data-original-opacity', currentOpacity);
+              }
+              el.transition().duration(200).style('opacity', 0.3);
             });
           }
         });
       },
       onItemLeave: () => {
-        // Reset all series to their original opacity
+        // Reset all series to their original opacity (keep data-original-opacity for fast item-to-item hover)
         legendItems.forEach((item) => {
           const bars = getBarsByField(item.field);
           bars.each(function() {

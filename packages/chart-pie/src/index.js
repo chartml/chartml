@@ -211,7 +211,7 @@ export function createPieChartRenderer() {
       align: 'center',
       maxRows: 3,
       onItemHover: (item) => {
-        // Highlight corresponding slice, dim others relative to their current opacity
+        // Highlight corresponding slice, dim others
         slices.each(function(_, idx) {
           const el = d3.select(this);
           if (idx === item.index) {
@@ -220,16 +220,19 @@ export function createPieChartRenderer() {
               .attr('d', arcHover)
               .style('opacity', 1);
           } else {
-            const currentOpacity = parseFloat(el.attr('opacity') || el.style('opacity')) || 0.9;
-            el.attr('data-original-opacity', currentOpacity);
+            // Only save original opacity if not already saved (prevents cumulative dimming)
+            if (!el.attr('data-original-opacity')) {
+              const currentOpacity = parseFloat(el.attr('opacity') || el.style('opacity')) || 0.9;
+              el.attr('data-original-opacity', currentOpacity);
+            }
             el.transition()
               .duration(200)
-              .style('opacity', currentOpacity * 0.7);
+              .style('opacity', 0.3);
           }
         });
       },
       onItemLeave: () => {
-        // Reset all slices to their original opacity
+        // Reset all slices to their original opacity (keep data-original-opacity for fast item-to-item hover)
         slices.each(function() {
           const el = d3.select(this);
           const originalOpacity = parseFloat(el.attr('data-original-opacity')) || 0.9;
