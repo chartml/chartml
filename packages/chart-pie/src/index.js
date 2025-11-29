@@ -52,42 +52,22 @@ export function createPieChartRenderer() {
 
     const pieColors = colors;
 
-    // Determine legend position based on available space
-    // Legend on right needs ~150px width. Pie chart needs reasonable diameter.
-    const LEGEND_WIDTH = 150;
-    const MIN_PIE_DIAMETER = 180; // Minimum readable pie chart diameter
+    // Legend is always at bottom - reserve space for it
+    // Legend needs ~60-80px depending on number of rows
+    const LEGEND_HEIGHT = 70;
+    const TOP_MARGIN = 20;
+    const SIDE_MARGIN = 20;
 
-    // Calculate max radius if legend is on right
-    // Pie is centered at width/2, so radius can extend at most to (width - LEGEND_WIDTH - 20px padding)
-    const maxRightEdge = width - LEGEND_WIDTH - 20; // Right edge where legend starts (with padding)
-    const maxRadiusForRightLegend = maxRightEdge - (width / 2); // Distance from center to legend
-    const maxPieDiameterForRightLegend = maxRadiusForRightLegend * 2;
+    // Available space for pie (above legend)
+    const availableHeight = height - LEGEND_HEIGHT - TOP_MARGIN;
+    const availableWidth = width - (SIDE_MARGIN * 2);
 
-    // Also constrain by height
-    const maxPieDiameterByHeight = height - 80; // 80px for top/bottom margins
+    // Radius is constrained by both dimensions
+    const radius = Math.max(40, Math.min(availableWidth / 2, availableHeight / 2));
 
-    // Final diameter if using right legend
-    const rightLegendPieDiameter = Math.min(maxPieDiameterForRightLegend, maxPieDiameterByHeight);
-
-    // Use right legend only if:
-    // 1. We have enough width for legend (width >= 400), AND
-    // 2. The resulting pie diameter is reasonable (>= MIN_PIE_DIAMETER)
-    const legendOnRight = width >= 400 && rightLegendPieDiameter >= MIN_PIE_DIAMETER;
-
-    // Calculate dimensions - adjust based on legend position
-    let radius, cx, cy;
-    if (legendOnRight) {
-      // Legend on right - pie centered, radius constrained to not overlap legend
-      radius = rightLegendPieDiameter / 2;
-      cx = width / 2; // Always center horizontally
-      cy = height / 2;
-    } else {
-      // Legend at bottom - pie uses full width but less height
-      const bottomMargin = 80; // Space for bottom legend
-      radius = Math.min(width / 2 - 40, (height - bottomMargin) / 2 - 40);
-      cx = width / 2; // Always center horizontally
-      cy = (height - bottomMargin) / 2 + 20; // Center in available space above legend
-    }
+    // Center pie in available space (above legend area)
+    const cx = width / 2;
+    const cy = TOP_MARGIN + availableHeight / 2;
 
     const innerRadius = type === 'doughnut' ? radius * 0.6 : 0;
 
