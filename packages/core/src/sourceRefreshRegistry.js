@@ -34,8 +34,6 @@ export class SourceRefreshRegistry {
 
     const source = this.sources.get(sourceName);
     source.subscribers.add(chart);
-
-    console.log(`[SourceRefreshRegistry] Chart subscribed to source "${sourceName}". Total subscribers: ${source.subscribers.size}`);
   }
 
   /**
@@ -47,12 +45,10 @@ export class SourceRefreshRegistry {
     const source = this.sources.get(sourceName);
     if (source) {
       source.subscribers.delete(chart);
-      console.log(`[SourceRefreshRegistry] Chart unsubscribed from source "${sourceName}". Remaining subscribers: ${source.subscribers.size}`);
 
       // Clean up if no subscribers left
       if (source.subscribers.size === 0) {
         this.sources.delete(sourceName);
-        console.log(`[SourceRefreshRegistry] Source "${sourceName}" removed (no subscribers)`);
       }
     }
   }
@@ -68,19 +64,15 @@ export class SourceRefreshRegistry {
     const source = this.sources.get(sourceName);
     if (!source) {
       // No subscribers - just execute the callback
-      console.log(`[SourceRefreshRegistry] No subscribers for source "${sourceName}", executing refresh directly`);
       await refreshCallback();
       return;
     }
-
-    console.log(`[SourceRefreshRegistry] Refreshing source "${sourceName}". Notifying ${source.subscribers.size} subscribers.`);
 
     try {
       // Mark source as refreshing
       source.isRefreshing = true;
 
       // STEP 1: Notify ALL subscribers that refresh is starting
-      console.log(`[SourceRefreshRegistry] Broadcasting REFRESH_START to ${source.subscribers.size} subscribers`);
       for (const chart of source.subscribers) {
         if (chart.onRefreshStateChange) {
           chart.onRefreshStateChange(true);
@@ -89,18 +81,15 @@ export class SourceRefreshRegistry {
 
       // STEP 2: Execute the refresh callback (only from the initiating chart)
       // Middleware will deduplicate if multiple sources happen to refresh simultaneously
-      console.log(`[SourceRefreshRegistry] Executing refresh callback`);
       await refreshCallback();
 
       // STEP 3: Update shared timestamp
       source.lastFetched = Date.now();
-      console.log(`[SourceRefreshRegistry] Refresh complete. Timestamp: ${source.lastFetched}`);
 
     } finally {
       // STEP 4: Notify ALL subscribers that refresh is complete
       source.isRefreshing = false;
 
-      console.log(`[SourceRefreshRegistry] Broadcasting REFRESH_COMPLETE to ${source.subscribers.size} subscribers`);
       for (const chart of source.subscribers) {
         // Update timestamp in metadata
         if (chart.metadata) {
@@ -114,7 +103,6 @@ export class SourceRefreshRegistry {
 
         // Re-render OTHER charts to show fresh data (skip initiating chart - it already rendered)
         if (chart !== initiatingChart && chart.rerender) {
-          console.log(`[SourceRefreshRegistry] Triggering rerender for non-initiating chart`);
           chart.rerender().catch(error => {
             console.error('[SourceRefreshRegistry] Chart rerender failed:', error);
           });

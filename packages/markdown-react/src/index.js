@@ -104,7 +104,6 @@ export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartm
           chartmlInstance.registry.registerSource(sourceComp.name, sourceComp);
         } catch (error) {
           // Source might already be registered - that's OK
-          console.debug(`[ChartML react-markdown] Source "${sourceComp.name}" already registered`);
         }
       });
 
@@ -119,7 +118,6 @@ export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartm
           chartmlInstance.registry.registerParams(paramsComp.name, paramsComp);
         } catch (error) {
           // Params might already be registered - that's OK
-          console.debug(`[ChartML react-markdown] Params "${paramsComp.name}" already registered`);
         }
       });
 
