@@ -41,8 +41,6 @@ export class ParamChangeRegistry {
 
     const subscribers = this.scopes.get(scopeName);
     subscribers.add(chart);
-
-    console.log(`[ParamChangeRegistry] Chart subscribed to scope "${scopeName}". Total subscribers: ${subscribers.size}`);
   }
 
   /**
@@ -54,12 +52,10 @@ export class ParamChangeRegistry {
     const subscribers = this.scopes.get(scopeName);
     if (subscribers) {
       subscribers.delete(chart);
-      console.log(`[ParamChangeRegistry] Chart unsubscribed from scope "${scopeName}". Remaining subscribers: ${subscribers.size}`);
 
       // Clean up if no subscribers left
       if (subscribers.size === 0) {
         this.scopes.delete(scopeName);
-        console.log(`[ParamChangeRegistry] Scope "${scopeName}" removed (no subscribers)`);
       }
     }
   }
@@ -76,16 +72,12 @@ export class ParamChangeRegistry {
     const subscribers = this.scopes.get(scopeName);
 
     if (!subscribers || subscribers.size === 0) {
-      console.log(`[ParamChangeRegistry] No subscribers for scope "${scopeName}", skipping notification`);
       return;
     }
-
-    console.log(`[ParamChangeRegistry] Param "${paramId}" changed in scope "${scopeName}". Notifying ${subscribers.size} subscribers.`);
 
     // Re-render all charts that depend on this scope
     for (const chart of subscribers) {
       if (chart.rerender) {
-        console.log(`[ParamChangeRegistry] Triggering rerender for chart`);
         chart.rerender().catch(error => {
           console.error('[ParamChangeRegistry] Chart rerender failed:', error);
         });

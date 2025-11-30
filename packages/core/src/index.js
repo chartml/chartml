@@ -78,7 +78,6 @@ class Chart {
     // Subscribe to source refresh notifications if chart uses a named source
     if (this.sourceName) {
       chartml.sourceRefreshRegistry.subscribe(this.sourceName, this);
-      console.log('[Chart constructor] Subscribed to source refresh notifications:', this.sourceName);
     }
 
     // Subscribe to parameter change notifications for any param scopes this chart depends on
@@ -96,7 +95,6 @@ class Chart {
         if (!this.paramScopes.has(scopeName)) {
           this.paramScopes.add(scopeName);
           chartml.paramChangeRegistry.subscribe(scopeName, this);
-          console.log('[Chart constructor] Subscribed to param scope:', scopeName);
         }
       }
     }
@@ -120,7 +118,6 @@ class Chart {
   async refresh() {
     // If chart uses a named source, coordinate refresh notifications through registry
     if (this.sourceName) {
-      console.log('[Chart.refresh] Coordinating refresh for source:', this.sourceName);
       await this.chartml.sourceRefreshRegistry.refreshSource(this.sourceName, async () => {
         // This callback does the actual refresh for THIS chart
         // Registry will notify all other charts using this source
@@ -140,8 +137,6 @@ class Chart {
       if (this.onRefreshStateChange) {
         this.onRefreshStateChange(true);
       }
-
-      console.log('[Chart.refresh] Refreshing with bypassCache (no source coordination)');
 
       await this.chartml._renderChartWithParams(this.container, {
         ...this.options,
@@ -163,7 +158,6 @@ class Chart {
    * @returns {Promise<void>}
    */
   async rerender() {
-    console.log('[Chart.rerender] Re-rendering with parameter resolution');
     // Call full render() with original spec to re-resolve parameters
     // render() will handle parameter resolution and return a new Chart instance
     await this.chartml.render(this.spec, this.container, {
@@ -179,14 +173,12 @@ class Chart {
     // Unsubscribe from source refresh notifications
     if (this.sourceName) {
       this.chartml.sourceRefreshRegistry.unsubscribe(this.sourceName, this);
-      console.log('[Chart.destroy] Unsubscribed from source refresh notifications:', this.sourceName);
     }
 
     // Unsubscribe from parameter change notifications
     if (this.paramScopes) {
       for (const scopeName of this.paramScopes) {
         this.chartml.paramChangeRegistry.unsubscribe(scopeName, this);
-        console.log('[Chart.destroy] Unsubscribed from param scope:', scopeName);
       }
     }
 
@@ -408,8 +400,6 @@ export class ChartML {
    * Resolve data source - determine which handler to use
    */
   async _resolveDataSource(spec, options = {}) {
-    console.log('[ChartML._resolveDataSource] options:', options);
-
     // Inline data (array)
     if (Array.isArray(spec.data)) {
       const handler = this.dataSources.get('inline');
@@ -428,7 +418,6 @@ export class ChartML {
       if (!handler) {
         throw new Error(`Unknown data source type: ${spec.data.type}`);
       }
-      console.log('[ChartML._resolveDataSource] Calling handler for type:', spec.data.type, 'with options:', options);
       return await handler(spec, options);
     }
 
@@ -618,18 +607,6 @@ export class ChartML {
       return await handler(spec.data, { hooks: this.hooks });
     }
 
-    console.error('🔴🔴🔴 [ChartML Core] DATA SOURCE RESOLUTION FAILED 🔴🔴🔴');
-    console.error('[ChartML Core] Full spec:', JSON.stringify(spec, null, 2));
-    console.error('[ChartML Core] spec.data value:', spec.data);
-    console.error('[ChartML Core] spec.data type:', typeof spec.data);
-    console.error('[ChartML Core] Type checks:', {
-      hasData: !!spec.data,
-      isObject: typeof spec.data === 'object',
-      hasProvider: spec.data?.provider,
-      hasRows: spec.data?.rows,
-      isArray: Array.isArray(spec.data),
-      isString: typeof spec.data === 'string'
-    });
     throw new Error('Unable to resolve data source. Provide "data:" as either a string (source reference), array (inline rows), or object with "provider" property.');
   }
 
@@ -666,7 +643,6 @@ export class ChartML {
           const pluginDefaults = renderer.getDefaultDimensions(spec, container);
           if (pluginDefaults?.height) {
             defaultHeight = pluginDefaults.height;
-            console.log(`[ChartML] Using plugin default height for "${chartType}":`, defaultHeight);
           }
         } catch (error) {
           console.warn(`[ChartML] Plugin dimension provider for "${chartType}" failed:`, error);

@@ -95,7 +95,6 @@ export async function d3Aggregate(data, spec, context = {}) {
 
       // Return cached result if still fresh
       if (age < CACHE_TTL_MS) {
-        console.log('[d3Aggregate] Cache HIT - returning cached result');
         return {
           data: cached.result,
           metadata: {
@@ -105,7 +104,6 @@ export async function d3Aggregate(data, spec, context = {}) {
         };
       } else {
         // Cache expired - remove it
-        console.log('[d3Aggregate] Cache expired - fetching fresh data');
         aggregateCache.delete(cacheKey);
       }
     }
@@ -113,7 +111,6 @@ export async function d3Aggregate(data, spec, context = {}) {
     // Check if there's an in-flight request for this same query
     const inFlight = inFlightRequests.get(cacheKey);
     if (inFlight) {
-      console.log('[d3Aggregate] In-flight request found - waiting for it');
       return await inFlight;
     }
   }
@@ -123,7 +120,6 @@ export async function d3Aggregate(data, spec, context = {}) {
     try {
       // Fetch data if not already provided
       if (!data && context.fetchData) {
-        console.log('[d3Aggregate] Fetching data from source');
         data = await context.fetchData();
       }
 
@@ -252,7 +248,6 @@ export async function d3Aggregate(data, spec, context = {}) {
           result: result,
           timestamp: timestamp
         });
-        console.log('[d3Aggregate] Cached aggregated result');
       }
 
       // Return Result Object with metadata
