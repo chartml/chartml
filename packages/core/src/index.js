@@ -214,6 +214,10 @@ export class ChartML {
     this.defaultPalette = options.defaultPalette || null;  // Array of color strings from parent app
     this.loadingIndicator = options.loadingIndicator || null;  // Optional custom loading indicator function
 
+    // Datasource resolver function for resolving slugs to internal configs
+    // Set by parent application via setDatasourceResolver()
+    this.datasourceResolver = null;
+
     // Create param change registry for coordinating parameter updates across charts
     this.paramChangeRegistry = new ParamChangeRegistry();
 
@@ -258,6 +262,45 @@ export class ChartML {
       throw new Error('Invalid palette: must be an array of color strings');
     }
     this.defaultPalette = palette;
+  }
+
+  /**
+   * Set the datasource resolver function for resolving slugs to internal configs.
+   *
+   * The resolver enables user-friendly datasource references in ChartML specs:
+   *   data:
+   *     datasource: "production-postgres"  # User-defined slug
+   *     query: SELECT * FROM users
+   *
+   * Instead of hard-to-remember UUIDs:
+   *   data:
+   *     datasource_id: "ds-2a1b3f5d8e5e4434a609084b2b4233d0"
+   *     query: SELECT * FROM users
+   *
+   * @param {Function} resolver - Async function that resolves slugs to datasource configs
+   *   Signature: async (slug, context) => {
+   *     provider: string,        // e.g., "postgres", "bigquery"
+   *     datasource_id: string,   // Internal UUID (e.g., "ds-abc123")
+   *     slug: string,            // The slug that was resolved
+   *     connection_config?: object  // Optional connection config
+   *   }
+   *
+   * @example
+   * chartml.setDatasourceResolver(async (slug, context) => {
+   *   const response = await apiClient.get(`/api/v1/datasources/${slug}`);
+   *   const ds = response.data;
+   *   return {
+   *     provider: ds.datasource_type,
+   *     datasource_id: ds.id,
+   *     slug: ds.slug
+   *   };
+   * });
+   */
+  setDatasourceResolver(resolver) {
+    if (typeof resolver !== 'function') {
+      throw new Error('Datasource resolver must be a function');
+    }
+    this.datasourceResolver = resolver;
   }
 
   /**
@@ -544,8 +587,11 @@ export class ChartML {
         }
         return data;
       } else {
-        // Plugin data source (bigquery, api, etc.)
-        const handler = this.dataSources.get(source.provider);
+        // Plugin data source (bigquery, api, etc.) - check instance first, then global registry
+        let handler = this.dataSources.get(source.provider);
+        if (!handler) {
+          handler = globalRegistry.getDataSource(source.provider);
+        }
         if (!handler) {
           throw new Error(`Unknown data source provider: ${source.provider}`);
         }
@@ -575,8 +621,11 @@ export class ChartML {
         }
         return data;
       } else {
-        // Plugin data source (bigquery, api, etc.)
-        const handler = this.dataSources.get(source.provider);
+        // Plugin data source (bigquery, api, etc.) - check instance first, then global registry
+        let handler = this.dataSources.get(source.provider);
+        if (!handler) {
+          handler = globalRegistry.getDataSource(source.provider);
+        }
         if (!handler) {
           throw new Error(`Unknown data source provider: ${source.provider}`);
         }
@@ -597,9 +646,59 @@ export class ChartML {
       return await handler(spec);
     }
 
+    // Object with datasource slug - resolve slug to config, then call plugin
+    // This is the preferred way to reference datasources in ChartML specs:
+    //   data:
+    //     datasource: "production-postgres"  # User-friendly slug
+    //     query: SELECT * FROM users
+    if (spec.data && typeof spec.data === 'object' && spec.data.datasource) {
+      // Check instance resolver first, then fall back to global registry
+      const resolver = this.datasourceResolver || globalRegistry.getDatasourceResolver();
+      if (!resolver) {
+        throw new Error(
+          'Datasource resolver not configured. ' +
+          'Call globalRegistry.setDatasourceResolver() or chartml.setDatasourceResolver() before using datasource slugs, ' +
+          'or use provider: "postgres" instead of datasource: "slug".'
+        );
+      }
+
+      // Resolve slug to datasource config
+      const resolved = await resolver(spec.data.datasource, options);
+
+      // Get the handler for this provider type (instance first, then global registry)
+      let handler = this.dataSources.get(resolved.provider);
+      if (!handler) {
+        handler = globalRegistry.getDataSource(resolved.provider);
+      }
+      if (!handler) {
+        throw new Error(`Unknown data source provider: ${resolved.provider}`);
+      }
+
+      // Merge resolved config into spec.data, replacing the slug with internal datasource_id
+      // The plugin receives: { query, datasource_id, ...other spec.data props, ...resolved props }
+      const enrichedSpec = {
+        ...spec.data,
+        datasource_id: resolved.datasource_id,  // Add internal ID for plugin
+        provider: resolved.provider,            // Ensure provider is set
+        // Keep original slug for logging/debugging
+        _resolved_slug: spec.data.datasource
+      };
+
+      // Pass resolved config in context for plugins that need full datasource info
+      return await handler(enrichedSpec, {
+        hooks: this.hooks,
+        ...options,
+        resolvedDatasource: resolved
+      });
+    }
+
     // Object with provider property - plugin data source
     if (spec.data && typeof spec.data === 'object' && spec.data.provider) {
-      const handler = this.dataSources.get(spec.data.provider);
+      // Check instance first, then global registry
+      let handler = this.dataSources.get(spec.data.provider);
+      if (!handler) {
+        handler = globalRegistry.getDataSource(spec.data.provider);
+      }
       if (!handler) {
         throw new Error(`Unknown data source provider: ${spec.data.provider}`);
       }
@@ -607,7 +706,7 @@ export class ChartML {
       return await handler(spec.data, { hooks: this.hooks });
     }
 
-    throw new Error('Unable to resolve data source. Provide "data:" as either a string (source reference), array (inline rows), or object with "provider" property.');
+    throw new Error('Unable to resolve data source. Provide "data:" as either a string (source reference), array (inline rows), object with "datasource" slug, or object with "provider" property.');
   }
 
   /**
