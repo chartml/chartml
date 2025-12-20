@@ -4,7 +4,19 @@
  * React-markdown plugin for rendering ChartML code blocks.
  * Handles multi-component documents (sources + charts) with proper two-pass rendering.
  *
- * Usage:
+ * Usage (standalone - creates its own ChartML instance):
+ * ```jsx
+ * import Markdown from 'react-markdown';
+ * import { ChartMLCodeBlock } from '@chartml/markdown-react';
+ *
+ * const { code, pre } = ChartMLCodeBlock({});
+ *
+ * <Markdown components={{ code, pre }}>
+ *   {markdown}
+ * </Markdown>
+ * ```
+ *
+ * Usage (with custom instance - for apps that register their own plugins):
  * ```jsx
  * import Markdown from 'react-markdown';
  * import { ChartMLCodeBlock } from '@chartml/markdown-react';
@@ -39,6 +51,7 @@
 
 import React, { useRef, useEffect } from 'react';
 import yaml from 'js-yaml';
+import { ChartML } from '@chartml/core';
 import { DefaultParamsRenderer } from './DefaultParamsRenderer.jsx';
 import { getExpectedDimensions, getColSpanClass } from '@chartml/markdown-common';
 
@@ -46,17 +59,17 @@ import { getExpectedDimensions, getColSpanClass } from '@chartml/markdown-common
  * Create ChartML components for react-markdown
  *
  * @param {Object} options - Configuration
- * @param {ChartML} options.chartmlInstance - ChartML instance (with plugins registered)
- * @param {string} options.containerClassName - Optional custom className for chart container (defaults to 'chartml-chart-container')
- * @param {Function} options.chartWrapper - Optional wrapper component to add chrome (receives spec, chartmlInstance, onChartRender as props)
- * @param {Function} options.paramsWrapper - Optional wrapper component for params blocks (receives params from spec.params)
- * @param {Function} options.codeRenderer - Optional custom renderer for non-ChartML code blocks (receives { lang, inline, className, children, ...props })
+ * @param {ChartML} [options.chartmlInstance] - Optional ChartML instance. If not provided, creates a new instance that uses plugins from the global registry.
+ * @param {string} [options.containerClassName] - Optional custom className for chart container (defaults to 'chartml-chart-container')
+ * @param {Function} [options.chartWrapper] - Optional wrapper component to add chrome (receives spec, chartmlInstance, onChartRender as props)
+ * @param {Function} [options.paramsWrapper] - Optional wrapper component for params blocks (receives params from spec.params)
+ * @param {Function} [options.codeRenderer] - Optional custom renderer for non-ChartML code blocks (receives { lang, inline, className, children, ...props })
  * @returns {Object} { code, pre } - React components for code blocks and pre wrapper
  */
-export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartml-chart-container', chartWrapper, paramsWrapper, codeRenderer }) {
-  if (!chartmlInstance) {
-    throw new Error('ChartMLCodeBlock requires a chartmlInstance');
-  }
+export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartml-chart-container', chartWrapper, paramsWrapper, codeRenderer } = {}) {
+  // Create a default ChartML instance if not provided
+  // This enables standalone usage - plugins auto-register via globalRegistry when imported
+  const instance = chartmlInstance || new ChartML();
 
   // Track chart block index across all code blocks in the document
   // This counter is scoped to this ChartMLCodeBlock() call
@@ -101,7 +114,7 @@ export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartm
         }
 
         try {
-          chartmlInstance.registry.registerSource(sourceComp.name, sourceComp);
+          instance.registry.registerSource(sourceComp.name, sourceComp);
         } catch (error) {
           // Source might already be registered - that's OK
         }
@@ -115,7 +128,7 @@ export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartm
         }
 
         try {
-          chartmlInstance.registry.registerParams(paramsComp.name, paramsComp);
+          instance.registry.registerParams(paramsComp.name, paramsComp);
         } catch (error) {
           // Params might already be registered - that's OK
         }
@@ -133,7 +146,7 @@ export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartm
               key: idx,
               parameterDefinitions: paramsComp.params,
               scope: paramsComp.name,  // Use params block name as scope
-              chartmlInstance: chartmlInstance  // Pass instance for registry access
+              chartmlInstance: instance  // Pass instance for registry access
             });
           })
         );
@@ -157,7 +170,7 @@ export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartm
             { key: idx, className: colSpanClass },
             React.createElement(ChartComponent, {
               spec: chart,
-              chartmlInstance: chartmlInstance,
+              chartmlInstance: instance,
               className: containerClassName,
               chartBlockIndex: currentBlockIndex,
               chartArrayIndex: idx

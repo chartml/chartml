@@ -27,16 +27,14 @@ npm install @chartml/markdown-react react-markdown
 
 ## Quick Start
 
-### Basic Usage
+### Basic Usage (Standalone)
 
 ```jsx
 import Markdown from 'react-markdown';
 import { ChartMLCodeBlock } from '@chartml/markdown-react';
-import { ChartML } from '@chartml/core';
 
-// Create ChartML instance
-const chartml = new ChartML();
-const { code, pre } = ChartMLCodeBlock({ chartmlInstance: chartml });
+// No configuration needed - uses plugins from global registry
+const { code, pre } = ChartMLCodeBlock();
 
 function Dashboard() {
   const markdown = `
@@ -217,16 +215,26 @@ Creates custom components for react-markdown.
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `chartmlInstance` | `ChartML` | **Required.** ChartML instance with plugins registered |
+| `chartmlInstance` | `ChartML` | Optional. ChartML instance. If not provided, creates a new instance that uses plugins from the global registry. |
 | `containerClassName` | `string` | CSS class for chart containers (default: `'chartml-chart-container'`) |
 | `chartWrapper` | `Component` | Custom wrapper component for charts |
 | `paramsWrapper` | `Component` | Custom wrapper component for params blocks |
 
 **Returns:** `{ code, pre }` - Components to pass to react-markdown
 
-**Example:**
+**Example (Standalone):**
 
 ```jsx
+// Standalone - no configuration needed
+const { code, pre } = ChartMLCodeBlock();
+
+<Markdown components={{ code, pre }}>{markdown}</Markdown>
+```
+
+**Example (Custom Instance):**
+
+```jsx
+// With custom instance for apps that register their own plugins
 const chartml = new ChartML();
 const { code, pre } = ChartMLCodeBlock({
   chartmlInstance: chartml,

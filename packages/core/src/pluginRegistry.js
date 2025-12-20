@@ -10,6 +10,7 @@ class GlobalPluginRegistry {
     this.chartRenderers = new Map();
     this.dataSources = new Map();
     this.aggregateMiddleware = [];
+    this.datasourceResolver = null;
   }
 
   registerChartRenderer(type, renderer) {
@@ -28,6 +29,14 @@ class GlobalPluginRegistry {
 
   registerAggregateMiddleware(middleware) {
     this.aggregateMiddleware.push(middleware);
+  }
+
+  setDatasourceResolver(resolver) {
+    this.datasourceResolver = resolver;
+  }
+
+  getDatasourceResolver() {
+    return this.datasourceResolver;
   }
 
   getChartRenderer(type) {
