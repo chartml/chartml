@@ -217,7 +217,7 @@ function determineScaleTypes(data, xField) {
 
 /**
  * Calculate adaptive bar width for date scales
- * Returns the bar width that fits without overlap
+ * Returns the bar width based on the time span of the x-axis (not number of bars)
  */
 function calculateDateScaleBarWidth(data, xField, chartWidth) {
   if (data.length <= 1) return 20; // Single bar, use default
@@ -227,17 +227,22 @@ function calculateDateScaleBarWidth(data, xField, chartWidth) {
     .map(time => new Date(time))
     .sort((a, b) => a - b);
 
-  const dateCount = uniqueDates.length;
+  if (uniqueDates.length <= 1) return 20;
 
-  // Calculate average spacing between bars
-  // Available width / number of bars = space per bar
-  const spacePerBar = chartWidth / dateCount;
+  // Calculate the time span in days
+  const minDate = uniqueDates[0];
+  const maxDate = uniqueDates[uniqueDates.length - 1];
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const daySpan = Math.max(1, Math.ceil((maxDate - minDate) / msPerDay) + 1);
 
-  // Bar should be 80% of available space (20% for gap)
-  const calculatedWidth = spacePerBar * 0.8;
+  // Calculate bar width based on TIME SPAN (days), not number of bars
+  // This ensures bars are proportional to "one day" on the chart
+  const spacePerDay = chartWidth / daySpan;
+
+  // Bar should be 80% of a day's worth of space (20% for gap)
+  const calculatedWidth = spacePerDay * 0.8;
 
   // Cap between 2px (minimum visible) and 20% of chart width (responsive maximum)
-  // This prevents bars from being too thin or too fat, while adapting to chart size
   const maxBarWidth = chartWidth * 0.2;
   const barWidth = Math.max(2, Math.min(calculatedWidth, maxBarWidth));
 
