@@ -40,7 +40,10 @@ export function createPieChartRenderer() {
    * @param {Array} config.colors - Color palette array
    */
   return function renderPieChart(container, data, config) {
-    const { categoryField, valueField, height, colors, type, width } = config;
+    const { categoryField, valueField, height, colors, type, width, animation = true } = config;
+
+    // Helper to get animation duration (0 if animations disabled)
+    const getAnimationDuration = (baseMs) => animation ? baseMs : 0;
 
     // Clear container
     container.innerHTML = '';
@@ -132,13 +135,13 @@ export function createPieChartRenderer() {
           if (idx === i) {
             d3.select(this)
               .transition()
-              .duration(200)
+              .duration(getAnimationDuration(200))
               .attr('d', arcHover)
               .style('opacity', 1);
           } else {
             d3.select(this)
               .transition()
-              .duration(200)
+              .duration(getAnimationDuration(200))
               .style('opacity', 0.7);
           }
         });
@@ -160,7 +163,7 @@ export function createPieChartRenderer() {
         // Reset all slices
         slices
           .transition()
-          .duration(200)
+          .duration(getAnimationDuration(200))
           .attr('d', arc)
           .style('opacity', 0.9);
 
@@ -196,7 +199,7 @@ export function createPieChartRenderer() {
           const el = d3.select(this);
           if (idx === item.index) {
             el.transition()
-              .duration(200)
+              .duration(getAnimationDuration(200))
               .attr('d', arcHover)
               .style('opacity', 1);
           } else {
@@ -206,7 +209,7 @@ export function createPieChartRenderer() {
               el.attr('data-original-opacity', currentOpacity);
             }
             el.transition()
-              .duration(200)
+              .duration(getAnimationDuration(200))
               .style('opacity', 0.3);
           }
         });
@@ -217,7 +220,7 @@ export function createPieChartRenderer() {
           const el = d3.select(this);
           const originalOpacity = parseFloat(el.attr('data-original-opacity')) || 0.9;
           el.transition()
-            .duration(200)
+            .duration(getAnimationDuration(200))
             .attr('d', arc)
             .style('opacity', originalOpacity);
         });
