@@ -57,8 +57,12 @@ export function createScatterPlotRenderer() {
       yAxisLabel = '',
       colors,
       defaultRadius = 5,
-      radiusRange = [3, 20]
+      radiusRange = [3, 20],
+      animation = true  // Enable animations by default
     } = config;
+
+    // Helper to get animation duration (0 if animations disabled)
+    const getAnimationDuration = (baseMs) => animation ? baseMs : 0;
 
     // Validate that colors are provided
     if (!colors || !Array.isArray(colors)) {
@@ -223,7 +227,7 @@ export function createScatterPlotRenderer() {
         // Highlight dot
         d3.select(this)
           .transition()
-          .duration(200)
+          .duration(getAnimationDuration(200))
           .attr('r', (sizeField ? sizeScale(d[sizeField]) : defaultRadius) * 1.3)
           .attr('opacity', 1)
           .attr('stroke-width', 2);
@@ -250,7 +254,7 @@ export function createScatterPlotRenderer() {
         // Remove highlight
         d3.select(this)
           .transition()
-          .duration(200)
+          .duration(getAnimationDuration(200))
           .attr('r', sizeField ? sizeScale(d[sizeField]) : defaultRadius)
           .attr('opacity', 0.8)
           .attr('stroke-width', 1.5);
@@ -264,7 +268,7 @@ export function createScatterPlotRenderer() {
       .attr('r', 0)
       .transition()
       .delay((d, i) => i * 20)
-      .duration(600)
+      .duration(getAnimationDuration(600))
       .attr('r', d => sizeField ? sizeScale(d[sizeField]) : defaultRadius);
 
     // Add legend if colorField is provided - using unified utility with hover
@@ -306,14 +310,14 @@ export function createScatterPlotRenderer() {
             const dot = d3.select(this);
             const dotCategory = dot.attr('data-category');
             if (dotCategory === String(item.category)) {
-              dot.transition().duration(200).attr('opacity', 1);
+              dot.transition().duration(getAnimationDuration(200)).attr('opacity', 1);
             } else {
               // Only save original opacity if not already saved (prevents cumulative dimming)
               if (!dot.attr('data-original-opacity')) {
                 const currentOpacity = parseFloat(dot.attr('opacity') || dot.style('opacity')) || 0.8;
                 dot.attr('data-original-opacity', currentOpacity);
               }
-              dot.transition().duration(200).attr('opacity', 0.3);
+              dot.transition().duration(getAnimationDuration(200)).attr('opacity', 0.3);
             }
           });
         },
@@ -322,7 +326,7 @@ export function createScatterPlotRenderer() {
           svg.selectAll('.dot').each(function() {
             const dot = d3.select(this);
             const originalOpacity = parseFloat(dot.attr('data-original-opacity')) || 0.8;
-            dot.transition().duration(200).attr('opacity', originalOpacity);
+            dot.transition().duration(getAnimationDuration(200)).attr('opacity', originalOpacity);
           });
         }
       });

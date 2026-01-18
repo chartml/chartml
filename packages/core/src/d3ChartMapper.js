@@ -144,6 +144,7 @@ export function mapToCartesianChart(visualizeSpec, data, instanceConfig = {}) {
       grid: style.grid  // Pass through grid configuration
     },
     annotations: annotations || [],  // Pass through annotations (reference lines/bands)
+    animation: instanceConfig.animation !== false,  // Pass through animation setting (default true)
     data: processedData
   };
 }

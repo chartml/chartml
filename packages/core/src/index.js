@@ -213,6 +213,7 @@ export class ChartML {
     this.chartRenderers = new Map();  // Chart renderer plugins
     this.defaultPalette = options.defaultPalette || null;  // Array of color strings from parent app
     this.loadingIndicator = options.loadingIndicator || null;  // Optional custom loading indicator function
+    this.animation = options.animation !== false;  // Enable animations by default (backward compatible)
 
     // Datasource resolver function for resolving slugs to internal configs
     // Set by parent application via setDatasourceResolver()
@@ -1096,9 +1097,15 @@ export class ChartML {
       context.dimensions = this._calculateDimensions(context.resolvedSpec, container);
 
       // Create instance config to pass runtime defaults to mapper (does NOT mutate spec)
+      // Spec-level style.animation takes precedence over instance default
+      const animationEnabled = context.resolvedSpec.style?.animation !== undefined
+        ? context.resolvedSpec.style.animation
+        : this.animation;
+
       const instanceConfig = {
         defaultPalette: this.defaultPalette,
-        dimensions: context.dimensions
+        dimensions: context.dimensions,
+        animation: animationEnabled
       };
 
       // Map ChartML to D3 config (pass title and instanceConfig)

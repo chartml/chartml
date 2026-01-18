@@ -15,6 +15,18 @@ const AXIS_LABEL_FONT_SIZE = '12px';
 const AXIS_LABEL_FONT_FAMILY = 'system-ui';
 
 /**
+ * Get animation duration based on animation setting
+ * Returns 0 if animations are disabled, otherwise returns the base duration
+ *
+ * @param {number} baseMs - Base duration in milliseconds
+ * @param {boolean} animationEnabled - Whether animations are enabled
+ * @returns {number} Duration in milliseconds (0 if disabled)
+ */
+function getAnimationDuration(baseMs, animationEnabled) {
+  return animationEnabled ? baseMs : 0;
+}
+
+/**
  * CHART.JS TWO-PASS APPROACH - STEP 1: Calculate Margin
  *
  * Measure labels BEFORE rendering chart to determine required bottom margin.
@@ -923,15 +935,15 @@ function addDataLabels(g, data, row, x, yScale, chartHeight, xField, isDateScale
   labels
     .attr('opacity', 0)
     .transition()
-    .delay(200)
-    .duration(200)
+    .delay(getAnimationDuration(200, animation))
+    .duration(getAnimationDuration(200, animation))
     .attr('opacity', 0.9);
 }
 
 /**
  * Render bar mark for a single row
  */
-function renderBarMark(g, data, row, x, yScale, chartHeight, color, tooltip, container, xField, isDateScale, chartWidth) {
+function renderBarMark(g, data, row, x, yScale, chartHeight, color, tooltip, container, xField, isDateScale, chartWidth, animation) {
   // Calculate bar width with a responsive maximum cap to prevent overlap with many bars
   const maxBarWidth = chartWidth * 0.2; // Maximum width: 20% of chart width (responsive)
   let barWidth, xOffset;
@@ -968,7 +980,7 @@ function renderBarMark(g, data, row, x, yScale, chartHeight, color, tooltip, con
       const barColor = d3.select(this).attr('fill');
       d3.select(this)
         .transition()
-        .duration(200)
+        .duration(getAnimationDuration(200, animation))
         .attr('opacity', 1)
         .attr('stroke', d3.color(barColor).darker(0.5))
         .attr('stroke-width', 2);
@@ -987,7 +999,7 @@ function renderBarMark(g, data, row, x, yScale, chartHeight, color, tooltip, con
     .on('mouseleave', function() {
       d3.select(this)
         .transition()
-        .duration(200)
+        .duration(getAnimationDuration(200, animation))
         .attr('opacity', 0.9)
         .attr('stroke', 'none');
 
@@ -995,19 +1007,26 @@ function renderBarMark(g, data, row, x, yScale, chartHeight, color, tooltip, con
     });
 
   // Animate bars from bottom
-  // Disable pointer events during animation to prevent transition conflicts
-  bars
-    .style('pointer-events', 'none')
-    .attr('y', chartHeight)
-    .attr('height', 0)
-    .transition()
-    .duration(400)
-    .attr('y', d => yScale(d[row.field] || 0))
-    .attr('height', d => chartHeight - yScale(d[row.field] || 0))
-    .on('end', function() {
-      // Re-enable pointer events after animation completes
-      d3.select(this).style('pointer-events', 'auto');
-    });
+  // Animate bar entrance (only if animations enabled)
+  if (animation) {
+    bars
+      .style('pointer-events', 'none')
+      .attr('y', chartHeight)
+      .attr('height', 0)
+      .transition()
+      .duration(400)
+      .attr('y', d => yScale(d[row.field] || 0))
+      .attr('height', d => chartHeight - yScale(d[row.field] || 0))
+      .on('end', function() {
+        // Re-enable pointer events after animation completes
+        d3.select(this).style('pointer-events', 'auto');
+      });
+  } else {
+    // No animation - set final position immediately
+    bars
+      .attr('y', d => yScale(d[row.field] || 0))
+      .attr('height', d => chartHeight - yScale(d[row.field] || 0));
+  }
 
   // Add data labels if configured
   addDataLabels(g, data, row, x, yScale, chartHeight, xField, isDateScale);
@@ -1016,7 +1035,7 @@ function renderBarMark(g, data, row, x, yScale, chartHeight, color, tooltip, con
 /**
  * Render stacked bars for multiple bar rows
  */
-function renderStackedBars(g, data, barRows, x, yScale, chartHeight, colors, tooltip, container, xField, isDateScale, mode, chartWidth) {
+function renderStackedBars(g, data, barRows, x, yScale, chartHeight, colors, tooltip, container, xField, isDateScale, mode, chartWidth, animation) {
   const fields = barRows.map(r => r.field);
 
   // Calculate bar width with a responsive maximum cap (20% of chart width)
@@ -1097,21 +1116,28 @@ function renderStackedBars(g, data, barRows, x, yScale, chartHeight, colors, too
         tooltip.style('opacity', 0);
       });
 
-    // Animate stacked bars
-    // Disable pointer events during animation to prevent transition conflicts
-    groups.selectAll('rect')
-      .style('pointer-events', 'none')
-      .attr('y', chartHeight)
-      .attr('height', 0)
-      .transition()
-      .delay((d, i) => i * 10)
-      .duration(400)
-      .attr('y', d => yScale(d[1]))
-      .attr('height', d => yScale(d[0]) - yScale(d[1]))
-      .on('end', function() {
-        // Re-enable pointer events after animation completes
-        d3.select(this).style('pointer-events', 'auto');
-      });
+    // Animate stacked bars (only if animations enabled)
+    const stackedRects = groups.selectAll('rect');
+    if (animation) {
+      stackedRects
+        .style('pointer-events', 'none')
+        .attr('y', chartHeight)
+        .attr('height', 0)
+        .transition()
+        .delay((d, i) => i * 10)
+        .duration(400)
+        .attr('y', d => yScale(d[1]))
+        .attr('height', d => yScale(d[0]) - yScale(d[1]))
+        .on('end', function() {
+          // Re-enable pointer events after animation completes
+          d3.select(this).style('pointer-events', 'auto');
+        });
+    } else {
+      // No animation - set final position immediately
+      stackedRects
+        .attr('y', d => yScale(d[1]))
+        .attr('height', d => yScale(d[0]) - yScale(d[1]));
+    }
 
   } else {
     // Grouped mode
@@ -1169,21 +1195,28 @@ function renderStackedBars(g, data, barRows, x, yScale, chartHeight, colors, too
         tooltip.style('opacity', 0);
       });
 
-    // Animate grouped bars
-    // Disable pointer events during animation to prevent transition conflicts
-    groups.selectAll('rect')
-      .style('pointer-events', 'none')
-      .attr('y', chartHeight)
-      .attr('height', 0)
-      .transition()
-      .delay((d, i) => i * 10)
-      .duration(400)
-      .attr('y', d => yScale(d.value))
-      .attr('height', d => chartHeight - yScale(d.value))
-      .on('end', function() {
-        // Re-enable pointer events after animation completes
-        d3.select(this).style('pointer-events', 'auto');
-      });
+    // Animate grouped bars (only if animations enabled)
+    const groupedRects = groups.selectAll('rect');
+    if (animation) {
+      groupedRects
+        .style('pointer-events', 'none')
+        .attr('y', chartHeight)
+        .attr('height', 0)
+        .transition()
+        .delay((d, i) => i * 10)
+        .duration(400)
+        .attr('y', d => yScale(d.value))
+        .attr('height', d => chartHeight - yScale(d.value))
+        .on('end', function() {
+          // Re-enable pointer events after animation completes
+          d3.select(this).style('pointer-events', 'auto');
+        });
+    } else {
+      // No animation - set final position immediately
+      groupedRects
+        .attr('y', d => yScale(d.value))
+        .attr('height', d => chartHeight - yScale(d.value));
+    }
   }
 
   // Add data labels for each row if configured
@@ -1198,7 +1231,7 @@ function renderStackedBars(g, data, barRows, x, yScale, chartHeight, colors, too
 /**
  * Render line mark for a single row
  */
-function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, container, xField, isDateScale, curveType, showDots) {
+function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, container, xField, isDateScale, curveType, showDots, animation) {
   // Filter out null/undefined/NaN values
   const validData = data.filter(d => {
     const value = d[row.field];
@@ -1226,15 +1259,17 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
     .attr('stroke-width', 3)
     .attr('d', line);
 
-  // Animate line drawing
-  const totalLength = path.node().getTotalLength();
-  path
-    .attr('stroke-dasharray', totalLength + ' ' + totalLength)
-    .attr('stroke-dashoffset', totalLength)
-    .transition()
-    .duration(500)
-    .ease(d3.easeLinear)
-    .attr('stroke-dashoffset', 0);
+  // Animate line drawing (only if animations enabled)
+  if (animation) {
+    const totalLength = path.node().getTotalLength();
+    path
+      .attr('stroke-dasharray', totalLength + ' ' + totalLength)
+      .attr('stroke-dashoffset', totalLength)
+      .transition()
+      .duration(500)
+      .ease(d3.easeLinear)
+      .attr('stroke-dashoffset', 0);
+  }
 
   // Add hover targets for tooltip (always present, even when dots are hidden)
   // Create invisible hover circles that are always there to capture mouse events
@@ -1254,14 +1289,14 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
         const correspondingDot = g.select(`.dot-${sanitizedField}[data-index="${d3.select(this).attr('data-index')}"]`);
         correspondingDot
           .transition()
-          .duration(200)
+          .duration(getAnimationDuration(200, animation))
           .attr('r', 7)
           .attr('opacity', 1);
       } else {
         // If no dots, show a temporary highlight dot matching visible dot style
         d3.select(this)
           .transition()
-          .duration(200)
+          .duration(getAnimationDuration(200, animation))
           .attr('r', 5)
           .attr('fill', color)
           .attr('stroke', 'white')
@@ -1286,14 +1321,14 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
         const correspondingDot = g.select(`.dot-${sanitizedField}[data-index="${d3.select(this).attr('data-index')}"]`);
         correspondingDot
           .transition()
-          .duration(200)
+          .duration(getAnimationDuration(200, animation))
           .attr('r', 5)
           .attr('opacity', 0.9);
       } else {
         // Hide temporary highlight dot (reset to invisible hover target)
         d3.select(this)
           .transition()
-          .duration(200)
+          .duration(getAnimationDuration(200, animation))
           .attr('r', 8)
           .attr('fill', 'transparent')
           .attr('stroke', 'none')
@@ -1310,13 +1345,13 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
 
   // Add visible dots if enabled
   if (showDots) {
-    g.selectAll(`.dot-${sanitizedField}`)
+    const dots = g.selectAll(`.dot-${sanitizedField}`)
       .data(validData)
       .join('circle')
       .attr('class', `dot dot-${sanitizedField}`)
       .attr('cx', d => isDateScale ? x(d[xField]) : (x(d[xField]) + x.bandwidth() / 2))
       .attr('cy', d => yScale(d[row.field]))
-      .attr('r', 5)
+      .attr('r', animation ? 0 : 5)  // Start at 0 for animation, or final size if no animation
       .attr('fill', color)
       .attr('stroke', 'white')
       .attr('stroke-width', 2)
@@ -1326,19 +1361,21 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
         d3.select(this).attr('data-index', i);
       });
 
-    // Animate dots entrance - scale delay based on data size
-    // For large datasets (>50 points), show all dots at once after line animation
-    // For small datasets, stagger the entrance for visual effect
-    const dotDelay = validData.length > 50
-      ? (() => 500)  // All dots appear together after line finishes
-      : ((_, i) => 500 + i * 20);  // Stagger small datasets
+    // Animate dots entrance (only if animations enabled)
+    if (animation) {
+      // Scale delay based on data size
+      // For large datasets (>50 points), show all dots at once after line animation
+      // For small datasets, stagger the entrance for visual effect
+      const dotDelay = validData.length > 50
+        ? (() => 500)  // All dots appear together after line finishes
+        : ((_, i) => 500 + i * 20);  // Stagger small datasets
 
-    g.selectAll(`.dot-${sanitizedField}`)
-      .attr('r', 0)
-      .transition()
-      .delay(dotDelay)
-      .duration(200)
-      .attr('r', 5);
+      dots
+        .transition()
+        .delay(dotDelay)
+        .duration(200)
+        .attr('r', 5);
+    }
   }
 
   // Add data labels if configured
@@ -1348,7 +1385,7 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
 /**
  * Render area mark for rows
  */
-function renderAreaMarks(g, data, areaRows, x, yScale, chartHeight, colors, xField, isDateScale, curveType, fillOpacity, mode) {
+function renderAreaMarks(g, data, areaRows, x, yScale, chartHeight, colors, xField, isDateScale, curveType, fillOpacity, mode, animation) {
   const curve = d3[curveType] || d3.curveLinear;
   const fields = areaRows.map(r => r.field);
 
@@ -1388,13 +1425,15 @@ function renderAreaMarks(g, data, areaRows, x, yScale, chartHeight, colors, xFie
             .attr('opacity', fillOpacity);
         });
 
-      // Animate areas
-      path
-        .attr('opacity', 0)
-        .transition()
-        .delay(index * 100)
-        .duration(400)
-        .attr('opacity', fillOpacity);
+      // Animate area entrance (only if animations enabled)
+      if (animation) {
+        path
+          .attr('opacity', 0)
+          .transition()
+          .delay(index * 100)
+          .duration(400)
+          .attr('opacity', fillOpacity);
+      }
     });
   } else if (mode === 'normalized' && fields.length > 1) {
     // Normalized stacked areas (100% stacked) - use stackOffsetExpand
@@ -1432,13 +1471,15 @@ function renderAreaMarks(g, data, areaRows, x, yScale, chartHeight, colors, xFie
             .attr('opacity', fillOpacity);
         });
 
-      // Animate areas
-      path
-        .attr('opacity', 0)
-        .transition()
-        .delay(index * 100)
-        .duration(400)
-        .attr('opacity', fillOpacity);
+      // Animate area entrance (only if animations enabled)
+      if (animation) {
+        path
+          .attr('opacity', 0)
+          .transition()
+          .delay(index * 100)
+          .duration(400)
+          .attr('opacity', fillOpacity);
+      }
     });
   } else {
     // Overlapping areas
@@ -1469,13 +1510,15 @@ function renderAreaMarks(g, data, areaRows, x, yScale, chartHeight, colors, xFie
             .attr('opacity', fillOpacity);
         });
 
-      // Animate areas
-      path
-        .attr('opacity', 0)
-        .transition()
-        .delay(index * 100)
-        .duration(400)
-        .attr('opacity', fillOpacity);
+      // Animate area entrance (only if animations enabled)
+      if (animation) {
+        path
+          .attr('opacity', 0)
+          .transition()
+          .delay(index * 100)
+          .duration(400)
+          .attr('opacity', fillOpacity);
+      }
     });
   }
 }
@@ -1484,7 +1527,7 @@ function renderAreaMarks(g, data, areaRows, x, yScale, chartHeight, colors, xFie
  * Add legend below chart using unified legend utility
  * With bidirectional hover interaction between legend and chart elements
  */
-function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWidth, legendSpace, axes) {
+function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWidth, legendSpace, axes, animation) {
   if (rows.length <= 1) return null;
 
   // Position legend in the space reserved for it, accounting for x-axis label if present
@@ -1522,7 +1565,7 @@ function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWid
       legendItems.forEach((otherItem) => {
         const elements = getSeriesElements(otherItem.field);
         if (otherItem.field === item.field) {
-          elements.transition().duration(200).style('opacity', 1);
+          elements.transition().duration(getAnimationDuration(200, animation)).style('opacity', 1);
         } else {
           // Dim to fixed opacity (not cumulative)
           elements.each(function() {
@@ -1532,7 +1575,7 @@ function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWid
               const currentOpacity = parseFloat(el.attr('opacity') || el.style('opacity')) || 0.9;
               el.attr('data-original-opacity', currentOpacity);
             }
-            el.transition().duration(200).style('opacity', 0.3);
+            el.transition().duration(getAnimationDuration(200, animation)).style('opacity', 0.3);
           });
         }
       });
@@ -1544,7 +1587,7 @@ function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWid
         elements.each(function() {
           const el = d3.select(this);
           const originalOpacity = parseFloat(el.attr('data-original-opacity')) || 0.9;
-          el.transition().duration(200).style('opacity', originalOpacity);
+          el.transition().duration(getAnimationDuration(200, animation)).style('opacity', originalOpacity);
         });
       });
     }
@@ -1750,7 +1793,8 @@ function renderHorizontalBarChart(container, data, config) {
     marginTop = 20,
     marginRight = 30,
     axes = {},
-    colors // REQUIRED - no default
+    colors, // REQUIRED - no default
+    animation = true  // Enable animations by default (backward compatible)
   } = config;
 
   // Validate that colors are provided
@@ -2033,7 +2077,7 @@ function renderHorizontalBarChart(container, data, config) {
                 const currentOpacity = parseFloat(el.attr('opacity') || el.style('opacity')) || 0.9;
                 el.attr('data-original-opacity', currentOpacity);
               }
-              el.transition().duration(200).style('opacity', 0.3);
+              el.transition().duration(getAnimationDuration(200, animation)).style('opacity', 0.3);
             });
           }
         });
@@ -2045,7 +2089,7 @@ function renderHorizontalBarChart(container, data, config) {
           bars.each(function() {
             const el = d3.select(this);
             const originalOpacity = parseFloat(el.attr('data-original-opacity')) || 0.9;
-            el.transition().duration(200).style('opacity', originalOpacity);
+            el.transition().duration(getAnimationDuration(200, animation)).style('opacity', originalOpacity);
           });
         });
       }
@@ -2095,7 +2139,8 @@ export function renderD3CartesianChart(container, data, config) {
     curveType = 'curveMonotoneX',
     showDots = true,
     fillOpacity = 0.6,
-    annotations = []
+    annotations = [],
+    animation = true  // Enable animations by default (backward compatible)
   } = config;
 
   // Validate that colors are provided
@@ -2321,20 +2366,20 @@ export function renderD3CartesianChart(container, data, config) {
   // Render bars on left axis
   if (leftBars.length > 1 && mode) {
     // Multiple bars - use stacked or grouped rendering
-    renderStackedBars(g, data, leftBars, scales.x, scales.yLeft, chartHeight, colors, tooltip, container, xField, isDateScale, mode, chartWidth);
+    renderStackedBars(g, data, leftBars, scales.x, scales.yLeft, chartHeight, colors, tooltip, container, xField, isDateScale, mode, chartWidth, animation);
   } else if (leftBars.length === 1) {
     // Single bar
-    renderBarMark(g, data, leftBars[0], scales.x, scales.yLeft, chartHeight, leftBars[0].color, tooltip, container, xField, isDateScale, chartWidth);
+    renderBarMark(g, data, leftBars[0], scales.x, scales.yLeft, chartHeight, leftBars[0].color, tooltip, container, xField, isDateScale, chartWidth, animation);
   }
 
   // Render areas on left axis
   if (leftAreas.length > 0) {
-    renderAreaMarks(g, data, leftAreas, scales.x, scales.yLeft, chartHeight, colors, xField, isDateScale, curveType, fillOpacity, mode);
+    renderAreaMarks(g, data, leftAreas, scales.x, scales.yLeft, chartHeight, colors, xField, isDateScale, curveType, fillOpacity, mode, animation);
   }
 
   // Render lines on left axis
   leftLines.forEach(row => {
-    renderLineMark(g, data, row, scales.x, scales.yLeft, chartHeight, row.color, tooltip, container, xField, isDateScale, curveType, showDots);
+    renderLineMark(g, data, row, scales.x, scales.yLeft, chartHeight, row.color, tooltip, container, xField, isDateScale, curveType, showDots, animation);
   });
 
   // Render right axis marks
@@ -2345,17 +2390,17 @@ export function renderD3CartesianChart(container, data, config) {
 
     // Render bars on right axis
     rightBars.forEach(row => {
-      renderBarMark(g, data, row, scales.x, scales.yRight, chartHeight, row.color, tooltip, container, xField, isDateScale, chartWidth);
+      renderBarMark(g, data, row, scales.x, scales.yRight, chartHeight, row.color, tooltip, container, xField, isDateScale, chartWidth, animation);
     });
 
     // Render areas on right axis
     if (rightAreas.length > 0) {
-      renderAreaMarks(g, data, rightAreas, scales.x, scales.yRight, chartHeight, colors, xField, isDateScale, curveType, fillOpacity, mode);
+      renderAreaMarks(g, data, rightAreas, scales.x, scales.yRight, chartHeight, colors, xField, isDateScale, curveType, fillOpacity, mode, animation);
     }
 
     // Render lines on right axis
     rightLines.forEach(row => {
-      renderLineMark(g, data, row, scales.x, scales.yRight, chartHeight, row.color, tooltip, container, xField, isDateScale, curveType, showDots);
+      renderLineMark(g, data, row, scales.x, scales.yRight, chartHeight, row.color, tooltip, container, xField, isDateScale, curveType, showDots, animation);
     });
   }
 
@@ -2377,5 +2422,5 @@ export function renderD3CartesianChart(container, data, config) {
   }
 
   // Add legend (pass legendSpace and axes so it can position correctly relative to rotated labels and axis title)
-  addLegend(svg, normalizedRows, colors, marginLeft, height, marginBottom, chartWidth, legendSpace, axes);
+  addLegend(svg, normalizedRows, colors, marginLeft, height, marginBottom, chartWidth, legendSpace, axes, animation);
 }
