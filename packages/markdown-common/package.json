@@ -7,8 +7,7 @@
   "module": "dist/index.js",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "import": "./dist/index.js"
     },
     "./styles.css": "./src/styles.css"
   },
@@ -31,7 +30,7 @@
   "author": "Jason Adams",
   "license": "MIT",
   "dependencies": {
-    "@chartml/core": "file:../core"
+    "@chartml/core": "^1.4.0"
   },
   "devDependencies": {
     "vite": "^5.0.0"

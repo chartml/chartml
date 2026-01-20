@@ -1,6 +1,7 @@
 {
   "name": "chartml-monorepo",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "description": "ChartML - A declarative markup language for creating beautiful, interactive data visualizations",
   "workspaces": [

@@ -41,3 +41,7 @@ playwright-report/
 *.tmp
 .cache/
 CLAUDE.md
+
+# NPM publishing artifacts
+changed-packages.json
+*.tgz
