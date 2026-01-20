@@ -1,0 +1,161 @@
+name: Publish to NPM
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no actual publish or git operations)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed to push tags and create releases
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for git tags
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Detect changed packages
+        id: detect
+        run: |
+          node scripts/detect-changed-packages.js > changed-packages.json
+          cat changed-packages.json
+          echo "changed=$(cat changed-packages.json)" >> $GITHUB_OUTPUT
+
+      - name: Check if any packages need publishing
+        id: check
+        run: |
+          CHANGED_COUNT=$(cat changed-packages.json | jq '. | length')
+          echo "count=$CHANGED_COUNT" >> $GITHUB_OUTPUT
+          if [ "$CHANGED_COUNT" -eq 0 ]; then
+            echo "No packages need publishing"
+            echo "needs_publish=false" >> $GITHUB_OUTPUT
+          else
+            echo "Found $CHANGED_COUNT package(s) to publish"
+            echo "needs_publish=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build packages
+        if: steps.check.outputs.needs_publish == 'true'
+        run: npm run build --workspaces --if-present
+
+      - name: Validate packages
+        if: steps.check.outputs.needs_publish == 'true'
+        run: |
+          echo "Validating built packages..."
+          for pkg in $(cat changed-packages.json | jq -r '.[].name'); do
+            PKG_DIR=$(find packages -name package.json -exec grep -l "\"name\": \"$pkg\"" {} \; | head -1 | xargs dirname)
+            if [ ! -d "$PKG_DIR/dist" ] && [ ! -f "$PKG_DIR/src/index.js" ]; then
+              echo "ERROR: Package $pkg is missing dist/ directory and src/ files"
+              exit 1
+            fi
+            echo "✓ $pkg validated"
+          done
+
+      - name: Configure NPM authentication
+        if: steps.check.outputs.needs_publish == 'true'
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+
+      - name: Publish packages
+        if: steps.check.outputs.needs_publish == 'true'
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "🔍 DRY RUN MODE - No actual publishing will occur"
+            node scripts/publish-packages.js --dry-run
+          else
+            echo "📦 Publishing packages to NPM..."
+            node scripts/publish-packages.js
+          fi
+
+      - name: Create git tags
+        if: steps.check.outputs.needs_publish == 'true' && inputs.dry_run == false
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          for pkg in $(cat changed-packages.json | jq -r '.[] | "\(.name)@\(.version)"'); do
+            if git rev-parse "$pkg" >/dev/null 2>&1; then
+              echo "Tag $pkg already exists, skipping"
+            else
+              git tag -a "$pkg" -m "Release $pkg"
+              echo "✓ Created tag: $pkg"
+            fi
+          done
+
+      - name: Push tags to GitHub
+        if: steps.check.outputs.needs_publish == 'true' && inputs.dry_run == false
+        run: |
+          git push origin --tags
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.needs_publish == 'true' && inputs.dry_run == false
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for pkg in $(cat changed-packages.json | jq -r '.[] | "\(.name)@\(.version)"'); do
+            PKG_NAME=$(echo $pkg | cut -d@ -f1)
+            PKG_VERSION=$(echo $pkg | cut -d@ -f2)
+
+            # Create release notes
+            cat > release-notes.md <<EOF
+          # $PKG_NAME v$PKG_VERSION
+
+          Published to NPM: https://www.npmjs.com/package/$PKG_NAME/v/$PKG_VERSION
+
+          ## Installation
+
+          \`\`\`bash
+          npm install $PKG_NAME@$PKG_VERSION
+          \`\`\`
+
+          ## Changes
+
+          See commit history for details.
+          EOF
+
+            gh release create "$pkg" \
+              --title "$PKG_NAME v$PKG_VERSION" \
+              --notes-file release-notes.md
+
+            echo "✓ Created GitHub release: $pkg"
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Publish Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "**Mode:** 🔍 Dry Run (no changes made)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Mode:** 📦 Production" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.check.outputs.needs_publish }}" = "true" ]; then
+            echo "**Packages processed:**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            cat changed-packages.json | jq -r '.[] | "- \(.name)@\(.version)"' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No packages needed publishing" >> $GITHUB_STEP_SUMMARY
+          fi
