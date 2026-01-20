@@ -36,7 +36,6 @@ jobs:
         run: |
           node scripts/detect-changed-packages.js > changed-packages.json
           cat changed-packages.json
-          echo "changed=$(cat changed-packages.json)" >> $GITHUB_OUTPUT
 
       - name: Check if any packages need publishing
         id: check
