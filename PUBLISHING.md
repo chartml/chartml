@@ -14,24 +14,31 @@ ChartML uses an automated GitHub Actions workflow to publish packages to NPM. Th
 
 ## Prerequisites
 
-### NPM Token Setup (One-Time)
+### NPM Trusted Publishing Setup (One-Time)
 
-The workflow requires an NPM authentication token to be configured as a GitHub Secret:
+ChartML uses **NPM Trusted Publishing** (OIDC authentication), which is more secure than using long-lived tokens. No GitHub Secrets are required!
 
-1. **Generate NPM token** (if you don't have one):
+**Setup steps:**
+
+1. **Configure each package on NPM** (do this once per package):
    - Log in to [npmjs.com](https://www.npmjs.com)
-   - Go to Account Settings → Access Tokens
-   - Click "Generate New Token" → "Automation"
-   - Copy the token (starts with `npm_...`)
+   - For each package (e.g., `@chartml/core`):
+     - Go to the package settings
+     - Navigate to "Publishing access" or "Automation tokens"
+     - Configure GitHub Actions as a trusted publisher:
+       - **Repository**: `chartml/chartml`
+       - **Workflow**: `publish-npm.yml`
+       - **Environment**: Leave blank (we don't use environments)
 
-2. **Add token to GitHub Secrets**:
-   - Go to: https://github.com/jasadams/chartml/settings/secrets/actions
-   - Click "New repository secret"
-   - Name: `NPM_TOKEN`
-   - Value: Paste your NPM token
-   - Click "Add secret"
+2. **That's it!** The workflow will automatically authenticate using OIDC tokens from GitHub Actions.
 
-The workflow will use this token to authenticate with NPM during publishing.
+**Benefits of Trusted Publishing:**
+- ✅ No long-lived tokens to manage or rotate
+- ✅ No secrets stored in GitHub
+- ✅ Packages include provenance attestations (verifiable build info)
+- ✅ More secure - NPM verifies the publish came from your GitHub repo
+
+**Note**: If this is the first time publishing a package, you may need to use a legacy token for the initial publish only. After that, configure Trusted Publishing for all future releases.
 
 ## Publishing Process
 
@@ -133,9 +140,10 @@ git push
 
 **Common causes**:
 1. **Version already exists on NPM**: Bump version and try again
-2. **NPM token invalid**: Regenerate token and update GitHub Secret
+2. **Trusted Publishing not configured**: Configure the package on npmjs.com (see Prerequisites)
 3. **Package name taken**: Check NPM for naming conflicts
 4. **Build failed**: Check build logs, fix errors, rebuild
+5. **First publish requires token**: For new packages, you may need to do the first publish manually with a token, then configure Trusted Publishing
 
 ### Local dependency errors
 
