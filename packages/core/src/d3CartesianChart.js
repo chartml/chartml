@@ -216,34 +216,139 @@ function determineScaleTypes(data, xField) {
 }
 
 /**
+ * Detect the time granularity of date data
+ * Returns the median interval in milliseconds between consecutive data points
+ */
+function detectTimeInterval(data, xField) {
+  if (data.length < 2) return null;
+
+  // Get unique dates sorted
+  const uniqueDates = Array.from(new Set(data.map(d => d[xField].getTime())))
+    .sort((a, b) => a - b);
+
+  if (uniqueDates.length < 2) return null;
+
+  // Calculate intervals between consecutive dates
+  const intervals = [];
+  for (let i = 1; i < uniqueDates.length; i++) {
+    intervals.push(uniqueDates[i] - uniqueDates[i - 1]);
+  }
+
+  // Use median interval (more robust than mean for irregular data)
+  intervals.sort((a, b) => a - b);
+  const medianInterval = intervals[Math.floor(intervals.length / 2)];
+
+  return medianInterval;
+}
+
+/**
+ * Get smart tooltip format based on data granularity
+ * Tooltips show more detail than axis labels (always includes year, time when relevant)
+ */
+function getSmartTooltipFormat(data, xField) {
+  const interval = detectTimeInterval(data, xField);
+
+  if (!interval) {
+    return d3.utcFormat('%b %d, %Y'); // Default fallback
+  }
+
+  const MS_DAY = 24 * 60 * 60 * 1000;
+  const MS_MONTH = 30 * MS_DAY;
+
+  if (interval < MS_DAY) {
+    // Sub-daily data: show full date + time
+    return d3.utcFormat('%b %d, %Y %H:%M');
+  } else if (interval < MS_MONTH) {
+    // Daily/weekly data: show full date
+    return d3.utcFormat('%b %d, %Y');
+  } else {
+    // Monthly+ data: show month and year
+    return d3.utcFormat('%B %Y');
+  }
+}
+
+/**
+ * Get smart timestamp format based on data granularity and span
+ * Auto-detects appropriate format considering both interval and total time span
+ */
+function getSmartTimestampFormat(data, xField) {
+  const interval = detectTimeInterval(data, xField);
+
+  if (!interval) {
+    return d3.utcFormat('%b %d'); // Default fallback
+  }
+
+  // Calculate total time span
+  const uniqueDates = Array.from(new Set(data.map(d => d[xField].getTime())))
+    .sort((a, b) => a - b);
+  const totalSpan = uniqueDates.length >= 2
+    ? uniqueDates[uniqueDates.length - 1] - uniqueDates[0]
+    : 0;
+
+  const MS_HOUR = 60 * 60 * 1000;
+  const MS_DAY = 24 * MS_HOUR;
+  const MS_WEEK = 7 * MS_DAY;
+  const MS_MONTH = 30 * MS_DAY;
+
+  // Choose format based on interval AND total span
+  if (interval < MS_DAY) {
+    // Sub-daily data (hourly, 15-min, etc.)
+    if (totalSpan < MS_DAY * 2) {
+      // Single day or ~24h span: just show time
+      return d3.utcFormat('%H:%M');
+    } else {
+      // Multi-day span: show date + time
+      return d3.utcFormat('%b %d %H:%M');
+    }
+  } else if (interval < MS_WEEK) {
+    // Daily data
+    return d3.utcFormat('%b %d');
+  } else if (interval < MS_MONTH) {
+    // Weekly data
+    return d3.utcFormat('%b %d');
+  } else {
+    // Monthly or longer
+    return d3.utcFormat("%b '%y");
+  }
+}
+
+/**
  * Calculate adaptive bar width for date scales
- * Returns the bar width based on the time span of the x-axis (not number of bars)
+ * Returns the bar width based on the minimum gap between adjacent data points
  */
 function calculateDateScaleBarWidth(data, xField, chartWidth) {
   if (data.length <= 1) return 20; // Single bar, use default
 
   // Get unique dates sorted
-  const uniqueDates = Array.from(new Set(data.map(d => d[xField].getTime())))
-    .map(time => new Date(time))
-    .sort((a, b) => a - b);
+  const uniqueTimes = Array.from(new Set(data.map(d => d[xField].getTime()))).sort((a, b) => a - b);
+  const dataPointCount = uniqueTimes.length;
 
-  if (uniqueDates.length <= 1) return 20;
+  if (dataPointCount <= 1) return 20;
 
-  // Calculate the time span in days
-  const minDate = uniqueDates[0];
-  const maxDate = uniqueDates[uniqueDates.length - 1];
-  const msPerDay = 24 * 60 * 60 * 1000;
-  const daySpan = Math.max(1, Math.ceil((maxDate - minDate) / msPerDay) + 1);
+  // Find the minimum gap between adjacent data points
+  let minGap = Infinity;
+  for (let i = 1; i < uniqueTimes.length; i++) {
+    const gap = uniqueTimes[i] - uniqueTimes[i - 1];
+    if (gap < minGap) minGap = gap;
+  }
 
-  // Calculate bar width based on TIME SPAN (days), not number of bars
-  // This ensures bars are proportional to "one day" on the chart
-  const spacePerDay = chartWidth / daySpan;
+  // Total time span
+  const totalSpan = uniqueTimes[uniqueTimes.length - 1] - uniqueTimes[0];
+  if (totalSpan === 0) return 20;
 
-  // Bar should be 80% of a day's worth of space (20% for gap)
-  const calculatedWidth = spacePerDay * 0.8;
+  // The minimum gap as a fraction of total span
+  const minGapFraction = minGap / totalSpan;
 
-  // Cap between 2px (minimum visible) and 20% of chart width (responsive maximum)
-  const maxBarWidth = chartWidth * 0.2;
+  // Account for scale inset
+  const inset = chartWidth / (2 * dataPointCount);
+  const effectiveWidth = chartWidth - 2 * inset;
+
+  // Bar width should be proportional to the minimum gap
+  // If min gap is 1 hour out of 24 hours, bar should be ~1/24 of effective width
+  const calculatedWidth = effectiveWidth * minGapFraction * 0.7;
+
+  // Cap between 2px and 15% of chart width
+  const maxBarWidth = chartWidth * 0.15;
   const barWidth = Math.max(2, Math.min(calculatedWidth, maxBarWidth));
 
   return barWidth;
@@ -636,14 +741,16 @@ function addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, marginL
       xAxisGenerator = xAxisGenerator.ticks(suggestedTicks);
     }
 
-    // Apply date formatting if specified, otherwise use UTC default
+    // Apply date formatting if specified, otherwise use smart auto-detection
     if (axes.x?.format) {
       const formatter = createFormatter(axes.x.format, 'date');
       xAxisGenerator = xAxisGenerator.tickFormat(formatter);
     } else {
-      // Force UTC formatting to avoid timezone issues and multi-line format
-      // Use %b %d format for consistency (no year on every tick)
-      xAxisGenerator = xAxisGenerator.tickFormat(d3.utcFormat('%b %d'));
+      // Smart timestamp format: auto-detect based on data granularity
+      // - Sub-daily (hourly): HH:MM
+      // - Daily/weekly: Mon DD
+      // - Monthly+: Mon 'YY
+      xAxisGenerator = xAxisGenerator.tickFormat(getSmartTimestampFormat(data, xField));
     }
   } else {
     // For categorical axes, apply formatting if specified
@@ -965,6 +1072,10 @@ function renderBarMark(g, data, row, x, yScale, chartHeight, color, tooltip, con
   }
 
   const sanitizedField = sanitizeClassName(row.field);
+
+  // Pre-compute tooltip formatter for date scales
+  const tooltipFormatter = isDateScale ? getSmartTooltipFormat(data, xField) : null;
+
   const bars = g.selectAll(`.bar-${sanitizedField}`)
     .data(data)
     .join('rect')
@@ -991,7 +1102,7 @@ function renderBarMark(g, data, row, x, yScale, chartHeight, color, tooltip, con
         .attr('stroke-width', 2);
 
       const xValue = isDateScale
-        ? d3.utcFormat('%b %d, %Y')(d[xField])
+        ? tooltipFormatter(d[xField])
         : d[xField];
 
       tooltip
@@ -1057,6 +1168,9 @@ function renderStackedBars(g, data, barRows, x, yScale, chartHeight, colors, too
     xOffset = (bandwidth - barWidth) / 2;
   }
 
+  // Pre-compute tooltip formatter for date scales
+  const tooltipFormatter = isDateScale ? getSmartTooltipFormat(data, xField) : null;
+
   if (mode === 'stacked') {
     // Stacked mode
     const stack = d3.stack()
@@ -1104,9 +1218,13 @@ function renderStackedBars(g, data, barRows, x, yScale, chartHeight, colors, too
           .attr('stroke', d3.color(barColor).darker(0.5))
           .attr('stroke-width', 2);
 
+        const xValue = isDateScale
+          ? tooltipFormatter(d.data[xField])
+          : d.data[xField];
+
         tooltip
           .style('opacity', 1)
-          .html(`<strong>${d.data[xField]}</strong><br/>${row.label || key}: ${value.toLocaleString()}`);
+          .html(`<strong>${xValue}</strong><br/>${row.label || key}: ${value.toLocaleString()}`);
       })
       .on('mousemove', function(event) {
         positionTooltip(tooltip, event);
@@ -1183,9 +1301,13 @@ function renderStackedBars(g, data, barRows, x, yScale, chartHeight, colors, too
           .attr('stroke', d3.color(barColor).darker(0.5))
           .attr('stroke-width', 2);
 
+        const xValue = isDateScale
+          ? tooltipFormatter(d.xValue)
+          : d.xValue;
+
         tooltip
           .style('opacity', 1)
-          .html(`<strong>${d.xValue}</strong><br/>${d.row.label || d.key}: ${d.value.toLocaleString()}`);
+          .html(`<strong>${xValue}</strong><br/>${d.row.label || d.key}: ${d.value.toLocaleString()}`);
       })
       .on('mousemove', function(event) {
         positionTooltip(tooltip, event);
@@ -1278,6 +1400,9 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
 
   // Add hover targets for tooltip (always present, even when dots are hidden)
   // Create invisible hover circles that are always there to capture mouse events
+  // Pre-compute tooltip formatter for date scales
+  const tooltipFormatter = isDateScale ? getSmartTooltipFormat(data, xField) : null;
+
   const hoverTargets = g.selectAll(`.hover-target-${sanitizedField}`)
     .data(validData)
     .join('circle')
@@ -1310,7 +1435,7 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
       }
 
       const xValue = isDateScale
-        ? d3.utcFormat('%b %d, %Y')(d[xField])
+        ? tooltipFormatter(d[xField])
         : d[xField];
 
       tooltip
