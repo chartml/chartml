@@ -156,14 +156,14 @@ function publishPackage(packagePath, packageName, version, dryRun) {
 
   try {
     if (dryRun) {
-      console.error('  [DRY RUN] Would run: npm publish --access public --provenance');
+      console.error('  [DRY RUN] Would run: npm publish --access public');
       // In dry run, just validate the package
       execSync('npm pack --dry-run', {
         cwd: fullPath,
         stdio: 'inherit'
       });
     } else {
-      execSync('npm publish --access public --provenance', {
+      execSync('npm publish --access public', {
         cwd: fullPath,
         stdio: 'inherit'
       });
