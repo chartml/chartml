@@ -140,6 +140,37 @@ pnpm test
 pnpm docs:dev
 ```
 
+## Releasing
+
+To publish a new version to npm:
+
+1. **Update the version** in the package's `package.json`:
+   ```bash
+   # Example: bump @chartml/core from 1.4.1 to 1.4.2
+   cd packages/core
+   # Edit package.json version field
+   ```
+
+2. **Rebuild the package**:
+   ```bash
+   npm run build
+   ```
+
+3. **Commit, tag, and push**:
+   ```bash
+   git add .
+   git commit -m "Release @chartml/core v1.4.2"
+   git tag v1.4.2
+   git push origin main --tags
+   ```
+
+4. **GitHub Actions will automatically**:
+   - Detect packages with version changes
+   - Build and publish to npm
+   - Create GitHub releases
+
+The workflow triggers on any tag matching `v*`. You can also trigger it manually from the Actions tab with an optional dry-run mode.
+
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
