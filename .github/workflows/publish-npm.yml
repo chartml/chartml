@@ -1,6 +1,12 @@
 name: Publish to NPM
 
 on:
+  # Trigger on version tags (e.g., v1.4.2)
+  push:
+    tags:
+      - 'v*'
+
+  # Manual trigger with dry-run option
   workflow_dispatch:
     inputs:
       dry_run:
