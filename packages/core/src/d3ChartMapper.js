@@ -54,13 +54,31 @@ function parseDataDates(data, xField) {
  * Pivot data from long to wide format when marks.color is used for grouping
  */
 function pivotDataByColor(data, xField, yField, colorField) {
-  const xValues = [...new Set(data.map(d => d[xField]))];
+  // Detect if xField contains Date objects (need special comparison logic)
+  const sampleValue = data.length > 0 ? data[0][xField] : null;
+  const isDateField = sampleValue instanceof Date;
+
+  // For Date values, deduplicate by timestamp (value) instead of reference
+  let xValues;
+  if (isDateField) {
+    const timestampSet = new Set(data.map(d => d[xField].getTime()));
+    xValues = [...timestampSet].map(ts => new Date(ts));
+  } else {
+    xValues = [...new Set(data.map(d => d[xField]))];
+  }
+
   const colorValues = [...new Set(data.map(d => d[colorField]))];
 
   const pivotedData = xValues.map(xValue => {
     const row = { [xField]: xValue };
     colorValues.forEach(colorValue => {
-      const match = data.find(d => d[xField] === xValue && d[colorField] === colorValue);
+      // For Date comparison, compare by timestamp value, not reference
+      const match = data.find(d => {
+        const xMatch = isDateField
+          ? d[xField].getTime() === xValue.getTime()
+          : d[xField] === xValue;
+        return xMatch && d[colorField] === colorValue;
+      });
       row[colorValue] = match ? match[yField] : 0;
     });
     return row;
