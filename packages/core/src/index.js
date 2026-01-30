@@ -1093,6 +1093,51 @@ export class ChartML {
       context.processedData = result?.data !== undefined ? result.data : result;
       context.metadata = result?.metadata || {};
 
+      // If data is empty (SQL returned 0 rows), render empty state instead of crashing D3
+      if (Array.isArray(context.processedData) && context.processedData.length === 0) {
+        hideLoadingIndicator(loadingIndicator);
+
+        // Clear container and render empty state
+        container.innerHTML = '';
+        const emptyState = document.createElement('div');
+        emptyState.className = 'chartml-empty-state';
+        emptyState.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; color: #6b7280; font-family: system-ui, -apple-system, sans-serif;';
+
+        const icon = document.createElement('div');
+        icon.style.cssText = 'font-size: 32px; margin-bottom: 8px; opacity: 0.5;';
+        icon.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 4-6" opacity="0.3"/></svg>`;
+
+        const message = document.createElement('div');
+        message.style.cssText = 'font-size: 14px; font-weight: 500;';
+        message.textContent = 'No data available';
+
+        const hint = document.createElement('div');
+        hint.style.cssText = 'font-size: 12px; margin-top: 4px; opacity: 0.7;';
+        hint.textContent = 'The query returned no results';
+
+        emptyState.appendChild(icon);
+        emptyState.appendChild(message);
+        emptyState.appendChild(hint);
+        container.appendChild(emptyState);
+
+        // Render title if present
+        if (context.resolvedSpec.title) {
+          const titleDiv = document.createElement('div');
+          titleDiv.className = 'chart-title';
+          titleDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 8px;';
+          titleDiv.textContent = context.resolvedSpec.title;
+          container.insertBefore(titleDiv, container.firstChild);
+        }
+
+        const chartMetadata = {
+          ...context.metadata,
+          dimensions: this._calculateDimensions(context.resolvedSpec, container),
+          sourceName: context.sourceName,
+          isEmpty: true
+        };
+        return chartMetadata;
+      }
+
       // Calculate dimensions (does NOT mutate spec)
       context.dimensions = this._calculateDimensions(context.resolvedSpec, container);
 
