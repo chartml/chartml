@@ -92,25 +92,31 @@ jobs:
             node scripts/publish-packages.js
           fi
 
-      - name: Create git tags
+      - name: Create and push git tags
         if: steps.check.outputs.needs_publish == 'true' && inputs.dry_run == false
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          NEW_TAGS=()
           for pkg in $(cat changed-packages.json | jq -r '.[] | "\(.name)@\(.version)"'); do
             if git rev-parse "$pkg" >/dev/null 2>&1; then
               echo "Tag $pkg already exists, skipping"
             else
               git tag -a "$pkg" -m "Release $pkg"
+              NEW_TAGS+=("$pkg")
               echo "✓ Created tag: $pkg"
             fi
           done
 
-      - name: Push tags to GitHub
-        if: steps.check.outputs.needs_publish == 'true' && inputs.dry_run == false
-        run: |
-          git push origin --tags
+          if [ ${#NEW_TAGS[@]} -gt 0 ]; then
+            for tag in "${NEW_TAGS[@]}"; do
+              git push origin "$tag"
+              echo "✓ Pushed tag: $tag"
+            done
+          else
+            echo "No new tags to push"
+          fi
 
       - name: Create GitHub Release
         if: steps.check.outputs.needs_publish == 'true' && inputs.dry_run == false
