@@ -21,13 +21,30 @@ function normalizeField(field, defaultMark) {
       dataLabels: null
     };
   }
+  // Handle range marks (upper/lower instead of field)
+  if (field.mark === 'range') {
+    if (!field.upper || !field.lower) {
+      throw new Error(`Range mark requires both 'upper' and 'lower' fields`);
+    }
+    return {
+      mark: 'range',
+      upper: field.upper,
+      lower: field.lower,
+      opacity: field.opacity || 0.15,
+      color: field.color || null,
+      label: field.label || null,
+      axis: field.axis || 'left'
+    };
+  }
+
   return {
     field: field.field,
     mark: field.mark || defaultMark,
     axis: field.axis || 'left',
     color: field.color || null,
     label: field.label || field.field,
-    dataLabels: field.dataLabels || null
+    dataLabels: field.dataLabels || null,
+    lineStyle: field.lineStyle || null
   };
 }
 

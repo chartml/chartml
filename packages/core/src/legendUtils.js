@@ -126,12 +126,16 @@ export function calculateLegendLayout(items, availableWidth, options = {}) {
   };
 }
 
+// Dash patterns for line styles (keep consistent with d3CartesianChart.js)
+const LINE_STYLE_DASH_PATTERNS = { dashed: '8 4', dotted: '2 4' };
+
 /**
  * Render legend symbol based on mark type
  */
-function renderSymbol(group, mark, color, size = SYMBOL_SIZE) {
+function renderSymbol(group, mark, color, size = SYMBOL_SIZE, lineStyle = null, opacity = null) {
+
   if (mark === 'line') {
-    group.append('line')
+    const line = group.append('line')
       .attr('x1', 0)
       .attr('y1', size / 2)
       .attr('x2', size)
@@ -139,6 +143,18 @@ function renderSymbol(group, mark, color, size = SYMBOL_SIZE) {
       .attr('stroke', color)
       .attr('stroke-width', 2.5)
       .attr('stroke-linecap', 'round');
+
+    if (lineStyle && LINE_STYLE_DASH_PATTERNS[lineStyle]) {
+      line.attr('stroke-dasharray', LINE_STYLE_DASH_PATTERNS[lineStyle]);
+    }
+  } else if (mark === 'range') {
+    // Filled rectangle with opacity matching the actual range area rendering
+    group.append('rect')
+      .attr('width', size)
+      .attr('height', size)
+      .attr('rx', SYMBOL_RADIUS)
+      .attr('fill', color)
+      .attr('opacity', opacity || 0.15);
   } else if (mark === 'scatter' || mark === 'point') {
     group.append('circle')
       .attr('cx', size / 2)
@@ -230,7 +246,7 @@ export function createLegend(container, items, config = {}) {
         .style('cursor', 'pointer');
 
       // Render symbol
-      renderSymbol(itemGroup, item.mark || 'bar', item.color, SYMBOL_SIZE);
+      renderSymbol(itemGroup, item.mark || 'bar', item.color, SYMBOL_SIZE, item.lineStyle || null, item.opacity || null);
 
       // Render label
       itemGroup.append('text')

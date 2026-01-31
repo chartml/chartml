@@ -14,6 +14,9 @@ import { createLegend, calculateLegendHeight } from './legendUtils.js';
 const AXIS_LABEL_FONT_SIZE = '12px';
 const AXIS_LABEL_FONT_FAMILY = 'system-ui';
 
+// Dash patterns for line styles (keep consistent with legendUtils.js)
+const LINE_STYLE_DASH_PATTERNS = { dashed: '8 4', dotted: '2 4' };
+
 /**
  * Get animation duration based on animation setting
  * Returns 0 if animations are disabled, otherwise returns the base duration
@@ -401,9 +404,11 @@ function createScales(data, rows, xField, chartWidth, chartHeight, isDateScale, 
       .padding(padding);
   }
 
-  // Separate rows by axis
-  const leftRows = rows.filter(r => !r.axis || r.axis === 'left');
-  const rightRows = rows.filter(r => r.axis === 'right');
+  // Separate rows by axis, excluding range marks from normal field processing
+  const leftRows = rows.filter(r => (!r.axis || r.axis === 'left') && r.mark !== 'range');
+  const rightRows = rows.filter(r => r.axis === 'right' && r.mark !== 'range');
+  const leftRangeRows = rows.filter(r => (!r.axis || r.axis === 'left') && r.mark === 'range');
+  const rightRangeRows = rows.filter(r => r.axis === 'right' && r.mark === 'range');
 
   // Calculate Y domain for left axis
   let yLeftMin, yLeftMax;
@@ -433,6 +438,17 @@ function createScales(data, rows, xField, chartWidth, chartHeight, isDateScale, 
     yLeftMax = d3.max(allLeftValues) || 1;
   }
 
+  // Include range mark upper/lower values in Y-domain extent
+  if (leftRangeRows.length > 0) {
+    const rangeValues = data.flatMap(d =>
+      leftRangeRows.flatMap(r => [d[r.upper] || 0, d[r.lower] || 0])
+    );
+    const rangeMin = d3.min(rangeValues) || 0;
+    const rangeMax = d3.max(rangeValues) || 0;
+    yLeftMin = Math.min(yLeftMin, rangeMin);
+    yLeftMax = Math.max(yLeftMax, rangeMax);
+  }
+
   // Override with custom min/max if specified
   if (axes.left?.min !== undefined) yLeftMin = axes.left.min;
   if (axes.left?.max !== undefined) yLeftMax = axes.left.max;
@@ -448,11 +464,22 @@ function createScales(data, rows, xField, chartWidth, chartHeight, isDateScale, 
 
   // Calculate Y domain for right axis (if needed)
   let yRight = null;
-  if (rightRows.length > 0) {
+  if (rightRows.length > 0 || rightRangeRows.length > 0) {
     const rightFields = rightRows.map(r => r.field);
     const allRightValues = data.flatMap(d => rightFields.map(field => d[field] || 0));
     let yRightMin = Math.min(0, d3.min(allRightValues) || 0);
     let yRightMax = d3.max(allRightValues) || 1;
+
+    // Include range mark upper/lower values in right Y-domain
+    if (rightRangeRows.length > 0) {
+      const rangeValues = data.flatMap(d =>
+        rightRangeRows.flatMap(r => [d[r.upper] || 0, d[r.lower] || 0])
+      );
+      const rangeMin = d3.min(rangeValues) || 0;
+      const rangeMax = d3.max(rangeValues) || 0;
+      yRightMin = Math.min(yRightMin, rangeMin);
+      yRightMax = Math.max(yRightMax, rangeMax);
+    }
 
     // Override with custom min/max if specified
     if (axes.right?.min !== undefined) yRightMin = axes.right.min;
@@ -1386,6 +1413,9 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
     .attr('stroke-width', 3)
     .attr('d', line);
 
+  // Determine lineStyle dasharray (dashed/dotted/solid)
+  const lineStyleDash = row.lineStyle ? LINE_STYLE_DASH_PATTERNS[row.lineStyle] || null : null;
+
   // Animate line drawing (only if animations enabled)
   if (animation) {
     const totalLength = path.node().getTotalLength();
@@ -1395,7 +1425,21 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
       .transition()
       .duration(500)
       .ease(d3.easeLinear)
-      .attr('stroke-dashoffset', 0);
+      .attr('stroke-dashoffset', 0)
+      .on('end', function() {
+        // Apply lineStyle dasharray AFTER draw animation completes
+        // (animation uses stroke-dasharray for the draw effect)
+        if (lineStyleDash) {
+          d3.select(this).attr('stroke-dasharray', lineStyleDash);
+        } else {
+          d3.select(this).attr('stroke-dasharray', null);
+        }
+      });
+  } else {
+    // No animation - apply lineStyle dasharray immediately
+    if (lineStyleDash) {
+      path.attr('stroke-dasharray', lineStyleDash);
+    }
   }
 
   // Add hover targets for tooltip (always present, even when dots are hidden)
@@ -1654,6 +1698,49 @@ function renderAreaMarks(g, data, areaRows, x, yScale, chartHeight, colors, xFie
 }
 
 /**
+ * Render a range mark (shaded area between upper and lower fields)
+ * Uses d3.area() to draw a filled region between two data-driven boundaries.
+ */
+function renderRangeMark(g, data, rangeRow, x, yScale, xField, isDateScale, curveType, color, animation) {
+  const curve = d3[curveType] || d3.curveLinear;
+  const fillOpacity = rangeRow.opacity || 0.15;
+
+  const area = d3.area()
+    .curve(curve)
+    .x(d => isDateScale ? x(d[xField]) : (x(d[xField]) + x.bandwidth() / 2))
+    .y0(d => yScale(d[rangeRow.lower] || 0))
+    .y1(d => yScale(d[rangeRow.upper] || 0));
+
+  // Filter out rows where upper or lower are missing
+  const validData = data.filter(d => {
+    const upper = d[rangeRow.upper];
+    const lower = d[rangeRow.lower];
+    return upper != null && !isNaN(upper) && lower != null && !isNaN(lower);
+  });
+
+  if (validData.length === 0) return;
+
+  const sanitizedLabel = sanitizeClassName(rangeRow.label || 'unlabeled');
+  const path = g.append('path')
+    .datum(validData)
+    .attr('class', `range-area range-${sanitizedLabel}`)
+    .attr('fill', color)
+    .attr('fill-opacity', fillOpacity)
+    .attr('stroke', 'none')
+    .attr('d', area)
+    .style('pointer-events', 'none');
+
+  // Animate range entrance (fade in)
+  if (animation) {
+    path
+      .attr('fill-opacity', 0)
+      .transition()
+      .duration(400)
+      .attr('fill-opacity', fillOpacity);
+  }
+}
+
+/**
  * Add legend below chart using unified legend utility
  * With bidirectional hover interaction between legend and chart elements
  */
@@ -1667,19 +1754,24 @@ function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWid
 
   const legendY = height - legendSpace - xAxisLabelHeight - gap;
 
-  // Convert rows to legend items format
-  const legendItems = rows.map((row, idx) => ({
-    label: row.label || row.field,
-    color: row.color || colors[idx],
-    mark: row.mark || 'bar',
-    field: row.field,
-    index: idx
-  }));
+  // Convert rows to legend items format (filter out range marks without labels)
+  // Range marks use label as identifier (they have upper/lower instead of field)
+  const legendItems = rows
+    .map((row, idx) => ({
+      label: row.label || row.field,
+      color: row.color || colors[idx],
+      mark: row.mark || 'bar',
+      field: row.mark === 'range' ? (row.label || 'unlabeled') : row.field,
+      lineStyle: row.lineStyle || null,
+      opacity: row.opacity || null,
+      index: idx
+    }))
+    .filter(item => !(item.mark === 'range' && !rows[item.index].label));
 
-  // Helper to get all series elements (bars, lines, areas, dots)
+  // Helper to get all series elements (bars, lines, areas, dots, range areas)
   const getSeriesElements = (field) => {
     const sanitized = sanitizeClassName(field);
-    const selector = `.bar-${sanitized}, .line-${sanitized}, .area-${sanitized}, .dots-${sanitized}`;
+    const selector = `.bar-${sanitized}, .line-${sanitized}, .area-${sanitized}, .dots-${sanitized}, .range-${sanitized}`;
     return svg.selectAll(selector);
   };
 
@@ -2347,8 +2439,11 @@ export function renderD3CartesianChart(container, data, config) {
   }));
 
   // Separate rows by axis for margin calculation and rendering
-  const leftRows = normalizedRows.filter(r => r.axis === 'left');
-  const rightRows = normalizedRows.filter(r => r.axis === 'right');
+  // Range marks are handled separately since they use upper/lower instead of field
+  const leftRows = normalizedRows.filter(r => r.axis === 'left' && r.mark !== 'range');
+  const rightRows = normalizedRows.filter(r => r.axis === 'right' && r.mark !== 'range');
+  const leftRangeRows = normalizedRows.filter(r => r.axis === 'left' && r.mark === 'range');
+  const rightRangeRows = normalizedRows.filter(r => r.axis === 'right' && r.mark === 'range');
 
   // Pre-calculate left Y-axis margin based on numeric tick labels
   let finalMarginLeft = marginLeft;
@@ -2378,6 +2473,17 @@ export function renderD3CartesianChart(container, data, config) {
       const allLeftValues = data.flatMap(d => leftFields.map(field => d[field] || 0));
       yLeftMin = Math.min(0, d3.min(allLeftValues) || 0);
       yLeftMax = d3.max(allLeftValues) || 1;
+    }
+
+    // Include range mark upper/lower values in pre-calculated Y-domain
+    if (leftRangeRows.length > 0) {
+      const rangeValues = data.flatMap(d =>
+        leftRangeRows.flatMap(r => [d[r.upper] || 0, d[r.lower] || 0])
+      );
+      const rangeMin = d3.min(rangeValues) || 0;
+      const rangeMax = d3.max(rangeValues) || 0;
+      yLeftMin = Math.min(yLeftMin, rangeMin);
+      yLeftMax = Math.max(yLeftMax, rangeMax);
     }
 
     if (axes.left?.min !== undefined) yLeftMin = axes.left.min;
@@ -2433,6 +2539,17 @@ export function renderD3CartesianChart(container, data, config) {
     let yRightMin = 0;
     let yRightMax = d3.max(allRightValues) || 1;
 
+    // Include range mark upper/lower values in pre-calculated right Y-domain
+    if (rightRangeRows.length > 0) {
+      const rangeValues = data.flatMap(d =>
+        rightRangeRows.flatMap(r => [d[r.upper] || 0, d[r.lower] || 0])
+      );
+      const rangeMin = d3.min(rangeValues) || 0;
+      const rangeMax = d3.max(rangeValues) || 0;
+      yRightMin = Math.min(yRightMin, rangeMin);
+      yRightMax = Math.max(yRightMax, rangeMax);
+    }
+
     // Override with custom min/max if specified
     if (axes.right?.min !== undefined) yRightMin = axes.right.min;
     if (axes.right?.max !== undefined) yRightMax = axes.right.max;
@@ -2486,9 +2603,22 @@ export function renderD3CartesianChart(container, data, config) {
   addGridLines(g, scales, chartWidth, chartHeight, config.style?.grid);
 
   // Group rows by mark and axis for rendering
-  // leftRows and rightRows already declared above for margin calculation
+  // leftRows, rightRows, leftRangeRows, rightRangeRows already declared above
 
-  // Render left axis marks
+  // Render range marks FIRST (behind all other marks)
+  leftRangeRows.forEach((rangeRow, idx) => {
+    const rangeColor = rangeRow.color || colors[normalizedRows.indexOf(rangeRow) % colors.length];
+    renderRangeMark(g, data, rangeRow, scales.x, scales.yLeft, xField, isDateScale, curveType, rangeColor, animation);
+  });
+
+  if (scales.yRight) {
+    rightRangeRows.forEach((rangeRow, idx) => {
+      const rangeColor = rangeRow.color || colors[normalizedRows.indexOf(rangeRow) % colors.length];
+      renderRangeMark(g, data, rangeRow, scales.x, scales.yRight, xField, isDateScale, curveType, rangeColor, animation);
+    });
+  }
+
+  // Render left axis marks (range marks already excluded from leftRows)
   const leftBars = leftRows.filter(r => r.mark === 'bar');
   const leftLines = leftRows.filter(r => r.mark === 'line');
   const leftAreas = leftRows.filter(r => r.mark === 'area');

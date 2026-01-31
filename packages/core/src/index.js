@@ -43,6 +43,23 @@ import { SourceRefreshRegistry } from './sourceRefreshRegistry.js';
 import { ParamChangeRegistry } from './paramChangeRegistry.js';
 
 /**
+ * Reserved keys that indicate an unnamed (legacy) data source
+ */
+const RESERVED_DATA_KEYS = new Set(['datasource', 'provider', 'query', 'rows', 'url', 'cache']);
+
+/**
+ * Detect whether spec.data uses named sources or is an unnamed source
+ * @param {*} dataSpec - The spec.data value
+ * @returns {boolean} True if named sources, false if unnamed
+ */
+function isNamedSources(dataSpec) {
+  if (typeof dataSpec === 'string') return false;
+  if (!dataSpec || typeof dataSpec !== 'object') return false;
+  if (Array.isArray(dataSpec)) return false;
+  return !Object.keys(dataSpec).some(key => RESERVED_DATA_KEYS.has(key));
+}
+
+/**
  * Chart Instance Class
  *
  * Returned by ChartML.render() to provide programmatic control over a rendered chart.
@@ -1077,7 +1094,19 @@ export class ChartML {
       }
 
       // Create lazy data fetch callback (only called if middleware cache misses)
-      const fetchData = async () => {
+      // For named sources, accepts sourceName parameter to fetch a specific source
+      const fetchData = async (sourceName) => {
+        if (sourceName && isNamedSources(context.resolvedSpec.data)) {
+          // Named source: resolve specific source by name
+          const sourceSpec = context.resolvedSpec.data[sourceName];
+          if (!sourceSpec) {
+            throw new Error(`Data source "${sourceName}" not found in spec.data`);
+          }
+          // Create a temporary spec with just this source as the data
+          const singleSourceSpec = { ...context.resolvedSpec, data: sourceSpec };
+          return await this._resolveDataSource(singleSourceSpec, options);
+        }
+        // Unnamed source or no name provided
         return await this._resolveDataSource(context.resolvedSpec, options);
       };
 
