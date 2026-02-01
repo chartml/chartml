@@ -24,7 +24,7 @@ Fetch data from external sources
 - `@chartml/data-csv` - CSV file parsing
 - `@chartml/data-json` - JSON file parsing
 
-### Aggregation Middleware: `aggregate-{engine}`
+### Transform Middleware: `transform-{engine}`
 Transform and aggregate data
 
 **Built-in:**
@@ -118,7 +118,7 @@ query: |
   WHERE date >= '2024-01-01'
 ```
 
-### 2. Aggregation Middleware Plugins
+### 2. Transform Middleware Plugins
 
 **Purpose**: Transform and aggregate data
 
@@ -126,10 +126,10 @@ query: |
 ```javascript
 /**
  * @param {Array} data - Input data rows
- * @param {Object} aggregateSpec - ChartML aggregate specification
+ * @param {Object} spec - Full chart specification (read stages from spec.transform)
  * @returns {Promise<Array>} Transformed data rows
  */
-async function aggregateMiddleware(data, aggregateSpec) {
+async function transformMiddleware(data, spec) {
   // Apply transformations
   return transformedData;
 }
@@ -138,24 +138,25 @@ async function aggregateMiddleware(data, aggregateSpec) {
 **Registration**:
 ```javascript
 // Built-in d3-array aggregation is registered by default
-// For custom aggregation, register your own middleware
-import customMiddleware from '@mycompany/aggregate-custom';
+// For custom transform logic, register your own middleware
+import customMiddleware from '@mycompany/transform-custom';
 
-chartml.registerAggregateMiddleware(customMiddleware());
+chartml.registerTransformMiddleware(customMiddleware());
 ```
 
 **Usage in ChartML**:
 ```yaml
-aggregate:
-  group: [region, product]
-  measures:
-    - field: revenue
-      aggregation: sum
-      alias: total_revenue
-  sort:
-    - field: total_revenue
-      direction: desc
-  limit: 10
+transform:
+  aggregate:
+    group: [region, product]
+    measures:
+      - field: revenue
+        aggregation: sum
+        alias: total_revenue
+    sort:
+      - field: total_revenue
+        direction: desc
+    limit: 10
 ```
 
 ### 3. Chart Renderer Plugins
@@ -219,7 +220,7 @@ ChartML Spec
     ↓
 [Data Source Plugin] → Fetch data
     ↓
-[Aggregation Middleware Plugin] → Transform data
+[Transform Middleware Plugin] → Transform data
     ↓
 [Configuration System] (Core) → Merge configs
     ↓
@@ -278,16 +279,17 @@ export function createExampleDataSource(options = {}) {
 }
 ```
 
-### Creating an Aggregation Middleware Plugin
+### Creating a Transform Middleware Plugin
 
-**File**: `packages/chartml-aggregate-example/src/index.js`
+**File**: `packages/chartml-transform-example/src/index.js`
 
 ```javascript
 /**
- * Example aggregation middleware plugin
+ * Example transform middleware plugin
  */
 export function createExampleMiddleware(options = {}) {
-  return async function exampleMiddleware(data, aggregateSpec) {
+  return async function exampleMiddleware(data, spec) {
+    const aggregateSpec = spec.transform?.aggregate;
     if (!aggregateSpec) return data;
 
     // Apply grouping
@@ -423,7 +425,7 @@ Third parties can create their own plugins:
 ```
 @acme/chartml-chart-gantt        # Custom Gantt chart
 @company/chartml-data-graphql    # GraphQL data source
-@user/chartml-aggregate-sql      # SQL-based aggregations
+@user/chartml-transform-sql      # SQL-based transformations
 ```
 
 **Installation**:
@@ -448,13 +450,13 @@ npm search @chartml/data-
 # Find all chart renderers
 npm search @chartml/chart-
 
-# Find all aggregation middleware
-npm search @chartml/aggregate-
+# Find all transform middleware
+npm search @chartml/transform-
 ```
 
 **Documentation Site**:
 - Plugin directory at chartml.org/plugins
-- Filter by category (data, aggregate, chart)
+- Filter by category (data, transform, chart)
 - Community ratings and downloads
 - Installation guides and examples
 
@@ -462,7 +464,7 @@ npm search @chartml/aggregate-
 
 ### For Plugin Authors
 
-1. **Naming**: Follow the convention (`data-`, `aggregate-`, `chart-`)
+1. **Naming**: Follow the convention (`data-`, `transform-`, `chart-`)
 2. **Type Names**:
    - Official plugins: Use simple names (`pie`, `scatter`)
    - Third-party: Use namespaced names (`@yourorg/pie`, `acme-pie`)

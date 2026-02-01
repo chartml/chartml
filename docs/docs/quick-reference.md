@@ -101,12 +101,13 @@ data:
     product: "Widget B"
     revenue: 41000
 
-aggregate:
-  dimensions: [month, product]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [month, product]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
 visualize:
   type: bar
@@ -359,15 +360,16 @@ data:
     sale_date: "2024-01-10"
     revenue: 950
 
-aggregate:
-  dimensions: [region]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
-  sort:
-    - field: total_revenue
-      direction: desc
+transform:
+  aggregate:
+    dimensions: [region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+    sort:
+      - field: total_revenue
+        direction: desc
 
 visualize:
   type: bar
@@ -409,15 +411,16 @@ data:
   - region: "West"
     revenue: 87000
 
-aggregate:
-  dimensions: [region]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
-  sort:
-    - field: total_revenue
-      direction: desc
+transform:
+  aggregate:
+    dimensions: [region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+    sort:
+      - field: total_revenue
+        direction: desc
 
 visualize:
   type: bar
@@ -454,12 +457,13 @@ data:
     product: "Widget B"
     revenue: 1950
 
-aggregate:
-  dimensions: [product]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [product]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
 visualize:
   type: line

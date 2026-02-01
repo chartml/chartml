@@ -76,20 +76,21 @@ data:
       revenue: 172000
       quarter: "Q2"
 
-aggregate:
-  dimensions: [month]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
-  filters:
-    rules:
-      - field: quarter
-        operator: "="
-        value: "$dashboard_filters.selected_quarter"
-      - field: revenue
-        operator: ">="
-        value: "$dashboard_filters.min_revenue"
+transform:
+  aggregate:
+    dimensions: [month]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+    filters:
+      rules:
+        - field: quarter
+          operator: "="
+          value: "$dashboard_filters.selected_quarter"
+        - field: revenue
+          operator: ">="
+          value: "$dashboard_filters.min_revenue"
 
 visualize:
   type: bar
@@ -209,12 +210,13 @@ data:
       product: "Widget B"
       sales: 45000
 
-aggregate:
-  dimensions: [region, product]
-  measures:
-    - column: sales
-      aggregation: sum
-      name: total_sales
+transform:
+  aggregate:
+    dimensions: [region, product]
+    measures:
+      - column: sales
+        aggregation: sum
+        name: total_sales
 
 visualize:
   type: bar
