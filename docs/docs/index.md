@@ -71,17 +71,18 @@ data:
     region: EU
     revenue: 41000
 
-aggregate:
-  dimensions: [month]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
-  filters:
-    rules:
-      - field: region
-        operator: in
-        value: "$selected_regions"
+transform:
+  aggregate:
+    dimensions: [month]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+    filters:
+      rules:
+        - field: region
+          operator: in
+          value: "$selected_regions"
 
 visualize:
   type: line

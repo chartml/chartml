@@ -1,9 +1,17 @@
 /**
- * Unit tests for d3-array aggregation middleware
+ * Unit tests for d3Transform middleware (aggregate stage)
  */
 
 import { describe, it, expect } from 'vitest';
-import { d3Aggregate } from '../src/aggregate.js';
+import { d3Transform } from '../src/transform.js';
+
+// Bypass cache context to prevent test interference from in-memory caching
+const ctx = { bypassCache: true };
+
+// Helper to build the full spec structure that d3Transform expects
+function aggSpec(aggregate) {
+  return { transform: { aggregate } };
+}
 
 // Sample data for testing
 const salesData = [
@@ -15,27 +23,27 @@ const salesData = [
   { region: 'East', product: 'Widget A', revenue: 1100, units: 11, date: '2024-01-22' },
 ];
 
-describe('d3Aggregate - Basic Grouping', () => {
+describe('d3Transform - Basic Grouping', () => {
   it('should handle no aggregation (returns original data)', async () => {
-    const result = await d3Aggregate(salesData, {});
-    expect(result).toEqual(salesData);
+    const result = await d3Transform(salesData, aggSpec({}), ctx);
+    expect(result.data).toEqual(salesData);
   });
 
   it('should handle empty dimensions and measures', async () => {
-    const result = await d3Aggregate(salesData, { dimensions: [], measures: [] });
-    expect(result).toEqual(salesData);
+    const result = await d3Transform(salesData, aggSpec({ dimensions: [], measures: [] }), ctx);
+    expect(result.data).toEqual(salesData);
   });
 
   it('should group by single dimension', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
       ]
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(3); // North, South, East
-    expect(result).toEqual(
+    expect(result.data).toHaveLength(3); // North, South, East
+    expect(result.data).toEqual(
       expect.arrayContaining([
         { region: 'North', total_revenue: 3300 },
         { region: 'South', total_revenue: 2100 },
@@ -45,15 +53,15 @@ describe('d3Aggregate - Basic Grouping', () => {
   });
 
   it('should group by multiple dimensions', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region', 'product'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
       ]
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(5); // North-A, North-B, South-A, South-B, East-A
-    expect(result).toEqual(
+    expect(result.data).toHaveLength(5); // North-A, North-B, South-A, South-B, East-A
+    expect(result.data).toEqual(
       expect.arrayContaining([
         { region: 'North', product: 'Widget A', total_revenue: 2500 },
         { region: 'North', product: 'Widget B', total_revenue: 800 },
@@ -65,124 +73,124 @@ describe('d3Aggregate - Basic Grouping', () => {
   });
 
   it('should aggregate without grouping (global aggregation)', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: [],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' },
         { column: 'units', aggregation: 'sum', name: 'total_units' }
       ]
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toEqual({
       total_revenue: 6500,
       total_units: 65
     });
   });
 });
 
-describe('d3Aggregate - Aggregation Functions', () => {
+describe('d3Transform - Aggregation Functions', () => {
   it('should compute SUM aggregation', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.total_revenue).toBe(3300); // 1000 + 1500 + 800
   });
 
   it('should compute AVG aggregation', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'avg', name: 'avg_revenue' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.avg_revenue).toBe(1100); // (1000 + 1500 + 800) / 3
   });
 
   it('should compute COUNT aggregation', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'count', name: 'count' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.count).toBe(3);
 
-    const south = result.find(r => r.region === 'South');
+    const south = result.data.find(r => r.region === 'South');
     expect(south.count).toBe(2);
   });
 
   it('should compute MIN aggregation', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'min', name: 'min_revenue' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.min_revenue).toBe(800);
   });
 
   it('should compute MAX aggregation', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'max', name: 'max_revenue' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.max_revenue).toBe(1500);
   });
 
   it('should compute FIRST aggregation', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'date', aggregation: 'first', name: 'first_date' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.first_date).toBe('2024-01-15');
   });
 
   it('should compute LAST aggregation', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'date', aggregation: 'last', name: 'last_date' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.last_date).toBe('2024-01-25');
   });
 
   it('should handle MEAN as alias for AVG', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'mean', name: 'mean_revenue' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.mean_revenue).toBe(1100);
   });
 
   it('should handle multiple measures at once', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' },
@@ -191,9 +199,9 @@ describe('d3Aggregate - Aggregation Functions', () => {
         { column: 'revenue', aggregation: 'max', name: 'max_revenue' },
         { column: 'units', aggregation: 'count', name: 'count' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north).toMatchObject({
       region: 'North',
       total_revenue: 3300,
@@ -205,23 +213,23 @@ describe('d3Aggregate - Aggregation Functions', () => {
   });
 });
 
-describe('d3Aggregate - Calculated Fields', () => {
+describe('d3Transform - Calculated Fields', () => {
   it('should compute simple calculated field', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' },
         { column: 'units', aggregation: 'sum', name: 'total_units' },
         { expression: 'total_revenue / total_units', name: 'avg_price' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.avg_price).toBe(100); // 3300 / 33
   });
 
   it('should compute chained calculated fields', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' },
@@ -229,23 +237,23 @@ describe('d3Aggregate - Calculated Fields', () => {
         { expression: 'total_revenue / total_units', name: 'avg_price' },
         { expression: 'avg_price * 1.2', name: 'markup_price' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.markup_price).toBe(120); // 100 * 1.2
   });
 
   it('should support complex expressions with parentheses', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' },
         { column: 'units', aggregation: 'sum', name: 'total_units' },
         { expression: '(total_revenue + 1000) / (total_units + 10)', name: 'adjusted' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.adjusted).toBe(100); // (3300 + 1000) / (33 + 10) = 4300 / 43 = 100
   });
 
@@ -254,23 +262,23 @@ describe('d3Aggregate - Calculated Fields', () => {
       { region: 'North', revenue: 1000, units: 0 }
     ];
 
-    const result = await d3Aggregate(testData, {
+    const result = await d3Transform(testData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' },
         { column: 'units', aggregation: 'sum', name: 'total_units' },
         { expression: 'total_revenue / total_units', name: 'avg_price' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.avg_price).toBe(Infinity); // Division by zero returns Infinity
   });
 });
 
-describe('d3Aggregate - Filtering', () => {
+describe('d3Transform - Filtering', () => {
   it('should apply pre-aggregation filter (WHERE)', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -281,15 +289,15 @@ describe('d3Aggregate - Filtering', () => {
           { field: 'product', operator: '=', value: 'Widget A' }
         ]
       }
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(3);
-    const north = result.find(r => r.region === 'North');
+    expect(result.data).toHaveLength(3);
+    const north = result.data.find(r => r.region === 'North');
     expect(north.total_revenue).toBe(2500); // Only Widget A sales
   });
 
   it('should apply post-aggregation filter (HAVING)', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -300,14 +308,14 @@ describe('d3Aggregate - Filtering', () => {
           { field: 'total_revenue', operator: '>', value: 2000 }
         ]
       }
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(2); // Only North (3300) and South (2100)
-    expect(result.map(r => r.region)).toEqual(expect.arrayContaining(['North', 'South']));
+    expect(result.data).toHaveLength(2); // Only North (3300) and South (2100)
+    expect(result.data.map(r => r.region)).toEqual(expect.arrayContaining(['North', 'South']));
   });
 
   it('should apply both pre and post-aggregation filters', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -319,15 +327,15 @@ describe('d3Aggregate - Filtering', () => {
           { field: 'total_revenue', operator: '>=', value: 2000 } // HAVING
         ]
       }
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(1); // Only North Widget A (2500)
-    expect(result[0].region).toBe('North');
-    expect(result[0].total_revenue).toBe(2500);
+    expect(result.data).toHaveLength(1); // Only North Widget A (2500)
+    expect(result.data[0].region).toBe('North');
+    expect(result.data[0].total_revenue).toBe(2500);
   });
 
   it('should handle equality operators', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -337,14 +345,14 @@ describe('d3Aggregate - Filtering', () => {
           { field: 'region', operator: '=', value: 'North' }
         ]
       }
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].region).toBe('North');
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].region).toBe('North');
   });
 
   it('should handle inequality operators', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['product'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -354,14 +362,14 @@ describe('d3Aggregate - Filtering', () => {
           { field: 'product', operator: '!=', value: 'Widget A' }
         ]
       }
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].product).toBe('Widget B');
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].product).toBe('Widget B');
   });
 
   it('should handle comparison operators (>, >=, <, <=)', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -371,15 +379,15 @@ describe('d3Aggregate - Filtering', () => {
           { field: 'revenue', operator: '>=', value: 1000 }
         ]
       }
-    });
+    }), ctx);
 
     // Should exclude revenue < 1000 (800, 900)
-    const total = result.reduce((sum, r) => sum + r.total_revenue, 0);
+    const total = result.data.reduce((sum, r) => sum + r.total_revenue, 0);
     expect(total).toBe(4800); // 1000 + 1500 + 1200 + 1100
   });
 
   it('should handle IN operator', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -389,14 +397,14 @@ describe('d3Aggregate - Filtering', () => {
           { field: 'region', operator: 'in', value: ['North', 'South'] }
         ]
       }
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(2);
-    expect(result.map(r => r.region)).toEqual(expect.arrayContaining(['North', 'South']));
+    expect(result.data).toHaveLength(2);
+    expect(result.data.map(r => r.region)).toEqual(expect.arrayContaining(['North', 'South']));
   });
 
   it('should handle NOT IN operator', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -406,14 +414,14 @@ describe('d3Aggregate - Filtering', () => {
           { field: 'region', operator: 'not in', value: ['North', 'South'] }
         ]
       }
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].region).toBe('East');
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].region).toBe('East');
   });
 
   it('should handle LIKE operator', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['product'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -423,13 +431,13 @@ describe('d3Aggregate - Filtering', () => {
           { field: 'product', operator: 'like', value: '%Widget%' }
         ]
       }
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(2); // Both Widget A and Widget B
+    expect(result.data).toHaveLength(2); // Both Widget A and Widget B
   });
 
   it('should handle OR combinator', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -441,14 +449,14 @@ describe('d3Aggregate - Filtering', () => {
           { field: 'region', operator: '=', value: 'East' }
         ]
       }
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(2);
-    expect(result.map(r => r.region)).toEqual(expect.arrayContaining(['North', 'East']));
+    expect(result.data).toHaveLength(2);
+    expect(result.data.map(r => r.region)).toEqual(expect.arrayContaining(['North', 'East']));
   });
 
   it('should handle AND combinator', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -460,16 +468,16 @@ describe('d3Aggregate - Filtering', () => {
           { field: 'product', operator: '=', value: 'Widget A' }
         ]
       }
-    });
+    }), ctx);
 
-    const total = result.reduce((sum, r) => sum + r.total_revenue, 0);
+    const total = result.data.reduce((sum, r) => sum + r.total_revenue, 0);
     expect(total).toBe(2500); // Only North + Widget A
   });
 });
 
-describe('d3Aggregate - Sorting', () => {
+describe('d3Transform - Sorting', () => {
   it('should sort by single field ascending', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -477,16 +485,16 @@ describe('d3Aggregate - Sorting', () => {
       sort: [
         { field: 'total_revenue', direction: 'asc' }
       ]
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(3);
-    expect(result[0].region).toBe('East'); // 1100
-    expect(result[1].region).toBe('South'); // 2100
-    expect(result[2].region).toBe('North'); // 3300
+    expect(result.data).toHaveLength(3);
+    expect(result.data[0].region).toBe('East'); // 1100
+    expect(result.data[1].region).toBe('South'); // 2100
+    expect(result.data[2].region).toBe('North'); // 3300
   });
 
   it('should sort by single field descending', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -494,16 +502,16 @@ describe('d3Aggregate - Sorting', () => {
       sort: [
         { field: 'total_revenue', direction: 'desc' }
       ]
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(3);
-    expect(result[0].region).toBe('North'); // 3300
-    expect(result[1].region).toBe('South'); // 2100
-    expect(result[2].region).toBe('East'); // 1100
+    expect(result.data).toHaveLength(3);
+    expect(result.data[0].region).toBe('North'); // 3300
+    expect(result.data[1].region).toBe('South'); // 2100
+    expect(result.data[2].region).toBe('East'); // 1100
   });
 
   it('should sort by multiple fields', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region', 'product'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -512,11 +520,11 @@ describe('d3Aggregate - Sorting', () => {
         { field: 'region', direction: 'asc' },
         { field: 'total_revenue', direction: 'desc' }
       ]
-    });
+    }), ctx);
 
-    expect(result[0].region).toBe('East');
-    expect(result[1].region).toBe('North');
-    expect(result[1].product).toBe('Widget A'); // North Widget A (2500) before North Widget B (800)
+    expect(result.data[0].region).toBe('East');
+    expect(result.data[1].region).toBe('North');
+    expect(result.data[1].product).toBe('Widget A'); // North Widget A (2500) before North Widget B (800)
   });
 
   it('should handle null values in sorting', async () => {
@@ -526,7 +534,7 @@ describe('d3Aggregate - Sorting', () => {
       { region: 'East', revenue: 200 }
     ];
 
-    const result = await d3Aggregate(testData, {
+    const result = await d3Transform(testData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'first', name: 'first_revenue' } // Use first to preserve nulls
@@ -534,30 +542,30 @@ describe('d3Aggregate - Sorting', () => {
       sort: [
         { field: 'first_revenue', direction: 'asc' }
       ]
-    });
+    }), ctx);
 
     // Should sort in ascending order by revenue
-    expect(result[0].region).toBe('East'); // 200
-    expect(result[1].region).toBe('South'); // 500
-    expect(result[2].region).toBe('North'); // 1000
+    expect(result.data[0].region).toBe('East'); // 200
+    expect(result.data[1].region).toBe('South'); // 500
+    expect(result.data[2].region).toBe('North'); // 1000
   });
 });
 
-describe('d3Aggregate - Limit', () => {
+describe('d3Transform - Limit', () => {
   it('should limit results', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
       ],
       limit: 2
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(2);
+    expect(result.data).toHaveLength(2);
   });
 
   it('should apply limit after sorting', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
@@ -566,42 +574,42 @@ describe('d3Aggregate - Limit', () => {
         { field: 'total_revenue', direction: 'desc' }
       ],
       limit: 2
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(2);
-    expect(result[0].region).toBe('North'); // Top revenue
-    expect(result[1].region).toBe('South'); // Second
+    expect(result.data).toHaveLength(2);
+    expect(result.data[0].region).toBe('North'); // Top revenue
+    expect(result.data[1].region).toBe('South'); // Second
     // East excluded by limit
   });
 
   it('should handle limit larger than result set', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
       ],
       limit: 100
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(3); // All results
+    expect(result.data).toHaveLength(3); // All results
   });
 
   it('should handle limit of 0', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
       ],
       limit: 0
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(3); // Limit 0 ignored
+    expect(result.data).toHaveLength(3); // Limit 0 ignored
   });
 });
 
-describe('d3Aggregate - Complete Pipeline', () => {
-  it('should execute complete pipeline: filter → group → calculate → having → sort → limit', async () => {
-    const result = await d3Aggregate(salesData, {
+describe('d3Transform - Complete Pipeline', () => {
+  it('should execute complete pipeline: filter -> group -> calculate -> having -> sort -> limit', async () => {
+    const result = await d3Transform(salesData, aggSpec({
       // GROUP BY
       dimensions: ['region'],
 
@@ -628,19 +636,19 @@ describe('d3Aggregate - Complete Pipeline', () => {
 
       // LIMIT
       limit: 2
-    });
+    }), ctx);
 
     // Expected: Only North (2500) passes HAVING filter (>= 1500)
     // South (1200) and East (1100) fail HAVING filter
     // Sorted desc, limited to 2 (but only 1 result passes)
-    expect(result).toHaveLength(1);
-    expect(result[0].region).toBe('North');
-    expect(result[0].total_revenue).toBe(2500);
-    expect(result[0].avg_price).toBe(100); // 2500 / 25
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].region).toBe('North');
+    expect(result.data[0].total_revenue).toBe(2500);
+    expect(result.data[0].avg_price).toBe(100); // 2500 / 25
   });
 
   it('should handle real-world dashboard query', async () => {
-    const result = await d3Aggregate(salesData, {
+    const result = await d3Transform(salesData, aggSpec({
       dimensions: ['region', 'product'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' },
@@ -659,28 +667,28 @@ describe('d3Aggregate - Complete Pipeline', () => {
         { field: 'total_revenue', direction: 'desc' }
       ],
       limit: 5
-    });
+    }), ctx);
 
-    expect(result.length).toBeGreaterThan(0);
-    expect(result[0]).toHaveProperty('region');
-    expect(result[0]).toHaveProperty('product');
-    expect(result[0]).toHaveProperty('total_revenue');
-    expect(result[0]).toHaveProperty('avg_revenue');
-    expect(result[0]).toHaveProperty('transaction_count');
-    expect(result[0]).toHaveProperty('avg_transaction_value');
+    expect(result.data.length).toBeGreaterThan(0);
+    expect(result.data[0]).toHaveProperty('region');
+    expect(result.data[0]).toHaveProperty('product');
+    expect(result.data[0]).toHaveProperty('total_revenue');
+    expect(result.data[0]).toHaveProperty('avg_revenue');
+    expect(result.data[0]).toHaveProperty('transaction_count');
+    expect(result.data[0]).toHaveProperty('avg_transaction_value');
   });
 });
 
-describe('d3Aggregate - Edge Cases', () => {
+describe('d3Transform - Edge Cases', () => {
   it('should handle empty data array', async () => {
-    const result = await d3Aggregate([], {
+    const result = await d3Transform([], aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
       ]
-    });
+    }), ctx);
 
-    expect(result).toEqual([]);
+    expect(result.data).toEqual([]);
   });
 
   it('should handle missing column values', async () => {
@@ -690,14 +698,14 @@ describe('d3Aggregate - Edge Cases', () => {
       { region: 'East', revenue: 500 }
     ];
 
-    const result = await d3Aggregate(testData, {
+    const result = await d3Transform(testData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
       ]
-    });
+    }), ctx);
 
-    const south = result.find(r => r.region === 'South');
+    const south = result.data.find(r => r.region === 'South');
     expect(south.total_revenue).toBe(0); // Missing treated as 0
   });
 
@@ -707,14 +715,14 @@ describe('d3Aggregate - Edge Cases', () => {
       { region: 'South', revenue: 1000 }
     ];
 
-    const result = await d3Aggregate(testData, {
+    const result = await d3Transform(testData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' }
       ]
-    });
+    }), ctx);
 
-    const north = result.find(r => r.region === 'North');
+    const north = result.data.find(r => r.region === 'North');
     expect(north.total_revenue).toBe(0); // Invalid number treated as 0
   });
 
@@ -723,26 +731,26 @@ describe('d3Aggregate - Edge Cases', () => {
       { region: 'North', revenue: 1000, units: 10 }
     ];
 
-    const result = await d3Aggregate(testData, {
+    const result = await d3Transform(testData, aggSpec({
       dimensions: ['region'],
       measures: [
         { column: 'revenue', aggregation: 'sum', name: 'total_revenue' },
         { column: 'revenue', aggregation: 'avg', name: 'avg_revenue' }
       ]
-    });
+    }), ctx);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].total_revenue).toBe(1000);
-    expect(result[0].avg_revenue).toBe(1000);
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].total_revenue).toBe(1000);
+    expect(result.data[0].avg_revenue).toBe(1000);
   });
 
-  it('should handle undefined aggregateSpec', async () => {
-    const result = await d3Aggregate(salesData, undefined);
-    expect(result).toEqual(salesData);
+  it('should handle undefined spec', async () => {
+    const result = await d3Transform(salesData, undefined, ctx);
+    expect(result.data).toEqual(salesData);
   });
 
-  it('should handle null aggregateSpec', async () => {
-    const result = await d3Aggregate(salesData, null);
-    expect(result).toEqual(salesData);
+  it('should handle null spec', async () => {
+    const result = await d3Transform(salesData, null, ctx);
+    expect(result.data).toEqual(salesData);
   });
 });

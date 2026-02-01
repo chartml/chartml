@@ -118,7 +118,7 @@ ChartML has a growing ecosystem of community-created plugins:
 
 - Create your own chart renderers
 - Add custom data sources (PostgreSQL, GraphQL, CSV, etc.)
-- Build custom aggregation engines
+- Build custom transform engines
 
 See the [Plugin Architecture Guide](./packages/core/PLUGIN_ARCHITECTURE.md) to learn how to create plugins.
 

@@ -76,15 +76,16 @@ data:
   - region: "South"
     revenue: 950
 
-aggregate:
-  dimensions: [region]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
-  sort:
-    - field: total_revenue
-      direction: desc
+transform:
+  aggregate:
+    dimensions: [region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+    sort:
+      - field: total_revenue
+        direction: desc
 
 visualize:
   type: bar
@@ -150,13 +151,13 @@ globalRegistry.registerDataSource('postgresql', async (spec) => {
 });
 ```
 
-### Custom Aggregation Plugins
+### Custom Transform Plugins
 
 ```javascript
 import { globalRegistry } from '@chartml/core';
 
-globalRegistry.registerAggregateMiddleware(async (data, aggregateSpec) => {
-  // Your custom aggregation logic
+globalRegistry.registerTransformMiddleware(async (data, spec) => {
+  // Your custom transform logic
   return transformedData;
 });
 ```

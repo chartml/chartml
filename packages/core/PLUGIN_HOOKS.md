@@ -48,7 +48,7 @@ const chartml = new ChartML({
 ```javascript
 {
   type: 'progress',
-  phase: 'data' | 'aggregate' | 'render',
+  phase: 'data' | 'transform' | 'render',
   loaded: number,      // Bytes or rows loaded
   total: number,       // Total bytes or rows
   percent: number,     // 0-100
@@ -136,34 +136,34 @@ export function createStreamingAPIPlugin(options) {
 }
 ```
 
-### Aggregation Middleware Plugins
+### Transform Middleware Plugins
 
 Middleware also receives hooks:
 
 ```javascript
 export function createAdvancedDuckDBMiddleware(options) {
-  return async function (data, aggregateSpec, { hooks }) {
+  return async function (data, spec, { hooks }) {
     const { onProgress } = hooks;
 
-    // Report progress during aggregation
+    // Report progress during transformation
     onProgress?.({
       type: 'progress',
-      phase: 'aggregate',
+      phase: 'transform',
       loaded: 0,
       total: data.length,
       percent: 0,
-      message: 'Starting aggregation...'
+      message: 'Starting transformation...'
     });
 
-    // ... perform aggregation
+    // ... perform transformation
 
     onProgress?.({
       type: 'progress',
-      phase: 'aggregate',
+      phase: 'transform',
       loaded: data.length,
       total: data.length,
       percent: 100,
-      message: 'Aggregation complete'
+      message: 'Transformation complete'
     });
 
     return result;
@@ -241,7 +241,7 @@ Example of using hooks for cross-tab coordination:
 export function createCoordinatedDuckDBPlugin(options) {
   const coordinator = new SharedWorker('/coordinator.js');
 
-  return async function (data, aggregateSpec, { hooks }) {
+  return async function (data, spec, { hooks }) {
     const { onCacheHit, onCacheMiss } = hooks;
 
     // Check if another tab is already processing this query
@@ -266,7 +266,7 @@ export function createCoordinatedDuckDBPlugin(options) {
       reason: 'not_processed'
     });
 
-    const result = await processWith DuckDB(data, aggregateSpec);
+    const result = await processWithDuckDB(data, spec);
 
     // Broadcast result to other tabs
     coordinator.broadcastResult(queryId, result);

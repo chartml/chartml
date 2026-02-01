@@ -96,7 +96,7 @@ ChartML Root
 └── [chart blocks] - One or more chart definitions
     ├── data (required) - Data source (inline, SQL, or reference)
     ├── params (optional) - Chart-level parameters
-    ├── aggregate (optional) - Data aggregation pipeline
+    ├── transform (optional) - Data transformation pipeline
     ├── visualize (required) - Chart specification
     ├── style (optional) - Chart-level styling
     └── config (optional) - Chart-level configuration

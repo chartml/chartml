@@ -9,7 +9,7 @@ class GlobalPluginRegistry {
   constructor() {
     this.chartRenderers = new Map();
     this.dataSources = new Map();
-    this.aggregateMiddleware = [];
+    this.transformMiddleware = [];
     this.datasourceResolver = null;
   }
 
@@ -27,8 +27,8 @@ class GlobalPluginRegistry {
     this.dataSources.set(name, handler);
   }
 
-  registerAggregateMiddleware(middleware) {
-    this.aggregateMiddleware.push(middleware);
+  registerTransformMiddleware(middleware) {
+    this.transformMiddleware.push(middleware);
   }
 
   setDatasourceResolver(resolver) {
@@ -55,8 +55,8 @@ class GlobalPluginRegistry {
     return this.dataSources;
   }
 
-  getAllAggregateMiddleware() {
-    return this.aggregateMiddleware;
+  getAllTransformMiddleware() {
+    return this.transformMiddleware;
   }
 }
 

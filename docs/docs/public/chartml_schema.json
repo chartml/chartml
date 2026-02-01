@@ -311,8 +311,8 @@
         "data": {
           "$ref": "#/definitions/Data"
         },
-        "aggregate": {
-          "$ref": "#/definitions/Aggregate"
+        "transform": {
+          "$ref": "#/definitions/Transform"
         },
         "visualize": {
           "$ref": "#/definitions/Visualize"
@@ -414,155 +414,161 @@
         }
       ]
     },
-    "Aggregate": {
+    "Transform": {
       "type": "object",
-      "description": "Data aggregation specification",
-      "additionalProperties": false,
+      "description": "Data transformation pipeline.",
+      "additionalProperties": true,
       "properties": {
-        "dimensions": {
-          "type": "array",
-          "description": "Group by columns",
-          "items": {
-            "oneOf": [
-              {
-                "type": "string"
-              },
-              {
+        "aggregate": {
+          "type": "object",
+          "description": "Declarative aggregation: group-by dimensions, aggregation measures, filters, sorting.",
+          "properties": {
+            "dimensions": {
+              "type": "array",
+              "description": "Group by columns",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "column": {
+                        "type": "string",
+                        "description": "Column expression or name"
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Output field name"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": ["string", "number", "date"],
+                        "description": "Data type for casting"
+                      }
+                    },
+                    "required": ["column", "name"]
+                  }
+                ]
+              }
+            },
+            "measures": {
+              "type": "array",
+              "description": "Aggregations and calculated fields",
+              "items": {
                 "type": "object",
                 "properties": {
                   "column": {
                     "type": "string",
-                    "description": "Column expression or name"
+                    "description": "Column to aggregate"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "sum", "count", "avg", "min", "max",
+                      "countDistinct", "median", "stddev", "variance",
+                      "percentile25", "percentile50", "percentile75",
+                      "percentile90", "percentile95", "percentile99"
+                    ],
+                    "description": "Aggregation function"
+                  },
+                  "expression": {
+                    "type": "string",
+                    "description": "SQL expression for calculated measure"
                   },
                   "name": {
                     "type": "string",
-                    "description": "Output field name"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["string", "number", "date"],
-                    "description": "Data type for casting"
+                    "description": "Output column name"
                   }
                 },
-                "required": ["column", "name"]
-              }
-            ]
-          }
-        },
-        "measures": {
-          "type": "array",
-          "description": "Aggregations and calculated fields",
-          "items": {
-            "type": "object",
-            "properties": {
-              "column": {
-                "type": "string",
-                "description": "Column to aggregate"
-              },
-              "aggregation": {
-                "type": "string",
-                "enum": [
-                  "sum", "count", "avg", "min", "max",
-                  "countDistinct", "median", "stddev", "variance",
-                  "percentile25", "percentile50", "percentile75",
-                  "percentile90", "percentile95", "percentile99"
-                ],
-                "description": "Aggregation function"
-              },
-              "expression": {
-                "type": "string",
-                "description": "SQL expression for calculated measure"
-              },
-              "name": {
-                "type": "string",
-                "description": "Output column name"
+                "required": ["name"]
               }
             },
-            "required": ["name"]
-          }
-        },
-        "filters": {
-          "type": "object",
-          "description": "Filter conditions",
-          "properties": {
-            "combinator": {
-              "type": "string",
-              "enum": ["and", "or"],
-              "description": "Logical operator combining filter rules (default: 'and')"
-            },
-            "rules": {
-              "type": "array",
-              "description": "Array of filter rule objects",
-              "items": {
-                "oneOf": [
-                  {
-                    "type": "object",
-                    "description": "Filter rule for null checks (no value required)",
-                    "properties": {
-                      "field": {
-                        "type": "string",
-                        "description": "Field name to filter on"
+            "filters": {
+              "type": "object",
+              "description": "Filter conditions",
+              "properties": {
+                "combinator": {
+                  "type": "string",
+                  "enum": ["and", "or"],
+                  "description": "Logical operator combining filter rules (default: 'and')"
+                },
+                "rules": {
+                  "type": "array",
+                  "description": "Array of filter rule objects",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "description": "Filter rule for null checks (no value required)",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field name to filter on"
+                          },
+                          "operator": {
+                            "type": "string",
+                            "enum": ["isNull", "isNotNull"],
+                            "description": "Null check operator"
+                          }
+                        },
+                        "required": ["field", "operator"],
+                        "additionalProperties": false
                       },
-                      "operator": {
-                        "type": "string",
-                        "enum": ["isNull", "isNotNull"],
-                        "description": "Null check operator"
+                      {
+                        "type": "object",
+                        "description": "Filter rule with value",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field name to filter on"
+                          },
+                          "operator": {
+                            "type": "string",
+                            "enum": [
+                              "=", "!=", ">", ">=", "<", "<=",
+                              "in", "notIn", "contains", "startsWith", "endsWith",
+                              "between"
+                            ],
+                            "description": "Comparison operator"
+                          },
+                          "value": {
+                            "description": "Filter value (string, number, array)"
+                          }
+                        },
+                        "required": ["field", "operator", "value"],
+                        "additionalProperties": false
                       }
-                    },
-                    "required": ["field", "operator"],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "description": "Filter rule with value",
-                    "properties": {
-                      "field": {
-                        "type": "string",
-                        "description": "Field name to filter on"
-                      },
-                      "operator": {
-                        "type": "string",
-                        "enum": [
-                          "=", "!=", ">", ">=", "<", "<=",
-                          "in", "notIn", "contains", "startsWith", "endsWith",
-                          "between"
-                        ],
-                        "description": "Comparison operator"
-                      },
-                      "value": {
-                        "description": "Filter value (string, number, array)"
-                      }
-                    },
-                    "required": ["field", "operator", "value"],
-                    "additionalProperties": false
+                    ]
                   }
-                ]
+                }
               }
+            },
+            "sort": {
+              "type": "array",
+              "description": "Sort order",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "field": {
+                    "type": "string",
+                    "description": "Field name to sort by"
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": ["asc", "desc"],
+                    "description": "Sort direction"
+                  }
+                },
+                "required": ["field", "direction"]
+              }
+            },
+            "limit": {
+              "type": "number",
+              "description": "Maximum rows to return"
             }
           }
-        },
-        "sort": {
-          "type": "array",
-          "description": "Sort order",
-          "items": {
-            "type": "object",
-            "properties": {
-              "field": {
-                "type": "string",
-                "description": "Field name to sort by"
-              },
-              "direction": {
-                "type": "string",
-                "enum": ["asc", "desc"],
-                "description": "Sort direction"
-              }
-            },
-            "required": ["field", "direction"]
-          }
-        },
-        "limit": {
-          "type": "number",
-          "description": "Maximum rows to return"
         }
       }
     },

@@ -36,7 +36,7 @@ import { getMergedConfig } from './config.js';
 import { parseComponent, COMPONENT_TYPES, extractReferences } from './componentParser.js';
 import { createRegistry } from './registry.js';
 import { globalRegistry } from './pluginRegistry.js';
-import { d3Aggregate } from './aggregate.js';
+import { d3Transform } from './transform.js';
 import { renderParams } from './paramsUI.js';
 import { resolveParamReferences, extractParamReferences } from './parameterResolver.js';
 import { SourceRefreshRegistry } from './sourceRefreshRegistry.js';
@@ -218,7 +218,7 @@ class Chart {
  * ChartML Renderer Class
  *
  * Main class for rendering ChartML specifications into interactive D3 visualizations.
- * Supports plugin system for extensible data sources and aggregate middleware.
+ * Supports plugin system for extensible data sources and transform middleware.
  *
  * ChartML is palette-agnostic - it doesn't define any built-in palettes.
  * The parent application provides the default palette as an array of colors.
@@ -226,7 +226,7 @@ class Chart {
 export class ChartML {
   constructor(options = {}) {
     this.dataSources = new Map();
-    this.aggregateMiddleware = [];
+    this.transformMiddleware = [];
     this.chartRenderers = new Map();  // Chart renderer plugins
     this.defaultPalette = options.defaultPalette || null;  // Array of color strings from parent app
     this.loadingIndicator = options.loadingIndicator || null;  // Optional custom loading indicator function
@@ -263,8 +263,8 @@ export class ChartML {
     // Register built-in data sources
     this._registerBuiltInDataSources();
 
-    // Register built-in aggregation middleware
-    this._registerBuiltInAggregation();
+    // Register built-in transform middleware
+    this._registerBuiltInTransform();
 
     // Register built-in chart renderers (backward compatibility)
     // These will be moved to plugins in the future
@@ -322,10 +322,10 @@ export class ChartML {
   }
 
   /**
-   * Register built-in aggregation middleware (d3-array)
+   * Register built-in transform middleware (d3-array aggregate)
    */
-  _registerBuiltInAggregation() {
-    this.registerAggregateMiddleware(d3Aggregate);
+  _registerBuiltInTransform() {
+    this.registerTransformMiddleware(d3Transform);
   }
 
   /**
@@ -388,36 +388,36 @@ export class ChartML {
   }
 
   /**
-   * Register aggregate middleware plugin
+   * Register transform middleware plugin
    *
    * @param {Function} middleware - Async function that transforms data
    *
    * @example
-   * chartml.registerAggregateMiddleware(async (data, aggregateSpec) => {
+   * chartml.registerTransformMiddleware(async (data, spec) => {
    *   // Transform data using DuckDB or other engine
    *   return transformedData;
    * });
    */
-  registerAggregateMiddleware(middleware) {
-    this.aggregateMiddleware.push(middleware);
+  registerTransformMiddleware(middleware) {
+    this.transformMiddleware.push(middleware);
   }
 
   /**
-   * Set aggregate middleware, replacing any existing middleware (including defaults)
+   * Set transform middleware, replacing any existing middleware (including defaults)
    *
-   * This is the preferred method when you want to replace the default d3Aggregate
+   * This is the preferred method when you want to replace the default d3Transform
    * middleware with a custom implementation like DuckDB.
    *
    * @param {Function} middleware - Async function that transforms data
    *
    * @example
-   * chartml.setAggregateMiddleware(async (data, aggregateSpec) => {
+   * chartml.setTransformMiddleware(async (data, spec) => {
    *   // Replace default d3 aggregation with DuckDB
-   *   return duckDbAggregation(data, aggregateSpec);
+   *   return duckDbTransform(data, spec);
    * });
    */
-  setAggregateMiddleware(middleware) {
-    this.aggregateMiddleware = [middleware];
+  setTransformMiddleware(middleware) {
+    this.transformMiddleware = [middleware];
   }
 
   /**
@@ -486,7 +486,7 @@ export class ChartML {
   }
 
   /**
-   * Apply aggregate middleware (includes filter + aggregate stages)
+   * Apply transform middleware (includes filter + aggregate stages)
    *
    * MIDDLEWARE-CONTROLLED CACHING:
    * The middleware receives a lazy data fetch callback in context.fetchData.
@@ -501,13 +501,13 @@ export class ChartML {
    * @param {Object} context - Context with hooks, options, etc.
    * @returns {Promise<Array>} Processed data
    */
-  async _applyAggregate(fetchData, spec, context = {}) {
+  async _applyTransform(fetchData, spec, context = {}) {
     // If no middleware registered, fetch data directly
-    if (this.aggregateMiddleware.length === 0) {
+    if (this.transformMiddleware.length === 0) {
       return await fetchData();
     }
 
-    // ALWAYS call middleware when registered, even for charts without aggregate config
+    // ALWAYS call middleware when registered, even for charts without transform config
     // The middleware handles passthrough cases AND is essential for data format conversion
     // (e.g., Arrow buffers must be converted to JS objects via DuckDB)
     const middlewareContext = {
@@ -521,7 +521,7 @@ export class ChartML {
     // Middleware can call context.fetchData() if it needs fresh data
     let result = null;
 
-    for (const middleware of this.aggregateMiddleware) {
+    for (const middleware of this.transformMiddleware) {
       result = await middleware(result, spec, middlewareContext);
     }
 
@@ -979,9 +979,9 @@ export class ChartML {
       // Build modified spec from originalSpec (preserving all other sections)
       const modifiedSpec = {
         ...originalSpec,
-        aggregate: {
-          ...(originalSpec.aggregate || {}),
-          ...(modifications.aggregate || {})
+        transform: {
+          ...(originalSpec.transform || {}),
+          ...(modifications.transform || {})
         }
       };
 
@@ -1110,9 +1110,9 @@ export class ChartML {
         return await this._resolveDataSource(context.resolvedSpec, options);
       };
 
-      // Apply aggregate middleware with lazy data fetching
+      // Apply transform middleware with lazy data fetching
       // Middleware can cache and skip data source entirely on cache hits
-      const result = await this._applyAggregate(fetchData, context.resolvedSpec, {
+      const result = await this._applyTransform(fetchData, context.resolvedSpec, {
         hooks: this.hooks,
         bypassCache: options.bypassCache,
         resolvedDataSource: context.resolvedDataSource
@@ -1468,8 +1468,8 @@ export { parseComponent, parseMultipleComponents, extractReferences, COMPONENT_T
 // Plugin Registry API (Auto-registration)
 export { globalRegistry } from './pluginRegistry.js';
 
-// Aggregation API (Built-in d3-array aggregation)
-export { d3Aggregate } from './aggregate.js';
+// Transform API (Built-in d3-array aggregation)
+export { d3Transform } from './transform.js';
 
 // Parameter Resolution API
 export { resolveParamReferences, extractParamReferences, validateParamReferences } from './parameterResolver.js';

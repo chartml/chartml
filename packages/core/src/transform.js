@@ -1,14 +1,14 @@
 /**
- * Built-in aggregation using d3-array
+ * Built-in transform middleware (aggregate stage) using d3-array
  *
  * Lightweight aggregation for typical dashboard datasets (<10k rows).
  * Supports: GROUP BY, aggregations (sum/avg/count/min/max), filters, sort, limit, calculated fields.
  *
- * For larger datasets or complex SQL operations, users can install aggregate middleware plugins.
+ * For larger datasets or complex SQL operations, users can install transform middleware plugins.
  *
  * CACHING:
  * - In-memory cache to prevent redundant BigQuery calls on re-renders
- * - Cache key based on data source spec + aggregation spec
+ * - Cache key based on data source spec + transform spec
  * - TTL of 5 minutes (balances freshness vs. performance)
  */
 
@@ -23,34 +23,35 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const inFlightRequests = new Map();
 
 /**
- * Generate cache key from data source and aggregation spec
+ * Generate cache key from data source and transform spec
  */
 function generateCacheKey(spec, context) {
   // Include data source spec (query, inline data, etc.)
   const dataSpec = spec.data || {};
 
-  // Include aggregation spec
-  const aggregateSpec = spec.aggregate || {};
+  // Include transform spec (contains aggregate and potentially other stages)
+  const transformSpec = spec.transform || {};
 
   // Create a stable string representation
   return JSON.stringify({
     data: dataSpec,
-    aggregate: aggregateSpec
+    transform: transformSpec
   });
 }
 
 /**
- * Built-in aggregation middleware using d3-array
+ * Built-in transform middleware using d3-array (aggregate stage)
  *
  * @param {Array<Object>|null} data - Input data array (null if not yet fetched)
  * @param {Object} spec - Pipeline specification
- * @param {Object} [spec.aggregate] - Aggregation specification
+ * @param {Object} [spec.transform] - Transform specification
+ * @param {Object} [spec.transform.aggregate] - Aggregation specification
  * @param {Object} context - Plugin context
  * @param {Function} [context.fetchData] - Lazy callback to fetch data from source
  * @param {boolean} [context.bypassCache] - If true, skip cache and fetch fresh data
  * @returns {Promise<Array<Object>>} Transformed data array
  */
-export async function d3Aggregate(data, spec, context = {}) {
+export async function d3Transform(data, spec, context = {}) {
   if (!spec) {
     return {
       data: data,
@@ -58,7 +59,7 @@ export async function d3Aggregate(data, spec, context = {}) {
     };
   }
 
-  const aggregateSpec = spec.aggregate || {};
+  const aggregateSpec = spec.transform?.aggregate || {};
 
   const { dimensions = [], measures = [], sort, limit, filters } = aggregateSpec;
 
@@ -449,7 +450,7 @@ function splitFilters(filters, dimensions, measures) {
       preAggRules.push(rule);
     } else {
       // Unknown field - apply pre-aggregation to be safe
-      console.warn(`[d3Aggregate] Filter field "${rule.field}" not found in dimensions or measures, applying pre-aggregation`);
+      console.warn(`[d3Transform] Filter field "${rule.field}" not found in dimensions or measures, applying pre-aggregation`);
       preAggRules.push(rule);
     }
   });
@@ -545,7 +546,7 @@ function applyRule(row, rule) {
       return fieldValue !== null && fieldValue !== undefined;
 
     default:
-      console.warn(`[d3Aggregate] Unknown operator: ${operator}`);
+      console.warn(`[d3Transform] Unknown operator: ${operator}`);
       return true;  // Don't filter out on unknown operator
   }
 }

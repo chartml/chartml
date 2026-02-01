@@ -244,8 +244,9 @@ params:  # Chart-specific parameters (no name field)
     default: 10
 
 data: sales_data
-aggregate:
-  limit: "$top_n"  # Reference chart-level param (no prefix)
+transform:
+  aggregate:
+    limit: "$top_n"  # Reference chart-level param (no prefix)
 ```
 Referenced as: `$top_n` (no block name prefix)
 
@@ -262,7 +263,7 @@ Referenced as: `$top_n` (no block name prefix)
 
 ## Component 3: Chart
 
-Complete visualization specification using Data → Aggregate → Visualize pipeline.
+Complete visualization specification using Data → Transform → Visualize pipeline.
 
 ### Structure
 
@@ -285,12 +286,13 @@ data:                         # Inline Source definition (object)
   cache:                      # Optional
     ttl: 6h
 
-aggregate:                    # Optional - data aggregation
-  dimensions: [...]
-  measures: [...]
-  filters: {...}
-  sort: [...]
-  limit: 100
+transform:                    # Optional - data transformation pipeline
+  aggregate:                  # Declarative aggregation stage
+    dimensions: [...]
+    measures: [...]
+    filters: {...}
+    sort: [...]
+    limit: 100
 
 visualize:                    # Required - chart rendering
   type: bar | line | area | scatter | pie | doughnut | metric
@@ -334,33 +336,34 @@ data:
     ttl: 6h
 ```
 
-### Aggregate Layer (Optional)
+### Transform Layer (Optional)
 
-Operates on data to filter, aggregate, and calculate.
+The transform layer contains data transformation stages. Currently the built-in stage is `aggregate`, which groups, filters, and calculates data.
 
 **Dimensions and Measures:**
 ```yaml
-aggregate:
-  dimensions:
-    - product
-    - region
-    - column: "DATE_TRUNC(sale_date, 'MONTH')"
-      name: year_month
-      type: date
+transform:
+  aggregate:
+    dimensions:
+      - product
+      - region
+      - column: "DATE_TRUNC(sale_date, 'MONTH')"
+        name: year_month
+        type: date
 
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
-    - column: units
-      aggregation: count
-      name: total_units
+      - column: units
+        aggregation: count
+        name: total_units
 
-    # Post-aggregation calculation
-    - expression: "total_revenue / total_units"
-      name: avg_price
-      type: number
+      # Post-aggregation calculation
+      - expression: "total_revenue / total_units"
+        name: avg_price
+        type: number
 ```
 
 **Aggregation Functions:**
@@ -368,21 +371,22 @@ aggregate:
 
 **Filters with Parameter References:**
 ```yaml
-aggregate:
-  filters:
-    combinator: and  # or "or"
-    rules:
-      - field: region
-        operator: in
-        value: "$dashboard_filters.selected_regions"  # Named param reference
+transform:
+  aggregate:
+    filters:
+      combinator: and  # or "or"
+      rules:
+        - field: region
+          operator: in
+          value: "$dashboard_filters.selected_regions"  # Named param reference
 
-      - field: total_revenue
-        operator: ">="
-        value: "$revenue_filter.minimum_revenue"  # Different named block
+        - field: total_revenue
+          operator: ">="
+          value: "$revenue_filter.minimum_revenue"  # Different named block
 
-      - field: date
-        operator: between
-        value: ["$time_filter.date_range.start", "$time_filter.date_range.end"]  # Nested access
+        - field: date
+          operator: between
+          value: ["$time_filter.date_range.start", "$time_filter.date_range.end"]  # Nested access
 ```
 
 **Filter Operators:**
@@ -394,14 +398,15 @@ aggregate:
 
 **Sort and Limit:**
 ```yaml
-aggregate:
-  sort:
-    - field: total_revenue
-      direction: desc
-    - field: region
-      direction: asc
+transform:
+  aggregate:
+    sort:
+      - field: total_revenue
+        direction: desc
+      - field: region
+        direction: asc
 
-  limit: 100
+    limit: 100
 ```
 
 ### Visualize Layer
@@ -610,12 +615,13 @@ title: "Revenue by Region"
 
 data: quarterly_sales         # Reference named Source
 
-aggregate:
-  dimensions: [region]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
 visualize:
   type: bar
@@ -644,19 +650,20 @@ params:
 
 data: quarterly_sales
 
-aggregate:
-  dimensions: [region]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
-  filters:
-    combinator: and
-    rules:
-      - field: region
-        operator: in
-        value: "$selected_regions"  # Chart-level param (no prefix)
+    filters:
+      combinator: and
+      rules:
+        - field: region
+          operator: in
+          value: "$selected_regions"  # Chart-level param (no prefix)
 
 visualize:
   type: bar
@@ -1030,7 +1037,7 @@ value: ["$params.date_range.start", "$params.date_range.end"]
 **Resolution:**
 1. Variables are resolved before chart execution
 2. `"$params.region"` → `["US", "EU"]` (from param state)
-3. Resolved values flow through Data → Aggregate → Visualize pipeline
+3. Resolved values flow through Data → Transform → Visualize pipeline
 
 ---
 
@@ -1141,23 +1148,24 @@ Charts using source and parameters:
 
   data: sales_data        # Reference the Source
 
-  aggregate:
-    dimensions: [region]
-    measures:
-      - column: revenue
-        aggregation: sum
-        name: total_revenue
+  transform:
+    aggregate:
+      dimensions: [region]
+      measures:
+        - column: revenue
+          aggregation: sum
+          name: total_revenue
 
-    filters:
-      combinator: and
-      rules:
-        - field: region
-          operator: in
-          value: "$params.selected_regions"
+      filters:
+        combinator: and
+        rules:
+          - field: region
+            operator: in
+            value: "$params.selected_regions"
 
-        - field: sale_date
-          operator: between
-          value: ["$params.global_date_range.start", "$params.global_date_range.end"]
+          - field: sale_date
+            operator: between
+            value: ["$params.global_date_range.start", "$params.global_date_range.end"]
 
   visualize:
     type: bar
@@ -1178,19 +1186,20 @@ Charts using source and parameters:
 
   data: sales_data
 
-  aggregate:
-    dimensions: [region]
-    measures:
-      - column: customers
-        aggregation: countDistinct
-        name: unique_customers
+  transform:
+    aggregate:
+      dimensions: [region]
+      measures:
+        - column: customers
+          aggregation: countDistinct
+          name: unique_customers
 
-    filters:
-      combinator: and
-      rules:
-        - field: region
-          operator: in
-          value: "$params.selected_regions"
+      filters:
+        combinator: and
+        rules:
+          - field: region
+            operator: in
+            value: "$params.selected_regions"
 
   visualize:
     type: bar

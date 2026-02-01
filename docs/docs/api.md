@@ -330,14 +330,14 @@ visualize:
 await chartml.render(spec, container);
 ```
 
-### setAggregateMiddleware()
+### setTransformMiddleware()
 
-Sets custom aggregation middleware for transforming data.
+Sets custom transform middleware for processing data.
 
 **Signature:**
 
 ```javascript
-chartml.setAggregateMiddleware(handler);
+chartml.setTransformMiddleware(handler);
 ```
 
 **Parameters:**
@@ -351,20 +351,20 @@ import { ChartML } from '@chartml/core';
 
 const chartml = new ChartML();
 
-// Custom aggregation middleware
-chartml.setAggregateMiddleware(async (data, spec, context) => {
+// Custom transform middleware
+chartml.setTransformMiddleware(async (data, spec, context) => {
   // data: Array of raw data rows
-  // spec: Aggregate specification (dimensions, measures, filters, etc.)
+  // spec: Full chart specification (read transform stages from spec.transform)
   // context: Execution context
 
-  // Perform custom aggregation
-  const aggregated = performCustomAggregation(data, spec);
+  // Perform custom transformation
+  const transformed = performCustomTransformation(data, spec);
 
   return {
-    data: aggregated,
+    data: transformed,
     metadata: {
       inputRows: data.length,
-      outputRows: aggregated.length
+      outputRows: transformed.length
     }
   };
 });
@@ -423,7 +423,7 @@ Called during data fetching and aggregation to report progress.
 
 ```javascript
 {
-  phase: 'data' | 'aggregate' | 'render',
+  phase: 'data' | 'transform' | 'render',
   percent: 0-100,
   message: 'Loading data...'
 }
@@ -643,14 +643,14 @@ chartml.registerDataSource('rest-api', async (spec, context) => {
 });
 ```
 
-### Aggregate Middleware Interface
+### Transform Middleware Interface
 
-Aggregate middleware transforms data (filtering, grouping, calculations).
+Transform middleware processes data through transformation stages (filtering, grouping, calculations).
 
 **Signature:**
 
 ```javascript
-async function aggregateMiddleware(data, spec, context) {
+async function transformMiddleware(data, spec, context) {
   // Transform data
   return { data, metadata };
 }
@@ -659,12 +659,12 @@ async function aggregateMiddleware(data, spec, context) {
 **Parameters:**
 
 - `data` (Array) - Raw data rows from data source
-- `spec` (Object) - Aggregate specification
-  - `spec.dimensions` - Array of dimension fields
-  - `spec.measures` - Array of measure definitions
-  - `spec.filters` - Filter rules
-  - `spec.sort` - Sort configuration
-  - `spec.limit` - Row limit
+- `spec` (Object) - Full chart specification. The aggregate stage config is at `spec.transform.aggregate`:
+  - `spec.transform.aggregate.dimensions` - Array of dimension fields
+  - `spec.transform.aggregate.measures` - Array of measure definitions
+  - `spec.transform.aggregate.filters` - Filter rules
+  - `spec.transform.aggregate.sort` - Sort configuration
+  - `spec.transform.aggregate.limit` - Row limit
 - `context` (Object) - Execution context
 
 **Returns:** Promise resolving to:
@@ -679,8 +679,9 @@ async function aggregateMiddleware(data, spec, context) {
 **Example:**
 
 ```javascript
-chartml.setAggregateMiddleware(async (data, spec, context) => {
-  const { dimensions, measures, filters, sort, limit } = spec;
+chartml.setTransformMiddleware(async (data, spec, context) => {
+  const aggregateSpec = spec.transform?.aggregate || {};
+  const { dimensions, measures, filters, sort, limit } = aggregateSpec;
 
   // Apply filters
   let filtered = filters ? applyFilters(data, filters) : data;

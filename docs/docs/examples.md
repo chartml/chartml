@@ -580,12 +580,13 @@ title: "Monthly Revenue Trend"
 
 data: q1_sales
 
-aggregate:
-  dimensions: [month]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [month]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
 visualize:
   type: bar
@@ -606,12 +607,13 @@ title: "Revenue by Region"
 
 data: q1_sales
 
-aggregate:
-  dimensions: [region]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
 visualize:
   type: pie
@@ -632,15 +634,16 @@ title: "Total Revenue by Region (Ranked)"
 
 data: q1_sales
 
-aggregate:
-  dimensions: [region]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
-  sort:
-    - field: total_revenue
-      direction: desc
+transform:
+  aggregate:
+    dimensions: [region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+    sort:
+      - field: total_revenue
+        direction: desc
 
 visualize:
   type: bar
@@ -662,12 +665,13 @@ title: "Revenue by Region and Month"
 
 data: q1_sales
 
-aggregate:
-  dimensions: [month, region]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [month, region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
 visualize:
   type: bar
@@ -721,12 +725,13 @@ data:
         product_line: "Services"
         revenue: 22000
 
-aggregate:
-  dimensions: [month, product_line]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [month, product_line]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
 visualize:
   type: bar
@@ -877,12 +882,13 @@ data:
         region: "East"
         revenue: 43000
 
-aggregate:
-  dimensions: [week, region]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [week, region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
 visualize:
   type: line
@@ -997,12 +1003,13 @@ data:
         region: "East"
         revenue: 50000
 
-aggregate:
-  dimensions: [week, region]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [week, region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
 visualize:
   type: area
@@ -1169,12 +1176,13 @@ data:
         region: "East"
         revenue: 68000
 
-aggregate:
-  dimensions: [week, region]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [week, region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
 visualize:
   type: area
@@ -1304,35 +1312,36 @@ data:
         revenue: 520
         units: 52
 
-aggregate:
-  dimensions:
-    - product
-    - category
+transform:
+  aggregate:
+    dimensions:
+      - product
+      - category
 
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
-    - column: units
-      aggregation: sum
-      name: total_units
-    - expression: "total_revenue / total_units"
-      name: avg_price
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+      - column: units
+        aggregation: sum
+        name: total_units
+      - expression: "total_revenue / total_units"
+        name: avg_price
 
-  filters:
-    rules:
-      - field: category
-        operator: "="
-        value: "Electronics"
+    filters:
+      rules:
+        - field: category
+          operator: "="
+          value: "Electronics"
+        - field: total_revenue
+          operator: ">="
+          value: 2000
+
+    sort:
       - field: total_revenue
-        operator: ">="
-        value: 2000
+        direction: desc
 
-  sort:
-    - field: total_revenue
-      direction: desc
-
-  limit: 10
+    limit: 10
 
 visualize:
   type: bar
@@ -1364,20 +1373,21 @@ data:
         revenue: 95000
         cost: 42000
 
-aggregate:
-  dimensions: [product_line]
+transform:
+  aggregate:
+    dimensions: [product_line]
 
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
-    - column: cost
-      aggregation: sum
-      name: total_cost
-    - expression: "total_revenue - total_cost"
-      name: profit
-    - expression: "profit / total_revenue"
-      name: profit_margin
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+      - column: cost
+        aggregation: sum
+        name: total_cost
+      - expression: "total_revenue - total_cost"
+        name: profit
+      - expression: "profit / total_revenue"
+        name: profit_margin
 
 visualize:
   type: bar
@@ -1498,24 +1508,25 @@ data:
         revenue: 1250
         units: 25
 
-aggregate:
-  dimensions:
-    - product
-    - column: "DATE_TRUNC('month', sale_date::DATE)"
-      name: month
-      type: date
+transform:
+  aggregate:
+    dimensions:
+      - product
+      - column: "DATE_TRUNC('month', sale_date::DATE)"
+        name: month
+        type: date
 
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
-    - column: units
-      aggregation: sum
-      name: total_units
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+      - column: units
+        aggregation: sum
+        name: total_units
 
-  sort:
-    - field: month
-      direction: asc
+    sort:
+      - field: month
+        direction: asc
 
 visualize:
   type: line
@@ -1552,35 +1563,36 @@ data:
         cost: 145000
         customers: 750
 
-aggregate:
-  dimensions: [region]
+transform:
+  aggregate:
+    dimensions: [region]
 
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
-    - column: cost
-      aggregation: sum
-      name: total_cost
-    - column: customers
-      aggregation: sum
-      name: total_customers
-    - expression: "total_revenue - total_cost"
-      name: profit
-    - expression: "profit / total_revenue"
-      name: profit_margin
-    - expression: "total_revenue / total_customers"
-      name: revenue_per_customer
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+      - column: cost
+        aggregation: sum
+        name: total_cost
+      - column: customers
+        aggregation: sum
+        name: total_customers
+      - expression: "total_revenue - total_cost"
+        name: profit
+      - expression: "profit / total_revenue"
+        name: profit_margin
+      - expression: "total_revenue / total_customers"
+        name: revenue_per_customer
 
-  filters:
-    rules:
-      - field: profit
-        operator: ">"
-        value: 50000
+    filters:
+      rules:
+        - field: profit
+          operator: ">"
+          value: 50000
 
-  sort:
-    - field: profit_margin
-      direction: desc
+    sort:
+      - field: profit_margin
+        direction: desc
 
 visualize:
   type: bar
@@ -2004,17 +2016,18 @@ data:
         month: "2024-01"
         revenue: 8000
 
-aggregate:
-  filters:
-    combinator: and
-    rules:
-      - field: region
-        operator: in
-        value: "$dashboard_filters.region"       # ← References named param
+transform:
+  aggregate:
+    filters:
+      combinator: and
+      rules:
+        - field: region
+          operator: in
+          value: "$dashboard_filters.region"       # ← References named param
 
-      - field: revenue
-        operator: ">="
-        value: "$dashboard_filters.min_revenue"  # ← References named param
+        - field: revenue
+          operator: ">="
+          value: "$dashboard_filters.min_revenue"  # ← References named param
 
 visualize:
   type: bar
@@ -2068,28 +2081,29 @@ data:
         q2: 88000
         customers: 750
 
-aggregate:
-  dimensions: [region]
-  measures:
-    - column: q1
-      aggregation: sum
-      name: q1_revenue
-    - column: q2
-      aggregation: sum
-      name: q2_revenue
-    - expression: "q1_revenue + q2_revenue"
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [region]
+    measures:
+      - column: q1
+        aggregation: sum
+        name: q1_revenue
+      - column: q2
+        aggregation: sum
+        name: q2_revenue
+      - expression: "q1_revenue + q2_revenue"
+        name: total_revenue
 
-  filters:
-    combinator: and
-    rules:
-      - field: region
-        operator: in
-        value: "$dashboard_filters.region"      # Named param reference
+    filters:
+      combinator: and
+      rules:
+        - field: region
+          operator: in
+          value: "$dashboard_filters.region"      # Named param reference
 
-      - field: total_revenue
-        operator: ">="
-        value: "$dashboard_filters.min_revenue" # Named param reference
+        - field: total_revenue
+          operator: ">="
+          value: "$dashboard_filters.min_revenue" # Named param reference
 
 visualize:
   type: bar
@@ -2131,16 +2145,17 @@ data:
     - product: "Widget C"
       revenue: 38000
 
-aggregate:
-  dimensions: [product]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
-  sort:
-    - field: total_revenue
-      direction: desc
-  limit: "$top_n"  # Chart-level param (no prefix)
+transform:
+  aggregate:
+    dimensions: [product]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+    sort:
+      - field: total_revenue
+        direction: desc
+    limit: "$top_n"  # Chart-level param (no prefix)
 
 visualize:
   type: bar
@@ -2203,12 +2218,13 @@ visualize:
 
 **Nested parameter values** are accessed using dot notation (named params):
 ```yaml
-aggregate:
-  filters:
-    rules:
-      - field: date
-        operator: between
-        value: ["$dashboard_filters.date_range.start", "$dashboard_filters.date_range.end"]
+transform:
+  aggregate:
+    filters:
+      rules:
+        - field: date
+          operator: between
+          value: ["$dashboard_filters.date_range.start", "$dashboard_filters.date_range.end"]
 ```
 
 **Resolution happens before pipeline execution:**
@@ -2316,23 +2332,24 @@ data:
         product: "Widget B"
         revenue: 22000
 
-aggregate:
-  dimensions: [region]
-  measures:
-    - column: revenue
-      aggregation: sum
-      name: total_revenue
+transform:
+  aggregate:
+    dimensions: [region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
 
-  filters:
-    combinator: and
-    rules:
-      - field: region
-        operator: in
-        value: "$selected_regions"  # Chart-level param (no prefix)
+    filters:
+      combinator: and
+      rules:
+        - field: region
+          operator: in
+          value: "$selected_regions"  # Chart-level param (no prefix)
 
-      - field: total_revenue
-        operator: ">="
-        value: "$min_revenue"  # Chart-level param (no prefix)
+        - field: total_revenue
+          operator: ">="
+          value: "$min_revenue"  # Chart-level param (no prefix)
 
 visualize:
   type: bar
