@@ -1708,8 +1708,16 @@ function renderRangeMark(g, data, rangeRow, x, yScale, xField, isDateScale, curv
   const area = d3.area()
     .curve(curve)
     .x(d => isDateScale ? x(d[xField]) : (x(d[xField]) + x.bandwidth() / 2))
-    .y0(d => yScale(d[rangeRow.lower] || 0))
-    .y1(d => yScale(d[rangeRow.upper] || 0));
+    .y0(d => {
+      let val = d[rangeRow.lower] || 0;
+      if (rangeRow.floor != null) val = Math.max(val, rangeRow.floor);
+      return yScale(val);
+    })
+    .y1(d => {
+      let val = d[rangeRow.upper] || 0;
+      if (rangeRow.ceiling != null) val = Math.min(val, rangeRow.ceiling);
+      return yScale(val);
+    });
 
   // Filter out rows where upper or lower are missing
   const validData = data.filter(d => {

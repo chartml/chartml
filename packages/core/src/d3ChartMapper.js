@@ -33,7 +33,9 @@ function normalizeField(field, defaultMark) {
       opacity: field.opacity || 0.15,
       color: field.color || null,
       label: field.label || null,
-      axis: field.axis || 'left'
+      axis: field.axis || 'left',
+      floor: field.floor != null ? field.floor : null,
+      ceiling: field.ceiling != null ? field.ceiling : null
     };
   }
 
