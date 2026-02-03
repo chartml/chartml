@@ -1128,9 +1128,10 @@ export class ChartML {
 
         // Clear container and render empty state
         container.innerHTML = '';
+        const emptyDimensions = this._calculateDimensions(context.resolvedSpec, container);
         const emptyState = document.createElement('div');
         emptyState.className = 'chartml-empty-state';
-        emptyState.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; color: #6b7280; font-family: system-ui, -apple-system, sans-serif;';
+        emptyState.style.cssText = `display: flex; flex-direction: column; align-items: center; justify-content: center; height: ${emptyDimensions.height}px; color: #6b7280; font-family: system-ui, -apple-system, sans-serif;`;
 
         const icon = document.createElement('div');
         icon.style.cssText = 'font-size: 32px; margin-bottom: 8px; opacity: 0.5;';
