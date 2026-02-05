@@ -1,0 +1,40 @@
+name: Deploy Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'packages/**'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted, linux]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install and build packages
+        run: |
+          npm ci
+          npm run build:packages
+
+      - name: Build docs
+        working-directory: docs
+        run: |
+          npm install
+          npm run docs:build
+
+      - name: Deploy
+        run: |
+          rm -rf /www/chartml.org/*
+          cp -r docs/docs/.vitepress/dist/* /www/chartml.org/
+          echo "Docs deployed to /www/chartml.org"
