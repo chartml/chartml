@@ -30,7 +30,7 @@ jobs:
       - name: Build docs
         working-directory: docs
         run: |
-          npm install
+          npm install --legacy-peer-deps
           npm run docs:build
 
       - name: Deploy
