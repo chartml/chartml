@@ -150,6 +150,7 @@ export function createScatterPlotRenderer() {
 
     const xAxis = g.append('g')
       .attr('transform', `translate(0,${chartHeight})`)
+      .style('color', 'var(--chartml-axis-line)')
       .call(xAxisGenerator);
 
     // Apply label strategy (handles rotation, truncation, etc.)
@@ -167,12 +168,13 @@ export function createScatterPlotRenderer() {
         .attr('text-anchor', 'middle')
         .style('font-size', '14px')
         .style('font-family', 'system-ui')
-        .style('fill', '#374151')
+        .style('fill', 'var(--chartml-text)')
         .text(xAxisLabel);
     }
 
     // Add Y axis
     const yAxis = g.append('g')
+      .style('color', 'var(--chartml-axis-line)')
       .call(d3.axisLeft(y).ticks(5));
 
     yAxis.selectAll('text')
@@ -188,26 +190,36 @@ export function createScatterPlotRenderer() {
         .attr('text-anchor', 'middle')
         .style('font-size', '14px')
         .style('font-family', 'system-ui')
-        .style('fill', '#374151')
+        .style('fill', 'var(--chartml-text)')
         .text(yAxisLabel);
     }
 
     // Add grid lines
-    g.append('g')
+    const gridX = g.append('g')
       .attr('class', 'grid-x')
-      .attr('opacity', 0.1)
       .call(d3.axisBottom(x)
         .tickSize(chartHeight)
         .tickFormat('')
       );
 
-    g.append('g')
+    gridX.selectAll('line')
+      .style('stroke', 'var(--chartml-grid)')
+      .style('stroke-opacity', 0.5);
+
+    gridX.select('.domain').style('opacity', 0);
+
+    const gridY = g.append('g')
       .attr('class', 'grid-y')
-      .attr('opacity', 0.1)
       .call(d3.axisLeft(y)
         .tickSize(-chartWidth)
         .tickFormat('')
       );
+
+    gridY.selectAll('line')
+      .style('stroke', 'var(--chartml-grid)')
+      .style('stroke-opacity', 0.5);
+
+    gridY.select('.domain').style('opacity', 0);
 
     // Add dots
     g.selectAll('.dot')
@@ -219,7 +231,7 @@ export function createScatterPlotRenderer() {
       .attr('cy', d => y(d[yField]))
       .attr('r', d => sizeField ? sizeScale(d[sizeField]) : defaultRadius)
       .attr('fill', d => colorField ? colorScale(d[colorField]) : colors[0])
-      .attr('stroke', 'white')
+      .style('stroke', 'var(--chartml-separator)')
       .attr('stroke-width', 1.5)
       .attr('opacity', 0.8)
       .style('cursor', 'pointer')

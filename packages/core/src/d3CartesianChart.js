@@ -790,6 +790,7 @@ function addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, marginL
   // Render X axis
   const xAxis = g.append('g')
     .attr('transform', `translate(0,${chartHeight})`)
+    .style('color', 'var(--chartml-axis-line)')
     .call(xAxisGenerator);
 
   // Apply comprehensive overlap prevention for ALL axis types (categorical, date, numeric)
@@ -820,7 +821,7 @@ function addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, marginL
       .attr('text-anchor', 'middle')
       .style('font-size', '14px')
       .style('font-family', AXIS_LABEL_FONT_FAMILY)
-      .style('fill', '#374151')
+      .style('fill', 'var(--chartml-text)')
       .text(axes.x.label);
   }
 
@@ -834,7 +835,9 @@ function addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, marginL
     yAxisLeftGenerator = yAxisLeftGenerator.tickFormat(formatter);
   }
 
-  const yAxisLeft = g.append('g').call(yAxisLeftGenerator);
+  const yAxisLeft = g.append('g')
+    .style('color', 'var(--chartml-axis-line)')
+    .call(yAxisLeftGenerator);
 
   yAxisLeft.selectAll('text')
     .style('font-size', AXIS_LABEL_FONT_SIZE)
@@ -897,7 +900,7 @@ function addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, marginL
       .attr('text-anchor', 'middle')
       .style('font-size', '14px')
       .style('font-family', AXIS_LABEL_FONT_FAMILY)
-      .style('fill', '#374151')
+      .style('fill', 'var(--chartml-text)')
       .text(axes.left.label);
   }
 
@@ -912,6 +915,7 @@ function addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, marginL
 
     const yAxisRight = g.append('g')
       .attr('transform', `translate(${chartWidth}, 0)`)
+      .style('color', 'var(--chartml-axis-line)')
       .call(yAxisRightGenerator);
 
     yAxisRight.selectAll('text')
@@ -938,7 +942,7 @@ function addAxesAndLabels(g, svg, scales, axes, chartWidth, chartHeight, marginL
         .attr('text-anchor', 'middle')
         .style('font-size', '14px')
         .style('font-family', AXIS_LABEL_FONT_FAMILY)
-        .style('fill', '#374151')
+        .style('fill', 'var(--chartml-text)')
         .text(axes.right.label);
     }
   }
@@ -954,7 +958,7 @@ function addGridLines(g, scales, chartWidth, chartHeight, gridConfig = {}) {
   const config = {
     x: gridConfig.x !== undefined ? gridConfig.x : false,  // Vertical grid lines off by default
     y: gridConfig.y !== undefined ? gridConfig.y : true,   // Horizontal grid lines on by default
-    color: gridConfig.color || '#e0e0e0',
+    color: gridConfig.color || 'var(--chartml-grid)',
     opacity: gridConfig.opacity !== undefined ? gridConfig.opacity : 0.5,
     dashArray: gridConfig.dashArray || null
   };
@@ -1011,7 +1015,7 @@ function addGridLines(g, scales, chartWidth, chartHeight, gridConfig = {}) {
 /**
  * Add data labels to marks
  */
-function addDataLabels(g, data, row, x, yScale, chartHeight, xField, isDateScale) {
+function addDataLabels(g, data, row, x, yScale, chartHeight, xField, isDateScale, animation) {
   if (!row.dataLabels || !row.dataLabels.show) {
     return; // Data labels not enabled
   }
@@ -1020,7 +1024,7 @@ function addDataLabels(g, data, row, x, yScale, chartHeight, xField, isDateScale
   const position = config.position || 'top';
   const format = config.format || null;
   const fontSize = config.fontSize || 12;
-  const color = config.color || '#374151';
+  const color = config.color || 'var(--chartml-text)';
 
   // Create formatter if format is specified
   const formatter = format ? createFormatter(format, 'number') : (v => v.toLocaleString());
@@ -1172,7 +1176,7 @@ function renderBarMark(g, data, row, x, yScale, chartHeight, color, tooltip, con
   }
 
   // Add data labels if configured
-  addDataLabels(g, data, row, x, yScale, chartHeight, xField, isDateScale);
+  addDataLabels(g, data, row, x, yScale, chartHeight, xField, isDateScale, animation);
 }
 
 /**
@@ -1377,7 +1381,7 @@ function renderStackedBars(g, data, barRows, x, yScale, chartHeight, colors, too
   // Note: For stacked bars, labels would overlap - may need special handling in future
   barRows.forEach(row => {
     if (row.dataLabels?.show) {
-      addDataLabels(g, data, row, x, yScale, chartHeight, xField, isDateScale);
+      addDataLabels(g, data, row, x, yScale, chartHeight, xField, isDateScale, animation);
     }
   });
 }
@@ -1473,7 +1477,7 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
           .duration(getAnimationDuration(200, animation))
           .attr('r', 5)
           .attr('fill', color)
-          .attr('stroke', 'white')
+          .style('stroke', 'var(--chartml-separator)')
           .attr('stroke-width', 2)
           .attr('opacity', 1);
       }
@@ -1527,7 +1531,7 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
       .attr('cy', d => yScale(d[row.field]))
       .attr('r', animation ? 0 : 5)  // Start at 0 for animation, or final size if no animation
       .attr('fill', color)
-      .attr('stroke', 'white')
+      .style('stroke', 'var(--chartml-separator)')
       .attr('stroke-width', 2)
       .attr('opacity', 0.9)
       .style('pointer-events', 'none')  // Let hover targets handle mouse events
@@ -1553,7 +1557,7 @@ function renderLineMark(g, data, row, x, yScale, chartHeight, color, tooltip, co
   }
 
   // Add data labels if configured
-  addDataLabels(g, validData, row, x, yScale, chartHeight, xField, isDateScale);
+  addDataLabels(g, validData, row, x, yScale, chartHeight, xField, isDateScale, animation);
 }
 
 /**
@@ -1828,7 +1832,7 @@ function addLegend(svg, rows, colors, marginLeft, height, marginBottom, chartWid
  * Render reference line annotation
  */
 function renderAnnotationLine(g, annotation, scales, chartWidth, chartHeight, marginLeft, marginTop, isDateScale) {
-  const { axis, value, label, labelPosition = 'end', color = '#666', strokeWidth = 1, dashArray, opacity = 1.0 } = annotation;
+  const { axis, value, label, labelPosition = 'end', color = 'var(--chartml-annotation)', strokeWidth = 1, dashArray, opacity = 1.0 } = annotation;
 
   // Determine which scale to use and coordinates
   let x1, y1, x2, y2;
@@ -1926,7 +1930,7 @@ function renderAnnotationLine(g, annotation, scales, chartWidth, chartHeight, ma
  * Render reference band annotation
  */
 function renderAnnotationBand(g, annotation, scales, chartWidth, chartHeight, marginLeft, marginTop, isDateScale) {
-  const { axis, from, to, label, color = '#666', opacity = 0.2, strokeColor, strokeWidth = 0 } = annotation;
+  const { axis, from, to, label, color = 'var(--chartml-annotation)', opacity = 0.2, strokeColor, strokeWidth = 0 } = annotation;
 
   // Determine which scale to use and coordinates
   let x, y, width, height;
@@ -2142,10 +2146,12 @@ function renderHorizontalBarChart(container, data, config) {
   // Use the smaller of 5 (default) or what actually fits
   const tickCount = Math.min(5, maxFittableTicks);
 
-  g.append('g')
+  const hBarXAxis = g.append('g')
     .attr('transform', `translate(0,${chartHeight})`)
-    .call(d3.axisBottom(x).ticks(tickCount).tickFormat(xFormatter || (d => d)))
-    .selectAll('text')
+    .style('color', 'var(--chartml-axis-line)')
+    .call(d3.axisBottom(x).ticks(tickCount).tickFormat(xFormatter || (d => d)));
+
+  hBarXAxis.selectAll('text')
     .style('font-size', AXIS_LABEL_FONT_SIZE)
     .style('font-family', AXIS_LABEL_FONT_FAMILY);
 
@@ -2157,20 +2163,27 @@ function renderHorizontalBarChart(container, data, config) {
       .attr('text-anchor', 'middle')
       .style('font-size', '14px')
       .style('font-family', AXIS_LABEL_FONT_FAMILY)
-      .style('fill', '#374151')
+      .style('fill', 'var(--chartml-text)')
       .text(xLabel);
   }
 
-  g.append('g')
-    .call(d3.axisLeft(y))
-    .selectAll('text')
+  const hBarYAxis = g.append('g')
+    .style('color', 'var(--chartml-axis-line)')
+    .call(d3.axisLeft(y));
+
+  hBarYAxis.selectAll('text')
     .style('font-size', AXIS_LABEL_FONT_SIZE)
     .style('font-family', AXIS_LABEL_FONT_FAMILY);
 
-  g.append('g')
+  const hBarGrid = g.append('g')
     .attr('class', 'grid')
-    .attr('opacity', 0.1)
     .call(d3.axisBottom(x).tickSize(chartHeight).tickFormat(''));
+
+  hBarGrid.selectAll('line')
+    .style('stroke', 'var(--chartml-grid)')
+    .style('stroke-opacity', 0.5);
+
+  hBarGrid.select('.domain').style('opacity', 0);
 
   // Create tooltip using centralized utility (same as vertical charts)
   const tooltip = createChartTooltip(container);

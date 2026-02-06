@@ -14,7 +14,7 @@ import * as d3 from 'd3';
 // Consistent legend styling constants
 const LEGEND_FONT_SIZE = '11px';
 const LEGEND_FONT_FAMILY = 'system-ui';
-const LEGEND_TEXT_COLOR = '#374151';
+const LEGEND_TEXT_COLOR = 'var(--chartml-text)';
 const SYMBOL_SIZE = 12;
 const SYMBOL_RADIUS = 2;
 const SYMBOL_TO_TEXT_GAP = 6;
@@ -209,8 +209,8 @@ export function createLegend(container, items, config = {}) {
     .append('div')
     .attr('class', 'legend-tooltip')
     .style('position', 'fixed')
-    .style('background', 'white')
-    .style('color', '#374151')
+    .style('background', 'var(--chartml-surface)')
+    .style('color', 'var(--chartml-text-strong)')
     .style('padding', '6px 10px')
     .style('border-radius', '4px')
     .style('font-size', '11px')
@@ -218,8 +218,8 @@ export function createLegend(container, items, config = {}) {
     .style('pointer-events', 'none')
     .style('opacity', 0)
     .style('z-index', 10000)
-    .style('box-shadow', '0 2px 8px rgba(0,0,0,0.15)')
-    .style('border', '1px solid #e5e7eb')
+    .style('box-shadow', 'var(--chartml-shadow)')
+    .style('border', '1px solid var(--chartml-border)')
     .style('max-width', '300px')
     .style('white-space', 'pre-wrap');
 
@@ -329,7 +329,7 @@ export function createLegend(container, items, config = {}) {
       .attr('y', SYMBOL_SIZE - 1)
       .style('font-size', LEGEND_FONT_SIZE)
       .style('font-family', LEGEND_FONT_FAMILY)
-      .style('fill', '#6b7280')
+      .style('fill', 'var(--chartml-text-secondary)')
       .style('font-style', 'italic')
       .text(overflowText);
 

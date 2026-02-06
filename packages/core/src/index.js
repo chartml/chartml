@@ -1131,7 +1131,7 @@ export class ChartML {
         const emptyDimensions = this._calculateDimensions(context.resolvedSpec, container);
         const emptyState = document.createElement('div');
         emptyState.className = 'chartml-empty-state';
-        emptyState.style.cssText = `display: flex; flex-direction: column; align-items: center; justify-content: center; height: ${emptyDimensions.height}px; color: #6b7280; font-family: system-ui, -apple-system, sans-serif;`;
+        emptyState.style.cssText = `display: flex; flex-direction: column; align-items: center; justify-content: center; height: ${emptyDimensions.height}px; color: var(--chartml-text-secondary); font-family: system-ui, -apple-system, sans-serif;`;
 
         const icon = document.createElement('div');
         icon.style.cssText = 'font-size: 32px; margin-bottom: 8px; opacity: 0.5;';
@@ -1154,7 +1154,7 @@ export class ChartML {
         if (context.resolvedSpec.title) {
           const titleDiv = document.createElement('div');
           titleDiv.className = 'chart-title';
-          titleDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 8px;';
+          titleDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--chartml-text-strong); margin-bottom: 8px;';
           titleDiv.textContent = context.resolvedSpec.title;
           container.insertBefore(titleDiv, container.firstChild);
         }
@@ -1223,7 +1223,7 @@ export class ChartML {
         if (!titleDiv) {
           titleDiv = document.createElement('div');
           titleDiv.className = 'chart-title';
-          titleDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 8px;';
+          titleDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--chartml-text-strong); margin-bottom: 8px;';
           container.insertBefore(titleDiv, container.firstChild);
         }
         titleDiv.textContent = context.resolvedSpec.title;

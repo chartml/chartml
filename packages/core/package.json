@@ -1,6 +1,6 @@
 {
   "name": "@chartml/core",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "A declarative markup language for creating beautiful, interactive data visualizations",
   "type": "module",
   "main": "dist/index.js",

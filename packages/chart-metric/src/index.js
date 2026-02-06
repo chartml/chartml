@@ -44,7 +44,7 @@ function renderMetricCard(container, data, config) {
   if (showLabel && label) {
     card.append('div')
       .style('font-size', '0.875rem')
-      .style('color', '#6b7280')
+      .style('color', 'var(--chartml-text-secondary)')
       .style('margin-bottom', '0.5rem')
       .text(label);
   }
@@ -54,14 +54,14 @@ function renderMetricCard(container, data, config) {
   card.append('div')
     .style('font-size', valueFontSize)
     .style('font-weight', '700')
-    .style('color', '#111827')
+    .style('color', 'var(--chartml-text-strong)')
     .text(formattedValue);
 
   // Add comparison if provided
   if (comparison && comparison.direction !== 'neutral') {
     const { percentChange, direction, isGood } = comparison;
 
-    let color = '#6b7280'; // neutral gray
+    let color = 'var(--chartml-text-secondary)'; // neutral gray
     if (isGood === true) {
       color = '#10b981'; // green
     } else if (isGood === false) {

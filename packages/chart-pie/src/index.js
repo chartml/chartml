@@ -120,7 +120,7 @@ export function createPieChartRenderer() {
       .attr('data-index', (d, i) => i)
       .attr('d', arc)
       .attr('fill', (d, i) => pieColors[i % pieColors.length])
-      .attr('stroke', 'white')
+      .style('stroke', 'var(--chartml-separator)')
       .attr('stroke-width', 2)
       .style('opacity', 0.9)
       .style('cursor', 'pointer')
