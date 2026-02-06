@@ -5,6 +5,84 @@
  * They are automatically bundled with @chartml/core.
  */
 
+/* ============================================================
+ * CSS Custom Properties — Dark Mode Support
+ *
+ * Light values live on :root.
+ * Dark overrides use the `.dark` class (VitePress convention).
+ * Standalone fallback uses prefers-color-scheme for non-VitePress hosts.
+ * ============================================================ */
+
+:root {
+  --chartml-text: #374151;
+  --chartml-text-secondary: #6b7280;
+  --chartml-text-strong: #1f2937;
+  --chartml-bg: #ffffff;
+  --chartml-surface: #ffffff;
+  --chartml-surface-overlay: rgba(255, 255, 255, 0.8);
+  --chartml-border: #e5e7eb;
+  --chartml-border-input: #d1d5db;
+  --chartml-grid: #e0e0e0;
+  --chartml-annotation: #666;
+  --chartml-separator: white;
+  --chartml-axis-line: #374151;
+  --chartml-spinner-track: rgba(0, 0, 0, 0.1);
+  --chartml-spinner-head: #333;
+  --chartml-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --chartml-focus-ring: rgba(59, 130, 246, 0.1);
+}
+
+.dark {
+  --chartml-text: #e5e7eb;
+  --chartml-text-secondary: #9ca3af;
+  --chartml-text-strong: #f3f4f6;
+  --chartml-bg: #1f2937;
+  --chartml-surface: #1e293b;
+  --chartml-surface-overlay: rgba(30, 41, 59, 0.8);
+  --chartml-border: #374151;
+  --chartml-border-input: #4b5563;
+  --chartml-grid: #374151;
+  --chartml-annotation: #9ca3af;
+  --chartml-separator: #1f2937;
+  --chartml-axis-line: #9ca3af;
+  --chartml-spinner-track: rgba(255, 255, 255, 0.1);
+  --chartml-spinner-head: #e5e7eb;
+  --chartml-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  --chartml-focus-ring: rgba(59, 130, 246, 0.3);
+}
+
+/* Standalone fallback: auto-detect dark preference when no .light/.dark class is set */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) {
+    --chartml-text: #e5e7eb;
+    --chartml-text-secondary: #9ca3af;
+    --chartml-text-strong: #f3f4f6;
+    --chartml-bg: #1f2937;
+    --chartml-surface: #1e293b;
+    --chartml-surface-overlay: rgba(30, 41, 59, 0.8);
+    --chartml-border: #374151;
+    --chartml-border-input: #4b5563;
+    --chartml-grid: #374151;
+    --chartml-annotation: #9ca3af;
+    --chartml-separator: #1f2937;
+    --chartml-axis-line: #9ca3af;
+    --chartml-spinner-track: rgba(255, 255, 255, 0.1);
+    --chartml-spinner-head: #e5e7eb;
+    --chartml-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    --chartml-focus-ring: rgba(59, 130, 246, 0.3);
+  }
+}
+
+/* Defensive CSS fallback for D3-generated axis elements */
+.chartml-chart .tick text {
+  fill: var(--chartml-text);
+}
+
+.chartml-chart .domain,
+.chartml-chart .tick line {
+  stroke: var(--chartml-axis-line);
+}
+
 /* Tooltip - sensible defaults, can be overridden by application */
 .chart-tooltip {
   position: fixed;  /* Fixed positioning prevents container expansion and scrollbars */
@@ -14,13 +92,13 @@
   transition: opacity 0.2s;
 
   /* Visual styling - defaults that work out of the box */
-  background: #ffffff;
-  border: 1px solid #d1d5db;
+  background: var(--chartml-surface);
+  border: 1px solid var(--chartml-border-input);
   border-radius: 0.375rem;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
-  color: #1f2937;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  color: var(--chartml-text-strong);
+  box-shadow: var(--chartml-shadow);
   max-width: 300px;
 }
 
@@ -35,7 +113,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--chartml-surface-overlay);
   z-index: 999;
 }
 
@@ -43,8 +121,8 @@
 .chartml-spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid rgba(0, 0, 0, 0.1);
-  border-top-color: #333;
+  border: 4px solid var(--chartml-spinner-track);
+  border-top-color: var(--chartml-spinner-head);
   border-radius: 50%;
   animation: chartml-spin 0.8s linear infinite;
 }
@@ -79,7 +157,7 @@
 .chartml-param-label {
   font-weight: 500;
   font-size: 0.875rem;
-  color: #374151;
+  color: var(--chartml-text);
   display: block;
   margin-bottom: 0.25rem;
 }
@@ -94,11 +172,11 @@
   justify-content: space-between;
   width: 100%;
   padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--chartml-border-input);
   border-radius: 0.375rem;
   font-size: 0.875rem;
-  color: #1f2937;
-  background: #ffffff;
+  color: var(--chartml-text-strong);
+  background: var(--chartml-bg);
   cursor: pointer;
   transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
@@ -112,12 +190,12 @@
 .chartml-param-multiselect-button:focus {
   outline: none;
   border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px var(--chartml-focus-ring);
 }
 
 .chartml-param-multiselect-arrow {
   font-size: 0.625rem;
-  color: #6b7280;
+  color: var(--chartml-text-secondary);
   transition: transform 0.2s ease-in-out;
   display: inline-block;
 }
@@ -130,10 +208,10 @@
   z-index: 1000;
   max-height: 16rem;
   overflow-y: auto;
-  background: #ffffff;
-  border: 1px solid #d1d5db;
+  background: var(--chartml-surface);
+  border: 1px solid var(--chartml-border-input);
   border-radius: 0.375rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--chartml-shadow);
   padding: 0.5rem;
   display: flex;
   flex-direction: column;
@@ -150,7 +228,7 @@
 
 .chartml-param-option span {
   font-size: 0.875rem;
-  color: #1f2937;
+  color: var(--chartml-text-strong);
   user-select: none;
 }
 
@@ -162,7 +240,7 @@
 
 .chartml-param-daterange-separator {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--chartml-text-secondary);
   font-weight: 500;
 }
 
@@ -172,12 +250,12 @@
 .chartml-param-text input,
 .chartml-param-daterange input {
   padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--chartml-border-input);
   border-radius: 0.375rem;
   width: 100%;
   font-size: 0.875rem;
-  color: #1f2937;
-  background: #ffffff;
+  color: var(--chartml-text-strong);
+  background: var(--chartml-bg);
   transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
@@ -188,7 +266,7 @@
 .chartml-param-daterange input:focus {
   outline: none;
   border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px var(--chartml-focus-ring);
 }
 
 .chartml-param-select select:hover,
@@ -210,7 +288,7 @@
   width: 1rem;
   height: 1rem;
   border-radius: 0.25rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--chartml-border-input);
 }
 
 .chartml-param-multiselect input[type="checkbox"]:hover {
@@ -219,13 +297,13 @@
 
 .chartml-param-multiselect input[type="checkbox"]:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px var(--chartml-focus-ring);
 }
 
 /* Chart Container - subtle rounded border */
 .chartml-chart {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--chartml-border);
   border-radius: 8px;
   padding: 1rem;
-  background: #ffffff;
+  background: var(--chartml-bg);
 }
