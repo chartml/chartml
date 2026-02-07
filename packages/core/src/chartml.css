@@ -303,10 +303,10 @@
   box-shadow: 0 0 0 3px var(--chartml-focus-ring);
 }
 
-/* Chart Container - subtle rounded border, transparent to inherit page background */
+/* Chart Container - subtle rounded border */
 .chartml-chart {
   border: 1px solid var(--chartml-border);
   border-radius: 8px;
   padding: 1rem;
-  background: transparent;
+  background: var(--chartml-bg);
 }
