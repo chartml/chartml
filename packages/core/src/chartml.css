@@ -30,6 +30,7 @@
   --chartml-spinner-head: #333;
   --chartml-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --chartml-focus-ring: rgba(59, 130, 246, 0.1);
+  --chartml-focus-border: #3b82f6;
 }
 
 .dark {
@@ -49,6 +50,7 @@
   --chartml-spinner-head: #e5e7eb;
   --chartml-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
   --chartml-focus-ring: rgba(59, 130, 246, 0.3);
+  --chartml-focus-border: #60a5fa;
 }
 
 /* Standalone fallback: auto-detect dark preference when no .light/.dark class is set */
@@ -70,6 +72,7 @@
     --chartml-spinner-head: #e5e7eb;
     --chartml-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
     --chartml-focus-ring: rgba(59, 130, 246, 0.3);
+    --chartml-focus-border: #60a5fa;
   }
 }
 
@@ -184,12 +187,12 @@
 }
 
 .chartml-param-multiselect-button:hover {
-  border-color: #9ca3af;
+  border-color: var(--chartml-text-secondary);
 }
 
 .chartml-param-multiselect-button:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: var(--chartml-focus-border, #3b82f6);
   box-shadow: 0 0 0 3px var(--chartml-focus-ring);
 }
 
@@ -265,7 +268,7 @@
 .chartml-param-text input:focus,
 .chartml-param-daterange input:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: var(--chartml-focus-border, #3b82f6);
   box-shadow: 0 0 0 3px var(--chartml-focus-ring);
 }
 
@@ -273,14 +276,14 @@
 .chartml-param-number input:hover,
 .chartml-param-text input:hover,
 .chartml-param-daterange input:hover {
-  border-color: #9ca3af;
+  border-color: var(--chartml-text-secondary);
 }
 
 .chartml-param-select select::placeholder,
 .chartml-param-number input::placeholder,
 .chartml-param-text input::placeholder,
 .chartml-param-daterange input::placeholder {
-  color: #9ca3af;
+  color: var(--chartml-text-secondary);
 }
 
 .chartml-param-multiselect input[type="checkbox"] {
@@ -292,7 +295,7 @@
 }
 
 .chartml-param-multiselect input[type="checkbox"]:hover {
-  border-color: #9ca3af;
+  border-color: var(--chartml-text-secondary);
 }
 
 .chartml-param-multiselect input[type="checkbox"]:focus {
@@ -300,10 +303,10 @@
   box-shadow: 0 0 0 3px var(--chartml-focus-ring);
 }
 
-/* Chart Container - subtle rounded border */
+/* Chart Container - subtle rounded border, transparent to inherit page background */
 .chartml-chart {
   border: 1px solid var(--chartml-border);
   border-radius: 8px;
   padding: 1rem;
-  background: var(--chartml-bg);
+  background: transparent;
 }
