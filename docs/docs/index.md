@@ -89,7 +89,7 @@ visualize:
   columns: month
   rows: total_revenue
   axes:
-    left:
+    rows:
       format: "$,.0f"
 ```
 ````

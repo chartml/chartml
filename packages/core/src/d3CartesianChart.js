@@ -2125,7 +2125,7 @@ function renderHorizontalBarChart(container, data, config) {
     .range([0, chartHeight])
     .padding(padding);
 
-  const xAxisFormat = axes.left?.format || axes.x?.format;
+  const xAxisFormat = axes.x?.format;
   const xFormatter = xAxisFormat ? createFormatter(xAxisFormat, 'auto') : null;
 
   // Calculate how many numeric labels can fit without overlapping
@@ -2155,7 +2155,7 @@ function renderHorizontalBarChart(container, data, config) {
     .style('font-size', AXIS_LABEL_FONT_SIZE)
     .style('font-family', AXIS_LABEL_FONT_FAMILY);
 
-  const xLabel = axes.left?.label || axes.x?.label;
+  const xLabel = axes.x?.label;
   if (xLabel) {
     g.append('text')
       .attr('x', chartWidth / 2)

@@ -74,7 +74,7 @@ visualize:
   columns: region            # Categories on x-axis
   rows: revenue              # Values on y-axis
   axes:
-    left:
+    rows:
       label: "Revenue ($)"
       format: "$,.0f"
   style:
@@ -145,7 +145,7 @@ visualize:
   marks:
     color: store             # Separate line per store
   axes:
-    left:
+    rows:
       label: "Sales"
       format: "$,.0f"
   style:
@@ -195,7 +195,7 @@ visualize:
   columns: price
   rows: units_sold
   axes:
-    left:
+    rows:
       label: "Units Sold"
   style:
     height: 400
@@ -209,7 +209,7 @@ Use the `format` option in axes or metric values:
 ```yaml
 visualize:
   axes:
-    left:
+    rows:
       format: "$,.0f"        # Currency: $1,234
       # or ",.2f"           # Decimal: 1,234.56
       # or ".1%"            # Percent: 45.6%
@@ -281,9 +281,9 @@ visualize:
 ```yaml
 visualize:
   axes:
-    x:
+    columns:
       label: "Month"
-    left:
+    rows:
       label: "Revenue ($)"
       format: "$,.0f"
       min: 0               # Force axis minimum
@@ -330,9 +330,9 @@ visualize:
       mark: line
       axis: right
   axes:
-    x:
+    columns:
       label: "Date"
-    left:
+    rows:
       label: "Daily Volume"
       format: ",.0f"
     right:
@@ -427,7 +427,7 @@ visualize:
   columns: region
   rows: total_revenue
   axes:
-    left:
+    rows:
       label: "Revenue ($)"
       format: "$,.0f"
   style:
@@ -472,9 +472,9 @@ visualize:
   marks:
     color: product
   axes:
-    x:
+    columns:
       label: "Product"
-    left:
+    rows:
       label: "Revenue"
       format: "$,.0f"
   style:

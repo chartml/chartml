@@ -209,7 +209,7 @@ visualize:
   columns: month
   rows: revenue
   axes:
-    left:
+    rows:
       format: "$,.0f"
 `;
 

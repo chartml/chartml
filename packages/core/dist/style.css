@@ -1,0 +1,312 @@
+/**
+ * ChartML Core Styles
+ *
+ * These styles are required for ChartML charts to work correctly.
+ * They are automatically bundled with @chartml/core.
+ */
+
+/* ============================================================
+ * CSS Custom Properties — Dark Mode Support
+ *
+ * Light values live on :root.
+ * Dark overrides use the `.dark` class (VitePress convention).
+ * Standalone fallback uses prefers-color-scheme for non-VitePress hosts.
+ * ============================================================ */
+
+:root {
+  --chartml-text: #374151;
+  --chartml-text-secondary: #6b7280;
+  --chartml-text-strong: #1f2937;
+  --chartml-bg: #ffffff;
+  --chartml-surface: #ffffff;
+  --chartml-surface-overlay: rgba(255, 255, 255, 0.8);
+  --chartml-border: #e5e7eb;
+  --chartml-border-input: #d1d5db;
+  --chartml-grid: #e0e0e0;
+  --chartml-annotation: #666;
+  --chartml-separator: white;
+  --chartml-axis-line: #374151;
+  --chartml-spinner-track: rgba(0, 0, 0, 0.1);
+  --chartml-spinner-head: #333;
+  --chartml-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --chartml-focus-ring: rgba(59, 130, 246, 0.1);
+  --chartml-focus-border: #3b82f6;
+}
+
+.dark {
+  --chartml-text: #e5e7eb;
+  --chartml-text-secondary: #9ca3af;
+  --chartml-text-strong: #f3f4f6;
+  --chartml-bg: #1f2937;
+  --chartml-surface: #1e293b;
+  --chartml-surface-overlay: rgba(30, 41, 59, 0.8);
+  --chartml-border: #374151;
+  --chartml-border-input: #4b5563;
+  --chartml-grid: #374151;
+  --chartml-annotation: #9ca3af;
+  --chartml-separator: #1f2937;
+  --chartml-axis-line: #9ca3af;
+  --chartml-spinner-track: rgba(255, 255, 255, 0.1);
+  --chartml-spinner-head: #e5e7eb;
+  --chartml-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  --chartml-focus-ring: rgba(59, 130, 246, 0.3);
+  --chartml-focus-border: #60a5fa;
+}
+
+/* Standalone fallback: auto-detect dark preference when no .light/.dark class is set */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) {
+    --chartml-text: #e5e7eb;
+    --chartml-text-secondary: #9ca3af;
+    --chartml-text-strong: #f3f4f6;
+    --chartml-bg: #1f2937;
+    --chartml-surface: #1e293b;
+    --chartml-surface-overlay: rgba(30, 41, 59, 0.8);
+    --chartml-border: #374151;
+    --chartml-border-input: #4b5563;
+    --chartml-grid: #374151;
+    --chartml-annotation: #9ca3af;
+    --chartml-separator: #1f2937;
+    --chartml-axis-line: #9ca3af;
+    --chartml-spinner-track: rgba(255, 255, 255, 0.1);
+    --chartml-spinner-head: #e5e7eb;
+    --chartml-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    --chartml-focus-ring: rgba(59, 130, 246, 0.3);
+    --chartml-focus-border: #60a5fa;
+  }
+}
+
+/* Defensive CSS fallback for D3-generated axis elements */
+.chartml-chart .tick text {
+  fill: var(--chartml-text);
+}
+
+.chartml-chart .domain,
+.chartml-chart .tick line {
+  stroke: var(--chartml-axis-line);
+}
+
+/* Tooltip - sensible defaults, can be overridden by application */
+.chart-tooltip {
+  position: fixed;  /* Fixed positioning prevents container expansion and scrollbars */
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+
+  /* Visual styling - defaults that work out of the box */
+  background: var(--chartml-surface);
+  border: 1px solid var(--chartml-border-input);
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--chartml-text-strong);
+  box-shadow: var(--chartml-shadow);
+  max-width: 300px;
+}
+
+/* Loading Indicator - default loading state */
+/* Can be customized via loadingIndicator option */
+.chartml-loading-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--chartml-surface-overlay);
+  z-index: 999;
+}
+
+/* Default spinner animation */
+.chartml-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--chartml-spinner-track);
+  border-top-color: var(--chartml-spinner-head);
+  border-radius: 50%;
+  animation: chartml-spin 0.8s linear infinite;
+}
+
+@keyframes chartml-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Parameters - styled to match chart card appearance */
+/* Applications can override these styles with custom CSS */
+.chartml-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.5rem;
+}
+
+.chartml-param-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 200px;
+  flex: 1;
+}
+
+.chartml-param-label {
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--chartml-text);
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.chartml-param-multiselect {
+  position: relative;
+}
+
+.chartml-param-multiselect-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--chartml-border-input);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  color: var(--chartml-text-strong);
+  background: var(--chartml-bg);
+  cursor: pointer;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  text-align: left;
+}
+
+.chartml-param-multiselect-button:hover {
+  border-color: var(--chartml-text-secondary);
+}
+
+.chartml-param-multiselect-button:focus {
+  outline: none;
+  border-color: var(--chartml-focus-border, #3b82f6);
+  box-shadow: 0 0 0 3px var(--chartml-focus-ring);
+}
+
+.chartml-param-multiselect-arrow {
+  font-size: 0.625rem;
+  color: var(--chartml-text-secondary);
+  transition: transform 0.2s ease-in-out;
+  display: inline-block;
+}
+
+.chartml-param-multiselect-dropdown {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  max-height: 16rem;
+  overflow-y: auto;
+  background: var(--chartml-surface);
+  border: 1px solid var(--chartml-border-input);
+  border-radius: 0.375rem;
+  box-shadow: var(--chartml-shadow);
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.chartml-param-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+
+.chartml-param-option span {
+  font-size: 0.875rem;
+  color: var(--chartml-text-strong);
+  user-select: none;
+}
+
+.chartml-param-daterange-inputs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chartml-param-daterange-separator {
+  font-size: 0.875rem;
+  color: var(--chartml-text-secondary);
+  font-weight: 500;
+}
+
+/* Input styles - match chart card aesthetics */
+.chartml-param-select select,
+.chartml-param-number input,
+.chartml-param-text input,
+.chartml-param-daterange input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--chartml-border-input);
+  border-radius: 0.375rem;
+  width: 100%;
+  font-size: 0.875rem;
+  color: var(--chartml-text-strong);
+  background: var(--chartml-bg);
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.chartml-param-select select:focus,
+.chartml-param-number input:focus,
+.chartml-param-text input:focus,
+.chartml-param-daterange input:focus {
+  outline: none;
+  border-color: var(--chartml-focus-border, #3b82f6);
+  box-shadow: 0 0 0 3px var(--chartml-focus-ring);
+}
+
+.chartml-param-select select:hover,
+.chartml-param-number input:hover,
+.chartml-param-text input:hover,
+.chartml-param-daterange input:hover {
+  border-color: var(--chartml-text-secondary);
+}
+
+.chartml-param-select select::placeholder,
+.chartml-param-number input::placeholder,
+.chartml-param-text input::placeholder,
+.chartml-param-daterange input::placeholder {
+  color: var(--chartml-text-secondary);
+}
+
+.chartml-param-multiselect input[type="checkbox"] {
+  cursor: pointer;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--chartml-border-input);
+}
+
+.chartml-param-multiselect input[type="checkbox"]:hover {
+  border-color: var(--chartml-text-secondary);
+}
+
+.chartml-param-multiselect input[type="checkbox"]:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--chartml-focus-ring);
+}
+
+/* Chart Container - subtle rounded border */
+.chartml-chart {
+  border: 1px solid var(--chartml-border);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--chartml-bg);
+}
