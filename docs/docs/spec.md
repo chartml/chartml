@@ -451,13 +451,15 @@ visualize:
     size: field_name
     text: field_name
 
-  axes:               # Optional
-    left:
+  axes:               # Optional — use semantic keys (recommended)
+    columns:            # Category axis (follows orientation)
+      label: "Label"
+    rows:               # Measure axis (follows orientation)
       label: "Label"
       format: "$,.0f"
       min: 0
       max: 100
-    right:            # For dual-axis charts
+    right:              # Secondary measure axis (dual-axis charts)
       label: "Label"
       format: ",.0f"
 
@@ -487,7 +489,7 @@ visualize:
   marks:
     color: product     # Group by product
   axes:
-    left:
+    rows:
       label: "Revenue ($)"
       format: "$,.0f"
   style:
@@ -503,7 +505,7 @@ visualize:
   marks:
     color: region     # Separate line per region
   axes:
-    left:
+    rows:
       format: "$,.0f"
   style:
     height: 400
@@ -553,7 +555,7 @@ visualize:
       color: "#34a853"
 
   axes:
-    left:
+    rows:
       label: "Revenue ($)"
       format: "$,.0f"
     right:
@@ -1061,7 +1063,7 @@ ChartML uses [d3-format](https://d3js.org/d3-format) for number formatting and [
 ### Usage in ChartML
 
 Formats can be applied to:
-- **Axis labels**: `axes.left.format`
+- **Axis labels**: `axes.rows.format`
 - **Data labels**: `rows.dataLabels.format`
 - **Metric values**: `visualize.format`
 
@@ -1172,7 +1174,7 @@ Charts using source and parameters:
     columns: region
     rows: total_revenue
     axes:
-      left:
+      rows:
         label: "Revenue ($)"
         format: "$,.0f"
     style:

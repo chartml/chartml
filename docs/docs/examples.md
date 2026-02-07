@@ -344,7 +344,7 @@ visualize:
   rows: revenue
 
   axes:
-    left:
+    rows:
       label: "Revenue ($)"
       format: "$,.0f"
 
@@ -386,7 +386,7 @@ visualize:
   rows: revenue
 
   axes:
-    left:
+    rows:
       label: "Revenue ($)"
       format: "$,.0f"
 
@@ -436,7 +436,7 @@ visualize:
       color: "#ea4335"
 
   axes:
-    left:
+    rows:
       label: "Revenue ($)"
       format: "$,.0f"
 
@@ -489,7 +489,7 @@ visualize:
   rows: sales
 
   axes:
-    left:
+    rows:
       label: "Daily Sales"
       format: ",.0f"
 
@@ -823,7 +823,7 @@ visualize:
       axis: right
       color: "#34a853"
   axes:
-    left:
+    rows:
       label: "Revenue ($)"
       format: "$,.0f"
     right:
@@ -930,7 +930,7 @@ visualize:
   columns: week
   rows: revenue
   axes:
-    left:
+    rows:
       label: "Revenue ($)"
   style:
     height: 300
@@ -1019,7 +1019,7 @@ visualize:
   marks:
     color: region
   axes:
-    left:
+    rows:
       label: "Revenue ($)"
   style:
     height: 300
@@ -1103,7 +1103,7 @@ visualize:
   columns: day
   rows: sales
   axes:
-    left:
+    rows:
       label: "Sales ($)"
   style:
     height: 300
@@ -1192,7 +1192,7 @@ visualize:
   marks:
     color: region
   axes:
-    left:
+    rows:
       label: "Market Share"
   style:
     height: 300
@@ -1652,7 +1652,7 @@ visualize:
       position: top
       format: $,.0f
   axes:
-    left:
+    rows:
       label: Revenue ($)
       format: $,.0f
       min: 0
@@ -1693,7 +1693,7 @@ visualize:
     field: sales
     label: Sales
   axes:
-    left:
+    rows:
       label: Sales
       format: $,.0f
   style:
@@ -1741,7 +1741,7 @@ visualize:
       position: top
       format: .1%
   axes:
-    left:
+    rows:
       label: Conversion Rate
       format: .1%
       min: 0
@@ -1784,7 +1784,7 @@ visualize:
       position: top
       format: ~s
   axes:
-    left:
+    rows:
       label: Revenue
       format: ~s
       min: 0
@@ -1847,7 +1847,7 @@ visualize:
       fontSize: 11
       color: '#ea4335'
   axes:
-    left:
+    rows:
       label: Amount ($)
       format: $,.0f
       min: 80000
@@ -1908,7 +1908,7 @@ visualize:
       position: top
       format: ',.0f'
   axes:
-    left:
+    rows:
       label: Revenue ($)
       format: $,.0f
       min: 0
@@ -1957,7 +1957,7 @@ visualize:
       color: '#ffffff'
       fontSize: 14
   axes:
-    left:
+    rows:
       label: Revenue ($)
       format: $,.0f
   style:
@@ -2115,7 +2115,7 @@ visualize:
     - field: q2_revenue
       label: "Q2"
   axes:
-    left:
+    rows:
       label: "Revenue ($)"
       format: "$,.0f"
   style:
@@ -2356,7 +2356,7 @@ visualize:
   columns: region
   rows: total_revenue
   axes:
-    left:
+    rows:
       label: "Revenue ($)"
       format: "$,.0f"
   style:

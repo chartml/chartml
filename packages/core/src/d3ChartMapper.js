@@ -145,6 +145,23 @@ export function mapToCartesianChart(visualizeSpec, data, instanceConfig = {}) {
   const seriesCount = normalizedRows.length;
   const chartColors = getChartColors(seriesCount, basePalette);
 
+  // Resolve semantic axis names (axes.columns / axes.rows) to positional (x / left)
+  // based on chart orientation. Positional keys override semantic ones.
+  const isHorizontal = orientation === 'horizontal' && type === 'bar';
+  const resolvedAxes = { ...axes };
+
+  if (axes.columns) {
+    // columns axis → where categories appear
+    const target = isHorizontal ? 'left' : 'x';
+    // Semantic is the base, positional overrides
+    resolvedAxes[target] = { ...axes.columns, ...resolvedAxes[target] };
+  }
+  if (axes.rows) {
+    // rows axis → where measure values appear
+    const target = isHorizontal ? 'x' : 'left';
+    resolvedAxes[target] = { ...axes.rows, ...resolvedAxes[target] };
+  }
+
   return {
     xField,
     rows: normalizedRows,
@@ -155,22 +172,22 @@ export function mapToCartesianChart(visualizeSpec, data, instanceConfig = {}) {
     height: style.height || instanceConfig.dimensions?.height || 400,
     axes: {
       x: {
-        label: axes.x?.label || '',
-        format: axes.x?.format
+        label: resolvedAxes.x?.label || '',
+        format: resolvedAxes.x?.format
       },
       left: {
-        label: axes.left?.label || '',
-        format: axes.left?.format,
-        min: axes.left?.min,
-        max: axes.left?.max,
-        nice: axes.left?.nice !== false  // Default true
+        label: resolvedAxes.left?.label || '',
+        format: resolvedAxes.left?.format,
+        min: resolvedAxes.left?.min,
+        max: resolvedAxes.left?.max,
+        nice: resolvedAxes.left?.nice !== false  // Default true
       },
       right: {
-        label: axes.right?.label || '',
-        format: axes.right?.format,
-        min: axes.right?.min,
-        max: axes.right?.max,
-        nice: axes.right?.nice !== false  // Default true
+        label: resolvedAxes.right?.label || '',
+        format: resolvedAxes.right?.format,
+        min: resolvedAxes.right?.min,
+        max: resolvedAxes.right?.max,
+        nice: resolvedAxes.right?.nice !== false  // Default true
       }
     },
     colors: chartColors,
@@ -211,8 +228,8 @@ export function mapToScatterPlot(visualizeSpec, instanceConfig = {}) {
     colorField: marks.color || null,
     width: style.width || instanceConfig.dimensions?.width || 600,
     height: style.height || instanceConfig.dimensions?.height || 400,
-    xAxisLabel: axes.x?.label || '',
-    yAxisLabel: axes.left?.label || '',
+    xAxisLabel: axes.x?.label || axes.columns?.label || '',
+    yAxisLabel: axes.left?.label || axes.rows?.label || '',
     colors,
     radiusRange: [5, 20]
   };
