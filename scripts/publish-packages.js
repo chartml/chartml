@@ -147,12 +147,33 @@ function sortByDependencyOrder(packages, allPackages) {
 }
 
 /**
- * Publish a single package
+ * Check if a package version already exists on npm
+ */
+function isPublishedOnNpm(packageName, version) {
+  try {
+    const output = execSync(`npm view ${packageName}@${version} version 2>/dev/null`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    return output.trim() === version;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Publish a single package. Returns 'success', 'skipped', or 'failed'.
  */
 function publishPackage(packagePath, packageName, version, dryRun) {
   const fullPath = join(rootDir, packagePath);
 
   console.error(`\n📦 Publishing ${packageName}@${version}...`);
+
+  // Check if already published on npm
+  if (isPublishedOnNpm(packageName, version)) {
+    console.error(`  ⏭ ${packageName}@${version} already exists on npm, skipping`);
+    return 'skipped';
+  }
 
   try {
     if (dryRun) {
@@ -169,11 +190,11 @@ function publishPackage(packagePath, packageName, version, dryRun) {
       });
       console.error(`  ✓ Successfully published ${packageName}@${version}`);
     }
-    return true;
+    return 'success';
   } catch (error) {
     console.error(`  ✗ Failed to publish ${packageName}@${version}`);
     console.error(`  Error: ${error.message}`);
-    return false;
+    return 'failed';
   }
 }
 
@@ -226,10 +247,12 @@ function main() {
     }
 
     // Publish the package
-    const success = publishPackage(pkg.path, pkg.name, pkg.version, isDryRun);
+    const result = publishPackage(pkg.path, pkg.name, pkg.version, isDryRun);
 
-    if (success) {
+    if (result === 'success') {
       results.success.push(pkg);
+    } else if (result === 'skipped') {
+      results.skipped.push(pkg);
     } else {
       results.failed.push(pkg);
     }
@@ -249,6 +272,13 @@ function main() {
   if (results.success.length > 0) {
     console.error(`\n✓ Successfully published (${results.success.length}):`);
     results.success.forEach(pkg => {
+      console.error(`  - ${pkg.name}@${pkg.version}`);
+    });
+  }
+
+  if (results.skipped.length > 0) {
+    console.error(`\n⏭ Skipped — already on npm (${results.skipped.length}):`);
+    results.skipped.forEach(pkg => {
       console.error(`  - ${pkg.name}@${pkg.version}`);
     });
   }
