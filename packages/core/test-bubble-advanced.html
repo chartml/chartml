@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bubble Chart Advanced Demo</title>
+  <link rel="stylesheet" href="./dist/style.css">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    }
+    h1 {
+      margin-top: 0;
+    }
+    #chart {
+      margin: 20px 0;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Bubble Chart Advanced Demo</h1>
+    <p>Shows labels on points, grouping hulls, axis min/max, and legend/axis spacing.</p>
+    <div id="chart"></div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "d3": "https://cdn.jsdelivr.net/npm/d3@7/+esm",
+        "d3-array": "https://cdn.jsdelivr.net/npm/d3-array@3/+esm",
+        "js-yaml": "https://cdn.jsdelivr.net/npm/js-yaml@4/+esm",
+        "@chartml/core": "/packages/core/dist/index.js",
+        "@chartml/chart-scatter": "/packages/chart-scatter/dist/index.js"
+      }
+    }
+  </script>
+  <script type="module">
+    import { ChartML } from './dist/index.js';
+    // Auto-register scatter renderer (local build shares the same core instance)
+    await import('@chartml/chart-scatter');
+
+    const spec = `
+data:
+  provider: inline
+  rows:
+    - x: -5
+      y: 12
+      size: 35
+      category: "North"
+      cluster: "Alpha"
+      name: "A1"
+    - x: -2
+      y: 18
+      size: 24
+      category: "North"
+      cluster: "Alpha"
+      name: "A2"
+    - x: 3
+      y: 22
+      size: 18
+      category: "East"
+      cluster: "Alpha"
+      name: "A3"
+    - x: 8
+      y: 16
+      size: 12
+      category: "East"
+      cluster: "Alpha"
+      name: "A4"
+    - x: 4
+      y: 6
+      size: 28
+      category: "South"
+      cluster: "Beta"
+      name: "B1"
+    - x: 6
+      y: 4
+      size: 32
+      category: "South"
+      cluster: "Beta"
+      name: "B2"
+    - x: 10
+      y: 9
+      size: 15
+      category: "West"
+      cluster: "Beta"
+      name: "B3"
+    - x: 14
+      y: 14
+      size: 20
+      category: "West"
+      cluster: "Beta"
+      name: "B4"
+
+visualize:
+  type: scatter
+  columns: x
+  rows: y
+  marks:
+    size: size
+    color: category
+    group: cluster
+    label: name
+  axes:
+    bottom:
+      label: "X Position"
+      min: -8
+      max: 16
+    left:
+      label: "Y Position"
+      min: 0
+      max: 24
+  style:
+    width: 900
+    height: 520
+    colors: ["#2563eb", "#10b981", "#f97316", "#8b5cf6"]
+`;
+
+    const chartml = new ChartML({
+      defaultPalette: ["#2563eb", "#10b981", "#f97316", "#8b5cf6", "#e11d48", "#f59e0b"]
+    });
+
+    chartml.render(spec, document.getElementById('chart'));
+  </script>
+</body>
+</html>

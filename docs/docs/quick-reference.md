@@ -178,27 +178,44 @@ visualize:
 ```yaml
 type: chart
 version: 1
-title: "Price vs Sales"
+title: "Price vs Sales (Bubble)"
 
 data:
   - price: 29.99
     units_sold: 450
+    region: "North"
+    sku: "A1"
   - price: 39.99
     units_sold: 380
+    region: "North"
+    sku: "A2"
   - price: 49.99
     units_sold: 320
+    region: "East"
+    sku: "B1"
   - price: 19.99
     units_sold: 520
+    region: "South"
+    sku: "C1"
 
 visualize:
   type: scatter
   columns: price
   rows: units_sold
   axes:
+    bottom:
+      label: "Price"
+      min: 0
+      max: 60
     rows:
       label: "Units Sold"
+      min: 0
+      max: 600
   style:
-    height: 400
+    size: units_sold          # Bubble size
+    color: region             # Legend + hover coloring
+    label: sku                # Always-on labels (collision-aware)
+    group: region             # Draw transparent hulls around groups
 
 ---
 

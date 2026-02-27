@@ -215,6 +215,10 @@ export function mapToScatterPlot(visualizeSpec, instanceConfig = {}) {
   const yField = (typeof rowField === 'string' ? rowField : rowField?.field) || 'y';
   const xField = (typeof columnField === 'string' ? columnField : columnField?.field) || 'x';
 
+  // Resolve axes for labels and domain overrides (support semantic + positional keys)
+  const bottomAxis = axes.bottom || axes.x || axes.columns || {};
+  const leftAxis = axes.left || axes.rows || {};
+
   // Determine colors - check spec first, then fall back to instance default
   const colors = style.colors || instanceConfig.defaultPalette || [
     '#2E7D9A', '#D4A445', '#4A7C59', '#D66B5B', '#8B6BA8', '#9BB85A',
@@ -226,10 +230,18 @@ export function mapToScatterPlot(visualizeSpec, instanceConfig = {}) {
     yField,
     sizeField: marks.size || null,
     colorField: marks.color || null,
+    groupField: marks.group || null,
+    labelField: marks.label || null,
     width: style.width || instanceConfig.dimensions?.width || 600,
     height: style.height || instanceConfig.dimensions?.height || 400,
-    xAxisLabel: axes.x?.label || axes.columns?.label || '',
-    yAxisLabel: axes.left?.label || axes.rows?.label || '',
+    xAxisLabel: bottomAxis.label || '',
+    yAxisLabel: leftAxis.label || '',
+    xMin: bottomAxis.min,
+    xMax: bottomAxis.max,
+    xNice: bottomAxis.nice !== false,
+    yMin: leftAxis.min,
+    yMax: leftAxis.max,
+    yNice: leftAxis.nice !== false,
     colors,
     radiusRange: [5, 20]
   };

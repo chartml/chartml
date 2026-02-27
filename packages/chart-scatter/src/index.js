@@ -58,7 +58,16 @@ export function createScatterPlotRenderer() {
       colors,
       defaultRadius = 5,
       radiusRange = [3, 20],
-      animation = true  // Enable animations by default
+      animation = true,  // Enable animations by default
+      xMin = undefined,
+      xMax = undefined,
+      xNice = true,
+      yMin = undefined,
+      yMax = undefined,
+      yNice = true,
+      labelField = null,
+      labelCollision = 'hide-overlap',
+      groupField = null
     } = config;
 
     // Helper to get animation duration (0 if animations disabled)
@@ -72,36 +81,82 @@ export function createScatterPlotRenderer() {
     // Clear previous content
     container.innerHTML = '';
 
-    // Pre-calculate marginBottom based on label strategy (before creating SVG)
-    // This ensures X-axis labels and legend don't collide
+    // Domain helpers with overrides and safe fallbacks
+    const dataXMin = d3.min(data, d => d[xField]);
+    const dataXMax = d3.max(data, d => d[xField]);
+    const dataYMin = d3.min(data, d => d[yField]);
+    const dataYMax = d3.max(data, d => d[yField]);
+
+    const resolvedXMin = xMin !== undefined ? xMin : Math.min(0, dataXMin ?? 0);
+    const resolvedXMax = xMax !== undefined ? xMax : (dataXMax ?? 0);
+    const resolvedYMin = yMin !== undefined ? yMin : Math.min(0, dataYMin ?? 0);
+    const resolvedYMax = yMax !== undefined ? yMax : (dataYMax ?? 0);
+
+    const xDomain = [resolvedXMin, resolvedXMax];
+    const yDomain = [resolvedYMin, resolvedYMax];
+
+    // Avoid zero-length domains
+    if (xDomain[0] === xDomain[1]) xDomain[1] = xDomain[0] + 1;
+    if (yDomain[0] === yDomain[1]) yDomain[1] = yDomain[0] + 1;
+
+    const buildXScale = (rangeEnd) => {
+      const scale = d3.scaleLinear()
+        .domain(xDomain)
+        .range([0, rangeEnd]);
+      if (xNice) scale.nice();
+      return scale;
+    };
+
+    // Measure required bottom margin using a hidden axis with applied strategy
+    const computeBottomMargin = (scale, strategy, options = {}) => {
+      const {
+        tickValues = null,
+        xAxisLabelText = '',
+        includeLegend = false
+      } = options;
+
+      const tempSvg = d3.select(container)
+        .append('svg')
+        .attr('width', 0)
+        .attr('height', 0)
+        .style('position', 'absolute')
+        .style('visibility', 'hidden')
+        .style('overflow', 'visible');
+
+      let axisGenerator = d3.axisBottom(scale).ticks(5);
+      if (tickValues) {
+        axisGenerator = axisGenerator.tickValues(tickValues);
+      }
+
+      const axisSelection = tempSvg.append('g').call(axisGenerator);
+
+      applyLabelStrategy(axisSelection, strategy.strategy, strategy.metadata);
+
+      const bbox = axisSelection.node()?.getBBox();
+      tempSvg.remove();
+
+      const axisHeight = bbox ? bbox.height : 0;
+      const labelExtraSpace = strategy.metadata?.requiredMargin || 0;
+      const axisLabelSpace = xAxisLabelText ? 22 : 0;
+      const legendSpace = includeLegend ? 42 : 0;
+      const padding = 10;
+
+      return axisHeight + labelExtraSpace + axisLabelSpace + legendSpace + padding;
+    };
+
     const estimatedChartWidth = width - marginLeft - marginRight;
-
-    // For continuous scales, get the tick values that D3 will generate
-    const xScale = d3.scaleLinear()
-      .domain([Math.min(0, d3.min(data, d => d[xField]) || 0), d3.max(data, d => d[xField])])
-      .nice()
-      .range([0, estimatedChartWidth]);
-
-    const xTickValues = xScale.ticks(5);
-    const xLabels = xTickValues.map(d => String(xScale.tickFormat(5)(d)));
-
-    // Determine optimal label strategy
+    const xScaleForMeasure = buildXScale(estimatedChartWidth);
+    const xTickValues = xScaleForMeasure.ticks(5);
+    const xLabels = xTickValues.map(d => String(xScaleForMeasure.tickFormat(5)(d)));
     const labelStrategy = determineLabelStrategy(xLabels, estimatedChartWidth);
 
-    // Calculate marginBottom based on strategy
-    let marginBottom;
-    if (config.marginBottom !== undefined) {
-      // User explicitly set margin, honor it
-      marginBottom = config.marginBottom;
-    } else {
-      const baseTickLabelSpace = 20; // Base space for tick labels (always present)
-      const legendSpace = colorField ? 40 : 0;
-      const axisLabelSpace = xAxisLabel ? 25 : 0;
-      const labelExtraSpace = labelStrategy.metadata.requiredMargin || 0;
-      const legendPadding = colorField ? 10 : 0;
+    const measuredMarginBottom = computeBottomMargin(xScaleForMeasure, labelStrategy, {
+      tickValues: xTickValues,
+      xAxisLabelText: xAxisLabel,
+      includeLegend: Boolean(colorField)
+    });
 
-      marginBottom = baseTickLabelSpace + labelExtraSpace + axisLabelSpace + legendPadding + legendSpace;
-    }
+    const marginBottom = config.marginBottom !== undefined ? config.marginBottom : measuredMarginBottom;
 
     // Calculate final chart dimensions
     const chartWidth = width - marginLeft - marginRight;
@@ -120,13 +175,16 @@ export function createScatterPlotRenderer() {
     const g = svg.append('g')
       .attr('transform', `translate(${marginLeft},${marginTop})`);
 
-    // Create scales (reuse the xScale we already created for label strategy)
-    const x = xScale.range([0, chartWidth]); // Update range to final chartWidth
+    // Create scales (reuse domain from earlier measurement)
+    const x = buildXScale(chartWidth);
 
     const y = d3.scaleLinear()
-      .domain([Math.min(0, d3.min(data, d => d[yField]) || 0), d3.max(data, d => d[yField])])
-      .nice()
+      .domain(yDomain)
       .range([chartHeight, 0]);
+
+    if (yNice) {
+      y.nice();
+    }
 
     // Size scale if sizeField is provided
     const sizeScale = sizeField
@@ -159,12 +217,13 @@ export function createScatterPlotRenderer() {
       container
     });
 
+    const xAxisHeight = xAxis.node()?.getBBox()?.height || 0;
+
     // Add X axis label - positioned after axis tick labels using calculated margin
     if (xAxisLabel) {
-      const labelExtraSpace = labelStrategy.metadata.requiredMargin || 0;
       g.append('text')
         .attr('x', chartWidth / 2)
-        .attr('y', chartHeight + labelExtraSpace + 20)
+        .attr('y', chartHeight + xAxisHeight + 16)
         .attr('text-anchor', 'middle')
         .style('font-size', '14px')
         .style('font-family', 'system-ui')
@@ -221,6 +280,44 @@ export function createScatterPlotRenderer() {
 
     gridY.select('.domain').style('opacity', 0);
 
+    // Add grouping hulls to outline clusters
+    if (groupField) {
+      const hullLayer = g.append('g').attr('class', 'group-hulls');
+      const grouped = d3.groups(data, d => d[groupField]);
+      const groupColorScale = d3.scaleOrdinal()
+        .domain(grouped.map(([key]) => key))
+        .range(colors);
+
+      grouped.forEach(([groupKey, values]) => {
+        const screenPoints = values.map(d => [x(d[xField]), y(d[yField])]);
+        if (screenPoints.length < 2) return;
+
+        let hull = d3.polygonHull(screenPoints);
+        if (!hull) {
+          const xs = screenPoints.map(p => p[0]);
+          const ys = screenPoints.map(p => p[1]);
+          const minX = Math.min(...xs);
+          const maxX = Math.max(...xs);
+          const minY = Math.min(...ys);
+          const maxY = Math.max(...ys);
+          hull = [
+            [minX, minY],
+            [maxX, minY],
+            [maxX, maxY],
+            [minX, maxY]
+          ];
+        }
+
+        hullLayer.append('path')
+          .attr('d', `M${hull.map(p => p.join(',')).join('L')}Z`)
+          .attr('fill', 'none')
+          .attr('stroke', groupColorScale(groupKey))
+          .attr('stroke-width', 2)
+          .attr('opacity', 0.35)
+          .attr('pointer-events', 'none');
+      });
+    }
+
     // Add dots
     g.selectAll('.dot')
       .data(data)
@@ -253,6 +350,12 @@ export function createScatterPlotRenderer() {
         if (colorField) {
           tooltipHtml += `<br/>${colorField}: ${d[colorField]}`;
         }
+        if (labelField) {
+          tooltipHtml += `<br/>${labelField}: ${d[labelField]}`;
+        }
+        if (groupField) {
+          tooltipHtml += `<br/>${groupField}: ${d[groupField]}`;
+        }
 
         // Show tooltip
         tooltip
@@ -283,16 +386,52 @@ export function createScatterPlotRenderer() {
       .duration(getAnimationDuration(600))
       .attr('r', d => sizeField ? sizeScale(d[sizeField]) : defaultRadius);
 
+    // Add always-on labels near points with simple collision avoidance
+    if (labelField) {
+      const labelLayer = g.append('g')
+        .attr('class', 'point-labels')
+        .attr('pointer-events', 'none');
+
+      const labels = labelLayer.selectAll('text')
+        .data(data)
+        .join('text')
+        .attr('x', d => x(d[xField]))
+        .attr('y', d => y(d[yField]) - (sizeField ? sizeScale(d[sizeField]) : defaultRadius) - 6)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '11px')
+        .style('font-family', 'system-ui')
+        .style('fill', 'var(--chartml-text)')
+        .text(d => String(d[labelField] ?? ''));
+
+      if (labelCollision === 'hide-overlap') {
+        const placed = [];
+        labels.each(function() {
+          const node = this;
+          const bbox = node.getBBox();
+          const currentBox = { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height };
+          const overlaps = placed.some(prev => !(
+            currentBox.x + currentBox.width < prev.x ||
+            currentBox.x > prev.x + prev.width ||
+            currentBox.y + currentBox.height < prev.y ||
+            currentBox.y > prev.y + prev.height
+          ));
+
+          if (overlaps) {
+            d3.select(node).attr('opacity', 0);
+          } else {
+            placed.push(currentBox);
+          }
+        });
+      }
+    }
+
     // Add legend if colorField is provided - using unified utility with hover
     if (colorField) {
       const categories = [...new Set(data.map(d => d[colorField]))];
 
       // Position legend using the pre-calculated margin values
-      const baseTickLabelSpace = 20;
-      const labelExtraSpace = labelStrategy.metadata.requiredMargin || 0;
-      const axisLabelSpace = xAxisLabel ? 25 : 0;
-      const legendPadding = 10;
-      const legendY = marginTop + chartHeight + baseTickLabelSpace + labelExtraSpace + axisLabelSpace + legendPadding;
+      const legendPadding = 12;
+      const legendY = marginTop + chartHeight + xAxisHeight + (xAxisLabel ? 24 : 8) + legendPadding;
 
       const legendItems = categories.map((category, idx) => ({
         label: String(category),

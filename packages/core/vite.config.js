@@ -10,10 +10,11 @@ export default defineConfig({
       formats: ['es']
     },
     rollupOptions: {
-      external: ['d3', 'js-yaml', 'react', 'react-dom', 'react/jsx-runtime'],
+      external: ['d3', 'd3-array', 'js-yaml', 'react', 'react-dom', 'react/jsx-runtime'],
       output: {
         globals: {
           d3: 'd3',
+          'd3-array': 'd3',
           'js-yaml': 'jsyaml',
           react: 'React',
           'react-dom': 'ReactDOM'

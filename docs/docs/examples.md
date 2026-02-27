@@ -1398,6 +1398,90 @@ visualize:
       label: "Profit Margin"
   style:
     height: 300
+
+### Bubble Clusters with Labels and Hulls
+
+Bubble plot with per-axis min/max, always-on labels, grouping hull outlines, and hover tooltips.
+
+```chartml
+type: chart
+version: 1
+title: "Team Cluster Map"
+
+data:
+  provider: inline
+  rows:
+    - x: -5
+      y: 12
+      size: 35
+      category: "North"
+      cluster: "Alpha"
+      name: "A1"
+    - x: -2
+      y: 18
+      size: 24
+      category: "North"
+      cluster: "Alpha"
+      name: "A2"
+    - x: 3
+      y: 22
+      size: 18
+      category: "East"
+      cluster: "Alpha"
+      name: "A3"
+    - x: 8
+      y: 16
+      size: 12
+      category: "East"
+      cluster: "Alpha"
+      name: "A4"
+    - x: 4
+      y: 6
+      size: 28
+      category: "South"
+      cluster: "Beta"
+      name: "B1"
+    - x: 6
+      y: 4
+      size: 32
+      category: "South"
+      cluster: "Beta"
+      name: "B2"
+    - x: 10
+      y: 9
+      size: 15
+      category: "West"
+      cluster: "Beta"
+      name: "B3"
+    - x: 14
+      y: 14
+      size: 20
+      category: "West"
+      cluster: "Beta"
+      name: "B4"
+
+visualize:
+  type: scatter
+  columns: x
+  rows: y
+  marks:
+    size: size
+    color: category
+    label: name
+    group: cluster
+  axes:
+    bottom:
+      label: "X Position"
+      min: -8
+      max: 16
+    left:
+      label: "Y Position"
+      min: 0
+      max: 24
+  style:
+    height: 520
+    colors: ["#2563eb", "#10b981", "#f97316", "#8b5cf6"]
+```
 ```
 
 ---

@@ -1,6 +1,7 @@
 import * as yaml from "js-yaml";
 import yaml__default from "js-yaml";
 import * as d3 from "d3";
+import * as d3$1 from "d3-array";
 function createFormatter(formatString, type = "auto") {
   if (!formatString) {
     return (value) => String(value);
@@ -161,7 +162,7 @@ function createLegend(container, items, config = {}) {
   const legendGroup = container.append("g").attr("class", "chart-legend").attr("transform", `translate(${x}, ${y})`);
   const tooltip = d3.select("body").append("div").attr("class", "legend-tooltip").style("position", "fixed").style("background", "var(--chartml-surface)").style("color", "var(--chartml-text-strong)").style("padding", "6px 10px").style("border-radius", "4px").style("font-size", "11px").style("font-family", LEGEND_FONT_FAMILY).style("pointer-events", "none").style("opacity", 0).style("z-index", 1e4).style("box-shadow", "var(--chartml-shadow)").style("border", "1px solid var(--chartml-border)").style("max-width", "300px").style("white-space", "pre-wrap");
   layout.rows.forEach((row, rowIndex) => {
-    const rowWidth = row.reduce((sum2, item) => sum2 + item.itemWidth, 0);
+    const rowWidth = row.reduce((sum, item) => sum + item.itemWidth, 0);
     let startX = 0;
     if (align === "center") {
       startX = (width - rowWidth) / 2;
@@ -201,7 +202,7 @@ function createLegend(container, items, config = {}) {
   if (layout.overflow && layout.overflowCount > 0) {
     const lastRowIndex = layout.rows.length - 1;
     const lastRow = layout.rows[lastRowIndex];
-    const lastRowWidth = lastRow.reduce((sum2, item) => sum2 + item.itemWidth, 0);
+    const lastRowWidth = lastRow.reduce((sum, item) => sum + item.itemWidth, 0);
     let overflowX = 0;
     if (align === "center") {
       overflowX = (width + lastRowWidth) / 2 + 8;
@@ -1527,15 +1528,15 @@ function generateFallbackColor(hex) {
   const rNorm = r / 255;
   const gNorm = g / 255;
   const bNorm = b / 255;
-  const max2 = Math.max(rNorm, gNorm, bNorm);
-  const min2 = Math.min(rNorm, gNorm, bNorm);
-  let h, s, l = (max2 + min2) / 2;
-  if (max2 === min2) {
+  const max = Math.max(rNorm, gNorm, bNorm);
+  const min = Math.min(rNorm, gNorm, bNorm);
+  let h, s, l = (max + min) / 2;
+  if (max === min) {
     h = s = 0;
   } else {
-    const d = max2 - min2;
-    s = l > 0.5 ? d / (2 - max2 - min2) : d / (max2 + min2);
-    switch (max2) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
       case rNorm:
         h = ((gNorm - bNorm) / d + (gNorm < bNorm ? 6 : 0)) / 6;
         break;
@@ -1767,12 +1768,14 @@ function mapToCartesianChart(visualizeSpec, data, instanceConfig = {}) {
   };
 }
 function mapToScatterPlot(visualizeSpec, instanceConfig = {}) {
-  var _a, _b, _c, _d, _e, _f;
+  var _a, _b;
   const { rows, columns, marks = {}, axes = {}, style = {} } = visualizeSpec;
   const rowField = Array.isArray(rows) ? rows[0] : rows;
   const columnField = Array.isArray(columns) ? columns[0] : columns;
   const yField = (typeof rowField === "string" ? rowField : rowField == null ? void 0 : rowField.field) || "y";
   const xField = (typeof columnField === "string" ? columnField : columnField == null ? void 0 : columnField.field) || "x";
+  const bottomAxis = axes.bottom || axes.x || axes.columns || {};
+  const leftAxis = axes.left || axes.rows || {};
   const colors = style.colors || instanceConfig.defaultPalette || [
     "#2E7D9A",
     "#D4A445",
@@ -1792,10 +1795,18 @@ function mapToScatterPlot(visualizeSpec, instanceConfig = {}) {
     yField,
     sizeField: marks.size || null,
     colorField: marks.color || null,
+    groupField: marks.group || null,
+    labelField: marks.label || null,
     width: style.width || ((_a = instanceConfig.dimensions) == null ? void 0 : _a.width) || 600,
     height: style.height || ((_b = instanceConfig.dimensions) == null ? void 0 : _b.height) || 400,
-    xAxisLabel: ((_c = axes.x) == null ? void 0 : _c.label) || ((_d = axes.columns) == null ? void 0 : _d.label) || "",
-    yAxisLabel: ((_e = axes.left) == null ? void 0 : _e.label) || ((_f = axes.rows) == null ? void 0 : _f.label) || "",
+    xAxisLabel: bottomAxis.label || "",
+    yAxisLabel: leftAxis.label || "",
+    xMin: bottomAxis.min,
+    xMax: bottomAxis.max,
+    xNice: bottomAxis.nice !== false,
+    yMin: leftAxis.min,
+    yMax: leftAxis.max,
+    yNice: leftAxis.nice !== false,
     colors,
     radiusRange: [5, 20]
   };
@@ -2506,143 +2517,6 @@ class GlobalPluginRegistry {
   }
 }
 const globalRegistry = new GlobalPluginRegistry();
-class InternMap extends Map {
-  constructor(entries, key = keyof) {
-    super();
-    Object.defineProperties(this, { _intern: { value: /* @__PURE__ */ new Map() }, _key: { value: key } });
-    if (entries != null) for (const [key2, value] of entries) this.set(key2, value);
-  }
-  get(key) {
-    return super.get(intern_get(this, key));
-  }
-  has(key) {
-    return super.has(intern_get(this, key));
-  }
-  set(key, value) {
-    return super.set(intern_set(this, key), value);
-  }
-  delete(key) {
-    return super.delete(intern_delete(this, key));
-  }
-}
-function intern_get({ _intern, _key }, value) {
-  const key = _key(value);
-  return _intern.has(key) ? _intern.get(key) : value;
-}
-function intern_set({ _intern, _key }, value) {
-  const key = _key(value);
-  if (_intern.has(key)) return _intern.get(key);
-  _intern.set(key, value);
-  return value;
-}
-function intern_delete({ _intern, _key }, value) {
-  const key = _key(value);
-  if (_intern.has(key)) {
-    value = _intern.get(key);
-    _intern.delete(key);
-  }
-  return value;
-}
-function keyof(value) {
-  return value !== null && typeof value === "object" ? value.valueOf() : value;
-}
-function identity(x) {
-  return x;
-}
-function rollup(values, reduce, ...keys) {
-  return nest(values, identity, reduce, keys);
-}
-function nest(values, map, reduce, keys) {
-  return function regroup(values2, i) {
-    if (i >= keys.length) return reduce(values2);
-    const groups = new InternMap();
-    const keyof2 = keys[i++];
-    let index = -1;
-    for (const value of values2) {
-      const key = keyof2(value, ++index, values2);
-      const group = groups.get(key);
-      if (group) group.push(value);
-      else groups.set(key, [value]);
-    }
-    for (const [key, values3] of groups) {
-      groups.set(key, regroup(values3, i));
-    }
-    return map(groups);
-  }(values, 0);
-}
-function max(values, valueof) {
-  let max2;
-  if (valueof === void 0) {
-    for (const value of values) {
-      if (value != null && (max2 < value || max2 === void 0 && value >= value)) {
-        max2 = value;
-      }
-    }
-  } else {
-    let index = -1;
-    for (let value of values) {
-      if ((value = valueof(value, ++index, values)) != null && (max2 < value || max2 === void 0 && value >= value)) {
-        max2 = value;
-      }
-    }
-  }
-  return max2;
-}
-function min(values, valueof) {
-  let min2;
-  if (valueof === void 0) {
-    for (const value of values) {
-      if (value != null && (min2 > value || min2 === void 0 && value >= value)) {
-        min2 = value;
-      }
-    }
-  } else {
-    let index = -1;
-    for (let value of values) {
-      if ((value = valueof(value, ++index, values)) != null && (min2 > value || min2 === void 0 && value >= value)) {
-        min2 = value;
-      }
-    }
-  }
-  return min2;
-}
-function mean(values, valueof) {
-  let count = 0;
-  let sum2 = 0;
-  if (valueof === void 0) {
-    for (let value of values) {
-      if (value != null && (value = +value) >= value) {
-        ++count, sum2 += value;
-      }
-    }
-  } else {
-    let index = -1;
-    for (let value of values) {
-      if ((value = valueof(value, ++index, values)) != null && (value = +value) >= value) {
-        ++count, sum2 += value;
-      }
-    }
-  }
-  if (count) return sum2 / count;
-}
-function sum(values, valueof) {
-  let sum2 = 0;
-  if (valueof === void 0) {
-    for (let value of values) {
-      if (value = +value) {
-        sum2 += value;
-      }
-    }
-  } else {
-    let index = -1;
-    for (let value of values) {
-      if (value = +valueof(value, ++index, values)) {
-        sum2 += value;
-      }
-    }
-  }
-  return sum2;
-}
 const aggregateCache = /* @__PURE__ */ new Map();
 const CACHE_TTL_MS = 5 * 60 * 1e3;
 const inFlightRequests = /* @__PURE__ */ new Map();
@@ -2719,7 +2593,7 @@ async function d3Transform(data, spec, context = {}) {
         });
         result = [aggregated];
       } else if (dimensions.length === 1) {
-        const grouped = rollup(
+        const grouped = d3$1.rollup(
           filteredData,
           (group) => {
             const aggregated = {};
@@ -2735,7 +2609,7 @@ async function d3Transform(data, spec, context = {}) {
         );
         result = Array.from(grouped.values());
       } else {
-        const grouped = rollup(
+        const grouped = d3$1.rollup(
           filteredData,
           (group) => {
             const aggregated = {};
@@ -2824,16 +2698,16 @@ function computeMeasure(group, measure) {
   const { column, aggregation } = measure;
   switch (aggregation == null ? void 0 : aggregation.toLowerCase()) {
     case "sum":
-      return sum(group, (d) => Number(d[column]) || 0);
+      return d3$1.sum(group, (d) => Number(d[column]) || 0);
     case "avg":
     case "mean":
-      return mean(group, (d) => Number(d[column]) || 0) || 0;
+      return d3$1.mean(group, (d) => Number(d[column]) || 0) || 0;
     case "count":
       return group.length;
     case "min":
-      return min(group, (d) => d[column]);
+      return d3$1.min(group, (d) => d[column]);
     case "max":
-      return max(group, (d) => d[column]);
+      return d3$1.max(group, (d) => d[column]);
     case "first":
       return (_a = group[0]) == null ? void 0 : _a[column];
     case "last":
@@ -3111,7 +2985,7 @@ function renderSelectControl(param, currentValue, onChange) {
   return container;
 }
 function renderNumberControl(param, currentValue, onChange) {
-  const { id, label, min: min2, max: max2 } = param;
+  const { id, label, min, max } = param;
   const container = document.createElement("div");
   container.className = "chartml-param-number";
   const labelEl = document.createElement("label");
@@ -3123,8 +2997,8 @@ function renderNumberControl(param, currentValue, onChange) {
   input.id = `param-${id}`;
   input.type = "number";
   input.value = currentValue !== void 0 ? currentValue : 0;
-  if (min2 !== void 0) input.min = min2;
-  if (max2 !== void 0) input.max = max2;
+  if (min !== void 0) input.min = min;
+  if (max !== void 0) input.max = max;
   input.addEventListener("input", (e) => {
     onChange(Number(e.target.value));
   });
