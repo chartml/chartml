@@ -1,0 +1,20 @@
+type: chart
+version: 1
+title: "New Customers Over Time"
+data:
+  provider: inline
+  rows:
+    - date: "2024-01-01"
+      customers: 450
+    - date: "2024-01-08"
+      customers: 485
+    - date: "2024-01-15"
+      customers: 520
+    - date: "2024-01-22"
+      customers: 562
+    - date: "2024-01-29"
+      customers: 598
+visualize:
+  type: line
+  columns: date
+  rows: customers

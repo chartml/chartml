@@ -1,0 +1,20 @@
+type: chart
+version: 1
+title: "Revenue by Region"
+data:
+  provider: inline
+  rows:
+    - region: "North America"
+      revenue: 520000
+    - region: "Europe"
+      revenue: 380000
+    - region: "Asia Pacific"
+      revenue: 450000
+    - region: "Latin America"
+      revenue: 125000
+visualize:
+  type: pie
+  columns: region
+  rows: revenue
+  style:
+    height: 300

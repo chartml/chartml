@@ -1,0 +1,41 @@
+type: chart
+version: 1
+title: "Revenue by Region and Quarter"
+data:
+  provider: inline
+  rows:
+    - quarter: "Q1"
+      region: "North"
+      revenue: 42000
+    - quarter: "Q1"
+      region: "South"
+      revenue: 38000
+    - quarter: "Q1"
+      region: "East"
+      revenue: 35000
+    - quarter: "Q2"
+      region: "North"
+      revenue: 48000
+    - quarter: "Q2"
+      region: "South"
+      revenue: 42000
+    - quarter: "Q2"
+      region: "East"
+      revenue: 40000
+transform:
+  aggregate:
+    dimensions: [quarter, region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+visualize:
+  type: bar
+  mode: grouped
+  columns: quarter
+  rows: total_revenue
+  marks:
+    color: region
+  style:
+    height: 350
+    colors: ["#4285f4", "#ea4335", "#34a853"]
