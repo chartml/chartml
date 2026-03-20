@@ -209,7 +209,10 @@ name = "chartml-leptos"
 version = "0.1.0"
 dependencies = [
  "chartml-core",
+ "js-sys",
  "leptos",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

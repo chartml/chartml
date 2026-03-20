@@ -25,6 +25,13 @@ pub struct CategoryTickMark {
     pub bandwidth: f64,   // Width of the band
 }
 
+/// Calculate the optimal number of ticks based on available axis length in pixels.
+/// Formula: floor(axis_length / 50), clamped to 4..=10
+/// Matches JS chartml: maxFittableTicks = floor(chartWidth / 50), clamped 4-10.
+pub fn adaptive_tick_count(axis_length_px: f64) -> usize {
+    ((axis_length_px / 50.0).floor() as usize).clamp(4, 10)
+}
+
 /// Generates tick positions and formatted labels for a continuous axis.
 pub struct AxisLayout {
     position: AxisPosition,
@@ -172,5 +179,20 @@ mod tests {
     #[test]
     fn default_format_decimal() {
         assert_eq!(default_format(3.14), "3.14");
+    }
+
+    #[test]
+    fn adaptive_tick_count_small() {
+        assert_eq!(adaptive_tick_count(150.0), 4); // floor(150/50)=3, clamped to 4
+    }
+
+    #[test]
+    fn adaptive_tick_count_medium() {
+        assert_eq!(adaptive_tick_count(350.0), 7);
+    }
+
+    #[test]
+    fn adaptive_tick_count_large() {
+        assert_eq!(adaptive_tick_count(600.0), 10); // floor(600/50)=12, clamped to 10
     }
 }

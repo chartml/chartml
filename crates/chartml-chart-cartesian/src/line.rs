@@ -3,6 +3,7 @@ use chartml_core::element::{ChartElement, ElementData, TextAnchor, Transform, Vi
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
 use chartml_core::plugin::ChartConfig;
+use chartml_core::layout::adaptive_tick_count;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::shapes::LineGenerator;
 
@@ -60,6 +61,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             font_size: Some("14px".to_string()),
             fill: Some("#333".to_string()),
             class: "chart-title".to_string(),
+            data: None,
         });
     }
 
@@ -72,7 +74,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         (inner_height, 0.0),
         margins.left,
         y_fmt_ref,
-        5,
+        adaptive_tick_count(inner_height),
     );
 
     children.push(ChartElement::Group {

@@ -4,6 +4,7 @@ use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
 use chartml_core::layout::stack::StackLayout;
 use chartml_core::plugin::ChartConfig;
+use chartml_core::layout::adaptive_tick_count;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::shapes::AreaGenerator;
 
@@ -51,6 +52,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             font_size: Some("14px".to_string()),
             fill: Some("#333".to_string()),
             class: "chart-title".to_string(),
+            data: None,
         });
     }
 
@@ -133,7 +135,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             let x_axis_elements =
                 generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height);
             let y_axis_elements =
-                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, 5);
+                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height));
 
             children.push(ChartElement::Group {
                 class: "axes".to_string(),
@@ -208,7 +210,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             let x_axis_elements =
                 generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height);
             let y_axis_elements =
-                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, 5);
+                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height));
 
             children.push(ChartElement::Group {
                 class: "axes".to_string(),
@@ -289,7 +291,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         let x_axis_elements =
             generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height);
         let y_axis_elements =
-            generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, 5);
+            generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height));
 
         children.push(ChartElement::Group {
             class: "axes".to_string(),

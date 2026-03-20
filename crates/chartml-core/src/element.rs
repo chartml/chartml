@@ -64,6 +64,7 @@ pub enum ChartElement {
         font_size: Option<String>,
         fill: Option<String>,
         class: String,
+        data: Option<ElementData>,
     },
     /// Non-SVG container (e.g., metric card uses div-based layout)
     Div {
@@ -284,6 +285,7 @@ mod tests {
                     anchor: TextAnchor::Middle, dominant_baseline: None,
                     transform: None, font_size: None, fill: None,
                     class: "title".to_string(),
+                    data: None,
                 },
             ],
         };

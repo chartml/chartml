@@ -138,6 +138,7 @@ pub fn generate_x_axis(
             font_size: Some("11px".to_string()),
             fill: Some("#666".to_string()),
             class: "tick-label".to_string(),
+            data: None,
         });
     }
 
@@ -196,6 +197,7 @@ pub fn generate_y_axis(
             font_size: Some("11px".to_string()),
             fill: Some("#666".to_string()),
             class: "tick-label".to_string(),
+            data: None,
         });
     }
 
@@ -251,6 +253,7 @@ pub fn generate_y_axis_numeric(
             font_size: Some("11px".to_string()),
             fill: Some("#666".to_string()),
             class: "tick-label".to_string(),
+            data: None,
         });
     }
 
@@ -306,6 +309,7 @@ pub fn generate_x_axis_numeric(
             font_size: Some("11px".to_string()),
             fill: Some("#666".to_string()),
             class: "tick-label".to_string(),
+            data: None,
         });
     }
 
@@ -349,6 +353,7 @@ pub fn generate_legend(
             font_size: Some("11px".to_string()),
             fill: Some("#333".to_string()),
             class: "legend-label".to_string(),
+            data: None,
         });
 
         x_offset += 80.0;

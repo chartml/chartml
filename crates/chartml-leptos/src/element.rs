@@ -150,7 +150,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             }.into_any()
         }
 
-        ChartElement::Text { x, y, content, anchor, dominant_baseline, transform, font_size, fill, class } => {
+        ChartElement::Text { x, y, content, anchor, dominant_baseline, transform, font_size, fill, class, data } => {
             let x = x.to_string();
             let y = y.to_string();
             let content = content.clone();
@@ -161,7 +161,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             let fill = fill.clone().unwrap_or_default();
             let class = class.clone();
 
-            view! {
+            let inner = view! {
                 <text
                     x=x y=y
                     text-anchor=anchor
@@ -173,7 +173,13 @@ pub fn render_element(element: &ChartElement) -> AnyView {
                 >
                     {content}
                 </text>
-            }.into_any()
+            }.into_any();
+
+            if let Some(data) = data.clone() {
+                render_interactive(inner, String::new(), data)
+            } else {
+                inner
+            }
         }
 
         ChartElement::Div { class, style, children } => {

@@ -82,6 +82,7 @@ impl ChartRenderer for PieRenderer {
                 font_size: Some("16px".to_string()),
                 fill: Some("#333".to_string()),
                 class: "chartml-title".to_string(),
+                data: None,
             });
         }
 

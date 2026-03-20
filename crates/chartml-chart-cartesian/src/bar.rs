@@ -5,6 +5,7 @@ use chartml_core::layout::margins::{calculate_margins, MarginConfig};
 use chartml_core::layout::stack::StackLayout;
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
+use chartml_core::layout::adaptive_tick_count;
 use chartml_core::spec::{ChartMode, Orientation};
 
 use crate::helpers::{format_value, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_y_format, offset_element};
@@ -48,6 +49,7 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
             font_size: Some("14px".to_string()),
             fill: Some("#333".to_string()),
             class: "chart-title".to_string(),
+            data: None,
         });
     }
 
@@ -89,14 +91,14 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
     // Axes
     let axis_elements = if is_horizontal {
         let x_axis = generate_y_axis(&categories, (0.0, inner_height), margins.left, None);
-        let y_axis = generate_x_axis_numeric((0.0, value_max), (0.0, inner_width), margins.top + inner_height, y_fmt_ref, 5);
+        let y_axis = generate_x_axis_numeric((0.0, value_max), (0.0, inner_width), margins.top + inner_height, y_fmt_ref, adaptive_tick_count(inner_width));
         let mut axes = Vec::new();
         axes.extend(x_axis.into_iter().map(|e| offset_element(e, margins.left, margins.top)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes
     } else {
         let x_axis = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height);
-        let y_axis = generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, 5);
+        let y_axis = generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height));
         let mut axes = Vec::new();
         axes.extend(x_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
