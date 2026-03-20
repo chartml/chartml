@@ -9,7 +9,7 @@ use chartml_core::shapes::LineGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{format_value, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -87,6 +87,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         margins.left,
         y_fmt_ref,
         adaptive_tick_count(inner_height),
+        Some(inner_width),
     );
 
     children.push(ChartElement::Group {
@@ -123,17 +124,28 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 None => continue,
             };
 
-            let points: Vec<(f64, f64)> = categories
-                .iter()
-                .filter_map(|cat| {
-                    let row = series_rows.iter().find(|r| {
-                        get_string(r, &category_field).as_deref() == Some(cat.as_str())
-                    })?;
-                    let x = band.map(cat)? + bandwidth / 2.0;
-                    let y = linear.map(get_f64(row, &value_field)?);
-                    Some((x, y))
-                })
-                .collect();
+            let mut points: Vec<(f64, f64)> = Vec::new();
+            let mut point_data: Vec<(String, f64)> = Vec::new();
+
+            for cat in &categories {
+                let row = match series_rows.iter().find(|r| {
+                    get_string(r, &category_field).as_deref() == Some(cat.as_str())
+                }) {
+                    Some(r) => r,
+                    None => continue,
+                };
+                let val = match get_f64(row, &value_field) {
+                    Some(v) => v,
+                    None => continue,
+                };
+                let x = match band.map(cat) {
+                    Some(x) => x + bandwidth / 2.0,
+                    None => continue,
+                };
+                let y = linear.map(val);
+                points.push((x, y));
+                point_data.push((cat.clone(), val));
+            }
 
             if points.is_empty() {
                 continue;
@@ -149,12 +161,26 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             line_elements.push(ChartElement::Path {
                 d: path_d,
                 fill: None,
-                stroke: Some(color),
+                stroke: Some(color.clone()),
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
                 class: "line".to_string(),
                 data: Some(ElementData::new(series_name, "").with_series(series_name)),
             });
+
+            // Hover dots at each data point
+            for (i, &(px, py)) in points.iter().enumerate() {
+                let (ref cat, val) = point_data[i];
+                line_elements.push(ChartElement::Circle {
+                    cx: px,
+                    cy: py,
+                    r: 4.0,
+                    fill: color.clone(),
+                    stroke: Some("#fff".to_string()),
+                    class: "chartml-line-dot".to_string(),
+                    data: Some(ElementData::new(cat, format_value(val, y_fmt_ref)).with_series(series_name)),
+                });
+            }
         }
 
         // Legend
@@ -167,17 +193,28 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         });
     } else {
         // Single series
-        let points: Vec<(f64, f64)> = categories
-            .iter()
-            .filter_map(|cat| {
-                let row = data.iter().find(|r| {
-                    get_string(r, &category_field).as_deref() == Some(cat.as_str())
-                })?;
-                let x = band.map(cat)? + bandwidth / 2.0;
-                let y = linear.map(get_f64(row, &value_field)?);
-                Some((x, y))
-            })
-            .collect();
+        let mut points: Vec<(f64, f64)> = Vec::new();
+        let mut point_data: Vec<(String, f64)> = Vec::new();
+
+        for cat in &categories {
+            let row = match data.iter().find(|r| {
+                get_string(r, &category_field).as_deref() == Some(cat.as_str())
+            }) {
+                Some(r) => r,
+                None => continue,
+            };
+            let val = match get_f64(row, &value_field) {
+                Some(v) => v,
+                None => continue,
+            };
+            let x = match band.map(cat) {
+                Some(x) => x + bandwidth / 2.0,
+                None => continue,
+            };
+            let y = linear.map(val);
+            points.push((x, y));
+            point_data.push((cat.clone(), val));
+        }
 
         if !points.is_empty() {
             let path_d = line_gen.generate(&points);
@@ -190,12 +227,26 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             line_elements.push(ChartElement::Path {
                 d: path_d,
                 fill: None,
-                stroke: Some(color),
+                stroke: Some(color.clone()),
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
                 class: "line".to_string(),
                 data: None,
             });
+
+            // Hover dots at each data point
+            for (i, &(px, py)) in points.iter().enumerate() {
+                let (ref cat, val) = point_data[i];
+                line_elements.push(ChartElement::Circle {
+                    cx: px,
+                    cy: py,
+                    r: 4.0,
+                    fill: color.clone(),
+                    stroke: Some("#fff".to_string()),
+                    class: "chartml-line-dot".to_string(),
+                    data: Some(ElementData::new(cat, format_value(val, y_fmt_ref))),
+                });
+            }
         }
     }
 

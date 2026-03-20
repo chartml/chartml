@@ -185,6 +185,34 @@ pub fn ExamplesPage(chartml: Arc<ChartML>) -> impl IntoView {
                 </div>
             </section>
 
+            // ─── Section: Label Strategy Demos ───
+            <section class="examples-section">
+                <h2>"Label Strategy Demos"</h2>
+                <p class="section-desc">"Testing x-axis label handling: rotation, sampling, truncation, and date formatting."</p>
+
+                <div class="examples-grid two-col">
+                    <ExampleChart
+                        title="12 Monthly Categories"
+                        description="Enough labels to trigger rotation at narrow widths"
+                        spec=TWELVE_MONTHS
+                        chartml=chartml.clone()
+                    />
+                    <ExampleChart
+                        title="Daily Sales (Date X-Axis)"
+                        description="ISO date labels auto-formatted to 'Jan 15' style"
+                        spec=DAILY_SALES_DATES
+                        chartml=chartml.clone()
+                    />
+                </div>
+
+                <ExampleChart
+                    title="Long Category Names"
+                    description="Labels truncated with ellipsis when space is tight"
+                    spec=LONG_CATEGORIES
+                    chartml=chartml.clone()
+                />
+            </section>
+
         </div>
     }
 }
@@ -583,3 +611,107 @@ visualize:
   style:
     height: 400
     colors: ["#4285f4", "#ea4335", "#fbbc04", "#34a853"]"##;
+
+// ─── Label Strategy Demo specs ───
+
+const TWELVE_MONTHS: &str = r##"type: chart
+version: 1
+title: "Monthly Revenue 2024"
+data:
+  provider: inline
+  rows:
+    - month: "Jan"
+      revenue: 125000
+    - month: "Feb"
+      revenue: 138000
+    - month: "Mar"
+      revenue: 152000
+    - month: "Apr"
+      revenue: 145000
+    - month: "May"
+      revenue: 168000
+    - month: "Jun"
+      revenue: 158000
+    - month: "Jul"
+      revenue: 172000
+    - month: "Aug"
+      revenue: 165000
+    - month: "Sep"
+      revenue: 180000
+    - month: "Oct"
+      revenue: 175000
+    - month: "Nov"
+      revenue: 190000
+    - month: "Dec"
+      revenue: 195000
+visualize:
+  type: bar
+  columns: month
+  rows: revenue
+  axes:
+    rows:
+      label: "Revenue"
+      format: "$,.0f""##;
+
+const DAILY_SALES_DATES: &str = r##"type: chart
+version: 1
+title: "Daily Sales - March 2025"
+data:
+  provider: inline
+  rows:
+    - date: "2025-03-10"
+      sales: 4200
+    - date: "2025-03-11"
+      sales: 4350
+    - date: "2025-03-12"
+      sales: 4100
+    - date: "2025-03-13"
+      sales: 4500
+    - date: "2025-03-14"
+      sales: 4400
+    - date: "2025-03-15"
+      sales: 6200
+    - date: "2025-03-16"
+      sales: 7100
+    - date: "2025-03-17"
+      sales: 6800
+    - date: "2025-03-18"
+      sales: 7500
+visualize:
+  type: line
+  columns: date
+  rows: sales
+  axes:
+    rows:
+      label: "Daily Sales"
+      format: ",.0f""##;
+
+const LONG_CATEGORIES: &str = r##"type: chart
+version: 1
+title: "Revenue by Product Line"
+data:
+  provider: inline
+  rows:
+    - product: "Enterprise Cloud Platform"
+      revenue: 450000
+    - product: "Developer Tools Suite"
+      revenue: 380000
+    - product: "Data Analytics Engine"
+      revenue: 520000
+    - product: "Security & Compliance"
+      revenue: 290000
+    - product: "Mobile SDK Framework"
+      revenue: 340000
+    - product: "AI/ML Infrastructure"
+      revenue: 610000
+    - product: "Customer Success Platform"
+      revenue: 270000
+    - product: "Integration Middleware"
+      revenue: 310000
+visualize:
+  type: bar
+  columns: product
+  rows: revenue
+  axes:
+    rows:
+      format: "$,.0f""##;

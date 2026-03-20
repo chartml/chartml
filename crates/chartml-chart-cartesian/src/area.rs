@@ -10,7 +10,7 @@ use chartml_core::shapes::AreaGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{format_value, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -107,19 +107,27 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
             // Group stacked points by series
             for (series_idx, series_name) in series_names.iter().enumerate() {
-                let series_points: Vec<(f64, f64, f64)> = categories
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(_cat_idx, cat)| {
-                        let point = stacked_points.iter().find(|p| {
-                            p.key == *cat && p.series == *series_name
-                        })?;
-                        let x = band.map(cat)? + bandwidth / 2.0;
-                        let y0 = linear.map(point.y0);
-                        let y1 = linear.map(point.y1);
-                        Some((x, y0, y1))
-                    })
-                    .collect();
+                let mut series_points: Vec<(f64, f64, f64)> = Vec::new();
+                let mut dot_data: Vec<(String, f64, f64)> = Vec::new(); // (category, y1_value, y1_pixel)
+
+                for cat in &categories {
+                    let point = match stacked_points.iter().find(|p| {
+                        p.key == *cat && p.series == *series_name
+                    }) {
+                        Some(p) => p,
+                        None => continue,
+                    };
+                    let x = match band.map(cat) {
+                        Some(x) => x + bandwidth / 2.0,
+                        None => continue,
+                    };
+                    let y0 = linear.map(point.y0);
+                    let y1 = linear.map(point.y1);
+                    series_points.push((x, y0, y1));
+                    // The individual series value is y1 - y0 (unstacked)
+                    let series_val = point.y1 - point.y0;
+                    dot_data.push((cat.clone(), series_val, y1));
+                }
 
                 if series_points.is_empty() {
                     continue;
@@ -134,20 +142,34 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
                 area_elements.push(ChartElement::Path {
                     d: path_d,
-                    fill: Some(color),
+                    fill: Some(color.clone()),
                     stroke: None,
                     stroke_width: None,
                     stroke_dasharray: None,
                     class: "area".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
+
+                // Hover dots at the top edge of each stacked area
+                for (i, &(px, _y0, _y1)) in series_points.iter().enumerate() {
+                    let (ref cat, val, y1_pixel) = dot_data[i];
+                    area_elements.push(ChartElement::Circle {
+                        cx: px,
+                        cy: y1_pixel,
+                        r: 4.0,
+                        fill: color.clone(),
+                        stroke: Some("#fff".to_string()),
+                        class: "chartml-area-dot".to_string(),
+                        data: Some(ElementData::new(cat, format_value(val, y_fmt_ref)).with_series(series_name)),
+                    });
+                }
             }
 
             // Axes
             let x_axis_result =
                 generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref());
             let y_axis_elements =
-                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height));
+                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width));
 
             children.push(ChartElement::Group {
                 class: "axes".to_string(),
@@ -184,17 +206,28 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                     None => continue,
                 };
 
-                let points: Vec<(f64, f64, f64)> = categories
-                    .iter()
-                    .filter_map(|cat| {
-                        let row = series_rows.iter().find(|r| {
-                            get_string(r, &category_field).as_deref() == Some(cat.as_str())
-                        })?;
-                        let x = band.map(cat)? + bandwidth / 2.0;
-                        let y = linear.map(get_f64(row, &value_field)?);
-                        Some((x, baseline, y))
-                    })
-                    .collect();
+                let mut points: Vec<(f64, f64, f64)> = Vec::new();
+                let mut dot_data: Vec<(String, f64)> = Vec::new();
+
+                for cat in &categories {
+                    let row = match series_rows.iter().find(|r| {
+                        get_string(r, &category_field).as_deref() == Some(cat.as_str())
+                    }) {
+                        Some(r) => r,
+                        None => continue,
+                    };
+                    let val = match get_f64(row, &value_field) {
+                        Some(v) => v,
+                        None => continue,
+                    };
+                    let x = match band.map(cat) {
+                        Some(x) => x + bandwidth / 2.0,
+                        None => continue,
+                    };
+                    let y = linear.map(val);
+                    points.push((x, baseline, y));
+                    dot_data.push((cat.clone(), val));
+                }
 
                 if points.is_empty() {
                     continue;
@@ -209,20 +242,34 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
                 area_elements.push(ChartElement::Path {
                     d: path_d,
-                    fill: Some(color),
+                    fill: Some(color.clone()),
                     stroke: None,
                     stroke_width: None,
                     stroke_dasharray: None,
                     class: "area".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
+
+                // Hover dots at the top edge of each area
+                for (i, &(px, _y0, y1)) in points.iter().enumerate() {
+                    let (ref cat, val) = dot_data[i];
+                    area_elements.push(ChartElement::Circle {
+                        cx: px,
+                        cy: y1,
+                        r: 4.0,
+                        fill: color.clone(),
+                        stroke: Some("#fff".to_string()),
+                        class: "chartml-area-dot".to_string(),
+                        data: Some(ElementData::new(cat, format_value(val, y_fmt_ref)).with_series(series_name)),
+                    });
+                }
             }
 
             // Axes
             let x_axis_result =
                 generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref());
             let y_axis_elements =
-                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height));
+                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width));
 
             children.push(ChartElement::Group {
                 class: "axes".to_string(),
@@ -268,17 +315,28 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         let linear = ScaleLinear::new((0.0, value_max), (inner_height, 0.0));
         let baseline = linear.map(0.0);
 
-        let points: Vec<(f64, f64, f64)> = categories
-            .iter()
-            .filter_map(|cat| {
-                let row = data.iter().find(|r| {
-                    get_string(r, &category_field).as_deref() == Some(cat.as_str())
-                })?;
-                let x = band.map(cat)? + bandwidth / 2.0;
-                let y = linear.map(get_f64(row, &value_field)?);
-                Some((x, baseline, y))
-            })
-            .collect();
+        let mut points: Vec<(f64, f64, f64)> = Vec::new();
+        let mut dot_data: Vec<(String, f64)> = Vec::new();
+
+        for cat in &categories {
+            let row = match data.iter().find(|r| {
+                get_string(r, &category_field).as_deref() == Some(cat.as_str())
+            }) {
+                Some(r) => r,
+                None => continue,
+            };
+            let val = match get_f64(row, &value_field) {
+                Some(v) => v,
+                None => continue,
+            };
+            let x = match band.map(cat) {
+                Some(x) => x + bandwidth / 2.0,
+                None => continue,
+            };
+            let y = linear.map(val);
+            points.push((x, baseline, y));
+            dot_data.push((cat.clone(), val));
+        }
 
         if !points.is_empty() {
             let path_d = area_gen.generate(&points);
@@ -290,20 +348,34 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
             area_elements.push(ChartElement::Path {
                 d: path_d,
-                fill: Some(color),
+                fill: Some(color.clone()),
                 stroke: None,
                 stroke_width: None,
                 stroke_dasharray: None,
                 class: "area".to_string(),
                 data: None,
             });
+
+            // Hover dots at each data point
+            for (i, &(px, _y0, y1)) in points.iter().enumerate() {
+                let (ref cat, val) = dot_data[i];
+                area_elements.push(ChartElement::Circle {
+                    cx: px,
+                    cy: y1,
+                    r: 4.0,
+                    fill: color.clone(),
+                    stroke: Some("#fff".to_string()),
+                    class: "chartml-area-dot".to_string(),
+                    data: Some(ElementData::new(cat, format_value(val, y_fmt_ref))),
+                });
+            }
         }
 
         // Axes
         let x_axis_result =
             generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref());
         let y_axis_elements =
-            generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height));
+            generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width));
 
         children.push(ChartElement::Group {
             class: "axes".to_string(),

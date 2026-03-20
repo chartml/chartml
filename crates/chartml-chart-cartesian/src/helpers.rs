@@ -330,12 +330,14 @@ pub fn generate_y_axis(
 }
 
 /// Generate y-axis elements for numeric data (used by bar, line, and area charts).
+/// If `chart_width` is provided, horizontal grid lines extend across the chart.
 pub fn generate_y_axis_numeric(
     domain: (f64, f64),
     range: (f64, f64),
     x_position: f64,
     fmt: Option<&str>,
     tick_count: usize,
+    chart_width: Option<f64>,
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     let ticks = scale.ticks(tick_count);
@@ -357,6 +359,21 @@ pub fn generate_y_axis_numeric(
         let y = scale.map(*val);
         let label = format_value(*val, fmt);
 
+        // Horizontal grid line (if chart_width provided)
+        if let Some(cw) = chart_width {
+            elements.push(ChartElement::Line {
+                x1: x_position,
+                y1: y,
+                x2: x_position + cw,
+                y2: y,
+                stroke: "#e0e0e0".to_string(),
+                stroke_width: Some(1.0),
+                stroke_dasharray: None,
+                class: "grid-line".to_string(),
+            });
+        }
+
+        // Tick mark
         elements.push(ChartElement::Line {
             x1: x_position - 5.0,
             y1: y,
