@@ -192,14 +192,20 @@ body {
     animation: chartml-fade-in 500ms ease-out both;
 }
 
-/* Pie/doughnut slices — entrance + hover matching D3:
-   Default: opacity 0.9. Hover: hovered slice goes full opacity,
-   all other slices dim. 200ms transition on the path directly. */
+/* Pie/doughnut slices — entrance + hover matching D3.
+   NOTE: Cannot use animation fill-mode "both" or "forwards" here
+   because it locks opacity and prevents hover transitions. Instead
+   use a keyframe that ends at the resting opacity (0.9). */
 .chartml-pie-slice {
-    animation: chartml-fade-in 400ms ease-out both;
+    animation: chartml-pie-enter 400ms ease-out;
     opacity: 0.9;
-    transition: opacity 200ms ease !important;
+    transition: opacity 200ms ease;
     cursor: pointer;
+}
+
+@keyframes chartml-pie-enter {
+    from { opacity: 0; }
+    to   { opacity: 0.9; }
 }
 
 /* When pointer is anywhere over the pie, dim all slices */
@@ -207,9 +213,9 @@ body {
     opacity: 0.4;
 }
 
-/* The slice being hovered (path hover, not g hover) stays bright */
+/* The slice under the pointer stays bright */
 .chartml-pie-slice:hover {
-    opacity: 1 !important;
+    opacity: 1;
 }
 
 /* Line/area data point dots — matches D3 chartml:
