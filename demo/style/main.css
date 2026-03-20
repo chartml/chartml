@@ -241,9 +241,131 @@ body {
     width: 100%;
 }
 
-/* Responsive */
+/* ─── Navigation ─── */
+.app-nav {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+}
+
+.nav-btn {
+    padding: 6px 16px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: white;
+    color: #666;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+
+.nav-btn:hover {
+    border-color: #2E7D9A;
+    color: #2E7D9A;
+}
+
+.nav-btn.active {
+    background: #2E7D9A;
+    color: white;
+    border-color: #2E7D9A;
+}
+
+/* ─── Examples Page ─── */
+.examples-page {
+    padding-bottom: 60px;
+}
+
+.examples-section {
+    margin-bottom: 40px;
+}
+
+.examples-section h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.section-desc {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 16px;
+}
+
+.examples-grid {
+    display: grid;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.examples-grid.two-col {
+    grid-template-columns: 1fr 1fr;
+}
+
+.example-chart {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+.examples-grid .example-chart {
+    margin-bottom: 0;
+}
+
+.example-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.example-desc {
+    font-size: 13px;
+    color: #999;
+    margin-bottom: 12px;
+}
+
+.example-render {
+    min-height: 120px;
+}
+
+.example-render .chartml-container {
+    width: 100%;
+}
+
+/* ─── Metric Row ─── */
+.metric-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.metric-cell {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.metric-cell .chartml-metric-card {
+    min-height: auto;
+}
+
+/* ─── Responsive ─── */
 @media (max-width: 768px) {
     .app-main {
         grid-template-columns: 1fr;
+    }
+    .examples-grid.two-col {
+        grid-template-columns: 1fr;
+    }
+    .metric-row {
+        grid-template-columns: 1fr 1fr;
     }
 }

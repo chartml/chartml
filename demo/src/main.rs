@@ -1,5 +1,6 @@
 mod app;
 mod editor;
+mod examples;
 mod gallery;
 
 fn main() {
