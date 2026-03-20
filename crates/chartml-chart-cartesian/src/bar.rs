@@ -8,7 +8,9 @@ use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::layout::adaptive_tick_count;
 use chartml_core::spec::{ChartMode, Orientation};
 
-use crate::helpers::{format_value, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_y_format, offset_element};
+use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
+
+use crate::helpers::{format_value, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -24,10 +26,24 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
     let is_stacked = matches!(config.visualize.mode, Some(ChartMode::Stacked));
     let is_grouped = matches!(config.visualize.mode, Some(ChartMode::Grouped));
 
-    // Calculate margins
+    // Step 1: Compute label strategy for margin estimation (only for vertical bars)
+    let x_format = get_x_format(config);
+    let x_extra_margin = if !is_horizontal {
+        let estimated_width = config.width - 80.0;
+        let x_strategy = LabelStrategy::determine(&categories, estimated_width, &LabelStrategyConfig::default());
+        match &x_strategy {
+            LabelStrategy::Rotated { margin, .. } => *margin,
+            _ => 0.0,
+        }
+    } else {
+        0.0
+    };
+
+    // Step 2: Calculate margins including rotation
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: color_field.is_some(),
+        x_label_strategy_margin: x_extra_margin,
         ..Default::default()
     };
     let margins = calculate_margins(&margin_config);
@@ -97,10 +113,10 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes
     } else {
-        let x_axis = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height);
+        let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref());
         let y_axis = generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height));
         let mut axes = Vec::new();
-        axes.extend(x_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
+        axes.extend(x_axis_result.elements.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
         axes
     };

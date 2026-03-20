@@ -3,8 +3,9 @@
 pub enum LabelStrategy {
     /// Labels displayed horizontally (no transformation needed).
     Horizontal,
-    /// Labels rotated -45 degrees. Contains the additional bottom margin needed.
-    Rotated { margin: f64 },
+    /// Labels rotated -45 degrees. Contains the additional bottom margin needed
+    /// and an optional skip factor for label sampling after rotation.
+    Rotated { margin: f64, skip_factor: Option<usize> },
     /// Labels truncated to max_width with ellipsis.
     Truncated { max_width: f64 },
     /// Only a subset of labels shown (evenly sampled).
@@ -70,7 +71,8 @@ impl LabelStrategy {
             let angle_rad = config.rotation_angle_deg.to_radians();
             let required_vertical = max_width * angle_rad.sin();
             let margin = (required_vertical.ceil() + 15.0).min(config.max_rotation_margin);
-            return LabelStrategy::Rotated { margin };
+            let skip_factor = compute_skip_factor(labels, available_width, config.rotation_angle_deg);
+            return LabelStrategy::Rotated { margin, skip_factor };
         }
 
         // Strategy 3: Truncated -- if truncated labels would fit
@@ -101,9 +103,30 @@ pub fn approximate_text_width(text: &str) -> f64 {
     text.chars().map(char_width).sum()
 }
 
+/// After rotation, check if labels still overlap and compute skip factor.
+/// Matches JS: if overlapRatio > 1.5 && labelCount > 8, skip = ceil(overlapRatio / 2)
+pub fn compute_skip_factor(
+    labels: &[String],
+    available_width: f64,
+    rotation_angle_deg: f64,
+) -> Option<usize> {
+    if labels.len() <= 8 {
+        return None;
+    }
+    let available_per_label = available_width / labels.len() as f64;
+    let max_width = labels.iter().map(|l| approximate_text_width(l)).fold(0.0_f64, f64::max);
+    let rotated_width = max_width * rotation_angle_deg.to_radians().cos();
+    let overlap_ratio = (rotated_width + 6.0) / available_per_label;
+    if overlap_ratio > 1.5 {
+        Some((overlap_ratio / 2.0).ceil() as usize)
+    } else {
+        None
+    }
+}
+
 /// Select strategic indices for sampled label display.
 /// Always includes first and last; evenly distributes the rest.
-fn strategic_indices(total: usize, target: usize) -> Vec<usize> {
+pub fn strategic_indices(total: usize, target: usize) -> Vec<usize> {
     if total == 0 {
         return vec![];
     }

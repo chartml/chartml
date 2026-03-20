@@ -1,6 +1,8 @@
-use chartml_core::element::{ChartElement, TextAnchor, Transform};
+use chartml_core::element::{ChartElement, ElementData, TextAnchor, Transform};
 use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
+use chartml_core::format::{detect_date_format, reformat_date_label};
+use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, truncate_label};
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::spec::{FieldRef, FieldRefItem, MarkEncoding};
@@ -87,15 +89,40 @@ fn insert_commas(n: u64) -> String {
     result
 }
 
-/// Generate x-axis elements (tick marks and labels) for category data.
+/// Result of x-axis generation, including the computed label strategy.
+pub struct XAxisResult {
+    pub elements: Vec<ChartElement>,
+    /// Additional bottom margin needed (e.g., from label rotation).
+    pub extra_bottom_margin: f64,
+}
+
+/// Generate x-axis elements with smart label handling.
+/// Applies LabelStrategy (horizontal/rotated/truncated/sampled) based on available space.
+/// Auto-detects date labels and reformats them if no explicit format is provided.
 pub fn generate_x_axis(
     labels: &[String],
     range: (f64, f64),
     y_position: f64,
-) -> Vec<ChartElement> {
+    available_width: f64,
+    x_format: Option<&str>,
+) -> XAxisResult {
     let band = ScaleBand::new(labels.to_vec(), range);
     let bandwidth = band.bandwidth();
+
+    // Step 1: Format labels (date detection or explicit format)
+    let display_labels: Vec<String> = if let Some(fmt) = x_format {
+        labels.iter().map(|l| reformat_date_label(l, fmt)).collect()
+    } else if let Some(detected_fmt) = detect_date_format(labels) {
+        labels.iter().map(|l| reformat_date_label(l, &detected_fmt)).collect()
+    } else {
+        labels.to_vec()
+    };
+
+    // Step 2: Determine label strategy
+    let strategy = LabelStrategy::determine(&display_labels, available_width, &LabelStrategyConfig::default());
+
     let mut elements = Vec::new();
+    let extra_bottom_margin;
 
     // Axis line
     elements.push(ChartElement::Line {
@@ -109,40 +136,138 @@ pub fn generate_x_axis(
         class: "axis-line".to_string(),
     });
 
-    for label in labels {
-        let x = match band.map(label) {
-            Some(x) => x + bandwidth / 2.0,
-            None => continue,
-        };
+    // Step 3: Apply strategy
+    match &strategy {
+        LabelStrategy::Horizontal => {
+            extra_bottom_margin = 0.0;
+            for (i, label) in display_labels.iter().enumerate() {
+                let orig_label = &labels[i];
+                let x = match band.map(orig_label) {
+                    Some(x) => x + bandwidth / 2.0,
+                    None => continue,
+                };
+                // Tick mark
+                elements.push(ChartElement::Line {
+                    x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
+                    stroke: "#999".to_string(), stroke_width: Some(1.0),
+                    stroke_dasharray: None, class: "tick".to_string(),
+                });
+                // Label
+                elements.push(ChartElement::Text {
+                    x, y: y_position + 18.0,
+                    content: label.clone(),
+                    anchor: TextAnchor::Middle,
+                    dominant_baseline: None,
+                    transform: None,
+                    font_size: Some("11px".to_string()),
+                    fill: Some("#666".to_string()),
+                    class: "tick-label".to_string(),
+                    data: None,
+                });
+            }
+        }
 
-        // Tick mark
-        elements.push(ChartElement::Line {
-            x1: x,
-            y1: y_position,
-            x2: x,
-            y2: y_position + 5.0,
-            stroke: "#999".to_string(),
-            stroke_width: Some(1.0),
-            stroke_dasharray: None,
-            class: "tick".to_string(),
-        });
+        LabelStrategy::Rotated { margin, skip_factor } => {
+            extra_bottom_margin = *margin;
+            for (i, label) in display_labels.iter().enumerate() {
+                let orig_label = &labels[i];
+                let x = match band.map(orig_label) {
+                    Some(x) => x + bandwidth / 2.0,
+                    None => continue,
+                };
+                // Tick mark (always shown)
+                elements.push(ChartElement::Line {
+                    x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
+                    stroke: "#999".to_string(), stroke_width: Some(1.0),
+                    stroke_dasharray: None, class: "tick".to_string(),
+                });
+                // Label — skip if skip_factor says so
+                let should_show = match skip_factor {
+                    Some(factor) => i % factor == 0,
+                    None => true,
+                };
+                if should_show {
+                    elements.push(ChartElement::Text {
+                        x, y: y_position + 10.0,
+                        content: label.clone(),
+                        anchor: TextAnchor::End,
+                        dominant_baseline: None,
+                        transform: Some(Transform::Rotate(-45.0, x, y_position + 10.0)),
+                        font_size: Some("11px".to_string()),
+                        fill: Some("#666".to_string()),
+                        class: "tick-label".to_string(),
+                        data: None,
+                    });
+                }
+            }
+        }
 
-        // Label
-        elements.push(ChartElement::Text {
-            x,
-            y: y_position + 18.0,
-            content: label.clone(),
-            anchor: TextAnchor::Middle,
-            dominant_baseline: None,
-            transform: None,
-            font_size: Some("11px".to_string()),
-            fill: Some("#666".to_string()),
-            class: "tick-label".to_string(),
-            data: None,
-        });
+        LabelStrategy::Truncated { max_width } => {
+            extra_bottom_margin = 0.0;
+            for (i, label) in display_labels.iter().enumerate() {
+                let orig_label = &labels[i];
+                let x = match band.map(orig_label) {
+                    Some(x) => x + bandwidth / 2.0,
+                    None => continue,
+                };
+                elements.push(ChartElement::Line {
+                    x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
+                    stroke: "#999".to_string(), stroke_width: Some(1.0),
+                    stroke_dasharray: None, class: "tick".to_string(),
+                });
+                let truncated = truncate_label(label, *max_width);
+                let is_truncated = truncated != *label;
+                elements.push(ChartElement::Text {
+                    x, y: y_position + 18.0,
+                    content: truncated,
+                    anchor: TextAnchor::Middle,
+                    dominant_baseline: None,
+                    transform: None,
+                    font_size: Some("11px".to_string()),
+                    fill: Some("#666".to_string()),
+                    class: "tick-label".to_string(),
+                    data: if is_truncated {
+                        Some(ElementData::new(label.clone(), ""))
+                    } else {
+                        None
+                    },
+                });
+            }
+        }
+
+        LabelStrategy::Sampled { indices } => {
+            extra_bottom_margin = 0.0;
+            for (i, label) in display_labels.iter().enumerate() {
+                let orig_label = &labels[i];
+                let x = match band.map(orig_label) {
+                    Some(x) => x + bandwidth / 2.0,
+                    None => continue,
+                };
+                // Tick mark for all
+                elements.push(ChartElement::Line {
+                    x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
+                    stroke: "#999".to_string(), stroke_width: Some(1.0),
+                    stroke_dasharray: None, class: "tick".to_string(),
+                });
+                // Label only for sampled indices
+                if indices.contains(&i) {
+                    elements.push(ChartElement::Text {
+                        x, y: y_position + 18.0,
+                        content: label.clone(),
+                        anchor: TextAnchor::Middle,
+                        dominant_baseline: None,
+                        transform: None,
+                        font_size: Some("11px".to_string()),
+                        fill: Some("#666".to_string()),
+                        class: "tick-label".to_string(),
+                        data: None,
+                    });
+                }
+            }
+        }
     }
 
-    elements
+    XAxisResult { elements, extra_bottom_margin }
 }
 
 /// Generate y-axis elements for category data (used in horizontal bar charts).

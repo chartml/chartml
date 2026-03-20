@@ -7,7 +7,9 @@ use chartml_core::layout::adaptive_tick_count;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::shapes::LineGenerator;
 
-use crate::helpers::{generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_y_format, offset_element};
+use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
+
+use crate::helpers::{generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -20,10 +22,20 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
     let color_field = get_color_field(config);
 
-    // Calculate margins
+    // Step 1: Compute label strategy for margin estimation
+    let estimated_width = config.width - 80.0;
+    let x_format = get_x_format(config);
+    let x_strategy = LabelStrategy::determine(&categories, estimated_width, &LabelStrategyConfig::default());
+    let x_extra_margin = match &x_strategy {
+        LabelStrategy::Rotated { margin, .. } => *margin,
+        _ => 0.0,
+    };
+
+    // Step 2: Calculate margins including rotation
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: color_field.is_some(),
+        x_label_strategy_margin: x_extra_margin,
         ..Default::default()
     };
     let margins = calculate_margins(&margin_config);
@@ -68,7 +80,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
     // Axes — read format string from spec
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
-    let x_axis_elements = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height);
+    let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref());
     let y_axis_elements = generate_y_axis_numeric(
         (domain_min, domain_max),
         (inner_height, 0.0),
@@ -83,7 +95,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         children: {
             let mut axes = Vec::new();
             axes.extend(
-                x_axis_elements
+                x_axis_result.elements
                     .into_iter()
                     .map(|e| offset_element(e, margins.left, 0.0)),
             );
