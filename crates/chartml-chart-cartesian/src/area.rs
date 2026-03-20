@@ -68,7 +68,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         });
     }
 
-    let area_gen = AreaGenerator::new();
+    let area_gen = AreaGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
     let mut area_elements = Vec::new();
 
     if let Some(ref color_f) = color_field {

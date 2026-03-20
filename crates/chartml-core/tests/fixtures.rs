@@ -692,3 +692,55 @@ fn all_fixtures_have_inline_provider() {
         }
     }
 }
+
+#[test]
+fn parse_chart_with_annotations() {
+    let yaml = r##"type: chart
+version: 1
+title: "Test Annotations"
+data:
+  provider: inline
+  rows:
+    - { month: "Jan", revenue: 120000 }
+visualize:
+  type: line
+  columns: month
+  rows: revenue
+  annotations:
+    - type: band
+      axis: left
+      from: 140000
+      to: 160000
+      orientation: horizontal
+      label: "Target Range"
+      color: "#34a853"
+      opacity: 0.15
+      strokeColor: "#34a853"
+      strokeWidth: 1
+"##;
+    let result = chartml_core::parse(yaml);
+    assert!(result.is_ok(), "Failed to parse annotations: {:?}", result.err());
+}
+
+#[test]
+fn parse_chart_with_named_source() {
+    let yaml = r#"type: chart
+version: 1
+title: "Monthly Revenue Trend"
+data: q1_sales
+transform:
+  aggregate:
+    dimensions: [month]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+visualize:
+  type: bar
+  columns: month
+  rows: total_revenue
+  style:
+    height: 300"#;
+    let result = chartml_core::parse(yaml);
+    assert!(result.is_ok(), "Failed to parse named source chart: {:?}", result.err());
+}

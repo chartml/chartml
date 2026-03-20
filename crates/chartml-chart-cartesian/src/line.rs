@@ -110,7 +110,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
     });
 
     // Line paths
-    let line_gen = LineGenerator::new();
+    let line_gen = LineGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
     let bandwidth = band.bandwidth();
     let mut line_elements = Vec::new();
 
