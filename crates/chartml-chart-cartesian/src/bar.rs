@@ -13,6 +13,25 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 use crate::helpers::{GridConfig, format_value, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, offset_element};
 
 pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
+    use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
+    use chartml_core::shapes::LineGenerator;
+
+    // Detect multi-field rows (combo chart pattern)
+    let multi_fields: Vec<FieldSpec> = match &config.visualize.rows {
+        Some(FieldRef::Multiple(items)) => items.iter().filter_map(|item| match item {
+            FieldRefItem::Detailed(spec) => Some(spec.clone()),
+            FieldRefItem::Simple(name) => Some(FieldSpec {
+                field: name.clone(), mark: None, axis: None, label: None,
+                color: None, format: None, data_labels: None,
+            }),
+        }).collect(),
+        _ => vec![],
+    };
+
+    if !multi_fields.is_empty() {
+        return render_combo(data, config, &multi_fields);
+    }
+
     let category_field = get_field_name(&config.visualize.columns)?;
     let value_field = get_field_name(&config.visualize.rows)?;
 
@@ -427,5 +446,287 @@ fn render_multi_series_bars(
 
         Ok((value_max, elements))
     }
+}
+
+/// Render a combo chart: multiple fields with different marks (bar/line) and optional dual axis.
+fn render_combo(
+    data: &[Row],
+    config: &ChartConfig,
+    fields: &[chartml_core::spec::FieldSpec],
+) -> Result<ChartElement, ChartError> {
+    use chartml_core::shapes::LineGenerator;
+
+    let category_field = get_field_name(&config.visualize.columns)?;
+    let categories = unique_values(data, &category_field);
+    if categories.is_empty() {
+        return Err(ChartError::DataError("No category values found".into()));
+    }
+
+    let y_fmt = get_y_format(config);
+    let y_fmt_ref = y_fmt.as_deref();
+    let grid = GridConfig::from_config(config);
+    let x_format = get_x_format(config);
+
+    // Margins
+    let margin_config = MarginConfig {
+        has_title: config.title.is_some(),
+        has_legend: fields.len() > 1,
+        ..Default::default()
+    };
+    let margins = calculate_margins(&margin_config);
+    let inner_width = margins.inner_width(config.width);
+    let inner_height = margins.inner_height(config.height);
+
+    let band = ScaleBand::new(categories.clone(), (0.0, inner_width));
+    let bandwidth = band.bandwidth();
+
+    // Separate fields by axis
+    let left_fields: Vec<&chartml_core::spec::FieldSpec> = fields.iter()
+        .filter(|f| f.axis.as_deref() != Some("right"))
+        .collect();
+    let right_fields: Vec<&chartml_core::spec::FieldSpec> = fields.iter()
+        .filter(|f| f.axis.as_deref() == Some("right"))
+        .collect();
+
+    // Compute left-axis domain
+    let left_max = left_fields.iter()
+        .flat_map(|f| data.iter().filter_map(|r| get_f64(r, &f.field)))
+        .fold(0.0_f64, f64::max);
+    let axes_left = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref());
+    let left_domain_min = axes_left.and_then(|a| a.min).unwrap_or(0.0);
+    let left_domain_max = axes_left.and_then(|a| a.max).unwrap_or(if left_max <= 0.0 { 1.0 } else { left_max });
+    let left_scale = ScaleLinear::new((left_domain_min, left_domain_max), (inner_height, 0.0));
+
+    // Compute right-axis domain
+    let right_scale = if !right_fields.is_empty() {
+        let right_max = right_fields.iter()
+            .flat_map(|f| data.iter().filter_map(|r| get_f64(r, &f.field)))
+            .fold(0.0_f64, f64::max);
+        let axes_right = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref());
+        let right_domain_min = axes_right.and_then(|a| a.min).unwrap_or(0.0);
+        let right_domain_max = axes_right.and_then(|a| a.max).unwrap_or(if right_max <= 0.0 { 1.0 } else { right_max });
+        Some(ScaleLinear::new((right_domain_min, right_domain_max), (inner_height, 0.0)))
+    } else {
+        None
+    };
+
+    let mut children = Vec::new();
+
+    // Title
+    if let Some(ref title) = config.title {
+        children.push(ChartElement::Text {
+            x: config.width / 2.0, y: 20.0,
+            content: title.clone(),
+            anchor: TextAnchor::Middle, dominant_baseline: None,
+            transform: None, font_size: Some("16px".to_string()),
+            fill: Some("#333".to_string()), class: "chart-title".to_string(), data: None,
+        });
+    }
+
+    // Axes
+    let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
+    let y_axis_left = generate_y_axis_numeric(
+        (left_domain_min, left_domain_max), (inner_height, 0.0), margins.left,
+        y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid,
+    );
+
+    let mut axis_elements = Vec::new();
+    axis_elements.extend(x_axis_result.elements.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
+    axis_elements.extend(y_axis_left.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
+
+    // Right axis
+    if let Some(ref rs) = right_scale {
+        let right_fmt = config.visualize.axes.as_ref()
+            .and_then(|a| a.right.as_ref())
+            .and_then(|a| a.format.as_deref());
+        let right_axis = generate_y_axis_numeric(
+            rs.domain(), (inner_height, 0.0), margins.left + inner_width,
+            right_fmt, adaptive_tick_count(inner_height), None, &grid,
+        );
+        // Right axis ticks go to the right (+5 instead of -5)
+        axis_elements.extend(right_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
+    }
+
+    children.push(ChartElement::Group {
+        class: "axes".to_string(), transform: None, children: axis_elements,
+    });
+
+    // Render each field
+    let mut mark_elements = Vec::new();
+    let line_gen = LineGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
+    let mut series_names = Vec::new();
+    let mut series_colors = Vec::new();
+    let mut series_marks = Vec::new();
+
+    for (field_idx, field_spec) in fields.iter().enumerate() {
+        let field_name = &field_spec.field;
+        let is_right = field_spec.axis.as_deref() == Some("right");
+        let scale = if is_right { right_scale.as_ref().unwrap_or(&left_scale) } else { &left_scale };
+        let mark = field_spec.mark.as_deref().unwrap_or("bar");
+        let color = field_spec.color.clone()
+            .unwrap_or_else(|| config.colors.get(field_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string()));
+        let label = field_spec.label.clone().unwrap_or_else(|| field_name.clone());
+        let fmt_ref = if is_right {
+            config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()).and_then(|a| a.format.as_deref())
+        } else {
+            y_fmt_ref
+        };
+
+        match mark {
+            "bar" => {
+                for row in data {
+                    let cat = match get_string(row, &category_field) { Some(c) => c, None => continue };
+                    let val = get_f64(row, field_name).unwrap_or(0.0);
+                    let x = match band.map(&cat) { Some(x) => x, None => continue };
+                    let bar_top = scale.map(val);
+                    let bar_bottom = scale.map(0.0);
+                    let bar_height = (bar_bottom - bar_top).abs();
+
+                    mark_elements.push(ChartElement::Rect {
+                        x: x + margins.left, y: bar_top + margins.top,
+                        width: bandwidth, height: bar_height,
+                        fill: color.clone(), stroke: None,
+                        class: "bar".to_string(),
+                        data: Some(ElementData::new(&cat, format_value(val, fmt_ref)).with_series(&label)),
+                    });
+
+                    // Data labels
+                    if let Some(ref dl) = field_spec.data_labels {
+                        if dl.show == Some(true) {
+                            let dl_fmt = dl.format.as_deref().or(fmt_ref);
+                            mark_elements.push(ChartElement::Text {
+                                x: x + bandwidth / 2.0 + margins.left,
+                                y: bar_top + margins.top - 5.0,
+                                content: format_value(val, dl_fmt),
+                                anchor: TextAnchor::Middle, dominant_baseline: None,
+                                transform: None,
+                                font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "11px".to_string())),
+                                fill: Some(dl.color.clone().unwrap_or_else(|| "#333".to_string())),
+                                class: "data-label".to_string(), data: None,
+                            });
+                        }
+                    }
+                }
+            }
+            "line" | _ => {
+                let mut points = Vec::new();
+                let mut point_data = Vec::new();
+                for cat in &categories {
+                    let row = match data.iter().find(|r| get_string(r, &category_field).as_deref() == Some(cat.as_str())) {
+                        Some(r) => r, None => continue,
+                    };
+                    let val = match get_f64(row, field_name) { Some(v) => v, None => continue };
+                    let x = match band.map(cat) { Some(x) => x + bandwidth / 2.0, None => continue };
+                    let y = scale.map(val);
+                    points.push((x + margins.left, y + margins.top));
+                    point_data.push((cat.clone(), val));
+                }
+
+                if !points.is_empty() {
+                    let path_d = line_gen.generate(&points);
+                    mark_elements.push(ChartElement::Path {
+                        d: path_d, fill: None, stroke: Some(color.clone()),
+                        stroke_width: Some(2.0), stroke_dasharray: None,
+                        class: "line".to_string(),
+                        data: Some(ElementData::new(&label, "").with_series(&label)),
+                    });
+
+                    // Dots
+                    for (i, &(px, py)) in points.iter().enumerate() {
+                        let (ref cat, val) = point_data[i];
+                        mark_elements.push(ChartElement::Circle {
+                            cx: px, cy: py, r: 5.0,
+                            fill: color.clone(), stroke: Some("#fff".to_string()),
+                            class: "chartml-line-dot".to_string(),
+                            data: Some(ElementData::new(cat, format_value(val, fmt_ref)).with_series(&label)),
+                        });
+                    }
+
+                    // Data labels
+                    if let Some(ref dl) = field_spec.data_labels {
+                        if dl.show == Some(true) {
+                            let dl_fmt = dl.format.as_deref().or(fmt_ref);
+                            for (i, &(px, py)) in points.iter().enumerate() {
+                                let (_, val) = &point_data[i];
+                                mark_elements.push(ChartElement::Text {
+                                    x: px, y: py - 10.0,
+                                    content: format_value(*val, dl_fmt),
+                                    anchor: TextAnchor::Middle, dominant_baseline: None,
+                                    transform: None,
+                                    font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "11px".to_string())),
+                                    fill: Some(dl.color.clone().unwrap_or_else(|| color.clone())),
+                                    class: "data-label".to_string(), data: None,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        series_names.push(label);
+        series_colors.push(color);
+        series_marks.push(mark.to_string());
+    }
+
+    children.push(ChartElement::Group {
+        class: "marks".to_string(), transform: None, children: mark_elements,
+    });
+
+    // Legend with mixed marks
+    if series_names.len() > 1 {
+        let mut legend_elements = Vec::new();
+        let mut x_offset = 0.0;
+        let total_w: f64 = series_names.iter().enumerate().map(|(i, name)| {
+            let tw = chartml_core::layout::labels::approximate_text_width(name);
+            12.0 + 6.0 + tw + 16.0
+        }).sum();
+        x_offset = (config.width - total_w).max(0.0) / 2.0;
+
+        for (i, name) in series_names.iter().enumerate() {
+            let color = &series_colors[i];
+            let mark = series_marks[i].as_str();
+            let y = config.height - 10.0;
+
+            match mark {
+                "line" => {
+                    legend_elements.push(ChartElement::Line {
+                        x1: x_offset, y1: y + 6.0, x2: x_offset + 12.0, y2: y + 6.0,
+                        stroke: color.clone(), stroke_width: Some(2.5),
+                        stroke_dasharray: None, class: "legend-symbol legend-line".to_string(),
+                    });
+                }
+                _ => {
+                    legend_elements.push(ChartElement::Rect {
+                        x: x_offset, y, width: 12.0, height: 12.0,
+                        fill: color.clone(), stroke: None,
+                        class: "legend-symbol".to_string(), data: None,
+                    });
+                }
+            }
+
+            legend_elements.push(ChartElement::Text {
+                x: x_offset + 18.0, y: y + 10.0, content: name.clone(),
+                anchor: TextAnchor::Start, dominant_baseline: None,
+                transform: None, font_size: Some("11px".to_string()),
+                fill: Some("#333".to_string()), class: "legend-label".to_string(), data: None,
+            });
+
+            let tw = chartml_core::layout::labels::approximate_text_width(name);
+            x_offset += 12.0 + 6.0 + tw + 16.0;
+        }
+
+        children.push(ChartElement::Group {
+            class: "legend".to_string(), transform: None, children: legend_elements,
+        });
+    }
+
+    Ok(ChartElement::Svg {
+        viewbox: ViewBox::new(0.0, 0.0, config.width, config.height),
+        width: Some(config.width),
+        height: Some(config.height),
+        class: "chartml-bar chartml-combo".to_string(),
+        children,
+    })
 }
 
