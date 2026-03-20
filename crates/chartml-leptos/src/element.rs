@@ -5,20 +5,21 @@ use crate::tooltip::{TooltipState, use_tooltip};
 /// Recursively render a ChartElement tree into Leptos view nodes.
 pub fn render_element(element: &ChartElement) -> AnyView {
     match element {
-        ChartElement::Svg { viewbox, width, height, class, children } => {
+        ChartElement::Svg { viewbox, width: _, height, class, children } => {
             let viewbox_str = viewbox.to_string();
             let class = class.clone();
-            let width_str = width.map(|w| w.to_string()).unwrap_or_default();
+            // Use viewBox for coordinate system; width=100% to fill container.
+            // Height is preserved to maintain aspect ratio.
             let height_str = height.map(|h| h.to_string()).unwrap_or_default();
             let children_views: Vec<AnyView> = children.iter().map(render_element).collect();
 
             view! {
                 <svg
                     viewBox=viewbox_str
-                    width=width_str
+                    width="100%"
                     height=height_str
                     class=class
-                    style="overflow: visible;"
+                    style="overflow: visible; display: block;"
                 >
                     {children_views}
                 </svg>
