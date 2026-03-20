@@ -152,7 +152,7 @@ body {
 .bar {
     animation: chartml-bar-grow 400ms ease-out both;
     opacity: 0.9;
-    transition: opacity 200ms ease, stroke 200ms ease, stroke-width 200ms ease;
+    transition: opacity 200ms ease, stroke 200ms ease;
 }
 
 @keyframes chartml-bar-grow {
@@ -160,12 +160,18 @@ body {
     to   { transform: scaleY(1); }
 }
 
-/* Bar hover feedback (matches D3: opacity 0.9 → 1 + darker stroke) */
+/* Bar hover: opacity 0.9 → 1 + darker stroke border (matches D3 exactly).
+   stroke color uses brightness filter on a separate outline. */
+.bars rect,
+.bar {
+    stroke: transparent;
+    stroke-width: 2;
+}
+
 .bars rect:hover,
 .bar:hover {
     opacity: 1;
-    stroke-width: 2;
-    filter: brightness(0.9);
+    stroke: rgba(0, 0, 0, 0.3);
 }
 
 /* Line drawing animation via stroke-dasharray */
@@ -252,14 +258,9 @@ body {
  * entirely CSS. No inline style opacity changes.
  */
 
-/* Bars: darken on hover */
+/* Bars: interactive cursor (visual hover handled by .bars rect:hover above) */
 .chartml-interactive rect {
     cursor: pointer;
-    transition: filter 200ms ease;
-}
-
-.chartml-interactive rect:hover {
-    filter: brightness(0.9);
 }
 
 /* Paths (line/area series): subtle highlight on hover */
