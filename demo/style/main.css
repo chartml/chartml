@@ -194,22 +194,22 @@ body {
 
 /* Pie/doughnut slices — entrance + hover matching D3:
    Default: opacity 0.9. Hover: hovered slice goes full opacity,
-   all other slices dim to 0.5. 200ms transition. */
+   all other slices dim. 200ms transition on the path directly. */
 .chartml-pie-slice {
     animation: chartml-fade-in 400ms ease-out both;
     opacity: 0.9;
-    transition: opacity 200ms ease;
+    transition: opacity 200ms ease !important;
     cursor: pointer;
 }
 
-/* When pie group is hovered, dim all slices */
+/* When pointer is anywhere over the pie, dim all slices */
 .chartml-pie:hover .chartml-pie-slice {
-    opacity: 0.5;
+    opacity: 0.4;
 }
 
-/* The hovered slice stays bright */
-.chartml-pie .chartml-interactive:hover .chartml-pie-slice {
-    opacity: 1;
+/* The slice being hovered (path hover, not g hover) stays bright */
+.chartml-pie-slice:hover {
+    opacity: 1 !important;
 }
 
 /* Line/area data point dots — matches D3 chartml:
