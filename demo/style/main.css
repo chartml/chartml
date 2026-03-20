@@ -193,9 +193,9 @@ body {
 }
 
 /* Pie/doughnut slices — entrance + hover matching D3.
-   NOTE: Cannot use animation fill-mode "both" or "forwards" here
-   because it locks opacity and prevents hover transitions. Instead
-   use a keyframe that ends at the resting opacity (0.9). */
+   D3 behavior: hovered slice opacity 1, others dim to 0.7.
+   Uses :has() so dimming only triggers when a SLICE is hovered,
+   not when hovering empty space in the pie group. */
 .chartml-pie-slice {
     animation: chartml-pie-enter 400ms ease-out;
     opacity: 0.9;
@@ -208,13 +208,13 @@ body {
     to   { opacity: 0.9; }
 }
 
-/* When pointer is anywhere over the pie, dim all slices */
-.chartml-pie:hover .chartml-pie-slice {
-    opacity: 0.4;
+/* Only when a slice is actually hovered: dim all slices to 0.7 */
+.chartml-pie:has(.chartml-pie-slice:hover) .chartml-pie-slice {
+    opacity: 0.7;
 }
 
-/* The slice under the pointer stays bright */
-.chartml-pie-slice:hover {
+/* The hovered slice itself stays full brightness */
+.chartml-pie:has(.chartml-pie-slice:hover) .chartml-pie-slice:hover {
     opacity: 1;
 }
 
