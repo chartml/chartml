@@ -18,3 +18,10 @@ default-members = [
     "crates/chartml-chart-scatter",
     "crates/chartml-chart-metric",
 ]
+
+# Optimize WASM release builds for size
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
+strip = true
