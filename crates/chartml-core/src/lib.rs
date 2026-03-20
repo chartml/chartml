@@ -10,6 +10,7 @@ pub mod registry;
 pub mod element;
 pub mod data;
 pub mod transform;
+pub mod params;
 
 pub use error::ChartError;
 pub use spec::{parse, ChartMLSpec, Component};
@@ -22,13 +23,15 @@ use crate::data::Row;
 use crate::spec::{ChartSpec, DataRef};
 
 /// Main ChartML instance. Orchestrates parsing, data fetching, and rendering.
-/// Maintains a source registry that persists across render calls,
+/// Maintains source and parameter registries that persist across render calls,
 /// matching the JS ChartML class behavior.
 pub struct ChartML {
     registry: ChartMLRegistry,
     /// Named source data, registered via register_component() or
     /// automatically collected from multi-document YAML specs.
     sources: HashMap<String, Vec<Row>>,
+    /// Parameter default values, collected from type: params components.
+    param_values: params::ParamValues,
 }
 
 impl ChartML {
@@ -37,6 +40,7 @@ impl ChartML {
         Self {
             registry: ChartMLRegistry::new(),
             sources: HashMap::new(),
+            param_values: params::ParamValues::new(),
         }
     }
 
@@ -91,8 +95,13 @@ impl ChartML {
                 }
                 Ok(())
             }
-            spec::Component::Style(_) | spec::Component::Config(_) | spec::Component::Params(_) => {
-                // Style/config/params registration — stored for future use
+            spec::Component::Params(params_spec) => {
+                let defaults = params::collect_param_defaults(&[&params_spec]);
+                self.param_values.extend(defaults);
+                Ok(())
+            }
+            spec::Component::Style(_) | spec::Component::Config(_) => {
+                // Style/config registration — stored for future use
                 Ok(())
             }
             spec::Component::Chart(_) => {
@@ -126,10 +135,38 @@ impl ChartML {
         container_width: Option<f64>,
         container_height: Option<f64>,
     ) -> Result<ChartElement, ChartError> {
-        let parsed = spec::parse(yaml)?;
+        // Step 1: Resolve parameter references in the YAML before parsing.
+        // Merge persistent param_values with any document-local params.
+        let resolved_yaml = if !self.param_values.is_empty() {
+            params::resolve_param_references(yaml, &self.param_values)
+        } else {
+            yaml.to_string()
+        };
 
-        // Start with the persistent source registry, then overlay
-        // any document-local sources (from multi-document YAML).
+        let parsed = spec::parse(&resolved_yaml)?;
+
+        // Step 2: Collect document-local params and re-resolve if needed.
+        let mut local_params = self.param_values.clone();
+        let mut has_local_params = false;
+        if let ChartMLSpec::Array(ref components) = parsed {
+            for component in components {
+                if let Component::Params(params_spec) = component {
+                    let defaults = params::collect_param_defaults(&[params_spec]);
+                    local_params.extend(defaults);
+                    has_local_params = true;
+                }
+            }
+        }
+
+        // If we found local params, re-resolve and re-parse
+        let parsed = if has_local_params && local_params.len() > self.param_values.len() {
+            let re_resolved = params::resolve_param_references(yaml, &local_params);
+            spec::parse(&re_resolved)?
+        } else {
+            parsed
+        };
+
+        // Step 3: Collect sources (persistent + document-local).
         let mut sources: HashMap<String, Vec<Row>> = self.sources.clone();
 
         if let ChartMLSpec::Array(ref components) = parsed {

@@ -22,7 +22,7 @@ pub fn register_page_sources(chartml: &mut ChartML) {
                 }
                 yaml.push_str(inner);
             }
-            if is_source_yaml(&yaml) {
+            if is_source_yaml(&yaml) || yaml.trim().starts_with("type: params") {
                 let _ = chartml.register_component(&yaml);
             }
         }

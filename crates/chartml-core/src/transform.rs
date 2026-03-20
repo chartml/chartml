@@ -221,20 +221,7 @@ fn apply_filters(data: Vec<Row>, filters: &FilterGroup) -> Vec<Row> {
         .collect()
 }
 
-/// Check if a value is an unresolved parameter reference (e.g., "$dashboard_filters.region").
-fn is_unresolved_param(value: Option<&serde_json::Value>) -> bool {
-    match value {
-        Some(serde_json::Value::String(s)) => s.starts_with('$'),
-        _ => false,
-    }
-}
-
 fn eval_filter_rule(row: &Row, rule: &FilterRule) -> bool {
-    // Skip rules with unresolved parameter references — pass through
-    if is_unresolved_param(rule.value.as_ref()) {
-        return true;
-    }
-
     let field_val = row.get(&rule.field);
 
     match rule.operator.as_str() {
