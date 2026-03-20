@@ -127,35 +127,33 @@ body {
 
 /* ── Chart Animations ── */
 
-/* Bar entrance: individual bars fade + slide up */
-.bars rect,
-.bar {
-    animation: chartml-bar-enter 400ms ease-out both;
+/*
+ * Bar entrance: grow from baseline (matches D3 chartml behavior).
+ * D3 animates y and height attributes. In CSS we use a clip-path
+ * reveal on the bars group — a rectangle that expands upward from
+ * the bottom over 400ms, revealing bars as it goes.
+ */
+.bars {
+    animation: chartml-bars-reveal 400ms ease-out both;
 }
 
-/* Stagger bar animations by child index */
-.bars rect:nth-child(1) { animation-delay: 0ms; }
-.bars rect:nth-child(2) { animation-delay: 50ms; }
-.bars rect:nth-child(3) { animation-delay: 100ms; }
-.bars rect:nth-child(4) { animation-delay: 150ms; }
-.bars rect:nth-child(5) { animation-delay: 200ms; }
-.bars rect:nth-child(6) { animation-delay: 250ms; }
-.bars rect:nth-child(7) { animation-delay: 300ms; }
-.bars rect:nth-child(8) { animation-delay: 350ms; }
-.bars rect:nth-child(9) { animation-delay: 400ms; }
-.bars rect:nth-child(10) { animation-delay: 450ms; }
-.bars rect:nth-child(11) { animation-delay: 500ms; }
-.bars rect:nth-child(12) { animation-delay: 550ms; }
+@keyframes chartml-bars-reveal {
+    from { clip-path: inset(100% 0 0 0); }
+    to   { clip-path: inset(0 0 0 0); }
+}
 
-@keyframes chartml-bar-enter {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+/* Individual bar hover feedback (matches D3: opacity 0.9 → 1 + darker stroke) */
+.bars rect,
+.bar {
+    opacity: 0.9;
+    transition: opacity 200ms ease, stroke 200ms ease, stroke-width 200ms ease;
+}
+
+.bars rect:hover,
+.bar:hover {
+    opacity: 1;
+    stroke-width: 2;
+    filter: brightness(0.9);
 }
 
 /* Line drawing animation via stroke-dasharray */
