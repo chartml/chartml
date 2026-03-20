@@ -1,3 +1,4 @@
+pub mod error;
 pub mod spec;
 pub mod scales;
 pub mod shapes;
@@ -8,3 +9,6 @@ pub mod plugin;
 pub mod registry;
 pub mod element;
 pub mod data;
+
+pub use error::ChartError;
+pub use spec::{parse, ChartMLSpec, Component};
