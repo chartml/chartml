@@ -177,21 +177,19 @@ body {
 }
 
 /* Line/area data point dots — matches D3 chartml:
-   Dots are same color as line, full opacity with white stroke border
-   that visually "breaks" the line at each point. Subtle grow on hover. */
+   Solid dots, same color as line, white stroke border that visually
+   "breaks" the line at each point. Subtle grow on hover. */
 .chartml-line-dot,
 .chartml-area-dot {
     r: 5;
-    opacity: 0.9;
     stroke-width: 2;
-    transition: r 200ms ease, opacity 200ms ease;
+    transition: r 200ms ease;
     cursor: pointer;
 }
 
 .chartml-line-dot:hover,
 .chartml-area-dot:hover {
     r: 7;
-    opacity: 1;
 }
 
 /* Scatter point entrance */
