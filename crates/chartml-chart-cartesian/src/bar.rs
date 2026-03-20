@@ -10,7 +10,7 @@ use chartml_core::spec::{ChartMode, Orientation};
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{GridConfig, format_value, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{GridConfig, format_value, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, offset_element};
 
 pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -74,8 +74,11 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
     let y_fmt_ref = y_fmt.as_deref();
     let grid = GridConfig::from_config(config);
 
+    // Pre-read axis bounds (needed by bar rendering for correct scale)
+    let (axis_min, axis_max) = get_y_axis_bounds(config);
+
     let (value_max, bar_elements) = if let Some(ref color_f) = color_field {
-        render_multi_series_bars(
+        let (vm, els) = render_multi_series_bars(
             data,
             config,
             &category_field,
@@ -89,9 +92,12 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
             is_grouped,
             is_horizontal,
             y_fmt_ref,
-        )?
+            axis_min.unwrap_or(0.0),
+            axis_max.unwrap_or(f64::MAX),
+        )?;
+        (vm, els)
     } else {
-        render_single_series_bars(
+        let (vm, els) = render_single_series_bars(
             data,
             config,
             &category_field,
@@ -102,21 +108,27 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
             inner_height,
             is_horizontal,
             y_fmt_ref,
-        )?
+            axis_min.unwrap_or(0.0),
+            axis_max.unwrap_or(f64::MAX),
+        )?;
+        (vm, els)
     };
 
-    // Axes
+    let domain_min = axis_min.unwrap_or(0.0);
+    let domain_max = axis_max.unwrap_or(value_max);
+
+    // Axes (use domain_min/domain_max instead of 0.0/value_max)
     let axis_elements = if is_horizontal {
         // Category y-axis: generate at x=0 relative, then offset by margins.left
         let x_axis = generate_y_axis(&categories, (0.0, inner_height), 0.0, None);
-        let y_axis = generate_x_axis_numeric((0.0, value_max), (0.0, inner_width), margins.top + inner_height, y_fmt_ref, adaptive_tick_count(inner_width), Some(inner_height), &grid);
+        let y_axis = generate_x_axis_numeric((domain_min, domain_max), (0.0, inner_width), margins.top + inner_height, y_fmt_ref, adaptive_tick_count(inner_width), Some(inner_height), &grid);
         let mut axes = Vec::new();
         axes.extend(x_axis.into_iter().map(|e| offset_element(e, margins.left, margins.top)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes
     } else {
         let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
-        let y_axis = generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid);
+        let y_axis = generate_y_axis_numeric((domain_min, domain_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid);
         let mut axes = Vec::new();
         axes.extend(x_axis_result.elements.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
@@ -166,6 +178,8 @@ fn render_single_series_bars(
     inner_height: f64,
     is_horizontal: bool,
     y_fmt_ref: Option<&str>,
+    domain_min: f64,
+    domain_max: f64,
 ) -> Result<(f64, Vec<ChartElement>), ChartError> {
     // Find the max value
     let values: Vec<f64> = data
@@ -174,13 +188,15 @@ fn render_single_series_bars(
         .collect();
     let value_max = values.iter().cloned().fold(0.0_f64, f64::max);
     let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
+    // Use explicit axis max if provided, otherwise data max
+    let effective_max = if domain_max < f64::MAX { domain_max } else { value_max };
 
     let mut elements = Vec::new();
     let fill = config.colors.first().cloned().unwrap_or_else(|| "#2E7D9A".to_string());
 
     if is_horizontal {
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_height));
-        let linear = ScaleLinear::new((0.0, value_max), (0.0, inner_width));
+        let linear = ScaleLinear::new((domain_min, effective_max), (0.0, inner_width));
 
         for row in data {
             let cat = match get_string(row, category_field) {
@@ -207,7 +223,7 @@ fn render_single_series_bars(
         }
     } else {
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width));
-        let linear = ScaleLinear::new((0.0, value_max), (inner_height, 0.0));
+        let linear = ScaleLinear::new((domain_min, effective_max), (inner_height, 0.0));
 
         for row in data {
             let cat = match get_string(row, category_field) {
@@ -233,6 +249,30 @@ fn render_single_series_bars(
                 class: "bar".to_string(),
                 data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
             });
+
+            // Data label above bar (if configured)
+            if let Some(dl) = get_data_labels_config(config) {
+                if dl.show == Some(true) {
+                    let label_fmt = dl.format.as_deref().or(y_fmt_ref);
+                    let label_y = match dl.position.as_deref() {
+                        Some("center") => bar_top + bar_height / 2.0,
+                        Some("bottom") => bar_bottom - 5.0,
+                        _ => bar_top - 5.0, // "top" or default
+                    };
+                    elements.push(ChartElement::Text {
+                        x: x + band.bandwidth() / 2.0,
+                        y: label_y,
+                        content: format_value(val, label_fmt),
+                        anchor: TextAnchor::Middle,
+                        dominant_baseline: None,
+                        transform: None,
+                        font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "11px".to_string())),
+                        fill: Some(dl.color.clone().unwrap_or_else(|| "#333".to_string())),
+                        class: "data-label".to_string(),
+                        data: None,
+                    });
+                }
+            }
         }
     }
 
@@ -253,6 +293,8 @@ fn render_multi_series_bars(
     _is_grouped: bool,
     _is_horizontal: bool,
     y_fmt_ref: Option<&str>,
+    domain_min: f64,
+    domain_max: f64,
 ) -> Result<(f64, Vec<ChartElement>), ChartError> {
     let series_names = unique_values(data, color_field);
     let groups = group_by(data, color_field);
@@ -288,9 +330,10 @@ fn render_multi_series_bars(
             .map(|p| p.y1)
             .fold(0.0_f64, f64::max);
         let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
+        let effective_max = if domain_max < f64::MAX { domain_max } else { value_max };
 
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width));
-        let linear = ScaleLinear::new((0.0, value_max), (inner_height, 0.0));
+        let linear = ScaleLinear::new((domain_min, effective_max), (inner_height, 0.0));
 
         for point in &stacked_points {
             let x = match band.map(&point.key) {
@@ -332,9 +375,10 @@ fn render_multi_series_bars(
             .filter_map(|row| get_f64(row, value_field))
             .fold(0.0_f64, f64::max);
         let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
+        let effective_max = if domain_max < f64::MAX { domain_max } else { value_max };
 
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width));
-        let linear = ScaleLinear::new((0.0, value_max), (inner_height, 0.0));
+        let linear = ScaleLinear::new((domain_min, effective_max), (inner_height, 0.0));
 
         let num_series = series_names.len().max(1);
         let sub_band_width = band.bandwidth() / num_series as f64;

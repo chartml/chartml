@@ -46,6 +46,27 @@ impl GridConfig {
     }
 }
 
+/// Extract axis min/max bounds from the spec.
+pub fn get_y_axis_bounds(config: &ChartConfig) -> (Option<f64>, Option<f64>) {
+    let axes = match &config.visualize.axes {
+        Some(a) => a,
+        None => return (None, None),
+    };
+    let axis = match &axes.left {
+        Some(a) => a,
+        None => return (None, None),
+    };
+    (axis.min, axis.max)
+}
+
+/// Get dataLabels config from the rows field spec.
+pub fn get_data_labels_config(config: &ChartConfig) -> Option<&chartml_core::spec::DataLabelsSpec> {
+    match &config.visualize.rows {
+        Some(chartml_core::spec::FieldRef::Detailed(spec)) => spec.data_labels.as_ref(),
+        _ => None,
+    }
+}
+
 /// Extract the field name from a FieldRef (Simple, Detailed, or Multiple).
 pub fn get_field_name(field_ref: &Option<FieldRef>) -> Result<String, ChartError> {
     match field_ref {
