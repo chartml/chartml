@@ -60,7 +60,20 @@ impl ChartML {
 
     /// Parse a YAML string and render the first chart component.
     /// Returns the ChartElement tree for the first chart found.
+    /// Uses default dimensions (800x400) unless the spec overrides them.
     pub fn render_from_yaml(&self, yaml: &str) -> Result<ChartElement, ChartError> {
+        self.render_from_yaml_with_size(yaml, None, None)
+    }
+
+    /// Parse a YAML string and render with an explicit container size.
+    /// `container_width` overrides the default width (used when the spec doesn't specify one).
+    /// `container_height` overrides the default height.
+    pub fn render_from_yaml_with_size(
+        &self,
+        yaml: &str,
+        container_width: Option<f64>,
+        container_height: Option<f64>,
+    ) -> Result<ChartElement, ChartError> {
         let parsed = spec::parse(yaml)?;
 
         // Find the first chart component
@@ -77,11 +90,22 @@ impl ChartML {
             _ => return Err(ChartError::InvalidSpec("Expected a chart component".into())),
         };
 
-        self.render_chart(chart_spec)
+        self.render_chart_with_size(chart_spec, container_width, container_height)
     }
 
     /// Render a parsed ChartSpec into a ChartElement tree.
     pub fn render_chart(&self, chart_spec: &ChartSpec) -> Result<ChartElement, ChartError> {
+        self.render_chart_with_size(chart_spec, None, None)
+    }
+
+    /// Render a parsed ChartSpec with explicit container dimensions.
+    /// Spec-level width/height take priority; container size is the fallback.
+    pub fn render_chart_with_size(
+        &self,
+        chart_spec: &ChartSpec,
+        container_width: Option<f64>,
+        container_height: Option<f64>,
+    ) -> Result<ChartElement, ChartError> {
         let chart_type = &chart_spec.visualize.chart_type;
 
         // Look up renderer
@@ -91,16 +115,21 @@ impl ChartML {
         // Extract inline data (for v0.1, only inline data is supported)
         let data = self.extract_inline_data(chart_spec)?;
 
-        // Build chart config
+        // Build chart config — spec dimensions override container dimensions
+        let default_height = renderer.default_dimensions(&chart_spec.visualize)
+            .map(|d| d.height)
+            .unwrap_or(400.0);
+
         let height = chart_spec.visualize.style
             .as_ref()
             .and_then(|s| s.height)
-            .or_else(|| renderer.default_dimensions(&chart_spec.visualize).map(|d| d.height))
-            .unwrap_or(400.0);
+            .or(container_height)
+            .unwrap_or(default_height);
 
         let width = chart_spec.visualize.style
             .as_ref()
             .and_then(|s| s.width)
+            .or(container_width)
             .unwrap_or(800.0);
 
         let colors = chart_spec.visualize.style
