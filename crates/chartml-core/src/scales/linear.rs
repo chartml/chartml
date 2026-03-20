@@ -1,4 +1,4 @@
-use super::ContinuousScale;
+use super::{ContinuousScale, tick_step, round_to_precision};
 
 /// Maps a continuous domain to a continuous range via linear interpolation.
 /// Equivalent to D3's `scaleLinear()`.
@@ -142,35 +142,6 @@ impl ContinuousScale for ScaleLinear {
         let max = d0.max(d1);
         value.clamp(min, max)
     }
-}
-
-/// Calculate a nice step size for the given range and approximate tick count.
-/// Uses D3's tick step algorithm.
-fn tick_step(min: f64, max: f64, count: usize) -> f64 {
-    let raw_step = (max - min) / count as f64;
-    let magnitude = 10_f64.powf(raw_step.log10().floor());
-    let error = raw_step / magnitude;
-
-    if error >= 50_f64.sqrt() {
-        10.0 * magnitude
-    } else if error >= 10_f64.sqrt() {
-        5.0 * magnitude
-    } else if error >= 2_f64.sqrt() {
-        2.0 * magnitude
-    } else {
-        magnitude
-    }
-}
-
-/// Round a value to remove floating point artifacts based on step precision.
-fn round_to_precision(value: f64, step: f64) -> f64 {
-    if step == 0.0 {
-        return value;
-    }
-    // Determine the number of decimal places in the step
-    let decimals = (-step.log10().floor()).max(0.0) as i32;
-    let factor = 10_f64.powi(decimals);
-    (value * factor).round() / factor
 }
 
 #[cfg(test)]
