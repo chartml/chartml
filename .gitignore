@@ -11,6 +11,9 @@
 .vscode/
 *.iml
 
+# Trunk build output
+demo/dist/
+
 # Environment files
 .env
 .env.*
