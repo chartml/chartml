@@ -467,10 +467,34 @@ fn render_combo(
     let grid = GridConfig::from_config(config);
     let x_format = get_x_format(config);
 
-    // Margins
+    // Margins — account for right axis if present
+    let has_right = fields.iter().any(|f| f.axis.as_deref() == Some("right"));
+    let right_fmt = config.visualize.axes.as_ref()
+        .and_then(|a| a.right.as_ref())
+        .and_then(|a| a.format.as_deref());
+
+    // Pre-compute right tick labels to measure their width
+    let right_tick_labels: Vec<String> = if has_right {
+        // Estimate right-axis values for label width measurement
+        let right_max = fields.iter()
+            .filter(|f| f.axis.as_deref() == Some("right"))
+            .flat_map(|f| data.iter().filter_map(|r| get_f64(r, &f.field)))
+            .fold(0.0_f64, f64::max);
+        let right_domain_max = config.visualize.axes.as_ref()
+            .and_then(|a| a.right.as_ref())
+            .and_then(|a| a.max)
+            .unwrap_or(if right_max <= 0.0 { 1.0 } else { right_max });
+        let tmp_scale = ScaleLinear::new((0.0, right_domain_max), (0.0, 100.0));
+        tmp_scale.ticks(5).iter().map(|v| format_value(*v, right_fmt)).collect()
+    } else {
+        vec![]
+    };
+
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: fields.len() > 1,
+        has_right_axis: has_right,
+        right_tick_labels,
         ..Default::default()
     };
     let margins = calculate_margins(&margin_config);
@@ -544,6 +568,37 @@ fn render_combo(
             right_fmt, adaptive_tick_count(inner_height),
         );
         axis_elements.extend(right_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
+    }
+
+    // Axis title labels
+    if let Some(label) = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref()).and_then(|a| a.label.clone()) {
+        axis_elements.push(ChartElement::Text {
+            x: 14.0,
+            y: margins.top + inner_height / 2.0,
+            content: label,
+            anchor: TextAnchor::Middle,
+            dominant_baseline: None,
+            transform: Some(Transform::Rotate(-90.0, 14.0, margins.top + inner_height / 2.0)),
+            font_size: Some("12px".to_string()),
+            fill: Some("#666".to_string()),
+            class: "axis-label".to_string(),
+            data: None,
+        });
+    }
+    if let Some(label) = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()).and_then(|a| a.label.clone()) {
+        let rx = config.width - 14.0;
+        axis_elements.push(ChartElement::Text {
+            x: rx,
+            y: margins.top + inner_height / 2.0,
+            content: label,
+            anchor: TextAnchor::Middle,
+            dominant_baseline: None,
+            transform: Some(Transform::Rotate(90.0, rx, margins.top + inner_height / 2.0)),
+            font_size: Some("12px".to_string()),
+            fill: Some("#666".to_string()),
+            class: "axis-label".to_string(),
+            data: None,
+        });
     }
 
     children.push(ChartElement::Group {
