@@ -9,7 +9,9 @@ pub struct TransformSpec {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AggregateSpec {
+    #[serde(default)]
     pub dimensions: Vec<Dimension>,
+    #[serde(default)]
     pub measures: Vec<Measure>,
     pub filters: Option<FilterGroup>,
     pub sort: Option<Vec<SortSpec>>,
