@@ -85,6 +85,31 @@ fn value_to_yaml(value: &serde_json::Value) -> String {
     }
 }
 
+/// Extract chart-level param defaults from a YAML string by attempting
+/// to parse just the params section. This handles the case where params
+/// are defined inside the chart spec itself (not as a separate component).
+///
+/// Scans for inline `params:` blocks and extracts id/default pairs.
+pub fn extract_inline_param_defaults(yaml: &str) -> ParamValues {
+    let mut values = ParamValues::new();
+
+    // Try to parse the YAML as a mapping and look for a "params" key
+    // that contains an array of param definitions
+    if let Ok(serde_yaml::Value::Mapping(map)) = serde_yaml::from_str::<serde_yaml::Value>(yaml) {
+        if let Some(params_val) = map.get(&serde_yaml::Value::String("params".into())) {
+            if let Ok(params) = serde_yaml::from_value::<Vec<ParamDef>>(params_val.clone()) {
+                for param in &params {
+                    if let Some(ref default) = param.default {
+                        values.insert(param.id.clone(), default.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    values
+}
+
 /// Extract the set of parameter references from a YAML string.
 /// Returns paths like "dashboard_filters.region" or "top_n".
 pub fn extract_param_references(yaml: &str) -> Vec<String> {

@@ -135,10 +135,19 @@ impl ChartML {
         container_width: Option<f64>,
         container_height: Option<f64>,
     ) -> Result<ChartElement, ChartError> {
-        // Step 1: Resolve parameter references in the YAML before parsing.
-        // Merge persistent param_values with any document-local params.
-        let resolved_yaml = if !self.param_values.is_empty() {
-            params::resolve_param_references(yaml, &self.param_values)
+        // Step 1: Collect ALL param defaults before parsing.
+        // This includes persistent params, document-level params, and
+        // chart-level inline params — all must be resolved before serde
+        // tries to parse typed fields like limit: u64.
+        let mut all_params = self.param_values.clone();
+
+        // Extract inline (chart-level) param defaults from the raw YAML
+        let inline_defaults = params::extract_inline_param_defaults(yaml);
+        all_params.extend(inline_defaults);
+
+        // Resolve parameter references in the YAML string
+        let resolved_yaml = if !all_params.is_empty() {
+            params::resolve_param_references(yaml, &all_params)
         } else {
             yaml.to_string()
         };
