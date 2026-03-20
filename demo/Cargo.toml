@@ -13,3 +13,4 @@ chartml-chart-metric = { path = "../crates/chartml-chart-metric" }
 chartml-leptos = { path = "../crates/chartml-leptos" }
 leptos = { version = "0.8", features = ["csr"] }
 console_error_panic_hook = "0.1"
+serde_yaml = "0.9"

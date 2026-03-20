@@ -4,6 +4,7 @@ use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 use chartml_core::ChartML;
 use chartml_core::element::ElementData;
+use chartml_core::params::ParamValues;
 use crate::element::render_element;
 use crate::tooltip::{provide_tooltip_context, DefaultTooltip};
 
@@ -12,15 +13,16 @@ pub type TooltipRenderer = Arc<dyn Fn(&ElementData) -> AnyView + Send + Sync>;
 
 /// Main ChartML component for Leptos.
 ///
-/// Measures its container's width and renders the chart to fit.
-/// Re-renders automatically when the container resizes (via ResizeObserver)
-/// or when the spec changes.
+/// Renders a ChartML YAML spec reactively. Responds to:
+/// - `spec` signal changes (YAML editing)
+/// - Container resize (via ResizeObserver)
+/// - `param_values` signal changes (interactive param controls)
 ///
-/// # Tooltip Customization
+/// # Param Integration
 ///
-/// 1. **CSS** — override `.chartml-tooltip` styles
-/// 2. **Custom renderer** — `tooltip` prop: `Fn(&ElementData) -> AnyView`
-/// 3. **Disable** — pass an empty renderer
+/// Pass a shared `RwSignal<ParamValues>` via the `param_values` prop.
+/// When param UI controls update this signal, all charts re-render
+/// with the new values resolved.
 #[component]
 pub fn ChartMLChart(
     /// ChartML YAML specification string
@@ -34,26 +36,25 @@ pub fn ChartMLChart(
     /// Optional custom tooltip renderer
     #[prop(optional)]
     tooltip: Option<TooltipRenderer>,
+    /// Shared reactive param values — when updated by controls, charts re-render
+    #[prop(optional)]
+    param_values: Option<RwSignal<ParamValues>>,
 ) -> impl IntoView {
     let chartml = chartml.clone();
     let tooltip_state = provide_tooltip_context();
 
     // Track container width — updated by ResizeObserver
     let (container_width, set_container_width) = signal(0.0_f64);
-
-    // NodeRef to the container div for measuring
     let container_ref = NodeRef::<leptos::html::Div>::new();
 
     // Set up ResizeObserver after mount
     Effect::new(move || {
         if let Some(el) = container_ref.get() {
-            // Initial measurement
             let width = el.client_width() as f64;
             if width > 0.0 {
                 set_container_width.set(width);
             }
 
-            // Observe resize
             let cb = Closure::<dyn Fn(js_sys::Array)>::new(move |entries: js_sys::Array| {
                 if let Some(entry) = entries.get(0).dyn_ref::<web_sys::ResizeObserverEntry>() {
                     let rect = entry.content_rect();
@@ -66,8 +67,6 @@ pub fn ChartMLChart(
 
             if let Ok(observer) = web_sys::ResizeObserver::new(cb.as_ref().unchecked_ref()) {
                 observer.observe(&el);
-                // Leak the closure so it lives as long as the observer
-                // (cleaned up when the component unmounts and the element is removed)
                 cb.forget();
             }
         }
@@ -81,10 +80,13 @@ pub fn ChartMLChart(
 
     view! {
         <div class=container_class style="position: relative;" node_ref=container_ref>
-            // Chart content — re-renders when spec OR container_width changes
+            // Chart content — re-renders when spec, width, OR param_values change
             {move || {
                 let width = container_width.get();
                 let yaml = spec.get();
+
+                // Read param_values signal (if provided) to establish reactive dependency
+                let params = param_values.map(|pv| pv.get());
 
                 if yaml.trim().is_empty() {
                     return view! {
@@ -94,12 +96,18 @@ pub fn ChartMLChart(
                     }.into_any();
                 }
 
-                // Don't render until we have a measured width
                 if width <= 0.0 {
                     return view! { <div /> }.into_any();
                 }
 
-                match chartml.render_from_yaml_with_size(&yaml, Some(width), None) {
+                let result = chartml.render_from_yaml_with_params(
+                    &yaml,
+                    Some(width),
+                    None,
+                    params.as_ref(),
+                );
+
+                match result {
                     Ok(element) => render_element(&element).into_any(),
                     Err(err) => {
                         view! {

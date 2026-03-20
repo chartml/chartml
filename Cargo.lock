@@ -202,6 +202,7 @@ dependencies = [
  "chartml-leptos",
  "console_error_panic_hook",
  "leptos",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -211,6 +212,7 @@ dependencies = [
  "chartml-core",
  "js-sys",
  "leptos",
+ "serde_json",
  "wasm-bindgen",
  "web-sys",
 ]

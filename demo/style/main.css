@@ -342,6 +342,103 @@ body {
     pointer-events: none;
 }
 
+/* ─── Params Controls ─── */
+.chartml-params {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 8px 0;
+}
+
+.chartml-param-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.chartml-param-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+}
+
+.chartml-param-control {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    background: white;
+}
+
+.chartml-param-control:focus {
+    outline: none;
+    border-color: #2E7D9A;
+    box-shadow: 0 0 0 2px rgba(46,125,154,0.15);
+}
+
+select.chartml-param-control {
+    min-width: 120px;
+    cursor: pointer;
+}
+
+input[type="number"].chartml-param-control {
+    width: 100px;
+}
+
+input[type="text"].chartml-param-control {
+    min-width: 150px;
+}
+
+.chartml-param-multiselect-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0;
+    border: none;
+}
+
+.chartml-param-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 4px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    transition: background 150ms ease, border-color 150ms ease;
+}
+
+.chartml-param-checkbox:hover {
+    background: #f5f5f5;
+    border-color: #bbb;
+}
+
+.chartml-param-checkbox:has(input:checked) {
+    background: #e8f4f8;
+    border-color: #2E7D9A;
+}
+
+.chartml-param-daterange-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    padding: 0;
+}
+
+.chartml-param-daterange-separator {
+    color: #999;
+    font-size: 14px;
+}
+
+.examples-params {
+    background: #fafafa;
+    border: 1px dashed #ddd;
+}
+
 /* Metric card styling */
 .chartml-metric-card {
     min-height: 120px;

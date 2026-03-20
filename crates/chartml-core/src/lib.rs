@@ -135,15 +135,30 @@ impl ChartML {
         container_width: Option<f64>,
         container_height: Option<f64>,
     ) -> Result<ChartElement, ChartError> {
-        // Step 1: Collect ALL param defaults before parsing.
-        // This includes persistent params, document-level params, and
-        // chart-level inline params — all must be resolved before serde
-        // tries to parse typed fields like limit: u64.
+        self.render_from_yaml_with_params(yaml, container_width, container_height, None)
+    }
+
+    /// Render with explicit param value overrides.
+    /// `param_overrides` are current interactive values that take priority over defaults.
+    pub fn render_from_yaml_with_params(
+        &self,
+        yaml: &str,
+        container_width: Option<f64>,
+        container_height: Option<f64>,
+        param_overrides: Option<&params::ParamValues>,
+    ) -> Result<ChartElement, ChartError> {
+        // Step 1: Collect ALL param values — defaults + overrides.
+        // Priority: overrides > persistent defaults > inline defaults
         let mut all_params = self.param_values.clone();
 
         // Extract inline (chart-level) param defaults from the raw YAML
         let inline_defaults = params::extract_inline_param_defaults(yaml);
         all_params.extend(inline_defaults);
+
+        // Apply overrides (interactive values from UI controls)
+        if let Some(overrides) = param_overrides {
+            all_params.extend(overrides.iter().map(|(k, v)| (k.clone(), v.clone())));
+        }
 
         // Resolve parameter references in the YAML string
         let resolved_yaml = if !all_params.is_empty() {
