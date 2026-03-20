@@ -22,8 +22,13 @@ use crate::data::Row;
 use crate::spec::{ChartSpec, DataRef};
 
 /// Main ChartML instance. Orchestrates parsing, data fetching, and rendering.
+/// Maintains a source registry that persists across render calls,
+/// matching the JS ChartML class behavior.
 pub struct ChartML {
     registry: ChartMLRegistry,
+    /// Named source data, registered via register_component() or
+    /// automatically collected from multi-document YAML specs.
+    sources: HashMap<String, Vec<Row>>,
 }
 
 impl ChartML {
@@ -31,6 +36,7 @@ impl ChartML {
     pub fn new() -> Self {
         Self {
             registry: ChartMLRegistry::new(),
+            sources: HashMap::new(),
         }
     }
 
@@ -58,6 +64,50 @@ impl ChartML {
         self.registry.set_datasource_resolver(resolver);
     }
 
+    // --- Component registration (matches JS chartml.registerComponent()) ---
+
+    /// Register a non-chart component (source, style, config, params) from a YAML string.
+    /// Sources are stored in the instance and available to all subsequent render calls.
+    /// This matches the JS `chartml.registerComponent(spec)` API.
+    pub fn register_component(&mut self, yaml: &str) -> Result<(), ChartError> {
+        let parsed = spec::parse(yaml)?;
+        match parsed {
+            ChartMLSpec::Single(component) => self.register_single_component(component),
+            ChartMLSpec::Array(components) => {
+                for component in components {
+                    self.register_single_component(component)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn register_single_component(&mut self, component: spec::Component) -> Result<(), ChartError> {
+        match component {
+            spec::Component::Source(source_spec) => {
+                if let Some(ref rows) = source_spec.rows {
+                    let data = self.convert_json_rows(rows)?;
+                    self.sources.insert(source_spec.name.clone(), data);
+                }
+                Ok(())
+            }
+            spec::Component::Style(_) | spec::Component::Config(_) | spec::Component::Params(_) => {
+                // Style/config/params registration — stored for future use
+                Ok(())
+            }
+            spec::Component::Chart(_) => {
+                Err(ChartError::InvalidSpec(
+                    "Cannot register chart components. Use render_from_yaml() instead.".into()
+                ))
+            }
+        }
+    }
+
+    /// Register a named source directly from data rows.
+    pub fn register_source(&mut self, name: &str, data: Vec<Row>) {
+        self.sources.insert(name.to_string(), data);
+    }
+
     // --- Rendering ---
 
     /// Parse a YAML string and render the chart component(s).
@@ -78,8 +128,9 @@ impl ChartML {
     ) -> Result<ChartElement, ChartError> {
         let parsed = spec::parse(yaml)?;
 
-        // Collect named sources from multi-document specs
-        let mut sources: HashMap<String, Vec<Row>> = HashMap::new();
+        // Start with the persistent source registry, then overlay
+        // any document-local sources (from multi-document YAML).
+        let mut sources: HashMap<String, Vec<Row>> = self.sources.clone();
 
         if let ChartMLSpec::Array(ref components) = parsed {
             for component in components {

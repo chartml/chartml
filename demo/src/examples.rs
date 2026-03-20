@@ -6,6 +6,29 @@ use chartml_leptos::ChartMLChart;
 /// The raw examples.md from the JS chartml docs — included at compile time.
 const EXAMPLES_MD: &str = include_str!("../examples_source.md");
 
+/// Extract all chartml source blocks from the markdown and register them
+/// on the ChartML instance. Call this before wrapping in Arc.
+pub fn register_page_sources(chartml: &mut ChartML) {
+    let mut lines = EXAMPLES_MD.lines().peekable();
+    while let Some(line) = lines.next() {
+        if line.trim_start().starts_with("```chartml") {
+            let mut yaml = String::new();
+            for inner in lines.by_ref() {
+                if inner.trim_start().starts_with("```") {
+                    break;
+                }
+                if !yaml.is_empty() {
+                    yaml.push('\n');
+                }
+                yaml.push_str(inner);
+            }
+            if is_source_yaml(&yaml) {
+                let _ = chartml.register_component(&yaml);
+            }
+        }
+    }
+}
+
 /// A parsed section of the examples page.
 enum Block {
     Heading { level: usize, text: String },
@@ -20,13 +43,29 @@ enum Block {
 /// Check if a YAML block is a renderable chart.
 fn is_chart_yaml(yaml: &str) -> bool {
     let trimmed = yaml.trim();
-    // Single chart component
     if trimmed.starts_with("type: chart") || trimmed.starts_with("type:chart") {
         return true;
     }
-    // Array of chart components (starts with "- type: chart")
     if trimmed.starts_with("- type: chart") || trimmed.starts_with("-type: chart") {
         return true;
+    }
+    false
+}
+
+/// Check if a YAML block is a source definition.
+fn is_source_yaml(yaml: &str) -> bool {
+    yaml.trim().starts_with("type: source")
+}
+
+/// Check if a chart YAML references a named source (not inline data).
+fn uses_named_source(yaml: &str) -> bool {
+    for line in yaml.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("data:") {
+            let value = trimmed["data:".len()..].trim();
+            // If the value is a simple name (not a map/object), it's a named reference
+            return !value.is_empty() && !value.starts_with('{') && !value.is_empty() && value != "";
+        }
     }
     false
 }

@@ -9,7 +9,7 @@ use chartml_leptos::ChartMLChart;
 
 use crate::editor::YamlEditor;
 use crate::gallery::{Gallery, DEFAULT_SPEC};
-use crate::examples::ExamplesPage;
+use crate::examples::{ExamplesPage, register_page_sources};
 
 fn setup_chartml() -> Arc<ChartML> {
     let mut c = ChartML::new();
@@ -20,6 +20,8 @@ fn setup_chartml() -> Arc<ChartML> {
     c.register_renderer("doughnut", PieRenderer::new());
     c.register_renderer("scatter", ScatterRenderer::new());
     c.register_renderer("metric", MetricRenderer::new());
+    // Register named sources from the examples page
+    register_page_sources(&mut c);
     Arc::new(c)
 }
 
