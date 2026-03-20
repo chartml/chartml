@@ -624,7 +624,8 @@ fn render_combo(
         .filter(|f| f.mark.as_deref().unwrap_or("bar") == "bar")
         .count()
         .max(1);
-    let sub_bar_width = bandwidth / num_bar_fields as f64;
+    let sub_bar_padding = bandwidth * 0.05; // 5% of bandwidth as gap between grouped bars
+    let sub_bar_width = (bandwidth - sub_bar_padding * (num_bar_fields as f64 - 1.0).max(0.0)) / num_bar_fields as f64;
     let mut bar_field_idx = 0_usize;
     let mut series_names = Vec::new();
     let mut series_colors = Vec::new();
@@ -653,7 +654,7 @@ fn render_combo(
                     let cat = match get_string(row, &category_field) { Some(c) => c, None => continue };
                     let val = get_f64(row, field_name).unwrap_or(0.0);
                     let x = match band.map(&cat) { Some(x) => x, None => continue };
-                    let bar_x = x + this_bar_idx as f64 * sub_bar_width;
+                    let bar_x = x + this_bar_idx as f64 * (sub_bar_width + sub_bar_padding);
                     let bar_top = scale.map(val);
                     let bar_bottom = scale.map(0.0);
                     let bar_height = (bar_bottom - bar_top).abs();
