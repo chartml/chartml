@@ -102,6 +102,82 @@ impl ChartRenderer for ScatterRenderer {
         // Build SVG
         let mut children = Vec::new();
 
+        // Grid lines + axes
+        let x_ticks = x_scale.ticks(((inner_width / 50.0).floor() as usize).clamp(4, 10));
+        let y_ticks = y_scale.ticks(((inner_height / 50.0).floor() as usize).clamp(4, 10));
+        let mut axis_elements = Vec::new();
+
+        // Horizontal grid lines + y-axis ticks
+        for &val in &y_ticks {
+            let y = y_scale.map(val);
+            // Grid line
+            axis_elements.push(ChartElement::Line {
+                x1: margins.left, y1: y, x2: margins.left + inner_width, y2: y,
+                stroke: "#e0e0e0".to_string(), stroke_width: Some(1.0),
+                stroke_dasharray: None, class: "grid-line".to_string(),
+            });
+            // Tick
+            axis_elements.push(ChartElement::Line {
+                x1: margins.left - 5.0, y1: y, x2: margins.left, y2: y,
+                stroke: "#999".to_string(), stroke_width: Some(1.0),
+                stroke_dasharray: None, class: "tick".to_string(),
+            });
+            // Label
+            let label = if val == val.floor() && val.abs() < 1e15 { format!("{}", val as i64) } else { format!("{:.1}", val) };
+            axis_elements.push(ChartElement::Text {
+                x: margins.left - 8.0, y,
+                content: label, anchor: TextAnchor::End,
+                dominant_baseline: Some("middle".to_string()),
+                transform: None, font_size: Some("11px".to_string()),
+                fill: Some("#666".to_string()), class: "tick-label".to_string(), data: None,
+            });
+        }
+
+        // Vertical grid lines + x-axis ticks
+        let x_axis_y = margins.top + inner_height;
+        for &val in &x_ticks {
+            let x = x_scale.map(val);
+            // Grid line
+            axis_elements.push(ChartElement::Line {
+                x1: x, y1: margins.top, x2: x, y2: x_axis_y,
+                stroke: "#e0e0e0".to_string(), stroke_width: Some(1.0),
+                stroke_dasharray: None, class: "grid-line".to_string(),
+            });
+            // Tick
+            axis_elements.push(ChartElement::Line {
+                x1: x, y1: x_axis_y, x2: x, y2: x_axis_y + 5.0,
+                stroke: "#999".to_string(), stroke_width: Some(1.0),
+                stroke_dasharray: None, class: "tick".to_string(),
+            });
+            // Label
+            let label = if val == val.floor() && val.abs() < 1e15 { format!("{}", val as i64) } else { format!("{:.1}", val) };
+            axis_elements.push(ChartElement::Text {
+                x, y: x_axis_y + 18.0,
+                content: label, anchor: TextAnchor::Middle,
+                dominant_baseline: None, transform: None,
+                font_size: Some("11px".to_string()), fill: Some("#666".to_string()),
+                class: "tick-label".to_string(), data: None,
+            });
+        }
+
+        // Axis lines
+        axis_elements.push(ChartElement::Line {
+            x1: margins.left, y1: margins.top, x2: margins.left, y2: x_axis_y,
+            stroke: "#ccc".to_string(), stroke_width: Some(1.0),
+            stroke_dasharray: None, class: "axis-line".to_string(),
+        });
+        axis_elements.push(ChartElement::Line {
+            x1: margins.left, y1: x_axis_y, x2: margins.left + inner_width, y2: x_axis_y,
+            stroke: "#ccc".to_string(), stroke_width: Some(1.0),
+            stroke_dasharray: None, class: "axis-line".to_string(),
+        });
+
+        children.push(ChartElement::Group {
+            class: "axes".to_string(),
+            transform: None,
+            children: axis_elements,
+        });
+
         // Title
         if let Some(title) = &config.title {
             children.push(ChartElement::Text {

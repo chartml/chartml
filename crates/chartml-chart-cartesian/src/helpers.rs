@@ -403,12 +403,14 @@ pub fn generate_y_axis_numeric(
 }
 
 /// Generate x-axis elements for numeric data (used by horizontal bar charts).
+/// If `chart_height` is provided, vertical grid lines extend upward.
 pub fn generate_x_axis_numeric(
     domain: (f64, f64),
     range: (f64, f64),
     y_position: f64,
     fmt: Option<&str>,
     tick_count: usize,
+    chart_height: Option<f64>,
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     let ticks = scale.ticks(tick_count);
@@ -429,6 +431,20 @@ pub fn generate_x_axis_numeric(
     for val in &ticks {
         let x = scale.map(*val);
         let label = format_value(*val, fmt);
+
+        // Vertical grid line (if chart_height provided)
+        if let Some(ch) = chart_height {
+            elements.push(ChartElement::Line {
+                x1: x,
+                y1: y_position,
+                x2: x,
+                y2: y_position - ch,
+                stroke: "#e0e0e0".to_string(),
+                stroke_width: Some(1.0),
+                stroke_dasharray: None,
+                class: "grid-line".to_string(),
+            });
+        }
 
         elements.push(ChartElement::Line {
             x1: x,

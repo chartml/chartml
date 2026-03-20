@@ -319,6 +319,11 @@ body {
     font-weight: 700;
 }
 
+/* Grid lines — faint horizontal/vertical lines at tick positions */
+.grid-line {
+    opacity: 0.5;
+}
+
 /* Metric card styling */
 .chartml-metric-card {
     min-height: 120px;

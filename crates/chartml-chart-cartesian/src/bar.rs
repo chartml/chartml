@@ -107,7 +107,7 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
     // Axes
     let axis_elements = if is_horizontal {
         let x_axis = generate_y_axis(&categories, (0.0, inner_height), margins.left, None);
-        let y_axis = generate_x_axis_numeric((0.0, value_max), (0.0, inner_width), margins.top + inner_height, y_fmt_ref, adaptive_tick_count(inner_width));
+        let y_axis = generate_x_axis_numeric((0.0, value_max), (0.0, inner_width), margins.top + inner_height, y_fmt_ref, adaptive_tick_count(inner_width), Some(inner_height));
         let mut axes = Vec::new();
         axes.extend(x_axis.into_iter().map(|e| offset_element(e, margins.left, margins.top)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
