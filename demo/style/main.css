@@ -234,17 +234,24 @@ body {
     r: 7;
 }
 
-/* Scatter point entrance + hover */
+/* Scatter point entrance + hover.
+   No r animation — scatter points have data-driven radius (3-20px).
+   Animate opacity only for entrance, darken stroke on hover. */
 .chartml-scatter-point {
-    animation: chartml-scale-in 300ms ease-out both;
+    animation: chartml-fade-in-scatter 300ms ease-out;
     opacity: 0.9;
-    transition: r 200ms ease, opacity 200ms ease;
+    transition: opacity 200ms ease, stroke 200ms ease;
     cursor: pointer;
 }
 
+@keyframes chartml-fade-in-scatter {
+    from { opacity: 0; }
+    to   { opacity: 0.9; }
+}
+
 .chartml-interactive:hover .chartml-scatter-point {
-    r: 8;
     opacity: 1;
+    stroke: rgba(0, 0, 0, 0.3);
 }
 
 @keyframes chartml-scale-in {
