@@ -1,0 +1,30 @@
+use async_trait::async_trait;
+use crate::data::Row;
+use crate::error::ChartError;
+
+/// Options for data fetching.
+#[derive(Debug, Clone, Default)]
+pub struct FetchOptions {
+    /// Optional cache TTL hint.
+    pub cache_ttl: Option<String>,
+}
+
+/// Specification for fetching data.
+#[derive(Debug, Clone)]
+pub struct DataSpec {
+    /// Provider type: "inline", "http", "api", etc.
+    pub provider: String,
+    /// Inline rows (if provider is "inline").
+    pub rows: Option<Vec<serde_json::Value>>,
+    /// URL for HTTP/API providers.
+    pub url: Option<String>,
+    /// API endpoint.
+    pub endpoint: Option<String>,
+}
+
+/// Data source plugin — fetches raw data from a provider.
+#[async_trait]
+pub trait DataSource: Send + Sync {
+    /// Fetch data rows from this source.
+    async fn fetch(&self, spec: &DataSpec, options: &FetchOptions) -> Result<Vec<Row>, ChartError>;
+}
