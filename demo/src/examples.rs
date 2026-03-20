@@ -10,8 +10,25 @@ const EXAMPLES_MD: &str = include_str!("../examples_source.md");
 enum Block {
     Heading { level: usize, text: String },
     Paragraph(String),
-    ChartML(String),
+    /// A renderable chart spec (type: chart or array of charts).
+    Chart(String),
+    /// A non-renderable spec (type: style, config, source, params) — show as code.
+    CodeBlock(String),
     HorizontalRule,
+}
+
+/// Check if a YAML block is a renderable chart.
+fn is_chart_yaml(yaml: &str) -> bool {
+    let trimmed = yaml.trim();
+    // Single chart component
+    if trimmed.starts_with("type: chart") || trimmed.starts_with("type:chart") {
+        return true;
+    }
+    // Array of chart components (starts with "- type: chart")
+    if trimmed.starts_with("- type: chart") || trimmed.starts_with("-type: chart") {
+        return true;
+    }
+    false
 }
 
 /// Parse the markdown into blocks.
@@ -33,17 +50,30 @@ fn parse_examples(md: &str) -> Vec<Block> {
                 yaml.push_str(inner);
             }
             if !yaml.trim().is_empty() {
-                blocks.push(Block::ChartML(yaml));
+                if is_chart_yaml(&yaml) {
+                    blocks.push(Block::Chart(yaml));
+                } else {
+                    blocks.push(Block::CodeBlock(yaml));
+                }
             }
             continue;
         }
 
         // Skip regular yaml/json code blocks (non-rendered)
         if line.trim_start().starts_with("```") {
+            let mut code = String::new();
             for inner in lines.by_ref() {
                 if inner.trim_start().starts_with("```") {
                     break;
                 }
+                if !code.is_empty() {
+                    code.push('\n');
+                }
+                code.push_str(inner);
+            }
+            // Show yaml code blocks as styled code
+            if !code.trim().is_empty() && code.contains("type:") {
+                blocks.push(Block::CodeBlock(code));
             }
             continue;
         }
@@ -80,7 +110,6 @@ fn parse_examples(md: &str) -> Vec<Block> {
         // Paragraph text (skip empty lines, accumulate text)
         let trimmed = line.trim();
         if !trimmed.is_empty() && !trimmed.starts_with("**Related") {
-            // Merge consecutive text lines
             let mut text = trimmed.to_string();
             while let Some(&next) = lines.peek() {
                 let nt = next.trim();
@@ -103,11 +132,10 @@ fn parse_examples(md: &str) -> Vec<Block> {
 }
 
 /// Full examples page — mirrors the JS chartml docs/examples.md layout exactly.
-/// Parses the markdown, renders headings/descriptions as HTML, and each
-/// ```chartml block as a live chart via the Rust WASM renderer.
 #[component]
 pub fn ExamplesPage(chartml: Arc<ChartML>) -> impl IntoView {
     let blocks = parse_examples(EXAMPLES_MD);
+    let mut chart_number = 0_usize;
 
     let elements: Vec<AnyView> = blocks
         .into_iter()
@@ -128,11 +156,21 @@ pub fn ExamplesPage(chartml: Arc<ChartML>) -> impl IntoView {
                 Block::HorizontalRule => {
                     view! { <hr class="examples-hr" /> }.into_any()
                 }
-                Block::ChartML(yaml) => {
+                Block::CodeBlock(yaml) => {
+                    // Non-renderable spec — show as styled code block
+                    view! {
+                        <pre class="examples-code"><code>{yaml}</code></pre>
+                    }
+                    .into_any()
+                }
+                Block::Chart(yaml) => {
+                    chart_number += 1;
+                    let num = chart_number;
                     let spec = signal(yaml.clone());
                     let chartml = chartml.clone();
                     view! {
                         <div class="examples-chart">
+                            <div class="chart-number">{format!("Chart #{}", num)}</div>
                             <ChartMLChart spec=spec.0 chartml=chartml />
                         </div>
                     }
