@@ -200,11 +200,29 @@ impl ChartML {
                     })
                     .collect()
             }
-            _ => return Err(ChartError::InvalidSpec("No chart component found".into())),
+            _ => vec![],
         };
 
+        // If no charts, check for params components to render as UI controls
         if chart_specs.is_empty() {
-            return Err(ChartError::InvalidSpec("No chart component found".into()));
+            let params_specs: Vec<&spec::ParamsSpec> = match &parsed {
+                ChartMLSpec::Single(Component::Params(p)) => vec![p],
+                ChartMLSpec::Array(components) => {
+                    components.iter()
+                        .filter_map(|c| match c {
+                            Component::Params(p) => Some(p),
+                            _ => None,
+                        })
+                        .collect()
+                }
+                _ => vec![],
+            };
+
+            if !params_specs.is_empty() {
+                return Ok(self.render_params_ui(&params_specs));
+            }
+
+            return Err(ChartError::InvalidSpec("No chart or params component found".into()));
         }
 
         if chart_specs.len() == 1 {
@@ -350,6 +368,183 @@ impl ChartML {
             }
         }
         Ok(result)
+    }
+
+    /// Render params components as UI controls (Div/Span elements).
+    /// Matches the JS paramsUI.js visual output with proper CSS classes.
+    fn render_params_ui(&self, params_specs: &[&spec::ParamsSpec]) -> ChartElement {
+        let mut param_groups = Vec::new();
+
+        for params_spec in params_specs {
+            for param in &params_spec.params {
+                let control = self.render_param_control(param);
+                param_groups.push(ChartElement::Div {
+                    class: "chartml-param-group".to_string(),
+                    style: HashMap::new(),
+                    children: vec![control],
+                });
+            }
+        }
+
+        ChartElement::Div {
+            class: "chartml-params".to_string(),
+            style: HashMap::from([
+                ("display".to_string(), "flex".to_string()),
+                ("flex-wrap".to_string(), "wrap".to_string()),
+                ("gap".to_string(), "12px".to_string()),
+                ("padding".to_string(), "12px 0".to_string()),
+            ]),
+            children: param_groups,
+        }
+    }
+
+    /// Render a single parameter control based on its type.
+    fn render_param_control(&self, param: &spec::ParamDef) -> ChartElement {
+        let label = ChartElement::Span {
+            class: "chartml-param-label".to_string(),
+            style: HashMap::from([
+                ("font-size".to_string(), "12px".to_string()),
+                ("font-weight".to_string(), "600".to_string()),
+                ("color".to_string(), "#555".to_string()),
+                ("display".to_string(), "block".to_string()),
+                ("margin-bottom".to_string(), "4px".to_string()),
+            ]),
+            content: param.label.clone(),
+        };
+
+        let control = match param.param_type.as_str() {
+            "multiselect" => {
+                let options_text = param.options.as_ref()
+                    .map(|opts| opts.join(", "))
+                    .unwrap_or_default();
+                let default_text = param.default.as_ref()
+                    .map(|d| match d {
+                        serde_json::Value::Array(arr) => arr.iter()
+                            .filter_map(|v| v.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                        _ => d.to_string(),
+                    })
+                    .unwrap_or_default();
+                ChartElement::Div {
+                    class: "chartml-param-control chartml-param-multiselect".to_string(),
+                    style: HashMap::from([
+                        ("background".to_string(), "#f5f5f5".to_string()),
+                        ("border".to_string(), "1px solid #ddd".to_string()),
+                        ("border-radius".to_string(), "4px".to_string()),
+                        ("padding".to_string(), "6px 10px".to_string()),
+                        ("font-size".to_string(), "13px".to_string()),
+                        ("color".to_string(), "#333".to_string()),
+                        ("min-width".to_string(), "140px".to_string()),
+                    ]),
+                    children: vec![ChartElement::Span {
+                        class: "".to_string(),
+                        style: HashMap::new(),
+                        content: default_text,
+                    }],
+                }
+            }
+            "select" => {
+                let default_text = param.default.as_ref()
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                ChartElement::Div {
+                    class: "chartml-param-control chartml-param-select".to_string(),
+                    style: HashMap::from([
+                        ("background".to_string(), "#f5f5f5".to_string()),
+                        ("border".to_string(), "1px solid #ddd".to_string()),
+                        ("border-radius".to_string(), "4px".to_string()),
+                        ("padding".to_string(), "6px 10px".to_string()),
+                        ("font-size".to_string(), "13px".to_string()),
+                        ("color".to_string(), "#333".to_string()),
+                        ("min-width".to_string(), "120px".to_string()),
+                    ]),
+                    children: vec![ChartElement::Span {
+                        class: "".to_string(),
+                        style: HashMap::new(),
+                        content: format!("{} ▾", default_text),
+                    }],
+                }
+            }
+            "daterange" => {
+                let default_text = param.default.as_ref()
+                    .map(|d| {
+                        let start = d.get("start").and_then(|v| v.as_str()).unwrap_or("");
+                        let end = d.get("end").and_then(|v| v.as_str()).unwrap_or("");
+                        format!("{} → {}", start, end)
+                    })
+                    .unwrap_or_default();
+                ChartElement::Div {
+                    class: "chartml-param-control chartml-param-daterange".to_string(),
+                    style: HashMap::from([
+                        ("background".to_string(), "#f5f5f5".to_string()),
+                        ("border".to_string(), "1px solid #ddd".to_string()),
+                        ("border-radius".to_string(), "4px".to_string()),
+                        ("padding".to_string(), "6px 10px".to_string()),
+                        ("font-size".to_string(), "13px".to_string()),
+                        ("color".to_string(), "#333".to_string()),
+                    ]),
+                    children: vec![ChartElement::Span {
+                        class: "".to_string(),
+                        style: HashMap::new(),
+                        content: default_text,
+                    }],
+                }
+            }
+            "number" => {
+                let default_text = param.default.as_ref()
+                    .map(|d| d.to_string())
+                    .unwrap_or_default();
+                ChartElement::Div {
+                    class: "chartml-param-control chartml-param-number".to_string(),
+                    style: HashMap::from([
+                        ("background".to_string(), "#f5f5f5".to_string()),
+                        ("border".to_string(), "1px solid #ddd".to_string()),
+                        ("border-radius".to_string(), "4px".to_string()),
+                        ("padding".to_string(), "6px 10px".to_string()),
+                        ("font-size".to_string(), "13px".to_string()),
+                        ("color".to_string(), "#333".to_string()),
+                        ("min-width".to_string(), "80px".to_string()),
+                    ]),
+                    children: vec![ChartElement::Span {
+                        class: "".to_string(),
+                        style: HashMap::new(),
+                        content: default_text,
+                    }],
+                }
+            }
+            _ => {
+                let default_text = param.default.as_ref()
+                    .map(|d| d.to_string())
+                    .unwrap_or_default();
+                ChartElement::Div {
+                    class: "chartml-param-control chartml-param-text".to_string(),
+                    style: HashMap::from([
+                        ("background".to_string(), "#f5f5f5".to_string()),
+                        ("border".to_string(), "1px solid #ddd".to_string()),
+                        ("border-radius".to_string(), "4px".to_string()),
+                        ("padding".to_string(), "6px 10px".to_string()),
+                        ("font-size".to_string(), "13px".to_string()),
+                        ("color".to_string(), "#333".to_string()),
+                    ]),
+                    children: vec![ChartElement::Span {
+                        class: "".to_string(),
+                        style: HashMap::new(),
+                        content: param.placeholder.clone().unwrap_or(default_text),
+                    }],
+                }
+            }
+        };
+
+        ChartElement::Div {
+            class: "chartml-param-item".to_string(),
+            style: HashMap::from([
+                ("display".to_string(), "flex".to_string()),
+                ("flex-direction".to_string(), "column".to_string()),
+            ]),
+            children: vec![label, control],
+        }
     }
 
     /// Get a reference to the internal registry.

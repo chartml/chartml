@@ -89,7 +89,7 @@ fn parse_examples(md: &str) -> Vec<Block> {
                 yaml.push_str(inner);
             }
             if !yaml.trim().is_empty() {
-                if is_chart_yaml(&yaml) {
+                if is_chart_yaml(&yaml) || yaml.trim().starts_with("type: params") {
                     blocks.push(Block::Chart(yaml));
                 } else {
                     blocks.push(Block::CodeBlock(yaml));
