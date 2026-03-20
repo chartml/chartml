@@ -618,6 +618,14 @@ fn render_combo(
     // Render each field
     let mut mark_elements = Vec::new();
     let line_gen = LineGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
+
+    // Count bar fields for grouped subdivision
+    let num_bar_fields = fields.iter()
+        .filter(|f| f.mark.as_deref().unwrap_or("bar") == "bar")
+        .count()
+        .max(1);
+    let sub_bar_width = bandwidth / num_bar_fields as f64;
+    let mut bar_field_idx = 0_usize;
     let mut series_names = Vec::new();
     let mut series_colors = Vec::new();
     let mut series_marks = Vec::new();
@@ -638,17 +646,21 @@ fn render_combo(
 
         match mark {
             "bar" => {
+                let this_bar_idx = bar_field_idx;
+                bar_field_idx += 1;
+
                 for row in data {
                     let cat = match get_string(row, &category_field) { Some(c) => c, None => continue };
                     let val = get_f64(row, field_name).unwrap_or(0.0);
                     let x = match band.map(&cat) { Some(x) => x, None => continue };
+                    let bar_x = x + this_bar_idx as f64 * sub_bar_width;
                     let bar_top = scale.map(val);
                     let bar_bottom = scale.map(0.0);
                     let bar_height = (bar_bottom - bar_top).abs();
 
                     mark_elements.push(ChartElement::Rect {
-                        x: x + margins.left, y: bar_top + margins.top,
-                        width: bandwidth, height: bar_height,
+                        x: bar_x + margins.left, y: bar_top + margins.top,
+                        width: sub_bar_width, height: bar_height,
                         fill: color.clone(), stroke: None,
                         class: "bar".to_string(),
                         data: Some(ElementData::new(&cat, format_value(val, fmt_ref)).with_series(&label)),
@@ -659,7 +671,7 @@ fn render_combo(
                         if dl.show == Some(true) {
                             let dl_fmt = dl.format.as_deref().or(fmt_ref);
                             mark_elements.push(ChartElement::Text {
-                                x: x + bandwidth / 2.0 + margins.left,
+                                x: bar_x + sub_bar_width / 2.0 + margins.left,
                                 y: bar_top + margins.top - 5.0,
                                 content: format_value(val, dl_fmt),
                                 anchor: TextAnchor::Middle, dominant_baseline: None,
