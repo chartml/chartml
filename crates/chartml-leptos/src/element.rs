@@ -46,14 +46,19 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             let stroke_str = stroke.clone().unwrap_or_default();
             let class = class.clone();
             let tooltip_data = data.clone();
+            // For bar animation: transform-origin at bottom center of each rect
+            let origin_x = x + width / 2.0;
+            let origin_y = y + height;
+            let style = format!("transform-origin: {}px {}px;", origin_x, origin_y);
 
             if let Some(data) = tooltip_data {
-                render_interactive_rect(x_str, y_str, w_str, h_str, fill, stroke_str, class, data)
+                render_interactive_rect(x_str, y_str, w_str, h_str, fill, stroke_str, class, style, data)
             } else {
                 view! {
                     <rect
                         x=x_str y=y_str width=w_str height=h_str
                         fill=fill stroke=stroke_str class=class
+                        style=style
                     />
                 }.into_any()
             }
@@ -178,6 +183,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
 fn render_interactive_rect(
     x: String, y: String, w: String, h: String,
     fill: String, stroke: String, class: String,
+    base_style: String,
     data: ElementData,
 ) -> AnyView {
     let hovered = RwSignal::new(false);
@@ -189,7 +195,13 @@ fn render_interactive_rect(
             <rect
                 x=x.clone() y=y.clone() width=w height=h
                 fill=fill stroke=stroke class=class
-                style=move || if hovered.get() { "opacity: 0.8; cursor: pointer;" } else { "" }
+                style=move || {
+                    if hovered.get() {
+                        format!("{} opacity: 0.8; cursor: pointer;", base_style)
+                    } else {
+                        base_style.clone()
+                    }
+                }
                 on:mouseenter=move |_| hovered.set(true)
                 on:mouseleave=move |_| hovered.set(false)
             />

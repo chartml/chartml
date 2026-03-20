@@ -128,27 +128,24 @@ body {
 /* ── Chart Animations ── */
 
 /*
- * Bar entrance: grow from baseline (matches D3 chartml behavior).
- * D3 animates y and height attributes. In CSS we use a clip-path
- * reveal on the bars group — a rectangle that expands upward from
- * the bottom over 400ms, revealing bars as it goes.
+ * Bar entrance: each bar grows from its own baseline via scaleY.
+ * transform-origin is set inline per rect by the Leptos renderer
+ * to (center-x, bottom-y), so scaleY(0→1) grows upward from baseline.
+ * All bars take the same 400ms — taller bars grow faster (matches D3).
  */
-.bars {
-    animation: chartml-bars-reveal 400ms ease-out both;
-}
-
-@keyframes chartml-bars-reveal {
-    from { clip-path: inset(100% 0 0 0); }
-    to   { clip-path: inset(0 0 0 0); }
-}
-
-/* Individual bar hover feedback (matches D3: opacity 0.9 → 1 + darker stroke) */
 .bars rect,
 .bar {
+    animation: chartml-bar-grow 400ms ease-out both;
     opacity: 0.9;
     transition: opacity 200ms ease, stroke 200ms ease, stroke-width 200ms ease;
 }
 
+@keyframes chartml-bar-grow {
+    from { transform: scaleY(0); }
+    to   { transform: scaleY(1); }
+}
+
+/* Bar hover feedback (matches D3: opacity 0.9 → 1 + darker stroke) */
 .bars rect:hover,
 .bar:hover {
     opacity: 1;
