@@ -9,7 +9,7 @@ use chartml_core::shapes::LineGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{GridConfig, format_value, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{GridConfig, LegendMark, format_value, generate_x_axis, generate_y_axis_numeric, generate_legend_with_mark, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
@@ -236,7 +236,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         }
 
         // Legend
-        let legend_elements = generate_legend(&series_names, &series_colors, config.width, config.height - 10.0);
+        let legend_elements = generate_legend_with_mark(&series_names, &series_colors, config.width, config.height - 10.0, LegendMark::Line);
         children.push(ChartElement::Group {
             class: "legend".to_string(),
             transform: None,
@@ -313,7 +313,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
         // Legend
         let legend_elements =
-            generate_legend(&series_names, &config.colors, config.width, config.height - 10.0);
+            generate_legend_with_mark(&series_names, &config.colors, config.width, config.height - 10.0, LegendMark::Line);
         children.push(ChartElement::Group {
             class: "legend".to_string(),
             transform: None,

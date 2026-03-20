@@ -560,37 +560,112 @@ pub fn generate_x_axis_numeric(
     elements
 }
 
+/// Legend symbol type — matches the JS renderSymbol() function.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LegendMark {
+    Rect,    // bar, area, pie — rounded rectangle
+    Line,    // line charts — horizontal line
+    Circle,  // scatter, bubble — circle
+}
+
 /// Generate legend elements for multi-series charts.
+/// Uses approximate text measurement for proper spacing, centers the legend,
+/// and renders mark-appropriate symbols (line/rect/circle).
 pub fn generate_legend(
     series_names: &[String],
     colors: &[String],
     chart_width: f64,
     y_position: f64,
 ) -> Vec<ChartElement> {
+    generate_legend_with_mark(series_names, colors, chart_width, y_position, LegendMark::Rect)
+}
+
+/// Generate legend with a specific symbol mark type.
+pub fn generate_legend_with_mark(
+    series_names: &[String],
+    colors: &[String],
+    chart_width: f64,
+    y_position: f64,
+    mark: LegendMark,
+) -> Vec<ChartElement> {
+    use chartml_core::layout::labels::approximate_text_width;
+
+    // Skip legend for single series
+    if series_names.len() <= 1 {
+        return Vec::new();
+    }
+
+    const SYMBOL_SIZE: f64 = 12.0;
+    const SYMBOL_GAP: f64 = 6.0;
+    const ITEM_PADDING: f64 = 16.0;
+    const MAX_LABEL_LEN: usize = 20;
+
+    // Calculate item widths using text measurement
+    let items: Vec<(String, f64)> = series_names.iter().map(|name| {
+        let display = if name.len() > MAX_LABEL_LEN {
+            format!("{}…", &name[..MAX_LABEL_LEN - 1])
+        } else {
+            name.clone()
+        };
+        let text_w = approximate_text_width(&display);
+        let item_w = SYMBOL_SIZE + SYMBOL_GAP + text_w + ITEM_PADDING;
+        (display, item_w)
+    }).collect();
+
+    let total_width: f64 = items.iter().map(|(_, w)| w).sum();
+    let start_x = (chart_width - total_width).max(0.0) / 2.0; // center
+
     let mut elements = Vec::new();
-    let mut x_offset = chart_width / 2.0 - (series_names.len() as f64 * 60.0) / 2.0;
+    let mut x = start_x;
 
-    for (i, name) in series_names.iter().enumerate() {
-        let color = colors
-            .get(i)
-            .cloned()
-            .unwrap_or_else(|| "#999".to_string());
+    for (i, (display_name, item_w)) in items.iter().enumerate() {
+        let color = colors.get(i).cloned().unwrap_or_else(|| "#999".to_string());
+        let sym_y = y_position;
 
-        elements.push(ChartElement::Rect {
-            x: x_offset,
-            y: y_position,
-            width: 12.0,
-            height: 12.0,
-            fill: color,
-            stroke: None,
-            class: "legend-symbol".to_string(),
-            data: None,
-        });
+        // Symbol — different per mark type
+        match mark {
+            LegendMark::Line => {
+                elements.push(ChartElement::Line {
+                    x1: x,
+                    y1: sym_y + SYMBOL_SIZE / 2.0,
+                    x2: x + SYMBOL_SIZE,
+                    y2: sym_y + SYMBOL_SIZE / 2.0,
+                    stroke: color.clone(),
+                    stroke_width: Some(2.5),
+                    stroke_dasharray: None,
+                    class: "legend-symbol legend-line".to_string(),
+                });
+            }
+            LegendMark::Circle => {
+                elements.push(ChartElement::Circle {
+                    cx: x + SYMBOL_SIZE / 2.0,
+                    cy: sym_y + SYMBOL_SIZE / 2.0,
+                    r: SYMBOL_SIZE / 2.0 - 1.0,
+                    fill: color.clone(),
+                    stroke: None,
+                    class: "legend-symbol legend-circle".to_string(),
+                    data: None,
+                });
+            }
+            LegendMark::Rect => {
+                elements.push(ChartElement::Rect {
+                    x,
+                    y: sym_y,
+                    width: SYMBOL_SIZE,
+                    height: SYMBOL_SIZE,
+                    fill: color,
+                    stroke: None,
+                    class: "legend-symbol".to_string(),
+                    data: None,
+                });
+            }
+        }
 
+        // Label
         elements.push(ChartElement::Text {
-            x: x_offset + 16.0,
-            y: y_position + 10.0,
-            content: name.clone(),
+            x: x + SYMBOL_SIZE + SYMBOL_GAP,
+            y: sym_y + 10.0,
+            content: display_name.clone(),
             anchor: TextAnchor::Start,
             dominant_baseline: None,
             transform: None,
@@ -600,7 +675,7 @@ pub fn generate_legend(
             data: None,
         });
 
-        x_offset += 80.0;
+        x += item_w;
     }
 
     elements
