@@ -40,8 +40,11 @@ impl ChartRenderer for ScatterRenderer {
         let y_extent = extent(data, &y_field)
             .ok_or_else(|| ChartError::DataError(format!("No numeric data for field '{}'", y_field)))?;
 
-        let x_scale = ScaleLinear::new(x_extent, (margins.left, margins.left + inner_width)).nice(5);
-        let y_scale = ScaleLinear::new(y_extent, (margins.top + inner_height, margins.top)).nice(5); // inverted for SVG
+        // Default: include 0 in both axes (matching JS D3 behavior)
+        let x_domain = (x_extent.0.min(0.0), x_extent.1);
+        let y_domain = (y_extent.0.min(0.0), y_extent.1);
+        let x_scale = ScaleLinear::new(x_domain, (margins.left, margins.left + inner_width)).nice(5);
+        let y_scale = ScaleLinear::new(y_domain, (margins.top + inner_height, margins.top)).nice(5); // inverted for SVG
 
         // Size scale (if marks.size present)
         let size_scale = size_field.as_ref().and_then(|f| {
