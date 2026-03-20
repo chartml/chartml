@@ -411,6 +411,13 @@ pub fn generate_y_axis(
 
 /// Generate y-axis elements for numeric data (used by bar, line, and area charts).
 /// Grid lines are controlled by `grid` config and `chart_width`.
+/// Which side of the axis to render ticks and labels.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AxisSide {
+    Left,
+    Right,
+}
+
 pub fn generate_y_axis_numeric(
     domain: (f64, f64),
     range: (f64, f64),
@@ -473,6 +480,55 @@ pub fn generate_y_axis_numeric(
             y,
             content: label,
             anchor: TextAnchor::End,
+            dominant_baseline: Some("middle".to_string()),
+            transform: None,
+            font_size: Some("11px".to_string()),
+            fill: Some("#666".to_string()),
+            class: "tick-label".to_string(),
+            data: None,
+        });
+    }
+
+    elements
+}
+
+/// Generate a right-side y-axis (ticks and labels to the right of x_position).
+pub fn generate_y_axis_numeric_right(
+    domain: (f64, f64),
+    range: (f64, f64),
+    x_position: f64,
+    fmt: Option<&str>,
+    tick_count: usize,
+) -> Vec<ChartElement> {
+    let scale = ScaleLinear::new(domain, range);
+    let ticks = scale.ticks(tick_count);
+    let mut elements = Vec::new();
+
+    // Axis line
+    elements.push(ChartElement::Line {
+        x1: x_position, y1: range.0.min(range.1),
+        x2: x_position, y2: range.0.max(range.1),
+        stroke: "#ccc".to_string(), stroke_width: Some(1.0),
+        stroke_dasharray: None, class: "axis-line".to_string(),
+    });
+
+    for val in &ticks {
+        let y = scale.map(*val);
+        let label = format_value(*val, fmt);
+
+        // Tick mark (to the right)
+        elements.push(ChartElement::Line {
+            x1: x_position, y1: y,
+            x2: x_position + 5.0, y2: y,
+            stroke: "#999".to_string(), stroke_width: Some(1.0),
+            stroke_dasharray: None, class: "tick".to_string(),
+        });
+
+        // Label (to the right)
+        elements.push(ChartElement::Text {
+            x: x_position + 8.0, y,
+            content: label,
+            anchor: TextAnchor::Start,
             dominant_baseline: Some("middle".to_string()),
             transform: None,
             font_size: Some("11px".to_string()),

@@ -10,7 +10,7 @@ use chartml_core::spec::{ChartMode, Orientation};
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{GridConfig, format_value, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, offset_element};
+use crate::helpers::{GridConfig, format_value, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, offset_element};
 
 pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
@@ -534,16 +534,15 @@ fn render_combo(
     axis_elements.extend(x_axis_result.elements.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
     axis_elements.extend(y_axis_left.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
 
-    // Right axis
+    // Right axis — ticks and labels on the right side
     if let Some(ref rs) = right_scale {
         let right_fmt = config.visualize.axes.as_ref()
             .and_then(|a| a.right.as_ref())
             .and_then(|a| a.format.as_deref());
-        let right_axis = generate_y_axis_numeric(
+        let right_axis = generate_y_axis_numeric_right(
             rs.domain(), (inner_height, 0.0), margins.left + inner_width,
-            right_fmt, adaptive_tick_count(inner_height), None, &grid,
+            right_fmt, adaptive_tick_count(inner_height),
         );
-        // Right axis ticks go to the right (+5 instead of -5)
         axis_elements.extend(right_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
     }
 
