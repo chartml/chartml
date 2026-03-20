@@ -11,5 +11,5 @@ chartml-chart-pie = { path = "../crates/chartml-chart-pie" }
 chartml-chart-scatter = { path = "../crates/chartml-chart-scatter" }
 chartml-chart-metric = { path = "../crates/chartml-chart-metric" }
 chartml-leptos = { path = "../crates/chartml-leptos" }
-leptos = "0.7"
+leptos = { version = "0.7", features = ["csr"] }
 console_error_panic_hook = "0.1"
