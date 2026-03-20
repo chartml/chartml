@@ -64,15 +64,21 @@ pub fn parse(input: &str) -> Result<ChartMLSpec, ChartError> {
         let spec: ChartMLSpec = serde_yaml::from_str(yaml_str)?;
         Ok(spec)
     } else {
-        // Multiple documents: parse each as a Component.
+        // Multiple documents: parse each as a Component or array of Components.
         let mut components = Vec::with_capacity(documents.len());
         for doc in documents {
             let trimmed = doc.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            let component: Component = serde_yaml::from_str(trimmed)?;
-            components.push(component);
+            // Try parsing as a single component first, then as an array of components
+            if let Ok(component) = serde_yaml::from_str::<Component>(trimmed) {
+                components.push(component);
+            } else {
+                // May be an array of components (e.g., multiple charts in one document)
+                let array: Vec<Component> = serde_yaml::from_str(trimmed)?;
+                components.extend(array);
+            }
         }
         Ok(ChartMLSpec::Array(components))
     }
