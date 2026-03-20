@@ -57,6 +57,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
                         <rect
                             x=x_str y=y_str width=w_str height=h_str
                             fill=fill stroke=stroke_str class=class
+                            style=base_style.clone()
                         />
                     }.into_any(),
                     base_style,
