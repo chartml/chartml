@@ -490,9 +490,19 @@ fn render_combo(
         vec![]
     };
 
+    let has_left_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.left.as_ref())
+        .and_then(|a| a.label.as_ref())
+        .is_some();
+    let has_right_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.right.as_ref())
+        .and_then(|a| a.label.as_ref())
+        .is_some();
+
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: fields.len() > 1,
+        has_y_axis_label: has_left_label,
         has_right_axis: has_right,
         right_tick_labels,
         ..Default::default()
@@ -573,12 +583,12 @@ fn render_combo(
     // Axis title labels
     if let Some(label) = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref()).and_then(|a| a.label.clone()) {
         axis_elements.push(ChartElement::Text {
-            x: 14.0,
+            x: 12.0,
             y: margins.top + inner_height / 2.0,
             content: label,
             anchor: TextAnchor::Middle,
             dominant_baseline: None,
-            transform: Some(Transform::Rotate(-90.0, 14.0, margins.top + inner_height / 2.0)),
+            transform: Some(Transform::Rotate(-90.0, 12.0, margins.top + inner_height / 2.0)),
             font_size: Some("12px".to_string()),
             fill: Some("#666".to_string()),
             class: "axis-label".to_string(),
@@ -586,7 +596,7 @@ fn render_combo(
         });
     }
     if let Some(label) = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()).and_then(|a| a.label.clone()) {
-        let rx = config.width - 14.0;
+        let rx = config.width - 12.0;
         axis_elements.push(ChartElement::Text {
             x: rx,
             y: margins.top + inner_height / 2.0,

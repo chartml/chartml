@@ -93,7 +93,9 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
         let max_right_width = config.right_tick_labels.iter()
             .map(|l| approximate_text_width(l))
             .fold(0.0_f64, f64::max);
-        (max_right_width + 24.0)
+        // 24px for tick+gap, +20px if axis title label present
+        let label_space = if config.has_right_axis { 20.0 } else { 0.0 };
+        (max_right_width + 24.0 + label_space)
             .min(config.max_right_margin)
     } else {
         20.0
