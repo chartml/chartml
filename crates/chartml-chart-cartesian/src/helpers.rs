@@ -1,8 +1,8 @@
-use chartml_core::element::{ChartElement, TextAnchor};
+use chartml_core::element::{ChartElement, TextAnchor, Transform};
 use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
 use chartml_core::plugin::ChartConfig;
-use chartml_core::scales::ScaleBand;
+use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::spec::{FieldRef, FieldRefItem, MarkEncoding};
 
 /// Extract the field name from a FieldRef (Simple, Detailed, or Multiple).
@@ -200,4 +200,171 @@ pub fn generate_y_axis(
     }
 
     elements
+}
+
+/// Generate y-axis elements for numeric data (used by bar, line, and area charts).
+pub fn generate_y_axis_numeric(
+    domain: (f64, f64),
+    range: (f64, f64),
+    x_position: f64,
+    fmt: Option<&str>,
+    tick_count: usize,
+) -> Vec<ChartElement> {
+    let scale = ScaleLinear::new(domain, range);
+    let ticks = scale.ticks(tick_count);
+    let mut elements = Vec::new();
+
+    // Axis line
+    elements.push(ChartElement::Line {
+        x1: x_position,
+        y1: range.0.min(range.1),
+        x2: x_position,
+        y2: range.0.max(range.1),
+        stroke: "#ccc".to_string(),
+        stroke_width: Some(1.0),
+        stroke_dasharray: None,
+        class: "axis-line".to_string(),
+    });
+
+    for val in &ticks {
+        let y = scale.map(*val);
+        let label = format_value(*val, fmt);
+
+        elements.push(ChartElement::Line {
+            x1: x_position - 5.0,
+            y1: y,
+            x2: x_position,
+            y2: y,
+            stroke: "#999".to_string(),
+            stroke_width: Some(1.0),
+            stroke_dasharray: None,
+            class: "tick".to_string(),
+        });
+
+        elements.push(ChartElement::Text {
+            x: x_position - 8.0,
+            y,
+            content: label,
+            anchor: TextAnchor::End,
+            dominant_baseline: Some("middle".to_string()),
+            transform: None,
+            font_size: Some("11px".to_string()),
+            fill: Some("#666".to_string()),
+            class: "tick-label".to_string(),
+        });
+    }
+
+    elements
+}
+
+/// Generate x-axis elements for numeric data (used by horizontal bar charts).
+pub fn generate_x_axis_numeric(
+    domain: (f64, f64),
+    range: (f64, f64),
+    y_position: f64,
+    fmt: Option<&str>,
+    tick_count: usize,
+) -> Vec<ChartElement> {
+    let scale = ScaleLinear::new(domain, range);
+    let ticks = scale.ticks(tick_count);
+    let mut elements = Vec::new();
+
+    // Axis line
+    elements.push(ChartElement::Line {
+        x1: range.0,
+        y1: y_position,
+        x2: range.1,
+        y2: y_position,
+        stroke: "#ccc".to_string(),
+        stroke_width: Some(1.0),
+        stroke_dasharray: None,
+        class: "axis-line".to_string(),
+    });
+
+    for val in &ticks {
+        let x = scale.map(*val);
+        let label = format_value(*val, fmt);
+
+        elements.push(ChartElement::Line {
+            x1: x,
+            y1: y_position,
+            x2: x,
+            y2: y_position + 5.0,
+            stroke: "#999".to_string(),
+            stroke_width: Some(1.0),
+            stroke_dasharray: None,
+            class: "tick".to_string(),
+        });
+
+        elements.push(ChartElement::Text {
+            x,
+            y: y_position + 18.0,
+            content: label,
+            anchor: TextAnchor::Middle,
+            dominant_baseline: None,
+            transform: None,
+            font_size: Some("11px".to_string()),
+            fill: Some("#666".to_string()),
+            class: "tick-label".to_string(),
+        });
+    }
+
+    elements
+}
+
+/// Generate legend elements for multi-series charts.
+pub fn generate_legend(
+    series_names: &[String],
+    colors: &[String],
+    chart_width: f64,
+    y_position: f64,
+) -> Vec<ChartElement> {
+    let mut elements = Vec::new();
+    let mut x_offset = chart_width / 2.0 - (series_names.len() as f64 * 60.0) / 2.0;
+
+    for (i, name) in series_names.iter().enumerate() {
+        let color = colors
+            .get(i)
+            .cloned()
+            .unwrap_or_else(|| "#999".to_string());
+
+        elements.push(ChartElement::Rect {
+            x: x_offset,
+            y: y_position,
+            width: 12.0,
+            height: 12.0,
+            fill: color,
+            stroke: None,
+            class: "legend-symbol".to_string(),
+            data: None,
+        });
+
+        elements.push(ChartElement::Text {
+            x: x_offset + 16.0,
+            y: y_position + 10.0,
+            content: name.clone(),
+            anchor: TextAnchor::Start,
+            dominant_baseline: None,
+            transform: None,
+            font_size: Some("11px".to_string()),
+            fill: Some("#333".to_string()),
+            class: "legend-label".to_string(),
+        });
+
+        x_offset += 80.0;
+    }
+
+    elements
+}
+
+/// Offset an element's position by wrapping it in a Group with a Translate transform.
+pub fn offset_element(element: ChartElement, dx: f64, dy: f64) -> ChartElement {
+    if dx == 0.0 && dy == 0.0 {
+        return element;
+    }
+    ChartElement::Group {
+        class: String::new(),
+        transform: Some(Transform::Translate(dx, dy)),
+        children: vec![element],
+    }
 }

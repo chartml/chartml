@@ -6,7 +6,7 @@ use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::shapes::LineGenerator;
 
-use crate::helpers::{format_value, generate_x_axis, get_color_field, get_field_name, get_y_format};
+use crate::helpers::{generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_y_format, offset_element};
 
 pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -67,11 +67,12 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
     let x_axis_elements = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height);
-    let y_axis_elements = generate_y_axis_for_line(
+    let y_axis_elements = generate_y_axis_numeric(
         (domain_min, domain_max),
         (inner_height, 0.0),
         margins.left,
         y_fmt_ref,
+        5,
     );
 
     children.push(ChartElement::Group {
@@ -82,12 +83,12 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             axes.extend(
                 x_axis_elements
                     .into_iter()
-                    .map(|e| wrap_translate(e, margins.left, 0.0)),
+                    .map(|e| offset_element(e, margins.left, 0.0)),
             );
             axes.extend(
                 y_axis_elements
                     .into_iter()
-                    .map(|e| wrap_translate(e, 0.0, margins.top)),
+                    .map(|e| offset_element(e, 0.0, margins.top)),
             );
             axes
         },
@@ -199,109 +200,3 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
     })
 }
 
-fn generate_y_axis_for_line(
-    domain: (f64, f64),
-    range: (f64, f64),
-    x_position: f64,
-    fmt: Option<&str>,
-) -> Vec<ChartElement> {
-    let scale = ScaleLinear::new(domain, range);
-    let ticks = scale.ticks(5);
-    let mut elements = Vec::new();
-
-    elements.push(ChartElement::Line {
-        x1: x_position,
-        y1: range.0.min(range.1),
-        x2: x_position,
-        y2: range.0.max(range.1),
-        stroke: "#ccc".to_string(),
-        stroke_width: Some(1.0),
-        stroke_dasharray: None,
-        class: "axis-line".to_string(),
-    });
-
-    for val in &ticks {
-        let y = scale.map(*val);
-        let label = format_value(*val, fmt);
-
-        elements.push(ChartElement::Line {
-            x1: x_position - 5.0,
-            y1: y,
-            x2: x_position,
-            y2: y,
-            stroke: "#999".to_string(),
-            stroke_width: Some(1.0),
-            stroke_dasharray: None,
-            class: "tick".to_string(),
-        });
-
-        elements.push(ChartElement::Text {
-            x: x_position - 8.0,
-            y,
-            content: label,
-            anchor: TextAnchor::End,
-            dominant_baseline: Some("middle".to_string()),
-            transform: None,
-            font_size: Some("11px".to_string()),
-            fill: Some("#666".to_string()),
-            class: "tick-label".to_string(),
-        });
-    }
-
-    elements
-}
-
-fn generate_legend(
-    series_names: &[String],
-    colors: &[String],
-    chart_width: f64,
-    y_position: f64,
-) -> Vec<ChartElement> {
-    let mut elements = Vec::new();
-    let mut x_offset = chart_width / 2.0 - (series_names.len() as f64 * 60.0) / 2.0;
-
-    for (i, name) in series_names.iter().enumerate() {
-        let color = colors
-            .get(i)
-            .cloned()
-            .unwrap_or_else(|| "#999".to_string());
-
-        elements.push(ChartElement::Rect {
-            x: x_offset,
-            y: y_position,
-            width: 12.0,
-            height: 12.0,
-            fill: color,
-            stroke: None,
-            class: "legend-symbol".to_string(),
-            data: None,
-        });
-
-        elements.push(ChartElement::Text {
-            x: x_offset + 16.0,
-            y: y_position + 10.0,
-            content: name.clone(),
-            anchor: TextAnchor::Start,
-            dominant_baseline: None,
-            transform: None,
-            font_size: Some("11px".to_string()),
-            fill: Some("#333".to_string()),
-            class: "legend-label".to_string(),
-        });
-
-        x_offset += 80.0;
-    }
-
-    elements
-}
-
-fn wrap_translate(element: ChartElement, dx: f64, dy: f64) -> ChartElement {
-    if dx == 0.0 && dy == 0.0 {
-        return element;
-    }
-    ChartElement::Group {
-        class: String::new(),
-        transform: Some(Transform::Translate(dx, dy)),
-        children: vec![element],
-    }
-}
