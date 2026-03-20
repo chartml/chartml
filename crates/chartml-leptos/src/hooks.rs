@@ -8,7 +8,7 @@ use chartml_core::ChartML;
 /// or use `use_chartml_configured` to set up in one step.
 ///
 /// Usage:
-/// ```
+/// ```ignore
 /// let chartml = use_chartml();
 /// view! { <ChartMLChart spec=yaml chartml=chartml /> }
 /// ```
@@ -20,7 +20,7 @@ pub fn use_chartml() -> Arc<ChartML> {
 /// The closure receives a mutable reference to register renderers, data sources, etc.
 ///
 /// Usage:
-/// ```
+/// ```ignore
 /// let chartml = use_chartml_configured(|c| {
 ///     c.register_renderer("bar", CartesianRenderer::new());
 ///     c.register_renderer("line", CartesianRenderer::new());

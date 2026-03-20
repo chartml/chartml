@@ -1,5 +1,6 @@
 use chartml_core::element::{ChartElement, TextAnchor};
 use chartml_core::error::ChartError;
+use chartml_core::format::NumberFormatter;
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::ScaleBand;
 use chartml_core::spec::{FieldRef, FieldRefItem, MarkEncoding};
@@ -30,6 +31,60 @@ pub fn get_color_field(config: &ChartConfig) -> Option<String> {
             MarkEncoding::Simple(name) => name.clone(),
             MarkEncoding::Detailed(spec) => spec.field.clone(),
         })
+}
+
+/// Extract the y-axis (rows/left) format string from the spec.
+pub fn get_y_format(config: &ChartConfig) -> Option<String> {
+    config.visualize.axes.as_ref().and_then(|axes| {
+        axes.left.as_ref().or(axes.x.as_ref()).and_then(|a| a.format.clone())
+    })
+}
+
+/// Extract the x-axis (columns) format string from the spec.
+pub fn get_x_format(config: &ChartConfig) -> Option<String> {
+    config.visualize.axes.as_ref().and_then(|axes| {
+        axes.x.as_ref().and_then(|a| a.format.clone())
+    })
+}
+
+/// Format a numeric value using a format string, or a sensible default.
+pub fn format_value(value: f64, format_str: Option<&str>) -> String {
+    match format_str {
+        Some(fmt) => NumberFormatter::new(fmt).format(value),
+        None => default_format_value(value),
+    }
+}
+
+/// Default numeric formatting: integers without decimals, floats with 1 decimal.
+fn default_format_value(value: f64) -> String {
+    if value == value.floor() && value.abs() < 1e15 {
+        // Use comma separator for large integers
+        let abs = value.abs() as u64;
+        let formatted = insert_commas(abs);
+        if value < 0.0 {
+            format!("-{}", formatted)
+        } else {
+            formatted
+        }
+    } else {
+        format!("{:.1}", value)
+    }
+}
+
+fn insert_commas(n: u64) -> String {
+    let s = n.to_string();
+    let len = s.len();
+    if len <= 3 {
+        return s;
+    }
+    let mut result = String::with_capacity(len + len / 3);
+    for (i, ch) in s.chars().enumerate() {
+        if i > 0 && (len - i) % 3 == 0 {
+            result.push(',');
+        }
+        result.push(ch);
+    }
+    result
 }
 
 /// Generate x-axis elements (tick marks and labels) for category data.

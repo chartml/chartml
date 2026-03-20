@@ -7,7 +7,7 @@ use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::spec::{ChartMode, Orientation};
 
-use crate::helpers::{generate_x_axis, generate_y_axis, get_color_field, get_field_name};
+use crate::helpers::{format_value, generate_x_axis, generate_y_axis, get_color_field, get_field_name, get_y_format};
 
 pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -52,6 +52,9 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
     }
 
     // Determine value domain
+    let y_fmt = get_y_format(config);
+    let y_fmt_ref = y_fmt.as_deref();
+
     let (value_max, bar_elements) = if let Some(ref color_f) = color_field {
         render_multi_series_bars(
             data,
@@ -66,6 +69,7 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
             is_stacked,
             is_grouped,
             is_horizontal,
+            y_fmt_ref,
         )?
     } else {
         render_single_series_bars(
@@ -78,20 +82,21 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
             inner_width,
             inner_height,
             is_horizontal,
+            y_fmt_ref,
         )?
     };
 
     // Axes
     let axis_elements = if is_horizontal {
         let x_axis = generate_y_axis(&categories, (0.0, inner_height), margins.left, None);
-        let y_axis = generate_x_axis_numeric((0.0, value_max), (0.0, inner_width), margins.top + inner_height);
+        let y_axis = generate_x_axis_numeric((0.0, value_max), (0.0, inner_width), margins.top + inner_height, y_fmt_ref);
         let mut axes = Vec::new();
         axes.extend(x_axis.into_iter().map(|e| offset_element(e, margins.left, margins.top)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes
     } else {
         let x_axis = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height);
-        let y_axis = generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left);
+        let y_axis = generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref);
         let mut axes = Vec::new();
         axes.extend(x_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
@@ -140,6 +145,7 @@ fn render_single_series_bars(
     inner_width: f64,
     inner_height: f64,
     is_horizontal: bool,
+    y_fmt_ref: Option<&str>,
 ) -> Result<(f64, Vec<ChartElement>), ChartError> {
     // Find the max value
     let values: Vec<f64> = data
@@ -176,7 +182,7 @@ fn render_single_series_bars(
                 fill: fill.clone(),
                 stroke: None,
                 class: "bar".to_string(),
-                data: Some(ElementData::new(&cat, format!("{}", val))),
+                data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
             });
         }
     } else {
@@ -205,7 +211,7 @@ fn render_single_series_bars(
                 fill: fill.clone(),
                 stroke: None,
                 class: "bar".to_string(),
-                data: Some(ElementData::new(&cat, format!("{}", val))),
+                data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
             });
         }
     }
@@ -226,6 +232,7 @@ fn render_multi_series_bars(
     is_stacked: bool,
     _is_grouped: bool,
     _is_horizontal: bool,
+    y_fmt_ref: Option<&str>,
 ) -> Result<(f64, Vec<ChartElement>), ChartError> {
     let series_names = unique_values(data, color_field);
     let groups = group_by(data, color_field);
@@ -290,7 +297,7 @@ fn render_multi_series_bars(
                 stroke: None,
                 class: "bar".to_string(),
                 data: Some(
-                    ElementData::new(&point.key, format!("{}", point.value))
+                    ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
                         .with_series(&point.series),
                 ),
             });
@@ -349,7 +356,7 @@ fn render_multi_series_bars(
                 stroke: None,
                 class: "bar".to_string(),
                 data: Some(
-                    ElementData::new(&cat, format!("{}", val)).with_series(&series),
+                    ElementData::new(&cat, format_value(val, y_fmt_ref)).with_series(&series),
                 ),
             });
         }
@@ -362,6 +369,7 @@ fn generate_x_axis_numeric(
     domain: (f64, f64),
     range: (f64, f64),
     y_position: f64,
+    fmt: Option<&str>,
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     let ticks = scale.ticks(5);
@@ -381,11 +389,7 @@ fn generate_x_axis_numeric(
 
     for val in &ticks {
         let x = scale.map(*val);
-        let label = if *val == val.floor() && val.abs() < 1e15 {
-            format!("{}", *val as i64)
-        } else {
-            format!("{:.1}", val)
-        };
+        let label = format_value(*val, fmt);
 
         elements.push(ChartElement::Line {
             x1: x,
@@ -418,6 +422,7 @@ fn generate_y_axis_numeric(
     domain: (f64, f64),
     range: (f64, f64),
     x_position: f64,
+    fmt: Option<&str>,
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     let ticks = scale.ticks(5);
@@ -437,11 +442,7 @@ fn generate_y_axis_numeric(
 
     for val in &ticks {
         let y = scale.map(*val);
-        let label = if *val == val.floor() && val.abs() < 1e15 {
-            format!("{}", *val as i64)
-        } else {
-            format!("{:.1}", val)
-        };
+        let label = format_value(*val, fmt);
 
         elements.push(ChartElement::Line {
             x1: x_position - 5.0,

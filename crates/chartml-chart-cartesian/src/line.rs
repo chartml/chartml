@@ -6,7 +6,7 @@ use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::shapes::LineGenerator;
 
-use crate::helpers::{generate_x_axis, get_color_field, get_field_name};
+use crate::helpers::{format_value, generate_x_axis, get_color_field, get_field_name, get_y_format};
 
 pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -63,12 +63,15 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         });
     }
 
-    // Axes
+    // Axes — read format string from spec
+    let y_fmt = get_y_format(config);
+    let y_fmt_ref = y_fmt.as_deref();
     let x_axis_elements = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height);
     let y_axis_elements = generate_y_axis_for_line(
         (domain_min, domain_max),
         (inner_height, 0.0),
         margins.left,
+        y_fmt_ref,
     );
 
     children.push(ChartElement::Group {
@@ -200,6 +203,7 @@ fn generate_y_axis_for_line(
     domain: (f64, f64),
     range: (f64, f64),
     x_position: f64,
+    fmt: Option<&str>,
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     let ticks = scale.ticks(5);
@@ -218,11 +222,7 @@ fn generate_y_axis_for_line(
 
     for val in &ticks {
         let y = scale.map(*val);
-        let label = if *val == val.floor() && val.abs() < 1e15 {
-            format!("{}", *val as i64)
-        } else {
-            format!("{:.1}", val)
-        };
+        let label = format_value(*val, fmt);
 
         elements.push(ChartElement::Line {
             x1: x_position - 5.0,
