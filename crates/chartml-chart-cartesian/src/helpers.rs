@@ -7,6 +7,45 @@ use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::spec::{FieldRef, FieldRefItem, MarkEncoding};
 
+/// Grid line configuration resolved from the spec.
+#[derive(Debug, Clone)]
+pub struct GridConfig {
+    pub show_x: bool,
+    pub show_y: bool,
+    pub color: String,
+    pub opacity: f64,
+    pub dash_array: Option<String>,
+}
+
+impl Default for GridConfig {
+    fn default() -> Self {
+        Self {
+            show_x: false,
+            show_y: true, // JS default: horizontal grid on
+            color: "#e0e0e0".to_string(),
+            opacity: 0.5,
+            dash_array: None,
+        }
+    }
+}
+
+impl GridConfig {
+    /// Build from spec's style.grid if present.
+    pub fn from_config(config: &ChartConfig) -> Self {
+        let mut grid = Self::default();
+        if let Some(ref style) = config.visualize.style {
+            if let Some(ref g) = style.grid {
+                if let Some(x) = g.x { grid.show_x = x; }
+                if let Some(y) = g.y { grid.show_y = y; }
+                if let Some(ref c) = g.color { grid.color = c.clone(); }
+                if let Some(o) = g.opacity { grid.opacity = o; }
+                if let Some(ref d) = g.dash_array { grid.dash_array = Some(d.clone()); }
+            }
+        }
+        grid
+    }
+}
+
 /// Extract the field name from a FieldRef (Simple, Detailed, or Multiple).
 pub fn get_field_name(field_ref: &Option<FieldRef>) -> Result<String, ChartError> {
     match field_ref {
@@ -105,6 +144,8 @@ pub fn generate_x_axis(
     y_position: f64,
     available_width: f64,
     x_format: Option<&str>,
+    chart_height: Option<f64>,
+    grid: &GridConfig,
 ) -> XAxisResult {
     let band = ScaleBand::new(labels.to_vec(), range);
     let bandwidth = band.bandwidth();
@@ -135,6 +176,24 @@ pub fn generate_x_axis(
         stroke_dasharray: None,
         class: "axis-line".to_string(),
     });
+
+    // Vertical grid lines (if grid.show_x and chart_height provided)
+    if grid.show_x {
+        if let Some(ch) = chart_height {
+            for (_i, orig_label) in labels.iter().enumerate() {
+                let x = match band.map(orig_label) {
+                    Some(x) => x + bandwidth / 2.0,
+                    None => continue,
+                };
+                elements.push(ChartElement::Line {
+                    x1: x, y1: y_position, x2: x, y2: y_position - ch,
+                    stroke: grid.color.clone(), stroke_width: Some(1.0),
+                    stroke_dasharray: grid.dash_array.clone(),
+                    class: "grid-line grid-line-x".to_string(),
+                });
+            }
+        }
+    }
 
     // Step 3: Apply strategy
     match &strategy {
@@ -330,7 +389,7 @@ pub fn generate_y_axis(
 }
 
 /// Generate y-axis elements for numeric data (used by bar, line, and area charts).
-/// If `chart_width` is provided, horizontal grid lines extend across the chart.
+/// Grid lines are controlled by `grid` config and `chart_width`.
 pub fn generate_y_axis_numeric(
     domain: (f64, f64),
     range: (f64, f64),
@@ -338,6 +397,7 @@ pub fn generate_y_axis_numeric(
     fmt: Option<&str>,
     tick_count: usize,
     chart_width: Option<f64>,
+    grid: &GridConfig,
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     let ticks = scale.ticks(tick_count);
@@ -359,18 +419,20 @@ pub fn generate_y_axis_numeric(
         let y = scale.map(*val);
         let label = format_value(*val, fmt);
 
-        // Horizontal grid line (if chart_width provided)
-        if let Some(cw) = chart_width {
-            elements.push(ChartElement::Line {
-                x1: x_position,
-                y1: y,
-                x2: x_position + cw,
-                y2: y,
-                stroke: "#e0e0e0".to_string(),
-                stroke_width: Some(1.0),
-                stroke_dasharray: None,
-                class: "grid-line".to_string(),
-            });
+        // Horizontal grid line
+        if grid.show_y {
+            if let Some(cw) = chart_width {
+                elements.push(ChartElement::Line {
+                    x1: x_position,
+                    y1: y,
+                    x2: x_position + cw,
+                    y2: y,
+                    stroke: grid.color.clone(),
+                    stroke_width: Some(1.0),
+                    stroke_dasharray: grid.dash_array.clone(),
+                    class: format!("grid-line grid-line-y"),
+                });
+            }
         }
 
         // Tick mark
@@ -403,7 +465,7 @@ pub fn generate_y_axis_numeric(
 }
 
 /// Generate x-axis elements for numeric data (used by horizontal bar charts).
-/// If `chart_height` is provided, vertical grid lines extend upward.
+/// Grid lines controlled by `grid` config and `chart_height`.
 pub fn generate_x_axis_numeric(
     domain: (f64, f64),
     range: (f64, f64),
@@ -411,6 +473,7 @@ pub fn generate_x_axis_numeric(
     fmt: Option<&str>,
     tick_count: usize,
     chart_height: Option<f64>,
+    grid: &GridConfig,
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     let ticks = scale.ticks(tick_count);
@@ -432,18 +495,20 @@ pub fn generate_x_axis_numeric(
         let x = scale.map(*val);
         let label = format_value(*val, fmt);
 
-        // Vertical grid line (if chart_height provided)
-        if let Some(ch) = chart_height {
-            elements.push(ChartElement::Line {
-                x1: x,
-                y1: y_position,
-                x2: x,
-                y2: y_position - ch,
-                stroke: "#e0e0e0".to_string(),
-                stroke_width: Some(1.0),
-                stroke_dasharray: None,
-                class: "grid-line".to_string(),
-            });
+        // Vertical grid line
+        if grid.show_x {
+            if let Some(ch) = chart_height {
+                elements.push(ChartElement::Line {
+                    x1: x,
+                    y1: y_position,
+                    x2: x,
+                    y2: y_position - ch,
+                    stroke: grid.color.clone(),
+                    stroke_width: Some(1.0),
+                    stroke_dasharray: grid.dash_array.clone(),
+                    class: "grid-line grid-line-x".to_string(),
+                });
+            }
         }
 
         elements.push(ChartElement::Line {

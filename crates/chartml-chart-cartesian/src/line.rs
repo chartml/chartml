@@ -9,7 +9,7 @@ use chartml_core::shapes::LineGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{format_value, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{GridConfig, format_value, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -80,7 +80,8 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
     // Axes — read format string from spec
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
-    let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref());
+    let grid = GridConfig::from_config(config);
+    let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
     let y_axis_elements = generate_y_axis_numeric(
         (domain_min, domain_max),
         (inner_height, 0.0),
@@ -88,6 +89,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         y_fmt_ref,
         adaptive_tick_count(inner_height),
         Some(inner_width),
+        &grid,
     );
 
     children.push(ChartElement::Group {

@@ -10,7 +10,7 @@ use chartml_core::shapes::AreaGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{format_value, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{GridConfig, format_value, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -25,6 +25,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
     let is_stacked = matches!(config.visualize.mode, Some(chartml_core::spec::ChartMode::Stacked));
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
+    let grid = GridConfig::from_config(config);
 
     // Step 1: Compute label strategy for margin estimation
     let estimated_width = config.width - 80.0;
@@ -167,9 +168,9 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
             // Axes
             let x_axis_result =
-                generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref());
+                generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
             let y_axis_elements =
-                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width));
+                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid);
 
             children.push(ChartElement::Group {
                 class: "axes".to_string(),
@@ -267,9 +268,9 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
             // Axes
             let x_axis_result =
-                generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref());
+                generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
             let y_axis_elements =
-                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width));
+                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid);
 
             children.push(ChartElement::Group {
                 class: "axes".to_string(),
@@ -373,9 +374,9 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
         // Axes
         let x_axis_result =
-            generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref());
+            generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
         let y_axis_elements =
-            generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width));
+            generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid);
 
         children.push(ChartElement::Group {
             class: "axes".to_string(),

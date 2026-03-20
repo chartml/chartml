@@ -10,7 +10,7 @@ use chartml_core::spec::{ChartMode, Orientation};
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{format_value, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{GridConfig, format_value, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -72,6 +72,7 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
     // Determine value domain
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
+    let grid = GridConfig::from_config(config);
 
     let (value_max, bar_elements) = if let Some(ref color_f) = color_field {
         render_multi_series_bars(
@@ -108,14 +109,14 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
     let axis_elements = if is_horizontal {
         // Category y-axis: generate at x=0 relative, then offset by margins.left
         let x_axis = generate_y_axis(&categories, (0.0, inner_height), 0.0, None);
-        let y_axis = generate_x_axis_numeric((0.0, value_max), (0.0, inner_width), margins.top + inner_height, y_fmt_ref, adaptive_tick_count(inner_width), Some(inner_height));
+        let y_axis = generate_x_axis_numeric((0.0, value_max), (0.0, inner_width), margins.top + inner_height, y_fmt_ref, adaptive_tick_count(inner_width), Some(inner_height), &grid);
         let mut axes = Vec::new();
         axes.extend(x_axis.into_iter().map(|e| offset_element(e, margins.left, margins.top)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes
     } else {
-        let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref());
-        let y_axis = generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width));
+        let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
+        let y_axis = generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid);
         let mut axes = Vec::new();
         axes.extend(x_axis_result.elements.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));

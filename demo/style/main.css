@@ -331,9 +331,15 @@ body {
     font-weight: 700;
 }
 
-/* Grid lines — faint horizontal/vertical lines at tick positions */
+/* Grid lines — opacity is now set per-spec via the grid config.
+   Default fallback if no inline style is set. */
 .grid-line {
     opacity: 0.5;
+}
+
+.grid-line-x,
+.grid-line-y {
+    pointer-events: none;
 }
 
 /* Metric card styling */
