@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "crates/chartml-core",
+    "crates/chartml-chart-cartesian",
+    "crates/chartml-chart-pie",
+    "crates/chartml-chart-scatter",
+    "crates/chartml-chart-metric",
+    "crates/chartml-leptos",
+    "demo",
+]
+
+default-members = [
+    "crates/chartml-core",
+    "crates/chartml-chart-cartesian",
+    "crates/chartml-chart-pie",
+    "crates/chartml-chart-scatter",
+    "crates/chartml-chart-metric",
+]

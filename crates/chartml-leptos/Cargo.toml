@@ -1,0 +1,9 @@
+[package]
+name = "chartml-leptos"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+chartml-core = { path = "../chartml-core" }
+leptos = "0.7"
