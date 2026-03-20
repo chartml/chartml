@@ -192,9 +192,26 @@ body {
     animation: chartml-fade-in 500ms ease-out both;
 }
 
-/* Pie/doughnut slice entrance */
+/* Pie/doughnut slices — entrance + hover matching D3:
+   Default: opacity 0.9. Hover: slice grows outward (scale 1.04),
+   opacity 1, siblings dim to 0.5. Uses CSS sibling selectors. */
 .chartml-pie-slice {
     animation: chartml-fade-in 400ms ease-out both;
+    opacity: 0.9;
+    transition: transform 200ms ease, opacity 200ms ease;
+    transform-origin: center;
+    cursor: pointer;
+}
+
+/* When any slice group is hovered, dim ALL slices in the pie group */
+.chartml-pie:hover .chartml-pie-slice {
+    opacity: 0.5;
+}
+
+/* Un-dim + enlarge the slice whose interactive wrapper is hovered */
+.chartml-pie .chartml-interactive:hover .chartml-pie-slice {
+    opacity: 1;
+    transform: scale(1.04);
 }
 
 /* Line/area data point dots — matches D3 chartml:
@@ -213,16 +230,17 @@ body {
     r: 7;
 }
 
-/* Scatter point entrance */
+/* Scatter point entrance + hover */
 .chartml-scatter-point {
     animation: chartml-scale-in 300ms ease-out both;
-    transition: r 150ms ease, opacity 150ms ease;
+    opacity: 0.9;
+    transition: r 200ms ease, opacity 200ms ease;
     cursor: pointer;
 }
 
-.chartml-scatter-point:hover {
+.chartml-interactive:hover .chartml-scatter-point {
+    r: 8;
     opacity: 1;
-    filter: brightness(1.1);
 }
 
 @keyframes chartml-scale-in {
