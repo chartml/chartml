@@ -156,7 +156,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                     area_elements.push(ChartElement::Circle {
                         cx: px,
                         cy: y1_pixel,
-                        r: 4.0,
+                        r: 5.0,
                         fill: color.clone(),
                         stroke: Some("#fff".to_string()),
                         class: "chartml-area-dot".to_string(),
@@ -256,7 +256,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                     area_elements.push(ChartElement::Circle {
                         cx: px,
                         cy: y1,
-                        r: 4.0,
+                        r: 5.0,
                         fill: color.clone(),
                         stroke: Some("#fff".to_string()),
                         class: "chartml-area-dot".to_string(),
@@ -362,7 +362,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 area_elements.push(ChartElement::Circle {
                     cx: px,
                     cy: y1,
-                    r: 4.0,
+                    r: 5.0,
                     fill: color.clone(),
                     stroke: Some("#fff".to_string()),
                     class: "chartml-area-dot".to_string(),

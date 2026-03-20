@@ -174,7 +174,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 line_elements.push(ChartElement::Circle {
                     cx: px,
                     cy: py,
-                    r: 4.0,
+                    r: 5.0,
                     fill: color.clone(),
                     stroke: Some("#fff".to_string()),
                     class: "chartml-line-dot".to_string(),
@@ -240,7 +240,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 line_elements.push(ChartElement::Circle {
                     cx: px,
                     cy: py,
-                    r: 4.0,
+                    r: 5.0,
                     fill: color.clone(),
                     stroke: Some("#fff".to_string()),
                     class: "chartml-line-dot".to_string(),
