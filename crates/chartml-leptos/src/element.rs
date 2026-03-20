@@ -234,8 +234,8 @@ fn render_interactive(
         <g
             class="chartml-interactive"
             style=move || {
-                if hovered.get() {
-                    format!("{} opacity: 0.8; cursor: pointer;", base_style)
+                if base_style.is_empty() {
+                    String::new()
                 } else {
                     base_style.clone()
                 }

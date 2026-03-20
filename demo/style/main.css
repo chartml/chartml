@@ -125,7 +125,22 @@ body {
     border-color: #2E7D9A;
 }
 
-/* ── Chart Animations ── */
+/*
+ * ══════════════════════════════════════════════════════════════
+ * CHART ANIMATIONS & INTERACTIONS — ALL CSS, NO JAVASCRIPT
+ *
+ * Design principle: the Rust/WASM renderer outputs static SVG
+ * with semantic class names. ALL visual animation, hover effects,
+ * and transitions are handled purely via CSS below.
+ *
+ * The Leptos adapter only manages:
+ * - Tooltip data (which element is hovered, via signals)
+ * - Tooltip positioning (fixed div near cursor)
+ *
+ * Every entrance animation, hover effect, and transition is CSS.
+ * To customize: override these classes in your own stylesheet.
+ * ══════════════════════════════════════════════════════════════
+ */
 
 /*
  * Bar entrance: each bar grows from its own baseline via scaleY.
@@ -229,21 +244,32 @@ body {
     animation: chartml-fade-in 500ms ease-out 200ms both;
 }
 
-/* Hover effects */
-.chartml-container svg {
+/*
+ * ── Hover Effects ──
+ * All hover/interaction animations are CSS-only.
+ * The Leptos renderer adds class="chartml-interactive" wrappers
+ * and sets tooltip data via signals — but visual feedback is
+ * entirely CSS. No inline style opacity changes.
+ */
+
+/* Bars: darken on hover */
+.chartml-interactive rect {
+    cursor: pointer;
+    transition: filter 200ms ease;
+}
+
+.chartml-interactive rect:hover {
+    filter: brightness(0.9);
+}
+
+/* Paths (line/area series): subtle highlight on hover */
+.chartml-interactive path {
+    cursor: pointer;
     transition: opacity 200ms ease;
 }
 
-.chartml-interactive rect,
-.chartml-interactive path,
-.chartml-interactive circle {
-    transition: opacity 150ms ease;
-    cursor: pointer;
-}
-
-.chartml-interactive rect:hover,
-.chartml-interactive circle:hover {
-    filter: brightness(1.1);
+.chartml-interactive path:hover {
+    opacity: 0.7;
 }
 
 /* ─── Tooltip ─── */
