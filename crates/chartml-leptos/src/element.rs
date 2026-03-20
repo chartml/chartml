@@ -1,8 +1,8 @@
 use leptos::prelude::*;
 use chartml_core::element::*;
+use crate::tooltip::{TooltipState, use_tooltip};
 
 /// Recursively render a ChartElement tree into Leptos view nodes.
-/// This is the main rendering function that the ChartMLChart component calls.
 pub fn render_element(element: &ChartElement) -> AnyView {
     match element {
         ChartElement::Svg { viewbox, width, height, class, children } => {
@@ -45,20 +45,28 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             let fill = fill.clone();
             let stroke_str = stroke.clone().unwrap_or_default();
             let class = class.clone();
-            let tooltip_data = data.clone();
-            // For bar animation: transform-origin at bottom center of each rect
+            // Bar animation: transform-origin at bottom center
             let origin_x = x + width / 2.0;
             let origin_y = y + height;
-            let style = format!("transform-origin: {}px {}px;", origin_x, origin_y);
+            let base_style = format!("transform-origin: {}px {}px;", origin_x, origin_y);
 
-            if let Some(data) = tooltip_data {
-                render_interactive_rect(x_str, y_str, w_str, h_str, fill, stroke_str, class, style, data)
+            if let Some(data) = data.clone() {
+                render_interactive(
+                    view! {
+                        <rect
+                            x=x_str y=y_str width=w_str height=h_str
+                            fill=fill stroke=stroke_str class=class
+                        />
+                    }.into_any(),
+                    base_style,
+                    data,
+                )
             } else {
                 view! {
                     <rect
                         x=x_str y=y_str width=w_str height=h_str
                         fill=fill stroke=stroke_str class=class
-                        style=style
+                        style=base_style
                     />
                 }.into_any()
             }
@@ -71,10 +79,18 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             let sw = stroke_width.map(|w| w.to_string()).unwrap_or_default();
             let sda = stroke_dasharray.clone().unwrap_or_default();
             let class = class.clone();
-            let tooltip_data = data.clone();
 
-            if let Some(data) = tooltip_data {
-                render_interactive_path(d, fill_str, stroke_str, sw, sda, class, data)
+            if let Some(data) = data.clone() {
+                render_interactive(
+                    view! {
+                        <path
+                            d=d fill=fill_str stroke=stroke_str
+                            stroke-width=sw stroke-dasharray=sda class=class
+                        />
+                    }.into_any(),
+                    String::new(),
+                    data,
+                )
             } else {
                 view! {
                     <path
@@ -92,10 +108,18 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             let fill = fill.clone();
             let stroke_str = stroke.clone().unwrap_or_default();
             let class = class.clone();
-            let tooltip_data = data.clone();
 
-            if let Some(data) = tooltip_data {
-                render_interactive_circle(cx_str, cy_str, r_str, fill, stroke_str, class, data)
+            if let Some(data) = data.clone() {
+                render_interactive(
+                    view! {
+                        <circle
+                            cx=cx_str cy=cy_str r=r_str
+                            fill=fill stroke=stroke_str class=class
+                        />
+                    }.into_any(),
+                    String::new(),
+                    data,
+                )
             } else {
                 view! {
                     <circle
@@ -152,7 +176,9 @@ pub fn render_element(element: &ChartElement) -> AnyView {
 
         ChartElement::Div { class, style, children } => {
             let class = class.clone();
-            let style_str = style.iter()
+            let mut pairs: Vec<_> = style.iter().collect();
+            pairs.sort_by_key(|(k, _)| (*k).clone());
+            let style_str = pairs.iter()
                 .map(|(k, v)| format!("{}: {}", k, v))
                 .collect::<Vec<_>>()
                 .join("; ");
@@ -167,7 +193,9 @@ pub fn render_element(element: &ChartElement) -> AnyView {
 
         ChartElement::Span { class, style, content } => {
             let class = class.clone();
-            let style_str = style.iter()
+            let mut pairs: Vec<_> = style.iter().collect();
+            pairs.sort_by_key(|(k, _)| (*k).clone());
+            let style_str = pairs.iter()
                 .map(|(k, v)| format!("{}: {}", k, v))
                 .collect::<Vec<_>>()
                 .join("; ");
@@ -180,169 +208,56 @@ pub fn render_element(element: &ChartElement) -> AnyView {
     }
 }
 
-fn render_interactive_rect(
-    x: String, y: String, w: String, h: String,
-    fill: String, stroke: String, class: String,
+/// Wrap any SVG element with interactive hover behavior.
+/// On mouseenter: sets the shared tooltip signal with ElementData + position.
+/// On mouseleave: clears the tooltip signal.
+/// This keeps tooltip rendering out of the SVG — the ChartMLChart container
+/// renders the tooltip as an HTML overlay.
+fn render_interactive(
+    inner: AnyView,
     base_style: String,
     data: ElementData,
 ) -> AnyView {
+    let tooltip_signal = use_tooltip();
     let hovered = RwSignal::new(false);
-    let tooltip_text = format!("{}: {}", data.label, data.value);
-    let tooltip_width = (tooltip_text.len() as f64 * 7.0 + 16.0).to_string();
+    let data_for_enter = data.clone();
 
     view! {
-        <g class="chartml-interactive">
-            <rect
-                x=x.clone() y=y.clone() width=w height=h
-                fill=fill stroke=stroke class=class
-                style=move || {
+        <g
+            class="chartml-interactive"
+            style=move || {
+                if hovered.get() {
+                    format!("{} opacity: 0.8; cursor: pointer;", base_style)
+                } else {
+                    base_style.clone()
+                }
+            }
+            on:mouseenter=move |ev| {
+                hovered.set(true);
+                if let Some(sig) = tooltip_signal {
+                    let x = ev.client_x() as f64;
+                    let y = ev.client_y() as f64;
+                    sig.set(TooltipState::show(data_for_enter.clone(), x, y));
+                }
+            }
+            on:mousemove=move |ev| {
+                if let Some(sig) = tooltip_signal {
                     if hovered.get() {
-                        format!("{} opacity: 0.8; cursor: pointer;", base_style)
-                    } else {
-                        base_style.clone()
+                        sig.update(|s| {
+                            s.x = ev.client_x() as f64;
+                            s.y = ev.client_y() as f64;
+                        });
                     }
                 }
-                on:mouseenter=move |_| hovered.set(true)
-                on:mouseleave=move |_| hovered.set(false)
-            />
-            {move || {
-                let tooltip_text = tooltip_text.clone();
-                let tooltip_width = tooltip_width.clone();
-                if hovered.get() {
-                    let tx: f64 = x.parse().unwrap_or(0.0);
-                    let ty: f64 = y.parse().unwrap_or(0.0) - 10.0;
-                    view! {
-                        <g class="chartml-tooltip">
-                            <rect
-                                x=(tx - 5.0).to_string()
-                                y=(ty - 20.0).to_string()
-                                width=tooltip_width
-                                height="20"
-                                rx="3"
-                                fill="#333"
-                                opacity="0.9"
-                            />
-                            <text
-                                x=tx.to_string()
-                                y=(ty - 5.0).to_string()
-                                fill="white"
-                                font-size="12px"
-                                class="chartml-tooltip-text"
-                            >
-                                {tooltip_text}
-                            </text>
-                        </g>
-                    }.into_any()
-                } else {
-                    view! { <g /> }.into_any()
+            }
+            on:mouseleave=move |_| {
+                hovered.set(false);
+                if let Some(sig) = tooltip_signal {
+                    sig.set(TooltipState::hide());
                 }
-            }}
-        </g>
-    }.into_any()
-}
-
-fn render_interactive_path(
-    d: String, fill: String, stroke: String,
-    stroke_width: String, stroke_dasharray: String, class: String,
-    data: ElementData,
-) -> AnyView {
-    let hovered = RwSignal::new(false);
-    let tooltip_text = format!("{}: {}", data.label, data.value);
-    let tooltip_width = (tooltip_text.len() as f64 * 7.0 + 16.0).to_string();
-
-    view! {
-        <g class="chartml-interactive">
-            <path
-                d=d fill=fill stroke=stroke
-                stroke-width=stroke_width stroke-dasharray=stroke_dasharray class=class
-                style=move || if hovered.get() { "opacity: 0.8; cursor: pointer;" } else { "" }
-                on:mouseenter=move |_| hovered.set(true)
-                on:mouseleave=move |_| hovered.set(false)
-            />
-            {move || {
-                let tooltip_text = tooltip_text.clone();
-                let tooltip_width = tooltip_width.clone();
-                if hovered.get() {
-                    view! {
-                        <g class="chartml-tooltip">
-                            <rect
-                                x="-5"
-                                y="-30"
-                                width=tooltip_width
-                                height="20"
-                                rx="3"
-                                fill="#333"
-                                opacity="0.9"
-                            />
-                            <text
-                                x="0"
-                                y="-15"
-                                fill="white"
-                                font-size="12px"
-                                class="chartml-tooltip-text"
-                            >
-                                {tooltip_text}
-                            </text>
-                        </g>
-                    }.into_any()
-                } else {
-                    view! { <g /> }.into_any()
-                }
-            }}
-        </g>
-    }.into_any()
-}
-
-fn render_interactive_circle(
-    cx: String, cy: String, r: String,
-    fill: String, stroke: String, class: String,
-    data: ElementData,
-) -> AnyView {
-    let hovered = RwSignal::new(false);
-    let tooltip_text = format!("{}: {}", data.label, data.value);
-    let tooltip_width = (tooltip_text.len() as f64 * 7.0 + 16.0).to_string();
-
-    view! {
-        <g class="chartml-interactive">
-            <circle
-                cx=cx.clone() cy=cy.clone() r=r
-                fill=fill stroke=stroke class=class
-                style=move || if hovered.get() { "opacity: 0.8; cursor: pointer;" } else { "" }
-                on:mouseenter=move |_| hovered.set(true)
-                on:mouseleave=move |_| hovered.set(false)
-            />
-            {move || {
-                let tooltip_text = tooltip_text.clone();
-                let tooltip_width = tooltip_width.clone();
-                if hovered.get() {
-                    let tx: f64 = cx.parse().unwrap_or(0.0);
-                    let ty: f64 = cy.parse().unwrap_or(0.0) - 15.0;
-                    view! {
-                        <g class="chartml-tooltip">
-                            <rect
-                                x=(tx - 5.0).to_string()
-                                y=(ty - 20.0).to_string()
-                                width=tooltip_width
-                                height="20"
-                                rx="3"
-                                fill="#333"
-                                opacity="0.9"
-                            />
-                            <text
-                                x=tx.to_string()
-                                y=(ty - 5.0).to_string()
-                                fill="white"
-                                font-size="12px"
-                                class="chartml-tooltip-text"
-                            >
-                                {tooltip_text}
-                            </text>
-                        </g>
-                    }.into_any()
-                } else {
-                    view! { <g /> }.into_any()
-                }
-            }}
+            }
+        >
+            {inner}
         </g>
     }.into_any()
 }
