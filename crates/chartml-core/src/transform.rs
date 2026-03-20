@@ -15,7 +15,24 @@ pub fn apply_transforms(data: Vec<Row>, spec: &TransformSpec) -> Result<Vec<Row>
 }
 
 /// Aggregate data by dimensions with measures.
+/// Matches JS behavior: if no dimensions and no measures, skip aggregation
+/// and just apply filters/sort/limit to the raw data.
 fn aggregate(data: &[Row], spec: &AggregateSpec) -> Result<Vec<Row>, ChartError> {
+    // No aggregation needed — just filter/sort/limit the raw data
+    if spec.dimensions.is_empty() && spec.measures.is_empty() {
+        let mut result = data.to_vec();
+        if let Some(ref filters) = spec.filters {
+            result = apply_filters(result, filters);
+        }
+        if let Some(ref sorts) = spec.sort {
+            apply_sort(&mut result, sorts);
+        }
+        if let Some(limit) = spec.limit {
+            result.truncate(limit as usize);
+        }
+        return Ok(result);
+    }
+
     // 1. Extract dimension output names and source column names
     let dim_fields: Vec<String> = spec
         .dimensions
