@@ -127,19 +127,34 @@ body {
 
 /* ── Chart Animations ── */
 
-/* Bar entrance: bars grow from baseline */
-.chartml-bar {
+/* Bar entrance: individual bars fade + slide up */
+.bars rect,
+.bar {
     animation: chartml-bar-enter 400ms ease-out both;
 }
 
+/* Stagger bar animations by child index */
+.bars rect:nth-child(1) { animation-delay: 0ms; }
+.bars rect:nth-child(2) { animation-delay: 50ms; }
+.bars rect:nth-child(3) { animation-delay: 100ms; }
+.bars rect:nth-child(4) { animation-delay: 150ms; }
+.bars rect:nth-child(5) { animation-delay: 200ms; }
+.bars rect:nth-child(6) { animation-delay: 250ms; }
+.bars rect:nth-child(7) { animation-delay: 300ms; }
+.bars rect:nth-child(8) { animation-delay: 350ms; }
+.bars rect:nth-child(9) { animation-delay: 400ms; }
+.bars rect:nth-child(10) { animation-delay: 450ms; }
+.bars rect:nth-child(11) { animation-delay: 500ms; }
+.bars rect:nth-child(12) { animation-delay: 550ms; }
+
 @keyframes chartml-bar-enter {
     from {
-        transform: scaleY(0);
-        transform-origin: bottom;
+        opacity: 0;
+        transform: translateY(20px);
     }
     to {
-        transform: scaleY(1);
-        transform-origin: bottom;
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
