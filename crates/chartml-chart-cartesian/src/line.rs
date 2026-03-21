@@ -85,6 +85,10 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
     let domain_min = if value_min >= 0.0 { 0.0 } else { value_min };
     let domain_max = if value_max <= 0.0 { 1.0 } else { value_max };
 
+    // Apply D3-style nice domain rounding BEFORE creating the scale,
+    // so data points and axis ticks use the same domain.
+    let (domain_min, domain_max) = crate::helpers::nice_domain(domain_min, domain_max, 10);
+
     let band = ScaleBand::new(categories.clone(), (0.0, inner_width));
     let linear = ScaleLinear::new((domain_min, domain_max), (inner_height, 0.0));
 
@@ -111,11 +115,6 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
     let grid = GridConfig::from_config(config);
-
-    // Apply D3-style nice domain rounding for clean tick intervals and headroom.
-    // JS applies nice() unconditionally — even when explicit min/max are set, yLeft.nice()
-    // overrides them. Match that behavior: always apply nice_domain().
-    let (domain_min, domain_max) = crate::helpers::nice_domain(domain_min, domain_max, 10);
 
     let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
     let y_axis_elements = generate_y_axis_numeric(
