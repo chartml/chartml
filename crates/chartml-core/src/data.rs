@@ -478,11 +478,18 @@ impl DataTable {
                     DataType::Float64 | DataType::Float32 |
                     DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64 |
                     DataType::UInt8 | DataType::UInt16 | DataType::UInt32 | DataType::UInt64 |
-                    DataType::Decimal128(_, _) |
-                    DataType::Date32 | DataType::Date64 |
-                    DataType::Timestamp(_, _) => {
+                    DataType::Decimal128(_, _) => {
                         if let Some(v) = arrow_to_f64(col, row_idx) {
                             serde_json::json!(v)
+                        } else {
+                            serde_json::Value::Null
+                        }
+                    }
+                    // Dates and timestamps → preserve as ISO strings, not raw f64
+                    DataType::Date32 | DataType::Date64 |
+                    DataType::Timestamp(_, _) => {
+                        if let Some(s) = arrow_to_string(col, row_idx) {
+                            serde_json::Value::String(s)
                         } else {
                             serde_json::Value::Null
                         }
