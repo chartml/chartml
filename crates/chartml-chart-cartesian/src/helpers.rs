@@ -47,6 +47,20 @@ impl GridConfig {
 }
 
 /// Extract axis min/max bounds from the spec.
+/// Adaptive bar padding matching JS d3CartesianChart.js behavior.
+/// More bars = less padding to prevent overlap; fewer bars = more padding.
+pub fn adaptive_bar_padding(num_categories: usize) -> f64 {
+    if num_categories <= 6 {
+        0.2
+    } else if num_categories <= 12 {
+        0.15
+    } else if num_categories <= 20 {
+        0.1
+    } else {
+        0.05
+    }
+}
+
 pub fn get_y_axis_bounds(config: &ChartConfig) -> (Option<f64>, Option<f64>) {
     let axes = match &config.visualize.axes {
         Some(a) => a,

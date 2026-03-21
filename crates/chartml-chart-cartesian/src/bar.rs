@@ -284,7 +284,8 @@ fn render_single_series_bars(
     let fill = config.colors.first().cloned().unwrap_or_else(|| "#2E7D9A".to_string());
 
     if is_horizontal {
-        let band = ScaleBand::new(categories.to_vec(), (0.0, inner_height));
+        let band = ScaleBand::new(categories.to_vec(), (0.0, inner_height))
+            .padding(crate::helpers::adaptive_bar_padding(categories.len()));
         let linear = ScaleLinear::new((domain_min, effective_max), (0.0, inner_width));
 
         for row in data {
@@ -311,7 +312,8 @@ fn render_single_series_bars(
             });
         }
     } else {
-        let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width));
+        let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
+            .padding(crate::helpers::adaptive_bar_padding(categories.len()));
         let linear = ScaleLinear::new((domain_min, effective_max), (inner_height, 0.0));
 
         for row in data {
@@ -433,7 +435,8 @@ fn render_multi_series_bars(
             (domain_min, if domain_max < f64::MAX { domain_max } else { value_max })
         };
 
-        let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width));
+        let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
+            .padding(crate::helpers::adaptive_bar_padding(categories.len()));
         let linear = ScaleLinear::new((effective_min, effective_max), (inner_height, 0.0));
 
         for point in &stacked_points {
@@ -478,7 +481,8 @@ fn render_multi_series_bars(
         let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
         let effective_max = if domain_max < f64::MAX { domain_max } else { value_max };
 
-        let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width));
+        let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
+            .padding(0.05);
         let linear = ScaleLinear::new((domain_min, effective_max), (inner_height, 0.0));
 
         let num_series = series_names.len().max(1);
@@ -586,7 +590,8 @@ fn render_combo(
     let inner_width = margins.inner_width(config.width);
     let inner_height = margins.inner_height(config.height);
 
-    let band = ScaleBand::new(categories.clone(), (0.0, inner_width));
+    let band = ScaleBand::new(categories.clone(), (0.0, inner_width))
+        .padding(crate::helpers::adaptive_bar_padding(categories.len()));
     let bandwidth = band.bandwidth();
 
     // Separate fields by axis
