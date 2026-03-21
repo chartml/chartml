@@ -5,6 +5,7 @@ use chartml_core::error::ChartError;
 use chartml_core::scales::{ScaleLinear, ScaleSqrt};
 use chartml_core::spec::{VisualizeSpec, FieldRef, MarkEncoding};
 use chartml_core::layout::margins::Margins;
+use chartml_core::layout::labels::approximate_text_width;
 
 pub struct ScatterRenderer;
 
@@ -30,7 +31,13 @@ impl ChartRenderer for ScatterRenderer {
         let width = config.width;
         let height = config.height;
 
-        let margins = Margins::default();
+        let has_legend = color_field.is_some();
+        let margins = if has_legend {
+            // Add 30px bottom margin for the legend row
+            Margins::new(30.0, 20.0, 70.0, 60.0)
+        } else {
+            Margins::default()
+        };
         let inner_width = margins.inner_width(width);
         let inner_height = margins.inner_height(height);
 
@@ -110,6 +117,10 @@ impl ChartRenderer for ScatterRenderer {
         let y_ticks = y_scale.ticks(((inner_height / 50.0).floor() as usize).clamp(4, 10));
         let mut axis_elements = Vec::new();
 
+        // Compute tick steps for formatting
+        let y_tick_step = compute_tick_step(&y_ticks);
+        let x_tick_step = compute_tick_step(&x_ticks);
+
         // Horizontal grid lines + y-axis ticks
         for &val in &y_ticks {
             let y = y_scale.map(val);
@@ -126,7 +137,7 @@ impl ChartRenderer for ScatterRenderer {
                 stroke_dasharray: None, class: "tick".to_string(),
             });
             // Label
-            let label = if val == val.floor() && val.abs() < 1e15 { format!("{}", val as i64) } else { format!("{:.1}", val) };
+            let label = format_tick_value(val, y_tick_step);
             axis_elements.push(ChartElement::Text {
                 x: margins.left - 8.0, y,
                 content: label, anchor: TextAnchor::End,
@@ -154,7 +165,7 @@ impl ChartRenderer for ScatterRenderer {
                 stroke_dasharray: None, class: "tick".to_string(),
             });
             // Label
-            let label = if val == val.floor() && val.abs() < 1e15 { format!("{}", val as i64) } else { format!("{:.1}", val) };
+            let label = format_tick_value(val, x_tick_step);
             axis_elements.push(ChartElement::Text {
                 x, y: x_axis_y + 18.0,
                 content: label, anchor: TextAnchor::Middle,
@@ -207,6 +218,24 @@ impl ChartRenderer for ScatterRenderer {
             children: point_elements,
         });
 
+        // Legend
+        if let Some(ref cf) = color_field {
+            let series_names = unique_values(data, cf);
+            if series_names.len() > 1 {
+                let legend_elements = generate_legend_circles(
+                    &series_names,
+                    &config.colors,
+                    width,
+                    height - 10.0,
+                );
+                children.push(ChartElement::Group {
+                    class: "legend".to_string(),
+                    transform: None,
+                    children: legend_elements,
+                });
+            }
+        }
+
         Ok(ChartElement::Svg {
             viewbox: ViewBox::new(0.0, 0.0, width, height),
             width: Some(width),
@@ -256,6 +285,143 @@ fn get_size_field(config: &ChartConfig) -> Option<String> {
             MarkEncoding::Detailed(spec) => spec.field.clone(),
         })
     })
+}
+
+/// Compute the tick step from a slice of ticks.
+fn compute_tick_step(ticks: &[f64]) -> f64 {
+    if ticks.len() >= 2 {
+        (ticks[1] - ticks[0]).abs()
+    } else {
+        1.0
+    }
+}
+
+/// Format a numeric value for use as an axis tick label, with comma separators.
+///
+/// Mirrors the D3-style `format_tick_value` from the cartesian helpers: computes
+/// decimal precision from the tick step and inserts commas into the integer part.
+fn format_tick_value(value: f64, tick_step: f64) -> String {
+    // D3's precisionFixed(step): max(0, -floor(log10(abs(step))))
+    let precision = if tick_step.abs() < 1e-15 {
+        0usize
+    } else {
+        let p = -(tick_step.abs().log10().floor()) as i64;
+        p.max(0) as usize
+    };
+
+    let formatted = format!("{:.prec$}", value, prec = precision);
+
+    // Split on decimal point
+    let (int_part, dec_part) = if let Some(dot_pos) = formatted.find('.') {
+        (&formatted[..dot_pos], Some(&formatted[dot_pos..]))
+    } else {
+        (formatted.as_str(), None)
+    };
+
+    // Handle negative sign
+    let (sign, digits) = if int_part.starts_with('-') {
+        ("-", &int_part[1..])
+    } else {
+        ("", int_part)
+    };
+
+    let with_commas = insert_commas(digits);
+
+    match dec_part {
+        Some(dec) => format!("{}{}{}", sign, with_commas, dec),
+        None => format!("{}{}", sign, with_commas),
+    }
+}
+
+/// Insert comma separators into a string of digits.
+fn insert_commas(digits: &str) -> String {
+    let len = digits.len();
+    if len <= 3 {
+        return digits.to_string();
+    }
+    let mut result = String::with_capacity(len + len / 3);
+    for (i, ch) in digits.chars().enumerate() {
+        if i > 0 && (len - i) % 3 == 0 {
+            result.push(',');
+        }
+        result.push(ch);
+    }
+    result
+}
+
+/// Generate legend elements with circle symbols for scatter/bubble charts.
+///
+/// Mirrors `generate_legend_with_mark(..., LegendMark::Circle)` from cartesian
+/// helpers, centered horizontally at the given y_position.
+fn generate_legend_circles(
+    series_names: &[String],
+    colors: &[String],
+    chart_width: f64,
+    y_position: f64,
+) -> Vec<ChartElement> {
+    if series_names.len() <= 1 {
+        return Vec::new();
+    }
+
+    const SYMBOL_SIZE: f64 = 12.0;
+    const SYMBOL_GAP: f64 = 6.0;
+    const ITEM_PADDING: f64 = 16.0;
+    const MAX_LABEL_LEN: usize = 20;
+
+    // Calculate item widths using text measurement
+    let items: Vec<(String, f64)> = series_names.iter().map(|name| {
+        let display = if name.len() > MAX_LABEL_LEN {
+            format!("{}\u{2026}", &name[..MAX_LABEL_LEN - 1])
+        } else {
+            name.clone()
+        };
+        let text_w = approximate_text_width(&display);
+        let item_w = SYMBOL_SIZE + SYMBOL_GAP + text_w + ITEM_PADDING;
+        (display, item_w)
+    }).collect();
+
+    let total_width: f64 = items.iter().map(|(_, w)| w).sum();
+    let start_x = (chart_width - total_width).max(0.0) / 2.0;
+
+    let mut elements = Vec::new();
+    let mut x = start_x;
+
+    for (i, (display_name, item_w)) in items.iter().enumerate() {
+        let color = colors.get(i % colors.len())
+            .cloned()
+            .unwrap_or_else(|| "#999".to_string());
+        let sym_y = y_position;
+
+        // Circle symbol
+        elements.push(ChartElement::Circle {
+            cx: x + SYMBOL_SIZE / 2.0,
+            cy: sym_y + SYMBOL_SIZE / 2.0,
+            r: SYMBOL_SIZE / 2.0 - 1.0,
+            fill: color,
+            stroke: None,
+            class: "legend-symbol legend-circle".to_string(),
+            data: None,
+        });
+
+        // Label
+        elements.push(ChartElement::Text {
+            x: x + SYMBOL_SIZE + SYMBOL_GAP,
+            y: sym_y + 10.0,
+            content: display_name.clone(),
+            anchor: TextAnchor::Start,
+            dominant_baseline: None,
+            transform: None,
+            font_size: Some("11px".to_string()),
+            font_weight: None,
+            fill: Some("#333".to_string()),
+            class: "legend-label".to_string(),
+            data: None,
+        });
+
+        x += item_w;
+    }
+
+    elements
 }
 
 #[cfg(test)]
@@ -362,7 +528,7 @@ mod tests {
         assert!(result.is_ok(), "render failed: {:?}", result.err());
         let element = result.unwrap();
         let circle_count = count_elements(&element, &|e| matches!(e, ChartElement::Circle { .. }));
-        assert_eq!(circle_count, 4); // 4 data points
+        assert_eq!(circle_count, 6); // 4 data points + 2 legend circles (categories A, B)
     }
 
     #[test]

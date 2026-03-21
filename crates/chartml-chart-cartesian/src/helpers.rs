@@ -1172,7 +1172,7 @@ pub fn generate_annotations(
             if let Some(ref label) = ann.label {
                 let label_position = ann.label_position.as_deref().unwrap_or("end");
                 let (label_x, anchor) = if label_position == "end" {
-                    (x_end + 4.0, TextAnchor::Start)
+                    (x_end, TextAnchor::End)
                 } else {
                     (x_start, TextAnchor::Start)
                 };

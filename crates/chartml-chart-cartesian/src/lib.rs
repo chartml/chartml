@@ -403,6 +403,76 @@ mod tests {
     }
 
     #[test]
+    fn line_chart_grid_dash_array() {
+        let data = make_bar_data();
+        // Use unquoted dashArray value (matching the examples_source.md spec)
+        let viz: VisualizeSpec = serde_yaml::from_str(r#"
+type: line
+columns: month
+rows: revenue
+style:
+  grid:
+    x: true
+    y: true
+    color: '#e0e0e0'
+    opacity: 0.5
+    dashArray: 4,4
+  showDots: true
+"#).unwrap();
+
+        // Verify the grid spec parsed correctly
+        let grid_spec = viz.style.as_ref().unwrap().grid.as_ref().unwrap();
+        assert_eq!(grid_spec.dash_array, Some("4,4".to_string()), "GridSpec.dash_array should parse from YAML");
+        assert_eq!(grid_spec.x, Some(true), "grid.x should be true");
+        assert_eq!(grid_spec.y, Some(true), "grid.y should be true");
+
+        let config = ChartConfig {
+            visualize: viz,
+            title: Some("Dashed Grid Test".to_string()),
+            width: 800.0,
+            height: 400.0,
+            colors: vec!["#2E7D9A".to_string()],
+        };
+
+        // Verify GridConfig resolves correctly
+        let grid_config = crate::helpers::GridConfig::from_config(&config);
+        assert_eq!(grid_config.dash_array, Some("4,4".to_string()), "GridConfig.dash_array should be set");
+        assert!(grid_config.show_x, "grid.show_x should be true");
+        assert!(grid_config.show_y, "grid.show_y should be true");
+
+        let renderer = CartesianRenderer::new();
+        let element = renderer.render(&data, &config).unwrap();
+
+        // Count grid lines and verify ALL have stroke_dasharray set
+        let mut dashed_grid_count = 0;
+        let mut total_grid_count = 0;
+        fn check_grid(el: &ChartElement, dashed: &mut usize, total: &mut usize) {
+            match el {
+                ChartElement::Line { class, stroke_dasharray, .. } if class.contains("grid-line") => {
+                    *total += 1;
+                    if let Some(da) = stroke_dasharray {
+                        if !da.is_empty() {
+                            *dashed += 1;
+                        }
+                    }
+                }
+                ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                    for child in children {
+                        check_grid(child, dashed, total);
+                    }
+                }
+                _ => {}
+            }
+        }
+        check_grid(&element, &mut dashed_grid_count, &mut total_grid_count);
+
+        assert!(total_grid_count > 0, "Should have grid lines, got {}", total_grid_count);
+        assert_eq!(dashed_grid_count, total_grid_count,
+            "All {} grid lines should have stroke_dasharray='4,4', but only {} do",
+            total_grid_count, dashed_grid_count);
+    }
+
+    #[test]
     fn x_axis_date_labels_reformatted() {
         use crate::helpers::{generate_x_axis, GridConfig};
         let labels: Vec<String> = vec![
