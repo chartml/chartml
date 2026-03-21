@@ -1,0 +1,20 @@
+[package]
+name = "chartml-forecast"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+augurs-ets = "0.9"
+augurs-core = "0.9"
+augurs-seasons = "0.9"
+linregress = "0.5"
+statrs = "0.18"
+levenberg-marquardt = "0.14"
+nalgebra = { version = "0.33", default-features = false }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
