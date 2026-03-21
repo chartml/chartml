@@ -253,8 +253,6 @@ fn insert_commas(n: u64) -> String {
 /// Result of x-axis generation, including the computed label strategy.
 pub struct XAxisResult {
     pub elements: Vec<ChartElement>,
-    /// Additional bottom margin needed (e.g., from label rotation).
-    pub extra_bottom_margin: f64,
 }
 
 /// Generate x-axis elements with smart label handling.
@@ -285,7 +283,7 @@ pub fn generate_x_axis(
     let strategy = LabelStrategy::determine(&display_labels, available_width, &LabelStrategyConfig::default());
 
     let mut elements = Vec::new();
-    let extra_bottom_margin;
+    // Margin for rotated labels is pre-computed via MarginConfig.x_label_strategy_margin
 
     // Axis line
     elements.push(ChartElement::Line {
@@ -320,7 +318,7 @@ pub fn generate_x_axis(
     // Step 3: Apply strategy
     match &strategy {
         LabelStrategy::Horizontal => {
-            extra_bottom_margin = 0.0;
+            // no extra margin needed
             for (i, label) in display_labels.iter().enumerate() {
                 let orig_label = &labels[i];
                 let x = match band.map(orig_label) {
@@ -349,8 +347,8 @@ pub fn generate_x_axis(
             }
         }
 
-        LabelStrategy::Rotated { margin, skip_factor } => {
-            extra_bottom_margin = *margin;
+        LabelStrategy::Rotated { margin: _, skip_factor } => {
+            // rotation margin handled by MarginConfig
             for (i, label) in display_labels.iter().enumerate() {
                 let orig_label = &labels[i];
                 let x = match band.map(orig_label) {
@@ -386,7 +384,7 @@ pub fn generate_x_axis(
         }
 
         LabelStrategy::Truncated { max_width } => {
-            extra_bottom_margin = 0.0;
+            // no extra margin needed
             for (i, label) in display_labels.iter().enumerate() {
                 let orig_label = &labels[i];
                 let x = match band.map(orig_label) {
@@ -420,7 +418,7 @@ pub fn generate_x_axis(
         }
 
         LabelStrategy::Sampled { indices } => {
-            extra_bottom_margin = 0.0;
+            // no extra margin needed
             for (i, label) in display_labels.iter().enumerate() {
                 let orig_label = &labels[i];
                 let x = match band.map(orig_label) {
@@ -452,7 +450,7 @@ pub fn generate_x_axis(
         }
     }
 
-    XAxisResult { elements, extra_bottom_margin }
+    XAxisResult { elements }
 }
 
 /// Generate y-axis elements for category data (used in horizontal bar charts).

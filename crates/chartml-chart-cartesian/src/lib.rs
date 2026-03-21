@@ -445,7 +445,6 @@ mod tests {
             matches!(e, ChartElement::Text { transform: Some(_), .. })
         }).count();
         assert_eq!(text_with_transform, 0, "Horizontal strategy should have no transforms");
-        assert_eq!(result.extra_bottom_margin, 0.0);
     }
 
     #[test]
@@ -458,7 +457,6 @@ mod tests {
             matches!(e, ChartElement::Text { transform: Some(_), .. })
         }).count();
         assert!(text_with_transform > 0, "Rotated strategy should have transforms");
-        assert!(result.extra_bottom_margin > 0.0, "Rotated should add margin");
     }
 
     #[test]
