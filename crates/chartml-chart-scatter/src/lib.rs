@@ -194,22 +194,7 @@ impl ChartRenderer for ScatterRenderer {
             children: axis_elements,
         });
 
-        // Title
-        if let Some(title) = &config.title {
-            children.push(ChartElement::Text {
-                x: 10.0,
-                y: 20.0,
-                content: title.clone(),
-                anchor: TextAnchor::Start,
-                dominant_baseline: None,
-                transform: None,
-                font_size: Some("14px".to_string()),
-                font_weight: Some("bold".to_string()),
-                fill: Some("#333".to_string()),
-                class: "chart-title".to_string(),
-                data: None,
-            });
-        }
+        // Title is rendered as HTML outside the SVG — not added here.
 
         // Points group
         children.push(ChartElement::Group {

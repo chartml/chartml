@@ -75,6 +75,8 @@ impl ScaleLinear {
     }
 
     /// Extend the domain to nice round numbers (like D3's `.nice()`).
+    /// Uses D3's iterative algorithm (up to 10 passes) so the domain expands
+    /// until the tick step stabilises — matching d3-scale's linearish.nice().
     /// Preserves domain direction (reversed domains stay reversed).
     pub fn nice(self, count: usize) -> Self {
         if count == 0 {
@@ -82,24 +84,35 @@ impl ScaleLinear {
         }
         let (d0, d1) = self.domain;
         let reversed = d0 > d1;
-        let min = d0.min(d1);
-        let max = d0.max(d1);
-        if min == max {
+        let mut start = d0.min(d1);
+        let mut stop  = d0.max(d1);
+        if start == stop {
             return self;
         }
 
-        let step = tick_step(min, max, count);
-        if step == 0.0 || !step.is_finite() {
-            return self;
+        let mut prestep = f64::NAN;
+        let mut max_iter = 10i32;
+        while max_iter > 0 {
+            max_iter -= 1;
+            let step = tick_step(start, stop, count);
+            if step == 0.0 || !step.is_finite() {
+                break;
+            }
+            if step == prestep {
+                // Stable — done.
+                break;
+            }
+            // D3 also handles step < 0 (sub-unit steps use reciprocal encoding),
+            // but tick_step always returns positive for our data ranges.
+            start = (start / step).floor() * step;
+            stop  = (stop  / step).ceil()  * step;
+            prestep = step;
         }
-
-        let nice_min = round_to_precision((min / step).floor() * step, step);
-        let nice_max = round_to_precision((max / step).ceil() * step, step);
 
         let domain = if reversed {
-            (nice_max, nice_min)
+            (stop, start)
         } else {
-            (nice_min, nice_max)
+            (start, stop)
         };
 
         Self {

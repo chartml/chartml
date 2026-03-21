@@ -11,6 +11,25 @@ use crate::tooltip::{provide_tooltip_context, DefaultTooltip};
 /// Custom tooltip renderer type.
 pub type TooltipRenderer = Arc<dyn Fn(&ElementData) -> AnyView + Send + Sync>;
 
+/// Extract the top-level `title:` field from a ChartML YAML string.
+/// Returns None if no title is present or it is empty.
+fn extract_yaml_title(yaml: &str) -> Option<String> {
+    for line in yaml.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("title:") {
+            let t = rest.trim().trim_matches('"').trim_matches('\'').to_string();
+            if !t.is_empty() {
+                return Some(t);
+            }
+        }
+        // Stop scanning once we hit the visualize section
+        if trimmed.starts_with("visualize:") || trimmed.starts_with("data:") {
+            break;
+        }
+    }
+    None
+}
+
 /// Main ChartML component for Leptos.
 ///
 /// Renders a ChartML YAML spec reactively. Responds to:
@@ -100,6 +119,9 @@ pub fn ChartMLChart(
                     return view! { <div /> }.into_any();
                 }
 
+                // Extract title from YAML before rendering (title is an HTML div, not SVG element)
+                let chart_title = extract_yaml_title(&yaml);
+
                 let result = chartml.render_from_yaml_with_params(
                     &yaml,
                     Some(width),
@@ -108,7 +130,16 @@ pub fn ChartMLChart(
                 );
 
                 match result {
-                    Ok(element) => render_element(&element).into_any(),
+                    Ok(element) => view! {
+                        <div>
+                            {chart_title.map(|t| view! {
+                                <div class="chart-title" style="font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 8px;">
+                                    {t}
+                                </div>
+                            })}
+                            {render_element(&element)}
+                        </div>
+                    }.into_any(),
                     Err(err) => {
                         view! {
                             <div class="chartml-error">

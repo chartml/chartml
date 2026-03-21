@@ -51,10 +51,37 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         _ => 0.0,
     };
 
+    // Step 1b: Pre-compute domain for left margin estimation (matches JS two-pass approach).
+    let all_value_fields_prelim: Vec<String> = if is_multi_field {
+        multi_fields.iter().map(|f| f.field.clone()).collect()
+    } else {
+        vec![value_field.clone()]
+    };
+    let mut all_values_prelim: Vec<f64> = Vec::new();
+    for field in &all_value_fields_prelim {
+        for row in data {
+            if let Some(v) = get_f64(row, field) {
+                all_values_prelim.push(v);
+            }
+        }
+    }
+    let prelim_value_max = all_values_prelim.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let prelim_value_min = all_values_prelim.iter().cloned().fold(f64::INFINITY, f64::min);
+    let prelim_domain_min = if prelim_value_min >= 0.0 { 0.0 } else { prelim_value_min };
+    let prelim_domain_max = if prelim_value_max <= 0.0 { 1.0 } else { prelim_value_max };
+    let (prelim_domain_min, prelim_domain_max) = crate::helpers::nice_domain(prelim_domain_min, prelim_domain_max, 10);
+    let y_fmt = get_y_format(config);
+    let y_fmt_ref = y_fmt.as_deref();
+    let prelim_labels = vec![
+        crate::helpers::format_value(prelim_domain_max, y_fmt_ref),
+        crate::helpers::format_value(prelim_domain_min, y_fmt_ref),
+    ];
+
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: has_series,
         x_label_strategy_margin: x_extra_margin,
+        y_tick_labels: prelim_labels,
         ..Default::default()
     };
     let margins = calculate_margins(&margin_config);
@@ -94,26 +121,9 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
     let mut children = Vec::new();
 
-    // Title
-    if let Some(ref title) = config.title {
-        children.push(ChartElement::Text {
-            x: 10.0,
-            y: 20.0,
-            content: title.clone(),
-            anchor: TextAnchor::Start,
-            dominant_baseline: None,
-            transform: None,
-            font_size: Some("14px".to_string()),
-            font_weight: Some("bold".to_string()),
-            fill: Some("#333".to_string()),
-            class: "chart-title".to_string(),
-            data: None,
-        });
-    }
+    // Title is rendered as HTML outside the SVG — not added here.
 
     // Axes — read format string from spec
-    let y_fmt = get_y_format(config);
-    let y_fmt_ref = y_fmt.as_deref();
     let grid = GridConfig::from_config(config);
 
     let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
@@ -218,6 +228,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 stroke: Some(color.clone()),
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
+                opacity: None,
                 class: "line".to_string(),
                 data: Some(ElementData::new(&label, "").with_series(&label)),
             });
@@ -321,6 +332,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 stroke: Some(color.clone()),
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
+                opacity: None,
                 class: "line".to_string(),
                 data: Some(ElementData::new(series_name, "").with_series(series_name)),
             });
@@ -387,6 +399,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 stroke: Some(color.clone()),
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
+                opacity: None,
                 class: "line".to_string(),
                 data: None,
             });

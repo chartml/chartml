@@ -50,6 +50,21 @@ fn is_params_yaml(yaml: &str) -> bool {
     yaml.trim().starts_with("type: params")
 }
 
+/// Returns true if ALL charts in this YAML block use `visualize.type: metric`.
+/// Metric charts render as HTML (no SVG), so they don't appear in JS SVG indices.
+/// We skip numbering these so Rust chart #N matches JS SVG #N.
+fn is_metric_only_yaml(yaml: &str) -> bool {
+    let has_metric = yaml.contains("type: metric");
+    let has_svg_type = yaml.contains("type: bar")
+        || yaml.contains("type: line")
+        || yaml.contains("type: area")
+        || yaml.contains("type: pie")
+        || yaml.contains("type: scatter")
+        || yaml.contains("type: bubble")
+        || yaml.contains("type: combo");
+    has_metric && !has_svg_type
+}
+
 fn parse_examples(md: &str) -> Vec<Block> {
     let mut blocks = Vec::new();
     let mut lines = md.lines().peekable();
@@ -197,13 +212,20 @@ pub fn ExamplesPage(chartml: Arc<ChartML>) -> impl IntoView {
                     }
                 }
                 Block::Chart(yaml) => {
-                    chart_number += 1;
-                    let num = chart_number;
+                    let is_metric = is_metric_only_yaml(&yaml);
+                    let num = if is_metric {
+                        None
+                    } else {
+                        chart_number += 1;
+                        Some(chart_number)
+                    };
                     let spec = signal(yaml.clone());
                     let chartml = chartml.clone();
                     view! {
                         <div class="examples-chart">
-                            <div class="chart-number">{format!("Chart #{}", num)}</div>
+                            {num.map(|n| view! {
+                                <div class="chart-number">{format!("Chart #{}", n)}</div>
+                            })}
                             <ChartMLChart
                                 spec=spec.0
                                 chartml=chartml

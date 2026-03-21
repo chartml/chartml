@@ -36,11 +36,22 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         _ => 0.0,
     };
 
+    // Step 1b: Pre-compute domain for left margin estimation (matches JS two-pass approach).
+    let prelim_values: Vec<f64> = data.iter().filter_map(|r| get_f64(r, &value_field)).collect();
+    let prelim_max = prelim_values.iter().cloned().fold(0.0_f64, f64::max);
+    let prelim_max = if prelim_max <= 0.0 { 1.0 } else { prelim_max };
+    let (_, prelim_nice_max) = crate::helpers::nice_domain(0.0, prelim_max, 10);
+    let area_prelim_fmt = if is_normalized { Some(".0%") } else { y_fmt_ref };
+    let area_prelim_labels = vec![
+        crate::helpers::format_value(prelim_nice_max, area_prelim_fmt),
+    ];
+
     // Step 2: Calculate margins including rotation
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: color_field.is_some(),
         x_label_strategy_margin: x_extra_margin,
+        y_tick_labels: area_prelim_labels,
         ..Default::default()
     };
     let margins = calculate_margins(&margin_config);
@@ -53,22 +64,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
     let mut children = Vec::new();
 
-    // Title
-    if let Some(ref title) = config.title {
-        children.push(ChartElement::Text {
-            x: 10.0,
-            y: 20.0,
-            content: title.clone(),
-            anchor: TextAnchor::Start,
-            dominant_baseline: None,
-            transform: None,
-            font_size: Some("14px".to_string()),
-            font_weight: Some("bold".to_string()),
-            fill: Some("#333".to_string()),
-            class: "chart-title".to_string(),
-            data: None,
-        });
-    }
+    // Title is rendered as HTML outside the SVG — not added here.
 
     let area_gen = AreaGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
     let mut area_elements = Vec::new();
@@ -162,6 +158,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                     stroke: None,
                     stroke_width: None,
                     stroke_dasharray: None,
+                    opacity: Some(0.6),
                     class: "area".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
@@ -252,6 +249,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                     stroke: None,
                     stroke_width: None,
                     stroke_dasharray: None,
+                    opacity: Some(0.6),
                     class: "area".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
@@ -345,6 +343,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 stroke: None,
                 stroke_width: None,
                 stroke_dasharray: None,
+                opacity: Some(0.6),
                 class: "area".to_string(),
                 data: None,
             });

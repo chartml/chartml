@@ -69,28 +69,14 @@ impl ChartRenderer for PieRenderer {
                 stroke: Some("#fff".to_string()),
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
+                opacity: None,
                 class: "chartml-pie-slice".to_string(),
                 data: Some(data),
             });
         }
 
-        // Title element
+        // Title is rendered as HTML outside the SVG — not added here.
         let mut children = Vec::new();
-        if let Some(title) = &config.title {
-            children.push(ChartElement::Text {
-                x: 10.0,
-                y: 20.0,
-                content: title.clone(),
-                anchor: TextAnchor::Start,
-                dominant_baseline: None,
-                transform: None,
-                font_size: Some("14px".to_string()),
-                font_weight: Some("bold".to_string()),
-                fill: Some("#333".to_string()),
-                class: "chart-title".to_string(),
-                data: None,
-            });
-        }
 
         // Pie group (centered)
         children.push(ChartElement::Group {
@@ -217,11 +203,12 @@ mod tests {
     }
 
     #[test]
-    fn pie_has_title() {
+    fn pie_has_no_title_in_svg() {
+        // Title is rendered as HTML outside the SVG.
         let renderer = PieRenderer::new();
         let element = renderer.render(&make_pie_data(), &make_pie_config("pie")).unwrap();
         let text_count = count_elements(&element, &|e| matches!(e, ChartElement::Text { class, .. } if class == "chart-title"));
-        assert_eq!(text_count, 1);
+        assert_eq!(text_count, 0);
     }
 
     #[test]

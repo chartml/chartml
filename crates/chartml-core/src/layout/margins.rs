@@ -25,7 +25,7 @@ impl Margins {
 
 impl Default for Margins {
     fn default() -> Self {
-        Self { top: 30.0, right: 20.0, bottom: 40.0, left: 60.0 }
+        Self { top: 20.0, right: 30.0, bottom: 40.0, left: 70.0 }
     }
 }
 
@@ -73,8 +73,8 @@ impl Default for MarginConfig {
 pub fn calculate_margins(config: &MarginConfig) -> Margins {
     use super::labels::approximate_text_width;
 
-    // Top margin
-    let top = 30.0 + if config.has_title { 25.0 } else { 0.0 };
+    // Top margin — matches JS d3CartesianChart.js marginTop=20 (title is rendered as HTML outside SVG)
+    let top = 20.0;
 
     // Left margin: based on Y-axis tick label widths
     let max_y_label_width = config.y_tick_labels.iter()
@@ -83,7 +83,7 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
     let left_base = if max_y_label_width > 0.0 {
         max_y_label_width + 15.0
     } else {
-        60.0 // default
+        70.0 // matches JS d3CartesianChart.js default marginLeft
     };
     let left = (left_base + if config.has_y_axis_label { 20.0 } else { 0.0 })
         .min(config.max_left_margin);
@@ -98,7 +98,7 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
         (max_right_width + 24.0 + label_space)
             .min(config.max_right_margin)
     } else {
-        20.0
+        30.0 // matches JS d3CartesianChart.js default marginRight
     };
 
     // Bottom margin
@@ -117,10 +117,10 @@ mod tests {
     #[test]
     fn default_margins() {
         let m = Margins::default();
-        assert_eq!(m.top, 30.0);
-        assert_eq!(m.right, 20.0);
+        assert_eq!(m.top, 20.0);
+        assert_eq!(m.right, 30.0);
         assert_eq!(m.bottom, 40.0);
-        assert_eq!(m.left, 60.0);
+        assert_eq!(m.left, 70.0);
     }
 
     #[test]
@@ -144,14 +144,14 @@ mod tests {
             ..Default::default()
         };
         let m = calculate_margins(&config);
-        assert_eq!(m.top, 55.0); // 30 + 25
+        assert_eq!(m.top, 20.0); // title is rendered as HTML outside SVG — no extra margin needed
     }
 
     #[test]
     fn margins_without_title() {
         let config = MarginConfig::default();
         let m = calculate_margins(&config);
-        assert_eq!(m.top, 30.0);
+        assert_eq!(m.top, 20.0);
     }
 
     #[test]

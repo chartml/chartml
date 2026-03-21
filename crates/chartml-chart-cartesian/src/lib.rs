@@ -124,7 +124,9 @@ mod tests {
     }
 
     #[test]
-    fn bar_chart_has_title() {
+    fn bar_chart_has_no_title_in_svg() {
+        // Title is rendered as HTML outside the SVG (matching JS chartml).
+        // The SVG element tree must NOT contain a chart-title text element.
         let renderer = CartesianRenderer::new();
         let data = make_bar_data();
         let config = make_bar_config();
@@ -132,7 +134,7 @@ mod tests {
         let title_count = count_elements(&element, &|e| {
             matches!(e, ChartElement::Text { class, .. } if class == "chart-title")
         });
-        assert_eq!(title_count, 1, "Should have 1 title element");
+        assert_eq!(title_count, 0, "Title must not be in the SVG element tree");
     }
 
     #[test]
@@ -260,6 +262,68 @@ mod tests {
         let dims = renderer.default_dimensions(&viz);
         assert!(dims.is_some());
         assert_eq!(dims.unwrap().height, 400.0);
+    }
+
+    #[test]
+    fn bar_chart_adaptive_padding_2_bars() {
+        // With n=2 bars and adaptive padding=0.2, each bar should be ~36.4% of inner_width.
+        // inner_width = 800 - left_margin - right_margin ≈ 800 - 60 - 20 = 720
+        // bandwidth = 0.8/2.2 * inner_width ≈ 0.3636 * inner_width ≈ 261px
+        // Bar should NOT be close to 50% (which would indicate no padding).
+        let data: Vec<Row> = vec![
+            [("region".to_string(), json!("US")), ("revenue".to_string(), json!(55000))].into_iter().collect(),
+            [("region".to_string(), json!("EU")), ("revenue".to_string(), json!(40000))].into_iter().collect(),
+        ];
+        let viz: VisualizeSpec = serde_yaml::from_str(r#"
+            type: bar
+            columns: region
+            rows: revenue
+        "#).unwrap();
+        let config = ChartConfig {
+            visualize: viz,
+            title: Some("Regional Revenue".to_string()),
+            width: 800.0,
+            height: 400.0,
+            colors: vec!["#2E7D9A".to_string()],
+        };
+        let renderer = CartesianRenderer::new();
+        let element = renderer.render(&data, &config).unwrap();
+
+        // Find all Rect elements (bars)
+        let mut bar_widths = Vec::new();
+        fn collect_bar_widths(el: &ChartElement, widths: &mut Vec<f64>) {
+            match el {
+                ChartElement::Rect { width, class, .. } if class == "bar" => {
+                    widths.push(*width);
+                }
+                ChartElement::Svg { children, .. }
+                | ChartElement::Group { children, .. } => {
+                    for child in children { collect_bar_widths(child, widths); }
+                }
+                _ => {}
+            }
+        }
+        collect_bar_widths(&element, &mut bar_widths);
+
+        assert_eq!(bar_widths.len(), 2, "Should have 2 bars");
+        let bar_width = bar_widths[0];
+        println!("Bar width: {:.2}px", bar_width);
+
+        // JS applies maxBarWidth = inner_width * 0.2 clamp.
+        // With y_tick_labels pre-computation: for revenue values 100/200, the
+        // tick label "200" ≈ 21px + 15px buffer = 36px left margin.
+        // inner_width = 800 - 36 - 30 = 734px → maxBarWidth = 146.8px.
+        // bandwidth for 2 bars, padding=0.2 = ~234px → clamped to ~146.8px.
+        assert!(
+            bar_width <= 150.0,
+            "Bar width {:.1}px exceeds maxBarWidth clamp",
+            bar_width
+        );
+        assert!(
+            bar_width > 50.0,
+            "Bar width {:.1}px is unreasonably narrow",
+            bar_width
+        );
     }
 
     #[test]

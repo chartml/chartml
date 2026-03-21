@@ -47,6 +47,10 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
 
     // Step 1: Compute label strategy for margin estimation (only for vertical bars)
     let x_format = get_x_format(config);
+    let y_fmt = get_y_format(config);
+    let y_fmt_ref = y_fmt.as_deref();
+    let (axis_min, axis_max) = get_y_axis_bounds(config);
+
     let x_extra_margin = if !is_horizontal {
         let estimated_width = config.width - 80.0;
         let x_strategy = LabelStrategy::determine(&categories, estimated_width, &LabelStrategyConfig::default());
@@ -58,58 +62,16 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
         0.0
     };
 
-    // Step 2: Calculate margins including rotation
-    let margin_config = MarginConfig {
-        has_title: config.title.is_some(),
-        has_legend: color_field.is_some(),
-        x_label_strategy_margin: x_extra_margin,
-        ..Default::default()
-    };
-    let margins = calculate_margins(&margin_config);
-
-    let inner_width = margins.inner_width(config.width);
-    let inner_height = margins.inner_height(config.height);
-
-    let mut children = Vec::new();
-
-    // Title
-    if let Some(ref title) = config.title {
-        children.push(ChartElement::Text {
-            x: 10.0,
-            y: 20.0,
-            content: title.clone(),
-            anchor: TextAnchor::Start,
-            dominant_baseline: None,
-            transform: None,
-            font_size: Some("14px".to_string()),
-            font_weight: Some("bold".to_string()),
-            fill: Some("#333".to_string()),
-            class: "chart-title".to_string(),
-            data: None,
-        });
-    }
-
-    // Determine value domain
-    let y_fmt = get_y_format(config);
-    let y_fmt_ref = y_fmt.as_deref();
-    let grid = GridConfig::from_config(config);
-
-    // Pre-read axis bounds (needed by bar rendering for correct scale)
-    let (axis_min, axis_max) = get_y_axis_bounds(config);
-
-    let tick_count = adaptive_tick_count(inner_height);
-
-    // Pre-scan data max so we can compute a nice domain before rendering bars.
-    let raw_data_max: f64 = if let Some(ref color_f) = color_field {
+    // Step 1b: Pre-compute domain for left margin estimation (matches JS two-pass approach).
+    // JS computes finalMarginLeft from actual y-axis tick label widths; we approximate here.
+    let prelim_data_max: f64 = if let Some(ref color_f) = color_field {
         if is_stacked {
-            // For stacked, we need the per-category summed max
-            use chartml_core::data::group_by;
             let groups = group_by(data, color_f);
-            let series_names = chartml_core::data::unique_values(data, color_f);
+            let series_names = unique_values(data, color_f);
             categories.iter().map(|cat| {
                 series_names.iter().map(|s| {
                     groups.get(s).and_then(|rows| {
-                        rows.iter().find(|r| chartml_core::data::get_string(r, &category_field).as_deref() == Some(cat.as_str()))
+                        rows.iter().find(|r| get_string(r, &category_field).as_deref() == Some(cat.as_str()))
                             .and_then(|r| get_f64(r, &value_field))
                     }).unwrap_or(0.0)
                 }).sum::<f64>()
@@ -120,7 +82,52 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
     } else {
         data.iter().filter_map(|r| get_f64(r, &value_field)).fold(0.0_f64, f64::max)
     };
-    let raw_data_max = if raw_data_max <= 0.0 { 1.0 } else { raw_data_max };
+    let prelim_data_max = if prelim_data_max <= 0.0 { 1.0 } else { prelim_data_max };
+
+    let prelim_domain_max = if is_normalized {
+        1.0
+    } else {
+        let raw_max = axis_max.unwrap_or(prelim_data_max);
+        if axis_max.is_none() { nice_domain(axis_min.unwrap_or(0.0), raw_max, 10).1 } else { raw_max }
+    };
+    let prelim_domain_min = if is_normalized { 0.0 } else { axis_min.unwrap_or(0.0) };
+
+    // Generate representative tick label (domain max is typically widest label).
+    // For horizontal charts the y-axis shows categories (handled separately).
+    let y_tick_labels_for_margin: Vec<String> = if !is_horizontal {
+        let prelim_fmt = if is_normalized { Some(".0%") } else { y_fmt_ref };
+        vec![
+            format_value(prelim_domain_max, prelim_fmt),
+            format_value(prelim_domain_min, prelim_fmt),
+        ]
+    } else {
+        vec![]
+    };
+
+    // Step 2: Calculate margins including rotation
+    let margin_config = MarginConfig {
+        has_title: config.title.is_some(),
+        has_legend: color_field.is_some(),
+        x_label_strategy_margin: x_extra_margin,
+        y_tick_labels: y_tick_labels_for_margin,
+        ..Default::default()
+    };
+    let margins = calculate_margins(&margin_config);
+
+    let inner_width = margins.inner_width(config.width);
+    let inner_height = margins.inner_height(config.height);
+
+    let mut children = Vec::new();
+
+    // Title is rendered as an HTML div outside the SVG (matches JS chartml behaviour)
+    // — do NOT add it here as a SVG text element.
+
+    let grid = GridConfig::from_config(config);
+
+    let tick_count = adaptive_tick_count(inner_height);
+
+    // Compute final domain (same as prelim for vertical bars).
+    let raw_data_max = prelim_data_max;
 
     // For normalized mode, domain is always 0-1 (the NumberFormatter handles % display).
     let (domain_min, domain_max) = if is_normalized {
@@ -287,6 +294,9 @@ fn render_single_series_bars(
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_height))
             .padding(crate::helpers::adaptive_bar_padding(categories.len()));
         let linear = ScaleLinear::new((domain_min, effective_max), (0.0, inner_width));
+        // Match JS: barHeight = min(bandwidth, 40), centered in band
+        let bar_render_height = band.bandwidth().min(40.0);
+        let y_inset = (band.bandwidth() - bar_render_height) / 2.0;
 
         for row in data {
             let cat = match get_string(row, category_field) {
@@ -302,9 +312,9 @@ fn render_single_series_bars(
 
             elements.push(ChartElement::Rect {
                 x: 0.0,
-                y,
+                y: y + y_inset,
                 width: bar_width,
-                height: band.bandwidth(),
+                height: bar_render_height,
                 fill: fill.clone(),
                 stroke: None,
                 class: "bar".to_string(),
@@ -315,6 +325,10 @@ fn render_single_series_bars(
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
             .padding(crate::helpers::adaptive_bar_padding(categories.len()));
         let linear = ScaleLinear::new((domain_min, effective_max), (inner_height, 0.0));
+        // Match JS: barWidth = min(bandwidth, chartWidth * 0.2), centered in band
+        let max_bar_width = inner_width * 0.2;
+        let bar_render_width = band.bandwidth().min(max_bar_width);
+        let x_inset = (band.bandwidth() - bar_render_width) / 2.0;
 
         for row in data {
             let cat = match get_string(row, category_field) {
@@ -331,9 +345,9 @@ fn render_single_series_bars(
             let bar_height = (bar_bottom - bar_top).abs();
 
             elements.push(ChartElement::Rect {
-                x,
+                x: x + x_inset,
                 y: bar_top,
-                width: band.bandwidth(),
+                width: bar_render_width,
                 height: bar_height,
                 fill: fill.clone(),
                 stroke: None,
@@ -438,6 +452,10 @@ fn render_multi_series_bars(
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
             .padding(crate::helpers::adaptive_bar_padding(categories.len()));
         let linear = ScaleLinear::new((effective_min, effective_max), (inner_height, 0.0));
+        // Match JS: barWidth = min(bandwidth, chartWidth * 0.2), centered in band
+        let max_bar_width = inner_width * 0.2;
+        let bar_render_width = band.bandwidth().min(max_bar_width);
+        let x_inset = (band.bandwidth() - bar_render_width) / 2.0;
 
         for point in &stacked_points {
             let x = match band.map(&point.key) {
@@ -456,9 +474,9 @@ fn render_multi_series_bars(
                 .unwrap_or_else(|| "#2E7D9A".to_string());
 
             elements.push(ChartElement::Rect {
-                x,
+                x: x + x_inset,
                 y: y_top,
-                width: band.bandwidth(),
+                width: bar_render_width,
                 height: bar_height,
                 fill,
                 stroke: None,
@@ -642,17 +660,7 @@ fn render_combo(
 
     let mut children = Vec::new();
 
-    // Title
-    if let Some(ref title) = config.title {
-        children.push(ChartElement::Text {
-            x: 10.0, y: 20.0,
-            content: title.clone(),
-            anchor: TextAnchor::Start, dominant_baseline: None,
-            transform: None, font_size: Some("14px".to_string()),
-            font_weight: Some("bold".to_string()),
-            fill: Some("#333".to_string()), class: "chart-title".to_string(), data: None,
-        });
-    }
+    // Title is rendered as HTML outside the SVG — not added here.
 
     // Axes
     let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
@@ -712,8 +720,12 @@ fn render_combo(
         .filter(|f| f.mark.as_deref().unwrap_or("bar") == "bar")
         .count()
         .max(1);
-    let sub_bar_padding = bandwidth * 0.05; // 5% of bandwidth as gap between grouped bars
-    let sub_bar_width = (bandwidth - sub_bar_padding * (num_bar_fields as f64 - 1.0).max(0.0)) / num_bar_fields as f64;
+    // Match JS: barWidth = min(bandwidth, chartWidth * 0.2), centered within band
+    let max_bar_width = inner_width * 0.2;
+    let effective_bandwidth = bandwidth.min(max_bar_width);
+    let combo_x_inset = (bandwidth - effective_bandwidth) / 2.0;
+    let sub_bar_padding = effective_bandwidth * 0.05;
+    let sub_bar_width = (effective_bandwidth - sub_bar_padding * (num_bar_fields as f64 - 1.0).max(0.0)) / num_bar_fields as f64;
     let mut bar_field_idx = 0_usize;
     let mut series_names = Vec::new();
     let mut series_colors = Vec::new();
@@ -742,7 +754,7 @@ fn render_combo(
                     let cat = match get_string(row, &category_field) { Some(c) => c, None => continue };
                     let val = get_f64(row, field_name).unwrap_or(0.0);
                     let x = match band.map(&cat) { Some(x) => x, None => continue };
-                    let bar_x = x + this_bar_idx as f64 * (sub_bar_width + sub_bar_padding);
+                    let bar_x = x + combo_x_inset + this_bar_idx as f64 * (sub_bar_width + sub_bar_padding);
                     let bar_top = scale.map(val);
                     let bar_bottom = scale.map(0.0);
                     let bar_height = (bar_bottom - bar_top).abs();
@@ -793,6 +805,7 @@ fn render_combo(
                     mark_elements.push(ChartElement::Path {
                         d: path_d, fill: None, stroke: Some(color.clone()),
                         stroke_width: Some(2.0), stroke_dasharray: None,
+                        opacity: None,
                         class: "line".to_string(),
                         data: Some(ElementData::new(&label, "").with_series(&label)),
                     });
