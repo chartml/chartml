@@ -5,7 +5,7 @@ use chartml_core::format::{detect_date_format, reformat_date_label};
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, truncate_label};
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
-use chartml_core::spec::{FieldRef, FieldRefItem, MarkEncoding};
+use chartml_core::spec::{AnnotationSpec, FieldRef, FieldRefItem, MarkEncoding};
 
 /// Grid line configuration resolved from the spec.
 #[derive(Debug, Clone)]
@@ -114,6 +114,79 @@ pub fn format_value(value: f64, format_str: Option<&str>) -> String {
     match format_str {
         Some(fmt) => NumberFormatter::new(fmt).format(value),
         None => default_format_value(value),
+    }
+}
+
+/// Format a numeric value for use as an axis tick label.
+///
+/// This implements D3's automatic tick formatting: plain number notation with
+/// appropriate decimal precision derived from the tick step, and comma separators
+/// for large numbers. The user's format string (e.g. ".1%", ".3~s", "$,.0f") is
+/// intentionally NOT applied — D3's `scale.tickFormat()` with no specifier uses
+/// `",f"` with precision from `precisionFixed(tickStep)`.
+///
+/// `tick_step` is the distance between consecutive ticks (e.g. 50000 for ticks
+/// [0, 50000, 100000, ...] or 0.01 for ticks [0.00, 0.01, 0.02, ...]).
+pub fn format_tick_value(value: f64, tick_step: f64) -> String {
+    // D3's precisionFixed(step): max(0, -floor(log10(abs(step))))
+    let precision = if tick_step.abs() < 1e-15 {
+        0usize
+    } else {
+        let p = -(tick_step.abs().log10().floor()) as i64;
+        p.max(0) as usize
+    };
+
+    // Format with the computed precision
+    let formatted = format!("{:.prec$}", value, prec = precision);
+
+    // Insert comma separators into the integer part
+    // Split on decimal point
+    let (int_part, dec_part) = if let Some(dot_pos) = formatted.find('.') {
+        (&formatted[..dot_pos], Some(&formatted[dot_pos..]))
+    } else {
+        (formatted.as_str(), None)
+    };
+
+    // Handle negative sign
+    let (sign, digits) = if int_part.starts_with('-') {
+        ("-", &int_part[1..])
+    } else {
+        ("", int_part)
+    };
+
+    let with_commas = insert_commas_str(digits);
+
+    match dec_part {
+        Some(dec) => format!("{}{}{}", sign, with_commas, dec),
+        None => format!("{}{}", sign, with_commas),
+    }
+}
+
+/// Insert commas into a string of digits (no sign).
+fn insert_commas_str(digits: &str) -> String {
+    let len = digits.len();
+    if len <= 3 {
+        return digits.to_string();
+    }
+    let mut result = String::with_capacity(len + len / 3);
+    for (i, ch) in digits.chars().enumerate() {
+        if i > 0 && (len - i) % 3 == 0 {
+            result.push(',');
+        }
+        result.push(ch);
+    }
+    result
+}
+
+/// Compute the tick step from a slice of ticks, falling back to domain range.
+///
+/// Prefers the difference between the first two ticks (most reliable). If the
+/// ticks slice has fewer than 2 entries, falls back to the domain extent.
+fn compute_tick_step(ticks: &[f64], domain: (f64, f64)) -> f64 {
+    if ticks.len() >= 2 {
+        (ticks[1] - ticks[0]).abs()
+    } else {
+        (domain.1 - domain.0).abs().max(1.0)
     }
 }
 
@@ -240,6 +313,7 @@ pub fn generate_x_axis(
                     dominant_baseline: None,
                     transform: None,
                     font_size: Some("11px".to_string()),
+                    font_weight: None,
                     fill: Some("#666".to_string()),
                     class: "tick-label".to_string(),
                     data: None,
@@ -274,6 +348,7 @@ pub fn generate_x_axis(
                         dominant_baseline: None,
                         transform: Some(Transform::Rotate(-45.0, x, y_position + 10.0)),
                         font_size: Some("11px".to_string()),
+                        font_weight: None,
                         fill: Some("#666".to_string()),
                         class: "tick-label".to_string(),
                         data: None,
@@ -304,6 +379,7 @@ pub fn generate_x_axis(
                     dominant_baseline: None,
                     transform: None,
                     font_size: Some("11px".to_string()),
+                    font_weight: None,
                     fill: Some("#666".to_string()),
                     class: "tick-label".to_string(),
                     data: if is_truncated {
@@ -338,6 +414,7 @@ pub fn generate_x_axis(
                         dominant_baseline: None,
                         transform: None,
                         font_size: Some("11px".to_string()),
+                        font_weight: None,
                         fill: Some("#666".to_string()),
                         class: "tick-label".to_string(),
                         data: None,
@@ -400,6 +477,7 @@ pub fn generate_y_axis(
             dominant_baseline: Some("middle".to_string()),
             transform: None,
             font_size: Some("11px".to_string()),
+            font_weight: None,
             fill: Some("#666".to_string()),
             class: "tick-label".to_string(),
             data: None,
@@ -428,7 +506,12 @@ pub fn generate_y_axis_numeric(
     grid: &GridConfig,
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
-    let ticks = scale.ticks(tick_count);
+    // Match JS: d3.axisLeft(yLeft).ticks(5) — fixed count of 5 regardless of tick_count param.
+    // tick_count is kept for future use / callers that may pass it.
+    let _ = tick_count;
+    let ticks = d3_ticks(domain.0, domain.1, 5);
+    // Compute the tick step for automatic formatting (D3's tickStep)
+    let tick_step = compute_tick_step(&ticks, domain);
     let mut elements = Vec::new();
 
     // Axis line
@@ -445,7 +528,12 @@ pub fn generate_y_axis_numeric(
 
     for val in &ticks {
         let y = scale.map(*val);
-        let label = format_value(*val, fmt);
+        // When an explicit format string is provided (e.g. ".0%" for normalized
+        // stacked charts), use it. Otherwise fall back to D3-style auto-formatting.
+        let label = match fmt {
+            Some(f) => format_value(*val, Some(f)),
+            None => format_tick_value(*val, tick_step),
+        };
 
         // Horizontal grid line
         if grid.show_y {
@@ -483,6 +571,7 @@ pub fn generate_y_axis_numeric(
             dominant_baseline: Some("middle".to_string()),
             transform: None,
             font_size: Some("11px".to_string()),
+            font_weight: None,
             fill: Some("#666".to_string()),
             class: "tick-label".to_string(),
             data: None,
@@ -497,11 +586,12 @@ pub fn generate_y_axis_numeric_right(
     domain: (f64, f64),
     range: (f64, f64),
     x_position: f64,
-    fmt: Option<&str>,
+    _fmt: Option<&str>,
     tick_count: usize,
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     let ticks = scale.ticks(tick_count);
+    let tick_step = compute_tick_step(&ticks, domain);
     let mut elements = Vec::new();
 
     // Axis line
@@ -514,7 +604,7 @@ pub fn generate_y_axis_numeric_right(
 
     for val in &ticks {
         let y = scale.map(*val);
-        let label = format_value(*val, fmt);
+        let label = format_tick_value(*val, tick_step);
 
         // Tick mark (to the right)
         elements.push(ChartElement::Line {
@@ -532,6 +622,7 @@ pub fn generate_y_axis_numeric_right(
             dominant_baseline: Some("middle".to_string()),
             transform: None,
             font_size: Some("11px".to_string()),
+            font_weight: None,
             fill: Some("#666".to_string()),
             class: "tick-label".to_string(),
             data: None,
@@ -554,6 +645,7 @@ pub fn generate_x_axis_numeric(
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     let ticks = scale.ticks(tick_count);
+    let tick_step = compute_tick_step(&ticks, domain);
     let mut elements = Vec::new();
 
     // Axis line
@@ -570,7 +662,10 @@ pub fn generate_x_axis_numeric(
 
     for val in &ticks {
         let x = scale.map(*val);
-        let label = format_value(*val, fmt);
+        let label = match fmt {
+            Some(f) => format_value(*val, Some(f)),
+            None => format_tick_value(*val, tick_step),
+        };
 
         // Vertical grid line
         if grid.show_x {
@@ -607,6 +702,7 @@ pub fn generate_x_axis_numeric(
             dominant_baseline: None,
             transform: None,
             font_size: Some("11px".to_string()),
+            font_weight: None,
             fill: Some("#666".to_string()),
             class: "tick-label".to_string(),
             data: None,
@@ -726,6 +822,7 @@ pub fn generate_legend_with_mark(
             dominant_baseline: None,
             transform: None,
             font_size: Some("11px".to_string()),
+            font_weight: None,
             fill: Some("#333".to_string()),
             class: "legend-label".to_string(),
             data: None,
@@ -735,6 +832,214 @@ pub fn generate_legend_with_mark(
     }
 
     elements
+}
+
+/// Generate ticks matching D3's `ticks(start, stop, count)` algorithm exactly.
+///
+/// This is a direct port of `ticks()` from d3-array/src/ticks.js, using the same
+/// `tickSpec` logic (via `d3_tick_spec`) to compute `i1`, `i2`, and `inc`, then
+/// producing tick values identical to D3.
+///
+/// For domain (0, 200000) with count=5 this returns [0, 50000, 100000, 150000, 200000].
+pub fn d3_ticks(start: f64, stop: f64, count: usize) -> Vec<f64> {
+    if count == 0 {
+        return vec![];
+    }
+    if start == stop {
+        return vec![start];
+    }
+    let reverse = stop < start;
+    let (s0, s1) = if reverse { (stop, start) } else { (start, stop) };
+    let (i1, i2, inc) = d3_tick_spec(s0, s1, count as f64);
+    if i2 < i1 {
+        return vec![];
+    }
+    let n = (i2 - i1 + 1.0).round() as usize;
+    let mut ticks = Vec::with_capacity(n);
+    if reverse {
+        if inc < 0.0 {
+            for i in 0..n {
+                ticks.push((i2 - i as f64) / -inc);
+            }
+        } else {
+            for i in 0..n {
+                ticks.push((i2 - i as f64) * inc);
+            }
+        }
+    } else {
+        if inc < 0.0 {
+            for i in 0..n {
+                ticks.push((i1 + i as f64) / -inc);
+            }
+        } else {
+            for i in 0..n {
+                ticks.push((i1 + i as f64) * inc);
+            }
+        }
+    }
+    ticks
+}
+
+/// Compute D3's `tickSpec(start, stop, count)` — returns `(i1, i2, inc)`.
+///
+/// This is a direct port of the internal `tickSpec` function from d3-array/src/ticks.js.
+/// - When `power >= 0`: `inc = 10^power * factor`, `i1/i2` are integer multiples of `inc`
+/// - When `power < 0`: `inc = -(10^(-power) / factor)`, `i1/i2` are integer multiples of `1/(-inc)`
+fn d3_tick_spec(start: f64, stop: f64, count: f64) -> (f64, f64, f64) {
+    let e10: f64 = 50_f64.sqrt(); // ≈ 7.071
+    let e5: f64 = 10_f64.sqrt();  // ≈ 3.162
+    let e2: f64 = 2_f64.sqrt();   // ≈ 1.414
+
+    let step = (stop - start) / count.max(0.0);
+    let power = step.log10().floor();
+    let error = step / 10_f64.powf(power);
+    let factor = if error >= e10 {
+        10.0
+    } else if error >= e5 {
+        5.0
+    } else if error >= e2 {
+        2.0
+    } else {
+        1.0
+    };
+
+    if power < 0.0 {
+        let inc = 10_f64.powf(-power) / factor;
+        let mut i1 = (start * inc).round();
+        let mut i2 = (stop * inc).round();
+        if i1 / inc < start { i1 += 1.0; }
+        if i2 / inc > stop  { i2 -= 1.0; }
+        (i1, i2, -inc)
+    } else {
+        let inc = 10_f64.powf(power) * factor;
+        let mut i1 = (start / inc).round();
+        let mut i2 = (stop / inc).round();
+        if i1 * inc < start { i1 += 1.0; }
+        if i2 * inc > stop  { i2 -= 1.0; }
+        (i1, i2, inc)
+    }
+}
+
+/// Compute the D3 `tickIncrement(start, stop, count)` value.
+///
+/// This matches D3's `tickSpec` return value `inc` exactly:
+/// - When `power >= 0`: returns `10^power * factor` (positive integer step)
+/// - When `power < 0`: returns `-(10^(-power) / factor)` (negative, meaning step = 1/(-inc))
+///
+/// This is the Rust port of `tickIncrement` from d3-array/src/ticks.js.
+fn d3_tick_increment(start: f64, stop: f64, count: f64) -> f64 {
+    let e10: f64 = 50_f64.sqrt(); // ≈ 7.071
+    let e5: f64 = 10_f64.sqrt();  // ≈ 3.162
+    let e2: f64 = 2_f64.sqrt();   // ≈ 1.414
+
+    let step = (stop - start) / count.max(0.0);
+    let power = step.log10().floor();
+    let error = step / 10_f64.powf(power);
+    let factor = if error >= e10 {
+        10.0
+    } else if error >= e5 {
+        5.0
+    } else if error >= e2 {
+        2.0
+    } else {
+        1.0
+    };
+
+    if power < 0.0 {
+        // Negative inc: actual step = 1/(-inc)
+        -(10_f64.powf(-power) / factor)
+    } else {
+        10_f64.powf(power) * factor
+    }
+}
+
+/// Compute a "nice" domain for a numeric axis.
+///
+/// This is a direct port of D3's `scale.nice(count)` from d3-scale/src/linear.js.
+/// It iterates up to 10 times using `tickIncrement`, flooring the start and ceiling
+/// the stop at each step, until the step stabilises. This produces identical results
+/// to D3 for any input range and count.
+///
+/// Example: `nice_domain(0.0, 152_000.0, 5)` → `(0.0, 200_000.0)` (step 50_000),
+/// matching D3's output of ticks 0, 50k, 100k, 150k, 200k.
+pub fn nice_domain(domain_min: f64, domain_max: f64, tick_count: usize) -> (f64, f64) {
+    let reversed = domain_min > domain_max;
+    let (mut start, mut stop) = if reversed {
+        (domain_max, domain_min)
+    } else {
+        (domain_min, domain_max)
+    };
+
+    if start == stop {
+        return (domain_min, domain_max);
+    }
+
+    let count = tick_count.max(1) as f64;
+    let mut prestep = f64::NAN;
+    let mut max_iter = 10i32;
+
+    while max_iter > 0 {
+        max_iter -= 1;
+        let step = d3_tick_increment(start, stop, count);
+        if step == prestep {
+            // Converged
+            break;
+        } else if step > 0.0 {
+            start = (start / step).floor() * step;
+            stop = (stop / step).ceil() * step;
+        } else if step < 0.0 {
+            start = (start * -step).ceil() / -step;
+            stop = (stop * -step).floor() / -step;
+        } else {
+            break;
+        }
+        prestep = step;
+    }
+
+    if reversed {
+        (stop, start)
+    } else {
+        (start, stop)
+    }
+}
+
+#[cfg(test)]
+mod tick_tests {
+    use super::d3_ticks;
+
+    #[test]
+    fn d3_ticks_200k_domain_count5() {
+        // Verification case from the bug report:
+        // domain (0, 200000) with count=5 must produce [0, 50000, 100000, 150000, 200000]
+        let ticks = d3_ticks(0.0, 200_000.0, 5);
+        let expected = vec![0.0, 50_000.0, 100_000.0, 150_000.0, 200_000.0];
+        assert_eq!(ticks.len(), expected.len(), "wrong tick count: {:?}", ticks);
+        for (got, exp) in ticks.iter().zip(expected.iter()) {
+            assert!((got - exp).abs() < 1e-6, "tick mismatch: got {}, expected {}", got, exp);
+        }
+    }
+
+    #[test]
+    fn d3_ticks_0_to_100_count5() {
+        // Standard case: should produce [0, 20, 40, 60, 80, 100]
+        let ticks = d3_ticks(0.0, 100.0, 5);
+        let expected = vec![0.0, 20.0, 40.0, 60.0, 80.0, 100.0];
+        assert_eq!(ticks.len(), expected.len(), "wrong tick count: {:?}", ticks);
+        for (got, exp) in ticks.iter().zip(expected.iter()) {
+            assert!((got - exp).abs() < 1e-6, "tick mismatch: got {}, expected {}", got, exp);
+        }
+    }
+
+    #[test]
+    fn d3_ticks_empty_on_zero_count() {
+        assert!(d3_ticks(0.0, 100.0, 0).is_empty());
+    }
+
+    #[test]
+    fn d3_ticks_single_on_equal_bounds() {
+        let ticks = d3_ticks(50.0, 50.0, 5);
+        assert_eq!(ticks, vec![50.0]);
+    }
 }
 
 /// Offset an element's position by wrapping it in a Group with a Translate transform.
@@ -747,4 +1052,192 @@ pub fn offset_element(element: ChartElement, dx: f64, dy: f64) -> ChartElement {
         transform: Some(Transform::Translate(dx, dy)),
         children: vec![element],
     }
+}
+
+/// Convert a hex color string (e.g. "#34a853") and opacity (0.0–1.0) to an rgba() CSS string.
+/// Falls back to the original color string if parsing fails.
+fn hex_to_rgba(hex: &str, opacity: f64) -> String {
+    let hex = hex.trim_start_matches('#');
+    if hex.len() != 6 {
+        return format!("rgba(0,0,0,{})", opacity);
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16);
+    let g = u8::from_str_radix(&hex[2..4], 16);
+    let b = u8::from_str_radix(&hex[4..6], 16);
+    match (r, g, b) {
+        (Ok(r), Ok(g), Ok(b)) => format!("rgba({},{},{},{})", r, g, b, opacity),
+        _ => format!("rgba(0,0,0,{})", opacity),
+    }
+}
+
+/// Extract a numeric f64 from a serde_json::Value (number or numeric string).
+fn json_to_f64(v: &serde_json::Value) -> Option<f64> {
+    match v {
+        serde_json::Value::Number(n) => n.as_f64(),
+        serde_json::Value::String(s) => s.parse::<f64>().ok(),
+        _ => None,
+    }
+}
+
+/// Generate annotation elements for a chart.
+///
+/// Annotations are rendered in the chart's inner coordinate space (before margin offset).
+/// The caller must apply `offset_element` with `(margins.left, margins.top)` to position
+/// them correctly.
+///
+/// - `scale_y`: maps data values to pixel y-coordinates (higher data value → smaller y)
+/// - `x_start`: left edge of the chart area (0.0 in inner coordinates)
+/// - `x_end`: right edge of the chart area (= inner_width)
+/// - `inner_height`: height of the chart area (used for clipping reference)
+pub fn generate_annotations(
+    annotations: &[AnnotationSpec],
+    scale_y: &ScaleLinear,
+    x_start: f64,
+    x_end: f64,
+    inner_height: f64,
+    // Optional x-axis categories for vertical annotations (used to map category value → pixel x)
+    x_categories: Option<&[String]>,
+) -> Vec<ChartElement> {
+    let mut elements = Vec::new();
+
+    for ann in annotations {
+        let ann_type = ann.annotation_type.as_str();
+        let orientation = ann.orientation.as_deref().unwrap_or("horizontal");
+
+        if ann_type == "line" && orientation == "vertical" {
+            // Vertical line annotation — value is an x-axis category label
+            let value_str = match ann.value.as_ref() {
+                Some(v) => v.as_str().unwrap_or("").to_string(),
+                None => continue,
+            };
+            let x_px = if let Some(cats) = x_categories {
+                if let Some(idx) = cats.iter().position(|c| c == &value_str) {
+                    let step = (x_end - x_start) / cats.len() as f64;
+                    x_start + step * idx as f64 + step / 2.0
+                } else {
+                    continue;
+                }
+            } else {
+                continue;
+            };
+            let color = ann.color.as_deref().unwrap_or("#666").to_string();
+            let stroke_width = ann.stroke_width;
+            let dash_array = ann.dash_array.clone();
+
+            elements.push(ChartElement::Line {
+                x1: x_px, y1: 0.0,
+                x2: x_px, y2: inner_height,
+                stroke: color.clone(),
+                stroke_width,
+                stroke_dasharray: dash_array,
+                class: "annotation-line annotation-vertical".to_string(),
+            });
+
+            if let Some(ref label) = ann.label {
+                elements.push(ChartElement::Text {
+                    x: x_px + 4.0,
+                    y: 14.0,
+                    content: label.clone(),
+                    anchor: TextAnchor::Start,
+                    dominant_baseline: None,
+                    transform: None,
+                    font_size: Some("11px".to_string()),
+                    font_weight: None,
+                    fill: Some(color.clone()),
+                    class: "annotation-label".to_string(),
+                    data: None,
+                });
+            }
+        } else if ann_type == "line" && orientation == "horizontal" {
+            let value = match ann.value.as_ref().and_then(json_to_f64) {
+                Some(v) => v,
+                None => continue,
+            };
+            let y_px = scale_y.map(value);
+            let color = ann.color.as_deref().unwrap_or("#666").to_string();
+            let stroke_width = ann.stroke_width;
+            let dash_array = ann.dash_array.clone();
+
+            elements.push(ChartElement::Line {
+                x1: x_start,
+                y1: y_px,
+                x2: x_end,
+                y2: y_px,
+                stroke: color.clone(),
+                stroke_width,
+                stroke_dasharray: dash_array,
+                class: "annotation-line".to_string(),
+            });
+
+            if let Some(ref label) = ann.label {
+                let label_position = ann.label_position.as_deref().unwrap_or("end");
+                let (label_x, anchor) = if label_position == "end" {
+                    (x_end + 4.0, TextAnchor::Start)
+                } else {
+                    (x_start, TextAnchor::Start)
+                };
+                elements.push(ChartElement::Text {
+                    x: label_x,
+                    y: y_px - 4.0,
+                    content: label.clone(),
+                    anchor,
+                    dominant_baseline: None,
+                    transform: None,
+                    font_size: Some("11px".to_string()),
+                    font_weight: None,
+                    fill: Some(color.clone()),
+                    class: "annotation-label".to_string(),
+                    data: None,
+                });
+            }
+        } else if ann_type == "band" && orientation == "horizontal" {
+            let from_val = match ann.from.as_ref().and_then(json_to_f64) {
+                Some(v) => v,
+                None => continue,
+            };
+            let to_val = match ann.to.as_ref().and_then(json_to_f64) {
+                Some(v) => v,
+                None => continue,
+            };
+
+            let y_from = scale_y.map(from_val);
+            let y_to = scale_y.map(to_val);
+            let y_top = y_from.min(y_to);
+            let band_height = (y_from - y_to).abs();
+            let band_width = x_end - x_start;
+
+            let color = ann.color.as_deref().unwrap_or("#666");
+            let opacity = ann.opacity.unwrap_or(0.15);
+            let fill_color = hex_to_rgba(color, opacity);
+
+            elements.push(ChartElement::Rect {
+                x: x_start,
+                y: y_top,
+                width: band_width,
+                height: band_height,
+                fill: fill_color,
+                stroke: ann.stroke_color.clone(),
+                class: "annotation-band".to_string(),
+                data: None,
+            });
+
+            if let Some(ref label) = ann.label {
+                elements.push(ChartElement::Text {
+                    x: x_start + 4.0,
+                    y: y_top + 12.0,
+                    content: label.clone(),
+                    anchor: TextAnchor::Start,
+                    dominant_baseline: None,
+                    transform: None,
+                    font_size: Some("11px".to_string()),
+                    font_weight: None,
+                    fill: Some(ann.color.clone().unwrap_or_else(|| "#666".to_string())),
+                    class: "annotation-label".to_string(),
+                    data: None,
+                });
+            }
+        }
+    }
+
+    elements
 }

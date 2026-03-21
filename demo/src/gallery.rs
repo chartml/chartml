@@ -117,7 +117,7 @@ visualize:
   compareWith: previous
   invertTrend: true"##;
 
-// ─── Revenue vs Goal (from examples.md "Reference Lines" section, without annotations) ───
+// ─── Revenue vs Goal (from examples.md "Reference Lines" section) ───
 
 const BAR_REVENUE_GOAL_SPEC: &str = r##"type: chart
 version: 1
@@ -138,7 +138,52 @@ visualize:
   axes:
     rows:
       label: "Revenue ($)"
-      format: "$,.0f""##;
+      format: "$,.0f"
+  annotations:
+    - type: line
+      axis: left
+      value: 150000
+      orientation: horizontal
+      label: "Monthly Goal"
+      labelPosition: end
+      color: "#34a853"
+      strokeWidth: 2
+      dashArray: "5,5"
+      opacity: 1.0"##;
+
+// ─── Revenue Performance with Target Range ───
+
+const LINE_REVENUE_TARGET_RANGE_SPEC: &str = r##"type: chart
+version: 1
+title: "Revenue Performance with Target Range"
+data:
+  provider: inline
+  rows:
+    - { month: "Jan", revenue: 120000 }
+    - { month: "Feb", revenue: 135000 }
+    - { month: "Mar", revenue: 148000 }
+    - { month: "Apr", revenue: 162000 }
+    - { month: "May", revenue: 145000 }
+    - { month: "Jun", revenue: 158000 }
+visualize:
+  type: line
+  columns: month
+  rows: revenue
+  axes:
+    rows:
+      label: "Revenue ($)"
+      format: "$,.0f"
+  annotations:
+    - type: band
+      axis: left
+      from: 140000
+      to: 160000
+      orientation: horizontal
+      label: "Target Range"
+      color: "#34a853"
+      opacity: 0.15
+      strokeColor: "#34a853"
+      strokeWidth: 1"##;
 
 // ─── Combo chart: Actual vs Target (from examples.md "Advanced Analytics") ───
 
@@ -446,6 +491,82 @@ visualize:
       label: "Daily Sales"
       format: ",.0f""##;
 
+// ─── 100% Stacked Area (Normalized) ───
+
+const NORMALIZED_AREA_SPEC: &str = r##"type: chart
+version: 1
+title: "Regional Market Share Over Time"
+data:
+  provider: inline
+  rows:
+    - week: "Week 1"
+      region: "North"
+      revenue: 50000
+    - week: "Week 1"
+      region: "South"
+      revenue: 35000
+    - week: "Week 1"
+      region: "East"
+      revenue: 30000
+    - week: "Week 2"
+      region: "North"
+      revenue: 52000
+    - week: "Week 2"
+      region: "South"
+      revenue: 38000
+    - week: "Week 2"
+      region: "East"
+      revenue: 35000
+    - week: "Week 3"
+      region: "North"
+      revenue: 51000
+    - week: "Week 3"
+      region: "South"
+      revenue: 40000
+    - week: "Week 3"
+      region: "East"
+      revenue: 44000
+    - week: "Week 4"
+      region: "North"
+      revenue: 48000
+    - week: "Week 4"
+      region: "South"
+      revenue: 42000
+    - week: "Week 4"
+      region: "East"
+      revenue: 52000
+    - week: "Week 5"
+      region: "North"
+      revenue: 46000
+    - week: "Week 5"
+      region: "South"
+      revenue: 43000
+    - week: "Week 5"
+      region: "East"
+      revenue: 58000
+    - week: "Week 6"
+      region: "North"
+      revenue: 42000
+    - week: "Week 6"
+      region: "South"
+      revenue: 45000
+    - week: "Week 6"
+      region: "East"
+      revenue: 68000
+visualize:
+  type: area
+  mode: normalized
+  columns: week
+  rows: revenue
+  marks:
+    color: region
+  axes:
+    rows:
+      label: "Market Share"
+  style:
+    height: 300
+    colors: ["#4285f4", "#ea4335", "#34a853"]"##;
+
 const LONG_CATEGORIES_SPEC: &str = r##"type: chart
 version: 1
 title: "Revenue by Product Line"
@@ -484,11 +605,13 @@ struct GalleryItem {
 const GALLERY_ITEMS: &[GalleryItem] = &[
     GalleryItem { name: "Bar", spec: DEFAULT_SPEC },
     GalleryItem { name: "Bar (6 months)", spec: BAR_REVENUE_GOAL_SPEC },
+    GalleryItem { name: "Revenue Performance with Target Range", spec: LINE_REVENUE_TARGET_RANGE_SPEC },
     GalleryItem { name: "Stacked Bar", spec: STACKED_BAR_SPEC },
     GalleryItem { name: "Combo", spec: COMBO_SPEC },
     GalleryItem { name: "Line", spec: LINE_SPEC },
     GalleryItem { name: "Multi-Line", spec: MULTI_LINE_SPEC },
     GalleryItem { name: "Area", spec: AREA_SPEC },
+    GalleryItem { name: "Area (100% Stacked)", spec: NORMALIZED_AREA_SPEC },
     GalleryItem { name: "Pie", spec: PIE_SPEC },
     GalleryItem { name: "Doughnut", spec: DOUGHNUT_SPEC },
     GalleryItem { name: "Scatter", spec: SCATTER_SPEC },

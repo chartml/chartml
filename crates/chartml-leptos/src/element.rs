@@ -150,7 +150,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             }.into_any()
         }
 
-        ChartElement::Text { x, y, content, anchor, dominant_baseline, transform, font_size, fill, class, data } => {
+        ChartElement::Text { x, y, content, anchor, dominant_baseline, transform, font_size, font_weight, fill, class, data } => {
             let x = x.to_string();
             let y = y.to_string();
             let content = content.clone();
@@ -158,6 +158,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             let db = dominant_baseline.clone().unwrap_or_default();
             let transform_str = transform.as_ref().map(|t| t.to_svg_string()).unwrap_or_default();
             let fs = font_size.clone().unwrap_or_default();
+            let fw = font_weight.clone().unwrap_or_default();
             let fill = fill.clone().unwrap_or_default();
             let class = class.clone();
 
@@ -168,6 +169,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
                     dominant-baseline=db
                     transform=transform_str
                     font-size=fs
+                    font-weight=fw
                     fill=fill
                     class=class
                 >

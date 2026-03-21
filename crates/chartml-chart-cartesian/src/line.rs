@@ -9,7 +9,7 @@ use chartml_core::shapes::LineGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{GridConfig, LegendMark, format_value, generate_x_axis, generate_y_axis_numeric, generate_legend_with_mark, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{GridConfig, LegendMark, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_legend_with_mark, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
@@ -93,13 +93,14 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
     // Title
     if let Some(ref title) = config.title {
         children.push(ChartElement::Text {
-            x: config.width / 2.0,
+            x: 10.0,
             y: 20.0,
             content: title.clone(),
-            anchor: TextAnchor::Middle,
+            anchor: TextAnchor::Start,
             dominant_baseline: None,
             transform: None,
             font_size: Some("14px".to_string()),
+            font_weight: Some("bold".to_string()),
             fill: Some("#333".to_string()),
             class: "chart-title".to_string(),
             data: None,
@@ -110,12 +111,24 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
     let grid = GridConfig::from_config(config);
+
+    // Apply D3-style nice domain rounding for clean tick intervals and headroom (Regressions 2 & 3).
+    // Only when no explicit axis bounds are set.
+    let axes_bounds_min = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref()).and_then(|a| a.min);
+    let axes_bounds_max = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref()).and_then(|a| a.max);
+    let (domain_min, domain_max) = if axes_bounds_min.is_none() && axes_bounds_max.is_none() {
+        // Match JS: yLeft.nice() uses default count=10 for domain rounding.
+        crate::helpers::nice_domain(domain_min, domain_max, 10)
+    } else {
+        (domain_min, domain_max)
+    };
+
     let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
     let y_axis_elements = generate_y_axis_numeric(
         (domain_min, domain_max),
         (inner_height, 0.0),
         margins.left,
-        y_fmt_ref,
+        None,
         adaptive_tick_count(inner_height),
         Some(inner_width),
         &grid,
@@ -139,6 +152,28 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             axes
         },
     });
+
+    // Annotations — rendered below the line (added before line elements)
+    if let Some(annotations) = config.visualize.annotations.as_deref() {
+        if !annotations.is_empty() {
+            let ann_scale = ScaleLinear::new((domain_min, domain_max), (inner_height, 0.0));
+            let ann_elements = generate_annotations(
+                annotations,
+                &ann_scale,
+                0.0,
+                inner_width,
+                inner_height,
+                Some(&categories),
+            );
+            if !ann_elements.is_empty() {
+                children.push(ChartElement::Group {
+                    class: "annotations".to_string(),
+                    transform: Some(Transform::Translate(margins.left, margins.top)),
+                    children: ann_elements,
+                });
+            }
+        }
+    }
 
     // Line paths
     let line_gen = LineGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
@@ -223,6 +258,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                             dominant_baseline: None,
                             transform: None,
                             font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "11px".to_string())),
+                            font_weight: None,
                             fill: Some(dl.color.clone().unwrap_or_else(|| color.clone())),
                             class: "data-label".to_string(),
                             data: None,

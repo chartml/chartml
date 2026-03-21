@@ -2,7 +2,6 @@ use chartml_core::data::{get_f64, get_string, unique_values, group_by, Row};
 use chartml_core::element::{ChartElement, ElementData, TextAnchor, Transform, ViewBox};
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
-use chartml_core::layout::stack::StackLayout;
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::layout::adaptive_tick_count;
@@ -10,7 +9,7 @@ use chartml_core::spec::{ChartMode, Orientation};
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{GridConfig, format_value, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, offset_element};
+use crate::helpers::{GridConfig, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
 
 pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
@@ -42,7 +41,8 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
 
     let color_field = get_color_field(config);
     let is_horizontal = matches!(config.visualize.orientation, Some(Orientation::Horizontal));
-    let is_stacked = matches!(config.visualize.mode, Some(ChartMode::Stacked));
+    let is_normalized = matches!(config.visualize.mode, Some(ChartMode::Normalized));
+    let is_stacked = matches!(config.visualize.mode, Some(ChartMode::Stacked)) || is_normalized;
     let is_grouped = matches!(config.visualize.mode, Some(ChartMode::Grouped));
 
     // Step 1: Compute label strategy for margin estimation (only for vertical bars)
@@ -75,13 +75,14 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
     // Title
     if let Some(ref title) = config.title {
         children.push(ChartElement::Text {
-            x: config.width / 2.0,
+            x: 10.0,
             y: 20.0,
             content: title.clone(),
-            anchor: TextAnchor::Middle,
+            anchor: TextAnchor::Start,
             dominant_baseline: None,
             transform: None,
             font_size: Some("14px".to_string()),
+            font_weight: Some("bold".to_string()),
             fill: Some("#333".to_string()),
             class: "chart-title".to_string(),
             data: None,
@@ -96,8 +97,56 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
     // Pre-read axis bounds (needed by bar rendering for correct scale)
     let (axis_min, axis_max) = get_y_axis_bounds(config);
 
-    let (value_max, bar_elements) = if let Some(ref color_f) = color_field {
-        let (vm, els) = render_multi_series_bars(
+    let tick_count = adaptive_tick_count(inner_height);
+
+    // Pre-scan data max so we can compute a nice domain before rendering bars.
+    let raw_data_max: f64 = if let Some(ref color_f) = color_field {
+        if is_stacked {
+            // For stacked, we need the per-category summed max
+            use chartml_core::data::group_by;
+            let groups = group_by(data, color_f);
+            let series_names = chartml_core::data::unique_values(data, color_f);
+            categories.iter().map(|cat| {
+                series_names.iter().map(|s| {
+                    groups.get(s).and_then(|rows| {
+                        rows.iter().find(|r| chartml_core::data::get_string(r, &category_field).as_deref() == Some(cat.as_str()))
+                            .and_then(|r| get_f64(r, &value_field))
+                    }).unwrap_or(0.0)
+                }).sum::<f64>()
+            }).fold(0.0_f64, f64::max)
+        } else {
+            data.iter().filter_map(|r| get_f64(r, &value_field)).fold(0.0_f64, f64::max)
+        }
+    } else {
+        data.iter().filter_map(|r| get_f64(r, &value_field)).fold(0.0_f64, f64::max)
+    };
+    let raw_data_max = if raw_data_max <= 0.0 { 1.0 } else { raw_data_max };
+
+    // For normalized mode, domain is always 0-1 (the NumberFormatter handles % display).
+    let (domain_min, domain_max) = if is_normalized {
+        (0.0, 1.0)
+    } else {
+        let raw_domain_min = axis_min.unwrap_or(0.0);
+        let raw_domain_max = axis_max.unwrap_or(raw_data_max);
+        // Apply nice rounding to domain so ticks are round numbers with headroom (Regressions 2 & 3).
+        // Only apply when no explicit axis bounds are set by the user.
+        if axis_min.is_none() && axis_max.is_none() {
+            // Match JS: yLeft.nice() uses default count=10 for domain rounding.
+            nice_domain(raw_domain_min, raw_domain_max, 10)
+        } else {
+            (raw_domain_min, raw_domain_max)
+        }
+    };
+    // For normalized mode, override Y-axis format to show percentages.
+    let effective_y_fmt: Option<String> = if is_normalized {
+        Some(".0%".to_string())
+    } else {
+        None
+    };
+    let effective_y_fmt_ref = effective_y_fmt.as_deref();
+
+    let (_, bar_elements) = if let Some(ref color_f) = color_field {
+        render_multi_series_bars(
             data,
             config,
             &category_field,
@@ -110,13 +159,13 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
             is_stacked,
             is_grouped,
             is_horizontal,
+            is_normalized,
             y_fmt_ref,
-            axis_min.unwrap_or(0.0),
-            axis_max.unwrap_or(f64::MAX),
-        )?;
-        (vm, els)
+            domain_min,
+            domain_max,
+        )?
     } else {
-        let (vm, els) = render_single_series_bars(
+        render_single_series_bars(
             data,
             config,
             &category_field,
@@ -127,27 +176,23 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
             inner_height,
             is_horizontal,
             y_fmt_ref,
-            axis_min.unwrap_or(0.0),
-            axis_max.unwrap_or(f64::MAX),
-        )?;
-        (vm, els)
+            domain_min,
+            domain_max,
+        )?
     };
-
-    let domain_min = axis_min.unwrap_or(0.0);
-    let domain_max = axis_max.unwrap_or(value_max);
 
     // Axes (use domain_min/domain_max instead of 0.0/value_max)
     let axis_elements = if is_horizontal {
         // Category y-axis: generate at x=0 relative, then offset by margins.left
         let x_axis = generate_y_axis(&categories, (0.0, inner_height), 0.0, None);
-        let y_axis = generate_x_axis_numeric((domain_min, domain_max), (0.0, inner_width), margins.top + inner_height, y_fmt_ref, adaptive_tick_count(inner_width), Some(inner_height), &grid);
+        let y_axis = generate_x_axis_numeric((domain_min, domain_max), (0.0, inner_width), margins.top + inner_height, effective_y_fmt_ref, 5, Some(inner_height), &grid);
         let mut axes = Vec::new();
         axes.extend(x_axis.into_iter().map(|e| offset_element(e, margins.left, margins.top)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes
     } else {
         let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
-        let y_axis = generate_y_axis_numeric((domain_min, domain_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid);
+        let y_axis = generate_y_axis_numeric((domain_min, domain_max), (inner_height, 0.0), margins.left, effective_y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid);
         let mut axes = Vec::new();
         axes.extend(x_axis_result.elements.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
@@ -165,6 +210,31 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
         transform: Some(Transform::Translate(margins.left, margins.top)),
         children: bar_elements,
     });
+
+    // Annotations — rendered on top of bars, in inner coordinate space
+    if !is_horizontal {
+        if let Some(annotations) = config.visualize.annotations.as_deref() {
+            if !annotations.is_empty() {
+                use chartml_core::scales::ScaleLinear;
+                let ann_scale = ScaleLinear::new((domain_min, domain_max), (inner_height, 0.0));
+                let ann_elements = generate_annotations(
+                    annotations,
+                    &ann_scale,
+                    0.0,
+                    inner_width,
+                    inner_height,
+                    Some(&categories),
+                );
+                if !ann_elements.is_empty() {
+                    children.push(ChartElement::Group {
+                        class: "annotations".to_string(),
+                        transform: Some(Transform::Translate(margins.left, margins.top)),
+                        children: ann_elements,
+                    });
+                }
+            }
+        }
+    }
 
     // Legend
     if let Some(ref color_f) = color_field {
@@ -200,15 +270,15 @@ fn render_single_series_bars(
     domain_min: f64,
     domain_max: f64,
 ) -> Result<(f64, Vec<ChartElement>), ChartError> {
-    // Find the max value
+    // Find the max value (for return value only — domain_max is already caller-computed)
     let values: Vec<f64> = data
         .iter()
         .filter_map(|row| get_f64(row, value_field))
         .collect();
     let value_max = values.iter().cloned().fold(0.0_f64, f64::max);
     let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
-    // Use explicit axis max if provided, otherwise data max
-    let effective_max = if domain_max < f64::MAX { domain_max } else { value_max };
+    // Use the passed domain_max directly (caller already applied nice rounding if needed)
+    let effective_max = domain_max;
 
     let mut elements = Vec::new();
     let fill = config.colors.first().cloned().unwrap_or_else(|| "#2E7D9A".to_string());
@@ -286,6 +356,7 @@ fn render_single_series_bars(
                         dominant_baseline: None,
                         transform: None,
                         font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "11px".to_string())),
+                        font_weight: None,
                         fill: Some(dl.color.clone().unwrap_or_else(|| "#333".to_string())),
                         class: "data-label".to_string(),
                         data: None,
@@ -311,10 +382,13 @@ fn render_multi_series_bars(
     is_stacked: bool,
     _is_grouped: bool,
     _is_horizontal: bool,
+    is_normalized: bool,
     y_fmt_ref: Option<&str>,
     domain_min: f64,
     domain_max: f64,
 ) -> Result<(f64, Vec<ChartElement>), ChartError> {
+    use chartml_core::layout::stack::{StackLayout, StackOffset};
+
     let series_names = unique_values(data, color_field);
     let groups = group_by(data, color_field);
 
@@ -340,19 +414,27 @@ fn render_multi_series_bars(
             values_matrix.push(series_vals);
         }
 
-        let stack = StackLayout::new();
+        let stack = if is_normalized {
+            StackLayout::new().offset(StackOffset::Normalize)
+        } else {
+            StackLayout::new()
+        };
         let stacked_points = stack.layout(categories, &series_names, &values_matrix);
 
-        // Find max y1
-        let value_max = stacked_points
-            .iter()
-            .map(|p| p.y1)
-            .fold(0.0_f64, f64::max);
-        let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
-        let effective_max = if domain_max < f64::MAX { domain_max } else { value_max };
+        // For normalized mode, domain is 0-1; for regular stacked, use the raw max.
+        let (effective_min, effective_max) = if is_normalized {
+            (0.0, 1.0)
+        } else {
+            let value_max = stacked_points
+                .iter()
+                .map(|p| p.y1)
+                .fold(0.0_f64, f64::max);
+            let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
+            (domain_min, if domain_max < f64::MAX { domain_max } else { value_max })
+        };
 
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width));
-        let linear = ScaleLinear::new((domain_min, effective_max), (inner_height, 0.0));
+        let linear = ScaleLinear::new((effective_min, effective_max), (inner_height, 0.0));
 
         for point in &stacked_points {
             let x = match band.map(&point.key) {
@@ -385,7 +467,7 @@ fn render_multi_series_bars(
             });
         }
 
-        Ok((value_max, elements))
+        Ok((effective_max, elements))
     } else {
         // Grouped (or default multi-series)
         // Find overall max value
@@ -490,19 +572,12 @@ fn render_combo(
         vec![]
     };
 
-    let has_left_label = config.visualize.axes.as_ref()
-        .and_then(|a| a.left.as_ref())
-        .and_then(|a| a.label.as_ref())
-        .is_some();
-    let has_right_label = config.visualize.axes.as_ref()
-        .and_then(|a| a.right.as_ref())
-        .and_then(|a| a.label.as_ref())
-        .is_some();
-
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: fields.len() > 1,
-        has_y_axis_label: has_left_label,
+        // Left Y-axis label is not rendered for combo charts (see comment below),
+        // so do not reserve extra left-margin space for it.
+        has_y_axis_label: false,
         has_right_axis: has_right,
         right_tick_labels,
         ..Default::default()
@@ -522,23 +597,39 @@ fn render_combo(
         .filter(|f| f.axis.as_deref() == Some("right"))
         .collect();
 
-    // Compute left-axis domain
+    // Compute left-axis domain with D3-style nice rounding (Regressions 2 & 3).
     let left_max = left_fields.iter()
         .flat_map(|f| data.iter().filter_map(|r| get_f64(r, &f.field)))
         .fold(0.0_f64, f64::max);
     let axes_left = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref());
-    let left_domain_min = axes_left.and_then(|a| a.min).unwrap_or(0.0);
-    let left_domain_max = axes_left.and_then(|a| a.max).unwrap_or(if left_max <= 0.0 { 1.0 } else { left_max });
+    let left_explicit_min = axes_left.and_then(|a| a.min);
+    let left_explicit_max = axes_left.and_then(|a| a.max);
+    let raw_left_domain_min = left_explicit_min.unwrap_or(0.0);
+    let raw_left_domain_max = left_explicit_max.unwrap_or(if left_max <= 0.0 { 1.0 } else { left_max });
+    let (left_domain_min, left_domain_max) = if left_explicit_min.is_none() && left_explicit_max.is_none() {
+        // Match JS: yLeft.nice() uses default count=10 for domain rounding.
+        nice_domain(raw_left_domain_min, raw_left_domain_max, 10)
+    } else {
+        (raw_left_domain_min, raw_left_domain_max)
+    };
     let left_scale = ScaleLinear::new((left_domain_min, left_domain_max), (inner_height, 0.0));
 
-    // Compute right-axis domain
+    // Compute right-axis domain with D3-style nice rounding (Regressions 2 & 3).
     let right_scale = if !right_fields.is_empty() {
         let right_max = right_fields.iter()
             .flat_map(|f| data.iter().filter_map(|r| get_f64(r, &f.field)))
             .fold(0.0_f64, f64::max);
         let axes_right = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref());
-        let right_domain_min = axes_right.and_then(|a| a.min).unwrap_or(0.0);
-        let right_domain_max = axes_right.and_then(|a| a.max).unwrap_or(if right_max <= 0.0 { 1.0 } else { right_max });
+        let right_explicit_min = axes_right.and_then(|a| a.min);
+        let right_explicit_max = axes_right.and_then(|a| a.max);
+        let raw_right_domain_min = right_explicit_min.unwrap_or(0.0);
+        let raw_right_domain_max = right_explicit_max.unwrap_or(if right_max <= 0.0 { 1.0 } else { right_max });
+        let (right_domain_min, right_domain_max) = if right_explicit_min.is_none() && right_explicit_max.is_none() {
+            // Match JS: yLeft.nice() uses default count=10 for domain rounding.
+            nice_domain(raw_right_domain_min, raw_right_domain_max, 10)
+        } else {
+            (raw_right_domain_min, raw_right_domain_max)
+        };
         Some(ScaleLinear::new((right_domain_min, right_domain_max), (inner_height, 0.0)))
     } else {
         None
@@ -549,10 +640,11 @@ fn render_combo(
     // Title
     if let Some(ref title) = config.title {
         children.push(ChartElement::Text {
-            x: config.width / 2.0, y: 20.0,
+            x: 10.0, y: 20.0,
             content: title.clone(),
-            anchor: TextAnchor::Middle, dominant_baseline: None,
-            transform: None, font_size: Some("16px".to_string()),
+            anchor: TextAnchor::Start, dominant_baseline: None,
+            transform: None, font_size: Some("14px".to_string()),
+            font_weight: Some("bold".to_string()),
             fill: Some("#333".to_string()), class: "chart-title".to_string(), data: None,
         });
     }
@@ -561,7 +653,7 @@ fn render_combo(
     let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
     let y_axis_left = generate_y_axis_numeric(
         (left_domain_min, left_domain_max), (inner_height, 0.0), margins.left,
-        y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid,
+        None, adaptive_tick_count(inner_height), Some(inner_width), &grid,
     );
 
     let mut axis_elements = Vec::new();
@@ -580,21 +672,11 @@ fn render_combo(
         axis_elements.extend(right_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
     }
 
-    // Axis title labels
-    if let Some(label) = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref()).and_then(|a| a.label.clone()) {
-        axis_elements.push(ChartElement::Text {
-            x: 12.0,
-            y: margins.top + inner_height / 2.0,
-            content: label,
-            anchor: TextAnchor::Middle,
-            dominant_baseline: None,
-            transform: Some(Transform::Rotate(-90.0, 12.0, margins.top + inner_height / 2.0)),
-            font_size: Some("12px".to_string()),
-            fill: Some("#666".to_string()),
-            class: "axis-label".to_string(),
-            data: None,
-        });
-    }
+    // Axis title labels — left Y-axis label is intentionally not rendered.
+    // The axis label text (e.g. "Revenue ($)") is communicated via the spec's
+    // axes.rows.label field, but the JS reference does not render a rotated
+    // Y-axis label for combo charts; it relies on the axis ticks and legend
+    // to convey the units. Only the right-axis label is rendered if present.
     if let Some(label) = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()).and_then(|a| a.label.clone()) {
         let rx = config.width - 12.0;
         axis_elements.push(ChartElement::Text {
@@ -605,6 +687,7 @@ fn render_combo(
             dominant_baseline: None,
             transform: Some(Transform::Rotate(90.0, rx, margins.top + inner_height / 2.0)),
             font_size: Some("12px".to_string()),
+            font_weight: None,
             fill: Some("#666".to_string()),
             class: "axis-label".to_string(),
             data: None,
@@ -678,6 +761,7 @@ fn render_combo(
                                 anchor: TextAnchor::Middle, dominant_baseline: None,
                                 transform: None,
                                 font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "11px".to_string())),
+                                font_weight: None,
                                 fill: Some(dl.color.clone().unwrap_or_else(|| "#333".to_string())),
                                 class: "data-label".to_string(), data: None,
                             });
@@ -731,6 +815,7 @@ fn render_combo(
                                     anchor: TextAnchor::Middle, dominant_baseline: None,
                                     transform: None,
                                     font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "11px".to_string())),
+                                    font_weight: None,
                                     fill: Some(dl.color.clone().unwrap_or_else(|| color.clone())),
                                     class: "data-label".to_string(), data: None,
                                 });
@@ -749,6 +834,27 @@ fn render_combo(
     children.push(ChartElement::Group {
         class: "marks".to_string(), transform: None, children: mark_elements,
     });
+
+    // Annotations — rendered on top of marks, in inner coordinate space
+    if let Some(annotations) = config.visualize.annotations.as_deref() {
+        if !annotations.is_empty() {
+            let ann_elements = generate_annotations(
+                annotations,
+                &left_scale,
+                0.0,
+                inner_width,
+                inner_height,
+                Some(&categories),
+            );
+            if !ann_elements.is_empty() {
+                children.push(ChartElement::Group {
+                    class: "annotations".to_string(),
+                    transform: Some(Transform::Translate(margins.left, margins.top)),
+                    children: ann_elements,
+                });
+            }
+        }
+    }
 
     // Legend with mixed marks
     if series_names.len() > 1 {
@@ -786,6 +892,7 @@ fn render_combo(
                 x: x_offset + 18.0, y: y + 10.0, content: name.clone(),
                 anchor: TextAnchor::Start, dominant_baseline: None,
                 transform: None, font_size: Some("11px".to_string()),
+                font_weight: None,
                 fill: Some("#333".to_string()), class: "legend-label".to_string(), data: None,
             });
 

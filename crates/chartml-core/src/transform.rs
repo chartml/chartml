@@ -52,19 +52,25 @@ fn aggregate(data: &[Row], spec: &AggregateSpec) -> Result<Vec<Row>, ChartError>
         })
         .collect();
 
-    // 2. Group rows by dimension values
+    // 2. Group rows by dimension values, preserving first-occurrence order of group keys.
     let mut groups: HashMap<Vec<String>, Vec<&Row>> = HashMap::new();
+    let mut key_order: Vec<Vec<String>> = Vec::new();
+    let mut seen_keys: std::collections::HashSet<Vec<String>> = std::collections::HashSet::new();
     for row in data {
         let key: Vec<String> = dim_columns
             .iter()
             .map(|field| get_string(row, field).unwrap_or_default())
             .collect();
+        if seen_keys.insert(key.clone()) {
+            key_order.push(key.clone());
+        }
         groups.entry(key).or_default().push(row);
     }
 
-    // 3. For each group, compute measures
+    // 3. For each group, compute measures (in insertion order)
     let mut result: Vec<Row> = Vec::new();
-    for (key, rows) in &groups {
+    for key in &key_order {
+        let rows = &groups[key];
         let mut out_row = Row::new();
 
         // Add dimension values

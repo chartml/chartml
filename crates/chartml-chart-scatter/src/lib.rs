@@ -132,6 +132,7 @@ impl ChartRenderer for ScatterRenderer {
                 content: label, anchor: TextAnchor::End,
                 dominant_baseline: Some("middle".to_string()),
                 transform: None, font_size: Some("11px".to_string()),
+                font_weight: None,
                 fill: Some("#666".to_string()), class: "tick-label".to_string(), data: None,
             });
         }
@@ -158,7 +159,8 @@ impl ChartRenderer for ScatterRenderer {
                 x, y: x_axis_y + 18.0,
                 content: label, anchor: TextAnchor::Middle,
                 dominant_baseline: None, transform: None,
-                font_size: Some("11px".to_string()), fill: Some("#666".to_string()),
+                font_size: Some("11px".to_string()), font_weight: None,
+                fill: Some("#666".to_string()),
                 class: "tick-label".to_string(), data: None,
             });
         }
@@ -184,15 +186,16 @@ impl ChartRenderer for ScatterRenderer {
         // Title
         if let Some(title) = &config.title {
             children.push(ChartElement::Text {
-                x: width / 2.0,
+                x: 10.0,
                 y: 20.0,
                 content: title.clone(),
-                anchor: TextAnchor::Middle,
+                anchor: TextAnchor::Start,
                 dominant_baseline: None,
                 transform: None,
-                font_size: Some("16px".to_string()),
+                font_size: Some("14px".to_string()),
+                font_weight: Some("bold".to_string()),
                 fill: Some("#333".to_string()),
-                class: "chartml-title".to_string(),
+                class: "chart-title".to_string(),
                 data: None,
             });
         }

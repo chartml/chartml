@@ -2,9 +2,8 @@ use chartml_core::data::{get_f64, get_string, unique_values, group_by, Row};
 use chartml_core::element::{ChartElement, ElementData, TextAnchor, Transform, ViewBox};
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
-use chartml_core::layout::stack::StackLayout;
+use chartml_core::layout::stack::{StackLayout, StackOffset};
 use chartml_core::plugin::ChartConfig;
-use chartml_core::layout::adaptive_tick_count;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::shapes::AreaGenerator;
 
@@ -23,6 +22,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
     let color_field = get_color_field(config);
     let is_stacked = matches!(config.visualize.mode, Some(chartml_core::spec::ChartMode::Stacked));
+    let is_normalized = matches!(config.visualize.mode, Some(chartml_core::spec::ChartMode::Normalized));
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
     let grid = GridConfig::from_config(config);
@@ -56,13 +56,14 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
     // Title
     if let Some(ref title) = config.title {
         children.push(ChartElement::Text {
-            x: config.width / 2.0,
+            x: 10.0,
             y: 20.0,
             content: title.clone(),
-            anchor: TextAnchor::Middle,
+            anchor: TextAnchor::Start,
             dominant_baseline: None,
             transform: None,
             font_size: Some("14px".to_string()),
+            font_weight: Some("bold".to_string()),
             fill: Some("#333".to_string()),
             class: "chart-title".to_string(),
             data: None,
@@ -76,7 +77,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         let series_names = unique_values(data, color_f);
         let groups = group_by(data, color_f);
 
-        if is_stacked && series_names.len() > 1 {
+        if (is_stacked || is_normalized) && series_names.len() > 1 {
             // Build values matrix for stacking
             let mut values_matrix: Vec<Vec<f64>> = Vec::new();
             for series in &series_names {
@@ -96,15 +97,29 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 values_matrix.push(series_vals);
             }
 
-            let stack = StackLayout::new();
+            let stack = if is_normalized {
+                StackLayout::new().offset(StackOffset::Normalize)
+            } else {
+                StackLayout::new()
+            };
             let stacked_points = stack.layout(&categories, &series_names, &values_matrix);
 
-            let value_max = stacked_points
-                .iter()
-                .map(|p| p.y1)
-                .fold(0.0_f64, f64::max);
-            let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
-            let linear = ScaleLinear::new((0.0, value_max), (inner_height, 0.0));
+            // For normalized mode, the stack values are 0-1; Y-axis domain is 0-1
+            // with ".0%" format (NumberFormatter multiplies by 100 and appends %).
+            // For regular stacked mode, use the raw stacked max with nice rounding.
+            let (value_min, value_max, y_axis_fmt): (f64, f64, Option<&str>) = if is_normalized {
+                (0.0, 1.0, Some(".0%"))
+            } else {
+                let raw_value_max = stacked_points
+                    .iter()
+                    .map(|p| p.y1)
+                    .fold(0.0_f64, f64::max);
+                let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
+                // Match JS: yLeft.nice() uses default count=10 for domain rounding.
+                let (_, nice_max) = crate::helpers::nice_domain(0.0, raw_value_max, 10);
+                (0.0, nice_max, y_fmt_ref)
+            };
+            let linear = ScaleLinear::new((value_min, value_max), (inner_height, 0.0));
 
             // Group stacked points by series
             for (series_idx, series_name) in series_names.iter().enumerate() {
@@ -151,26 +166,14 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
 
-                // Hover dots at the top edge of each stacked area
-                for (i, &(px, _y0, _y1)) in series_points.iter().enumerate() {
-                    let (ref cat, val, y1_pixel) = dot_data[i];
-                    area_elements.push(ChartElement::Circle {
-                        cx: px,
-                        cy: y1_pixel,
-                        r: 5.0,
-                        fill: color.clone(),
-                        stroke: Some("#fff".to_string()),
-                        class: "chartml-area-dot".to_string(),
-                        data: Some(ElementData::new(cat, format_value(val, y_fmt_ref)).with_series(series_name)),
-                    });
-                }
+                // Area charts do not show dots by default (matches JS reference behaviour)
             }
 
             // Axes
             let x_axis_result =
                 generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
             let y_axis_elements =
-                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid);
+                generate_y_axis_numeric((value_min, value_max), (inner_height, 0.0), margins.left, y_axis_fmt, 5, Some(inner_width), &grid);
 
             children.push(ChartElement::Group {
                 class: "axes".to_string(),
@@ -196,8 +199,10 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 .iter()
                 .filter_map(|row| get_f64(row, &value_field))
                 .collect();
-            let value_max = values.iter().cloned().fold(0.0_f64, f64::max);
-            let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
+            let raw_value_max = values.iter().cloned().fold(0.0_f64, f64::max);
+            let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
+            // Match JS: yLeft.nice() uses default count=10 for domain rounding.
+            let (_, value_max) = crate::helpers::nice_domain(0.0, raw_value_max, 10);
             let linear = ScaleLinear::new((0.0, value_max), (inner_height, 0.0));
             let baseline = linear.map(0.0);
 
@@ -251,26 +256,13 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
 
-                // Hover dots at the top edge of each area
-                for (i, &(px, _y0, y1)) in points.iter().enumerate() {
-                    let (ref cat, val) = dot_data[i];
-                    area_elements.push(ChartElement::Circle {
-                        cx: px,
-                        cy: y1,
-                        r: 5.0,
-                        fill: color.clone(),
-                        stroke: Some("#fff".to_string()),
-                        class: "chartml-area-dot".to_string(),
-                        data: Some(ElementData::new(cat, format_value(val, y_fmt_ref)).with_series(series_name)),
-                    });
-                }
             }
 
             // Axes
             let x_axis_result =
                 generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
             let y_axis_elements =
-                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid);
+                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, None, 5, Some(inner_width), &grid);
 
             children.push(ChartElement::Group {
                 class: "axes".to_string(),
@@ -311,13 +303,14 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             .iter()
             .filter_map(|row| get_f64(row, &value_field))
             .collect();
-        let value_max = values.iter().cloned().fold(0.0_f64, f64::max);
-        let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
+        let raw_value_max = values.iter().cloned().fold(0.0_f64, f64::max);
+        let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
+        // Match JS: yLeft.nice() uses default count=10 for domain rounding.
+        let (_, value_max) = crate::helpers::nice_domain(0.0, raw_value_max, 10);
         let linear = ScaleLinear::new((0.0, value_max), (inner_height, 0.0));
         let baseline = linear.map(0.0);
 
         let mut points: Vec<(f64, f64, f64)> = Vec::new();
-        let mut dot_data: Vec<(String, f64)> = Vec::new();
 
         for cat in &categories {
             let row = match data.iter().find(|r| {
@@ -336,7 +329,6 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             };
             let y = linear.map(val);
             points.push((x, baseline, y));
-            dot_data.push((cat.clone(), val));
         }
 
         if !points.is_empty() {
@@ -357,26 +349,14 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 data: None,
             });
 
-            // Hover dots at each data point
-            for (i, &(px, _y0, y1)) in points.iter().enumerate() {
-                let (ref cat, val) = dot_data[i];
-                area_elements.push(ChartElement::Circle {
-                    cx: px,
-                    cy: y1,
-                    r: 5.0,
-                    fill: color.clone(),
-                    stroke: Some("#fff".to_string()),
-                    class: "chartml-area-dot".to_string(),
-                    data: Some(ElementData::new(cat, format_value(val, y_fmt_ref))),
-                });
-            }
+            // Area charts do not show dots by default (matches JS reference behaviour)
         }
 
         // Axes
         let x_axis_result =
             generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
         let y_axis_elements =
-            generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid);
+            generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, None, 5, Some(inner_width), &grid);
 
         children.push(ChartElement::Group {
             class: "axes".to_string(),

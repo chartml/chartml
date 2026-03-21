@@ -4,6 +4,7 @@ use chartml_core::element::*;
 use chartml_core::error::ChartError;
 use chartml_core::shapes::{ArcGenerator, PieLayout};
 use chartml_core::spec::{VisualizeSpec, FieldRef};
+use chartml_core::layout::{calculate_legend_layout, LegendConfig, LegendAlignment};
 
 pub struct PieRenderer;
 
@@ -36,10 +37,14 @@ impl ChartRenderer for PieRenderer {
 
         let width = config.width;
         let height = config.height;
-        let radius = (width.min(height) / 2.0) - 40.0; // padding
+
+        // Reserve space at the bottom for the legend (30px gap + ~20px legend row)
+        let legend_reserved = 50.0;
+        let radius = (width.min(height - legend_reserved) / 2.0) - 40.0;
         let inner_radius = if is_doughnut { radius * 0.5 } else { 0.0 };
         let cx = width / 2.0;
-        let cy = height / 2.0;
+        // Shift pie center up slightly to make room for legend below
+        let cy = (height - legend_reserved) / 2.0;
 
         // Compute pie layout
         let pie = PieLayout::new();
@@ -73,15 +78,16 @@ impl ChartRenderer for PieRenderer {
         let mut children = Vec::new();
         if let Some(title) = &config.title {
             children.push(ChartElement::Text {
-                x: cx,
+                x: 10.0,
                 y: 20.0,
                 content: title.clone(),
-                anchor: TextAnchor::Middle,
+                anchor: TextAnchor::Start,
                 dominant_baseline: None,
                 transform: None,
-                font_size: Some("16px".to_string()),
+                font_size: Some("14px".to_string()),
+                font_weight: Some("bold".to_string()),
                 fill: Some("#333".to_string()),
-                class: "chartml-title".to_string(),
+                class: "chart-title".to_string(),
                 data: None,
             });
         }
@@ -92,6 +98,45 @@ impl ChartRenderer for PieRenderer {
             transform: Some(Transform::Translate(cx, cy)),
             children: slice_elements,
         });
+
+        // Legend — rendered below the pie, horizontally centered
+        let legend_y = cy + radius + 30.0;
+        let legend_config = LegendConfig {
+            alignment: LegendAlignment::Center,
+            ..LegendConfig::default()
+        };
+        // Build ordered labels and colors (original data order matches color palette order)
+        let legend_colors: Vec<String> = (0..labels.len())
+            .map(|i| config.colors.get(i % config.colors.len()).cloned().unwrap_or_else(|| "#999".to_string()))
+            .collect();
+        let legend_layout = calculate_legend_layout(&labels, &legend_colors, width, &legend_config);
+        for item in legend_layout.items.iter().filter(|i| i.visible) {
+            // Colored swatch rect
+            children.push(ChartElement::Rect {
+                x: item.x,
+                y: legend_y + item.y,
+                width: legend_config.symbol_size,
+                height: legend_config.symbol_size,
+                fill: item.color.clone(),
+                stroke: None,
+                class: "legend-symbol".to_string(),
+                data: None,
+            });
+            // Label text
+            children.push(ChartElement::Text {
+                x: item.x + legend_config.symbol_size + legend_config.symbol_text_gap,
+                y: legend_y + item.y + 10.0,
+                content: item.label.clone(),
+                anchor: TextAnchor::Start,
+                dominant_baseline: None,
+                transform: None,
+                font_size: Some("11px".to_string()),
+                font_weight: None,
+                fill: Some("#333".to_string()),
+                class: "legend-label".to_string(),
+                data: None,
+            });
+        }
 
         Ok(ChartElement::Svg {
             viewbox: ViewBox::new(0.0, 0.0, width, height),
@@ -175,7 +220,44 @@ mod tests {
     fn pie_has_title() {
         let renderer = PieRenderer::new();
         let element = renderer.render(&make_pie_data(), &make_pie_config("pie")).unwrap();
-        let text_count = count_elements(&element, &|e| matches!(e, ChartElement::Text { class, .. } if class == "chartml-title"));
+        let text_count = count_elements(&element, &|e| matches!(e, ChartElement::Text { class, .. } if class == "chart-title"));
         assert_eq!(text_count, 1);
+    }
+
+    #[test]
+    fn pie_has_legend() {
+        let renderer = PieRenderer::new();
+        let element = renderer.render(&make_pie_data(), &make_pie_config("pie")).unwrap();
+        // 3 slices = 3 legend swatches (Rect) + 3 legend labels (Text with class "legend-label")
+        let swatch_count = count_elements(&element, &|e| matches!(e, ChartElement::Rect { class, .. } if class == "legend-symbol"));
+        assert_eq!(swatch_count, 3, "Should have 3 legend swatches (one per slice)");
+        let label_count = count_elements(&element, &|e| matches!(e, ChartElement::Text { class, .. } if class == "legend-label"));
+        assert_eq!(label_count, 3, "Should have 3 legend labels (one per slice)");
+    }
+
+    #[test]
+    fn pie_legend_colors_match_slices() {
+        let renderer = PieRenderer::new();
+        let config = make_pie_config("pie");
+        let element = renderer.render(&make_pie_data(), &config).unwrap();
+        // Collect legend swatch fills in document order
+        let mut fills = Vec::new();
+        fn collect_fills(el: &ChartElement, fills: &mut Vec<String>) {
+            match el {
+                ChartElement::Rect { fill, class, .. } if class == "legend-symbol" => {
+                    fills.push(fill.clone());
+                }
+                ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                    for child in children { collect_fills(child, fills); }
+                }
+                _ => {}
+            }
+        }
+        collect_fills(&element, &mut fills);
+        assert_eq!(fills.len(), 3, "Expected 3 legend swatches");
+        // Colors must match the configured palette in order
+        assert_eq!(fills[0], config.colors[0]);
+        assert_eq!(fills[1], config.colors[1]);
+        assert_eq!(fills[2], config.colors[2]);
     }
 }

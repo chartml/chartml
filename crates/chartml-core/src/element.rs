@@ -62,6 +62,7 @@ pub enum ChartElement {
         dominant_baseline: Option<String>,
         transform: Option<Transform>,
         font_size: Option<String>,
+        font_weight: Option<String>,
         fill: Option<String>,
         class: String,
         data: Option<ElementData>,
@@ -283,7 +284,7 @@ mod tests {
                 ChartElement::Text {
                     x: 400.0, y: 20.0, content: "Title".to_string(),
                     anchor: TextAnchor::Middle, dominant_baseline: None,
-                    transform: None, font_size: None, fill: None,
+                    transform: None, font_size: None, font_weight: None, fill: None,
                     class: "title".to_string(),
                     data: None,
                 },
