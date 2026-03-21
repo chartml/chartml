@@ -13,7 +13,9 @@ use chartml_core::error::ChartError;
 use chartml_core::plugin::transform::{TransformContext, TransformMiddleware, TransformResult};
 use chartml_core::spec::TransformSpec;
 use datafusion::prelude::*;
+use arrow::array::RecordBatch;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// DataFusion-backed transform middleware.
 ///
@@ -71,14 +73,24 @@ impl TransformMiddleware for DataFusionTransform {
             .table(&current_table)
             .await
             .map_err(|e| ChartError::DataError(format!("Failed to read result table: {}", e)))?;
+        let output_schema = Arc::new(df.schema().as_arrow().clone());
         let batches = df
             .collect()
             .await
             .map_err(|e| ChartError::DataError(format!("Failed to collect results: {}", e)))?;
 
+        if batches.is_empty() {
+            // DataFusion returned no batches (e.g., WHERE filtered all rows).
+            // Return an empty DataTable preserving the output schema.
+            return Ok(TransformResult {
+                data: DataTable::from_record_batch(RecordBatch::new_empty(output_schema)),
+                metadata: HashMap::new(),
+            });
+        }
+
         // Concatenate all output batches into a single RecordBatch and wrap in DataTable.
         let result_batch = arrow::compute::concat_batches(
-            &batches[0].schema(),
+            &output_schema,
             &batches,
         )
         .map_err(|e| ChartError::DataError(format!("Failed to concat result batches: {}", e)))?;

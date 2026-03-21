@@ -423,15 +423,17 @@ impl DataTable {
         for key in key_order {
             if let Some(indices) = group_indices.get(&key) {
                 let indices_arr = UInt32Array::from(indices.clone());
-                let columns: Vec<ArrayRef> = self
+                let take_result: Result<Vec<ArrayRef>, _> = self
                     .batch
                     .columns()
                     .iter()
-                    .map(|col| arrow::compute::take(col.as_ref(), &indices_arr, None).unwrap())
+                    .map(|col| arrow::compute::take(col.as_ref(), &indices_arr, None))
                     .collect();
-                let sub_batch =
-                    RecordBatch::try_new(self.batch.schema(), columns).unwrap();
-                result.insert(key, DataTable::from_record_batch(sub_batch));
+                if let Ok(columns) = take_result {
+                    if let Ok(sub_batch) = RecordBatch::try_new(self.batch.schema(), columns) {
+                        result.insert(key, DataTable::from_record_batch(sub_batch));
+                    }
+                }
             }
         }
         result
@@ -687,14 +689,24 @@ fn arrow_to_string(col: &ArrayRef, idx: usize) -> Option<String> {
                     .unwrap()
                     .value(idx),
             };
-            // Convert to seconds + subseconds
-            let (secs, nanos) = match unit {
-                TimeUnit::Second => (raw, 0i64),
-                TimeUnit::Millisecond => (raw / 1000, (raw % 1000) * 1_000_000),
-                TimeUnit::Microsecond => (raw / 1_000_000, (raw % 1_000_000) * 1000),
-                TimeUnit::Nanosecond => (raw / 1_000_000_000, raw % 1_000_000_000),
+            // Convert to seconds + subseconds using Euclidean division
+            // so the remainder is always non-negative (safe for pre-epoch timestamps).
+            let (secs, nanos_u32) = match unit {
+                TimeUnit::Second => (raw, 0u32),
+                TimeUnit::Millisecond => {
+                    let (s, r) = (raw.div_euclid(1000), raw.rem_euclid(1000));
+                    (s, (r * 1_000_000) as u32)
+                }
+                TimeUnit::Microsecond => {
+                    let (s, r) = (raw.div_euclid(1_000_000), raw.rem_euclid(1_000_000));
+                    (s, (r * 1000) as u32)
+                }
+                TimeUnit::Nanosecond => {
+                    let (s, r) = (raw.div_euclid(1_000_000_000), raw.rem_euclid(1_000_000_000));
+                    (s, r as u32)
+                }
             };
-            let iso = epoch_to_iso(secs, nanos as u32);
+            let iso = epoch_to_iso(secs, nanos_u32);
             if tz.is_some() {
                 Some(format!("{}Z", iso))
             } else {
@@ -709,10 +721,7 @@ fn arrow_to_string(col: &ArrayRef, idx: usize) -> Option<String> {
                 .value(idx);
             Some(format_decimal128(raw, *scale))
         }
-        _ => {
-            // Fallback: try the debug format
-            Some(format!("{:?}", col.data_type()))
-        }
+        _ => None,
     }
 }
 
@@ -782,7 +791,10 @@ fn format_decimal128(raw: i128, scale: i8) -> String {
     let divisor = 10_i128.pow(scale as u32);
     let whole = raw / divisor;
     let frac = (raw % divisor).abs();
-    format!("{}.{:0>width$}", whole, frac, width = scale as usize)
+    // For negative values between -1 and 0 (e.g., -0.05), whole truncates to 0
+    // and loses the sign. Restore it explicitly.
+    let sign = if raw < 0 && whole == 0 { "-" } else { "" };
+    format!("{}{}.{:0>width$}", sign, whole, frac, width = scale as usize)
 }
 
 // ── Type inference helpers ──
