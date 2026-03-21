@@ -19,8 +19,8 @@ pub use params::{ParamDef, ParamsSpec};
 pub use source::{CacheConfig, SourceSpec};
 pub use style::{FontSpec, FontsSpec, GridSpec, LegendSpec, StyleSpec};
 pub use transform::{
-    AggregateSpec, Dimension, DimensionSpec, FilterGroup, FilterRule, Measure, SortSpec,
-    TransformSpec,
+    AggregateSpec, Dimension, DimensionSpec, FilterGroup, FilterRule, ForecastSpec, Measure,
+    SortSpec, SqlSpec, TransformSpec,
 };
 
 /// A parsed ChartML specification: either a single component or multiple components.
