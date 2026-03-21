@@ -162,6 +162,20 @@ pub fn format_tick_value(value: f64, tick_step: f64) -> String {
     }
 }
 
+/// Format a numeric tick value WITHOUT comma separators.
+///
+/// This matches JS's `d => d` (plain toString) used by horizontal bar charts.
+/// Produces the same precision as `format_tick_value` but omits comma grouping.
+pub fn format_tick_value_plain(value: f64, tick_step: f64) -> String {
+    let precision = if tick_step.abs() < 1e-15 {
+        0usize
+    } else {
+        let p = -(tick_step.abs().log10().floor()) as i64;
+        p.max(0) as usize
+    };
+    format!("{:.prec$}", value, prec = precision)
+}
+
 /// Insert commas into a string of digits (no sign).
 fn insert_commas_str(digits: &str) -> String {
     let len = digits.len();
@@ -662,9 +676,12 @@ pub fn generate_x_axis_numeric(
 
     for val in &ticks {
         let x = scale.map(*val);
+        // JS horizontal bar uses `d => d` (plain toString) as default tick format,
+        // which does NOT add comma separators. Only use formatted output when an
+        // explicit format string is provided.
         let label = match fmt {
             Some(f) => format_value(*val, Some(f)),
-            None => format_tick_value(*val, tick_step),
+            None => format_tick_value_plain(*val, tick_step),
         };
 
         // Vertical grid line
