@@ -48,6 +48,11 @@ impl ChartMLRegistry {
         self.data_sources.get(name).map(|s| s.as_ref())
     }
 
+    /// Get the first registered transform middleware (if any).
+    pub fn get_transform(&self) -> Option<&dyn TransformMiddleware> {
+        self.transforms.first().map(|t| t.as_ref())
+    }
+
     pub fn has_renderer(&self, chart_type: &str) -> bool {
         self.renderers.contains_key(chart_type)
     }

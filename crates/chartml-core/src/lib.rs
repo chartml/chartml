@@ -562,6 +562,137 @@ impl ChartML {
         }
     }
 
+    // --- Async rendering (for use with TransformMiddleware, e.g. DataFusion) ---
+
+    /// Async render for use with registered TransformMiddleware (e.g., DataFusion).
+    ///
+    /// Parses the YAML spec, resolves data from `data` parameter or inline sources,
+    /// and if a TransformMiddleware is registered AND the spec contains sql or forecast
+    /// transforms, delegates to the middleware's async `transform()` method.
+    /// For aggregate-only specs without a middleware, falls back to the built-in sync
+    /// `apply_transforms`.
+    pub async fn render_from_yaml_with_data_async(
+        &self,
+        yaml: &str,
+        data: Vec<Row>,
+    ) -> Result<ChartElement, ChartError> {
+        let parsed = spec::parse(yaml)?;
+
+        // Collect named sources from persistent registry and document-local sources
+        let mut sources: HashMap<String, Vec<Row>> = self.sources.clone();
+        sources.insert("source".to_string(), data.clone());
+
+        if let ChartMLSpec::Array(ref components) = parsed {
+            for component in components {
+                if let Component::Source(source_spec) = component {
+                    if let Some(ref rows) = source_spec.rows {
+                        let converted = self.convert_json_rows(rows)?;
+                        sources.insert(source_spec.name.clone(), converted);
+                    }
+                }
+            }
+        }
+
+        // Extract chart spec
+        let chart_spec = match &parsed {
+            ChartMLSpec::Single(Component::Chart(chart)) => chart,
+            ChartMLSpec::Array(components) => {
+                components.iter()
+                    .find_map(|c| match c {
+                        Component::Chart(chart) => Some(chart),
+                        _ => None,
+                    })
+                    .ok_or_else(|| ChartError::InvalidSpec("No chart component found".into()))?
+            }
+            _ => return Err(ChartError::InvalidSpec("No chart component found".into())),
+        };
+
+        // Resolve data for this chart.
+        // If the spec has inline data, try to use it; but if it's empty and the caller
+        // provided data via the `data` parameter, use that instead.
+        let chart_data = match &chart_spec.data {
+            DataRef::Inline(inline) => {
+                let inline_rows = inline.rows.as_ref()
+                    .map(|r| self.convert_json_rows(r))
+                    .transpose()?
+                    .unwrap_or_default();
+                if inline_rows.is_empty() && !data.is_empty() {
+                    data
+                } else {
+                    inline_rows
+                }
+            }
+            DataRef::Named(name) => {
+                sources.get(name)
+                    .cloned()
+                    .ok_or_else(|| ChartError::DataError(
+                        format!("Named data source '{}' not found", name)
+                    ))?
+            }
+        };
+
+        // Determine if we need async middleware transform
+        let needs_middleware = chart_spec.transform.as_ref().map_or(false, |t| {
+            t.sql.is_some() || t.forecast.is_some()
+        });
+
+        let transformed_data = if let Some(ref transform_spec) = chart_spec.transform {
+            if needs_middleware {
+                // Use registered TransformMiddleware for sql/forecast transforms
+                let middleware = self.registry.get_transform()
+                    .ok_or_else(|| ChartError::InvalidSpec(
+                        "Spec uses sql or forecast transforms but no TransformMiddleware is registered".into()
+                    ))?;
+                let context = plugin::TransformContext::default();
+                let result = middleware.transform(chart_data, transform_spec, &context).await?;
+                result.data
+            } else {
+                // Aggregate-only — use built-in sync transform
+                transform::apply_transforms(chart_data, transform_spec)?
+            }
+        } else {
+            chart_data
+        };
+
+        // Build chart config and render (same as render_chart_internal but with pre-transformed data)
+        let chart_type = &chart_spec.visualize.chart_type;
+        let renderer = self.registry.get_renderer(chart_type)
+            .ok_or_else(|| ChartError::UnknownChartType(chart_type.clone()))?;
+
+        let default_height = renderer.default_dimensions(&chart_spec.visualize)
+            .map(|d| d.height)
+            .unwrap_or(400.0);
+
+        let height = chart_spec.visualize.style
+            .as_ref()
+            .and_then(|s| s.height)
+            .or(None)
+            .unwrap_or(default_height);
+
+        let width = chart_spec.visualize.style
+            .as_ref()
+            .and_then(|s| s.width)
+            .or(None)
+            .unwrap_or(800.0);
+
+        let colors = chart_spec.visualize.style
+            .as_ref()
+            .and_then(|s| s.colors.clone())
+            .unwrap_or_else(|| {
+                color::get_chart_colors(12, color::palettes::get_palette("autumn_forest"))
+            });
+
+        let config = plugin::ChartConfig {
+            visualize: chart_spec.visualize.clone(),
+            title: chart_spec.title.clone(),
+            width,
+            height,
+            colors,
+        };
+
+        renderer.render(&transformed_data, &config)
+    }
+
     /// Get a reference to the internal registry.
     pub fn registry(&self) -> &ChartMLRegistry {
         &self.registry
