@@ -1,4 +1,4 @@
-use chartml_core::data::{get_f64, get_string, unique_values, group_by, Row};
+use chartml_core::data::DataTable;
 use chartml_core::element::{ChartElement, ElementData, TextAnchor, Transform, ViewBox};
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
@@ -11,12 +11,12 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
 use crate::helpers::{GridConfig, LegendMark, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_legend_with_mark, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
-pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
+pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
 
     let category_field = get_field_name(&config.visualize.columns)?;
 
-    let categories = unique_values(data, &category_field);
+    let categories = data.unique_values(&category_field);
     if categories.is_empty() {
         return Err(ChartError::DataError("No category values found".into()));
     }
@@ -71,8 +71,8 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
     };
     let mut all_values_prelim: Vec<f64> = Vec::new();
     for field in &all_value_fields_prelim {
-        for row in data {
-            if let Some(v) = get_f64(row, field) {
+        for i in 0..data.num_rows() {
+            if let Some(v) = data.get_f64(i, field) {
                 all_values_prelim.push(v);
             }
         }
@@ -110,8 +110,8 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
     let mut all_values: Vec<f64> = Vec::new();
     for field in &all_value_fields {
-        for row in data {
-            if let Some(v) = get_f64(row, field) {
+        for i in 0..data.num_rows() {
+            if let Some(v) = data.get_f64(i, field) {
                 all_values.push(v);
             }
         }
@@ -211,16 +211,16 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                     let mut area_points: Vec<(f64, f64, f64)> = Vec::new(); // (x, y_upper, y_lower)
 
                     for cat in &categories {
-                        let row = match data.iter().find(|r| get_string(r, &category_field).as_deref() == Some(cat.as_str())) {
-                            Some(r) => r,
+                        let row_i = match (0..data.num_rows()).find(|&i| data.get_string(i, &category_field).as_deref() == Some(cat.as_str())) {
+                            Some(i) => i,
                             None => continue,
                         };
                         // Skip rows where bounds are null (historical data)
-                        let upper_val = match get_f64(row, upper_field) {
+                        let upper_val = match data.get_f64(row_i, upper_field) {
                             Some(v) => v,
                             None => continue,
                         };
-                        let lower_val = match get_f64(row, lower_field) {
+                        let lower_val = match data.get_f64(row_i, lower_field) {
                             Some(v) => v,
                             None => continue,
                         };
@@ -273,11 +273,11 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
             for cat in &categories {
                 // Find the row for this category
-                let row = match data.iter().find(|r| get_string(r, &category_field).as_deref() == Some(cat.as_str())) {
-                    Some(r) => r,
+                let row_i = match (0..data.num_rows()).find(|&i| data.get_string(i, &category_field).as_deref() == Some(cat.as_str())) {
+                    Some(i) => i,
                     None => continue,
                 };
-                let val = match get_f64(row, field_name) {
+                let val = match data.get_f64(row_i, field_name) {
                     Some(v) => v,
                     None => continue,
                 };
@@ -357,12 +357,12 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             children: legend_elements,
         });
     } else if let Some(ref color_f) = color_field {
-        let series_names = unique_values(data, color_f);
-        let groups = group_by(data, color_f);
+        let series_names = data.unique_values(color_f);
+        let groups = data.group_by(color_f);
 
         for (series_idx, series_name) in series_names.iter().enumerate() {
-            let series_rows = match groups.get(series_name) {
-                Some(rows) => rows,
+            let series_data = match groups.get(series_name) {
+                Some(d) => d,
                 None => continue,
             };
 
@@ -370,13 +370,13 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             let mut point_data: Vec<(String, f64)> = Vec::new();
 
             for cat in &categories {
-                let row = match series_rows.iter().find(|r| {
-                    get_string(r, &category_field).as_deref() == Some(cat.as_str())
+                let row_i = match (0..series_data.num_rows()).find(|&i| {
+                    series_data.get_string(i, &category_field).as_deref() == Some(cat.as_str())
                 }) {
-                    Some(r) => r,
+                    Some(i) => i,
                     None => continue,
                 };
-                let val = match get_f64(row, &value_field) {
+                let val = match series_data.get_f64(row_i, &value_field) {
                     Some(v) => v,
                     None => continue,
                 };
@@ -440,13 +440,13 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         let mut point_data: Vec<(String, f64)> = Vec::new();
 
         for cat in &categories {
-            let row = match data.iter().find(|r| {
-                get_string(r, &category_field).as_deref() == Some(cat.as_str())
+            let row_i = match (0..data.num_rows()).find(|&i| {
+                data.get_string(i, &category_field).as_deref() == Some(cat.as_str())
             }) {
-                Some(r) => r,
+                Some(i) => i,
                 None => continue,
             };
-            let val = match get_f64(row, &value_field) {
+            let val = match data.get_f64(row_i, &value_field) {
                 Some(v) => v,
                 None => continue,
             };

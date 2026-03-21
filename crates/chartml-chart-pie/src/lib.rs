@@ -1,5 +1,5 @@
 use chartml_core::plugin::{ChartRenderer, ChartConfig};
-use chartml_core::data::{Row, get_f64, get_string};
+use chartml_core::data::DataTable;
 use chartml_core::element::*;
 use chartml_core::error::ChartError;
 use chartml_core::shapes::{ArcGenerator, PieLayout};
@@ -13,7 +13,7 @@ impl PieRenderer {
 }
 
 impl ChartRenderer for PieRenderer {
-    fn render(&self, data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
+    fn render(&self, data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
         let chart_type = &config.visualize.chart_type;
         let is_doughnut = chart_type == "doughnut";
 
@@ -24,8 +24,8 @@ impl ChartRenderer for PieRenderer {
         // Extract data
         let mut labels = Vec::new();
         let mut values = Vec::new();
-        for row in data {
-            if let (Some(label), Some(value)) = (get_string(row, &col_field), get_f64(row, &row_field)) {
+        for i in 0..data.num_rows() {
+            if let (Some(label), Some(value)) = (data.get_string(i, &col_field), data.get_f64(i, &row_field)) {
                 labels.push(label);
                 values.push(value);
             }
@@ -156,15 +156,17 @@ fn get_field_name(field_ref: &Option<FieldRef>) -> Result<String, ChartError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chartml_core::data::Row;
     use chartml_core::element::count_elements;
     use serde_json::json;
 
-    fn make_pie_data() -> Vec<Row> {
-        vec![
+    fn make_pie_data() -> DataTable {
+        let rows: Vec<Row> = vec![
             [("region".to_string(), json!("North")), ("revenue".to_string(), json!(100))].into_iter().collect(),
             [("region".to_string(), json!("South")), ("revenue".to_string(), json!(200))].into_iter().collect(),
             [("region".to_string(), json!("East")), ("revenue".to_string(), json!(150))].into_iter().collect(),
-        ]
+        ];
+        DataTable::from_rows(&rows).unwrap()
     }
 
     fn make_pie_config(chart_type: &str) -> ChartConfig {

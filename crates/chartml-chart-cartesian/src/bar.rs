@@ -1,4 +1,4 @@
-use chartml_core::data::{get_f64, get_string, unique_values, group_by, Row};
+use chartml_core::data::DataTable;
 use chartml_core::element::{ChartElement, ElementData, TextAnchor, Transform, ViewBox};
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
@@ -11,7 +11,7 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
 use crate::helpers::{GridConfig, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
 
-pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
+pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
     
 
@@ -35,7 +35,7 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
     let category_field = get_field_name(&config.visualize.columns)?;
     let value_field = get_field_name(&config.visualize.rows)?;
 
-    let categories = unique_values(data, &category_field);
+    let categories = data.unique_values(&category_field);
     if categories.is_empty() {
         return Err(ChartError::DataError("No category values found".into()));
     }
@@ -67,21 +67,26 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
     // JS computes finalMarginLeft from actual y-axis tick label widths; we approximate here.
     let prelim_data_max: f64 = if let Some(ref color_f) = color_field {
         if is_stacked {
-            let groups = group_by(data, color_f);
-            let series_names = unique_values(data, color_f);
+            let groups = data.group_by(color_f);
+            let series_names = data.unique_values(color_f);
             categories.iter().map(|cat| {
                 series_names.iter().map(|s| {
-                    groups.get(s).and_then(|rows| {
-                        rows.iter().find(|r| get_string(r, &category_field).as_deref() == Some(cat.as_str()))
-                            .and_then(|r| get_f64(r, &value_field))
+                    groups.get(s).and_then(|series_data| {
+                        (0..series_data.num_rows()).find_map(|i| {
+                            if series_data.get_string(i, &category_field).as_deref() == Some(cat.as_str()) {
+                                series_data.get_f64(i, &value_field)
+                            } else {
+                                None
+                            }
+                        })
                     }).unwrap_or(0.0)
                 }).sum::<f64>()
             }).fold(0.0_f64, f64::max)
         } else {
-            data.iter().filter_map(|r| get_f64(r, &value_field)).fold(0.0_f64, f64::max)
+            (0..data.num_rows()).filter_map(|i| data.get_f64(i, &value_field)).fold(0.0_f64, f64::max)
         }
     } else {
-        data.iter().filter_map(|r| get_f64(r, &value_field)).fold(0.0_f64, f64::max)
+        (0..data.num_rows()).filter_map(|i| data.get_f64(i, &value_field)).fold(0.0_f64, f64::max)
     };
     let prelim_data_max = if prelim_data_max <= 0.0 { 1.0 } else { prelim_data_max };
 
@@ -246,7 +251,7 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
 
     // Legend
     if let Some(ref color_f) = color_field {
-        let series_names = unique_values(data, color_f);
+        let series_names = data.unique_values(color_f);
         let legend_elements = generate_legend(&series_names, &config.colors, config.width, config.height - 10.0);
         children.push(ChartElement::Group {
             class: "legend".to_string(),
@@ -265,7 +270,7 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
 }
 
 fn render_single_series_bars(
-    data: &[Row],
+    data: &DataTable,
     config: &ChartConfig,
     category_field: &str,
     value_field: &str,
@@ -279,9 +284,8 @@ fn render_single_series_bars(
     domain_max: f64,
 ) -> Result<(f64, Vec<ChartElement>), ChartError> {
     // Find the max value (for return value only — domain_max is already caller-computed)
-    let values: Vec<f64> = data
-        .iter()
-        .filter_map(|row| get_f64(row, value_field))
+    let values: Vec<f64> = (0..data.num_rows())
+        .filter_map(|i| data.get_f64(i, value_field))
         .collect();
     let value_max = values.iter().cloned().fold(0.0_f64, f64::max);
     let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
@@ -299,12 +303,12 @@ fn render_single_series_bars(
         let bar_render_height = band.bandwidth().min(40.0);
         let y_inset = (band.bandwidth() - bar_render_height) / 2.0;
 
-        for row in data {
-            let cat = match get_string(row, category_field) {
+        for i in 0..data.num_rows() {
+            let cat = match data.get_string(i, category_field) {
                 Some(c) => c,
                 None => continue,
             };
-            let val = get_f64(row, value_field).unwrap_or(0.0);
+            let val = data.get_f64(i, value_field).unwrap_or(0.0);
             let y = match band.map(&cat) {
                 Some(y) => y,
                 None => continue,
@@ -331,12 +335,12 @@ fn render_single_series_bars(
         let bar_render_width = band.bandwidth().min(max_bar_width);
         let x_inset = (band.bandwidth() - bar_render_width) / 2.0;
 
-        for row in data {
-            let cat = match get_string(row, category_field) {
+        for i in 0..data.num_rows() {
+            let cat = match data.get_string(i, category_field) {
                 Some(c) => c,
                 None => continue,
             };
-            let val = get_f64(row, value_field).unwrap_or(0.0);
+            let val = data.get_f64(i, value_field).unwrap_or(0.0);
             let x = match band.map(&cat) {
                 Some(x) => x,
                 None => continue,
@@ -387,7 +391,7 @@ fn render_single_series_bars(
 }
 
 fn render_multi_series_bars(
-    data: &[Row],
+    data: &DataTable,
     config: &ChartConfig,
     category_field: &str,
     value_field: &str,
@@ -406,8 +410,8 @@ fn render_multi_series_bars(
 ) -> Result<(f64, Vec<ChartElement>), ChartError> {
     use chartml_core::layout::stack::{StackLayout, StackOffset};
 
-    let series_names = unique_values(data, color_field);
-    let groups = group_by(data, color_field);
+    let series_names = data.unique_values(color_field);
+    let groups = data.group_by(color_field);
 
     let mut elements = Vec::new();
 
@@ -416,13 +420,18 @@ fn render_multi_series_bars(
         let mut values_matrix: Vec<Vec<f64>> = Vec::new();
         for series in &series_names {
             let mut series_vals = Vec::new();
-            let rows = groups.get(series);
+            let series_data = groups.get(series);
             for cat in categories {
-                let val = rows
-                    .map(|rs| {
-                        rs.iter()
-                            .find(|r| get_string(r, category_field).as_deref() == Some(cat.as_str()))
-                            .and_then(|r| get_f64(r, value_field))
+                let val = series_data
+                    .map(|sd| {
+                        (0..sd.num_rows())
+                            .find_map(|i| {
+                                if sd.get_string(i, category_field).as_deref() == Some(cat.as_str()) {
+                                    sd.get_f64(i, value_field)
+                                } else {
+                                    None
+                                }
+                            })
                             .unwrap_or(0.0)
                     })
                     .unwrap_or(0.0);
@@ -493,9 +502,8 @@ fn render_multi_series_bars(
     } else {
         // Grouped (or default multi-series)
         // Find overall max value
-        let value_max = data
-            .iter()
-            .filter_map(|row| get_f64(row, value_field))
+        let value_max = (0..data.num_rows())
+            .filter_map(|i| data.get_f64(i, value_field))
             .fold(0.0_f64, f64::max);
         let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
         let effective_max = if domain_max < f64::MAX { domain_max } else { value_max };
@@ -507,16 +515,16 @@ fn render_multi_series_bars(
         let num_series = series_names.len().max(1);
         let sub_band_width = band.bandwidth() / num_series as f64;
 
-        for row in data {
-            let cat = match get_string(row, category_field) {
+        for i in 0..data.num_rows() {
+            let cat = match data.get_string(i, category_field) {
                 Some(c) => c,
                 None => continue,
             };
-            let series = match get_string(row, color_field) {
+            let series = match data.get_string(i, color_field) {
                 Some(s) => s,
                 None => continue,
             };
-            let val = get_f64(row, value_field).unwrap_or(0.0);
+            let val = data.get_f64(i, value_field).unwrap_or(0.0);
 
             let x_base = match band.map(&cat) {
                 Some(x) => x,
@@ -555,14 +563,14 @@ fn render_multi_series_bars(
 
 /// Render a combo chart: multiple fields with different marks (bar/line) and optional dual axis.
 fn render_combo(
-    data: &[Row],
+    data: &DataTable,
     config: &ChartConfig,
     fields: &[chartml_core::spec::FieldSpec],
 ) -> Result<ChartElement, ChartError> {
     use chartml_core::shapes::LineGenerator;
 
     let category_field = get_field_name(&config.visualize.columns)?;
-    let categories = unique_values(data, &category_field);
+    let categories = data.unique_values(&category_field);
     if categories.is_empty() {
         return Err(ChartError::DataError("No category values found".into()));
     }
@@ -583,7 +591,7 @@ fn render_combo(
         // Estimate right-axis values for label width measurement
         let right_max = fields.iter()
             .filter(|f| f.axis.as_deref() == Some("right"))
-            .flat_map(|f| data.iter().filter_map(|r| get_f64(r, &f.field)))
+            .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
             .fold(0.0_f64, f64::max);
         let right_domain_max = config.visualize.axes.as_ref()
             .and_then(|a| a.right.as_ref())
@@ -623,7 +631,7 @@ fn render_combo(
 
     // Compute left-axis domain with D3-style nice rounding (Regressions 2 & 3).
     let left_max = left_fields.iter()
-        .flat_map(|f| data.iter().filter_map(|r| get_f64(r, &f.field)))
+        .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
         .fold(0.0_f64, f64::max);
     let axes_left = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref());
     let left_explicit_min = axes_left.and_then(|a| a.min);
@@ -641,7 +649,7 @@ fn render_combo(
     // Compute right-axis domain with D3-style nice rounding (Regressions 2 & 3).
     let right_scale = if !right_fields.is_empty() {
         let right_max = right_fields.iter()
-            .flat_map(|f| data.iter().filter_map(|r| get_f64(r, &f.field)))
+            .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
             .fold(0.0_f64, f64::max);
         let axes_right = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref());
         let right_explicit_min = axes_right.and_then(|a| a.min);
@@ -751,9 +759,9 @@ fn render_combo(
                 let this_bar_idx = bar_field_idx;
                 bar_field_idx += 1;
 
-                for row in data {
-                    let cat = match get_string(row, &category_field) { Some(c) => c, None => continue };
-                    let val = get_f64(row, field_name).unwrap_or(0.0);
+                for row_i in 0..data.num_rows() {
+                    let cat = match data.get_string(row_i, &category_field) { Some(c) => c, None => continue };
+                    let val = data.get_f64(row_i, field_name).unwrap_or(0.0);
                     let x = match band.map(&cat) { Some(x) => x, None => continue };
                     let bar_x = x + combo_x_inset + this_bar_idx as f64 * (sub_bar_width + sub_bar_padding);
                     let bar_top = scale.map(val);
@@ -791,10 +799,10 @@ fn render_combo(
                 let mut points = Vec::new();
                 let mut point_data = Vec::new();
                 for cat in &categories {
-                    let row = match data.iter().find(|r| get_string(r, &category_field).as_deref() == Some(cat.as_str())) {
-                        Some(r) => r, None => continue,
+                    let row_i = match (0..data.num_rows()).find(|&i| data.get_string(i, &category_field).as_deref() == Some(cat.as_str())) {
+                        Some(i) => i, None => continue,
                     };
-                    let val = match get_f64(row, field_name) { Some(v) => v, None => continue };
+                    let val = match data.get_f64(row_i, field_name) { Some(v) => v, None => continue };
                     let x = match band.map(cat) { Some(x) => x + bandwidth / 2.0, None => continue };
                     let y = scale.map(val);
                     points.push((x + margins.left, y + margins.top));

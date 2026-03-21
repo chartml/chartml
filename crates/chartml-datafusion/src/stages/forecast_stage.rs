@@ -102,10 +102,14 @@ pub async fn execute(
             result_rows.push(out_row);
         }
 
-        // Set forecast on last historical row for seamless dashed-line connection
+        // Set forecast + bounds on last historical row for seamless connection:
+        // - forecast = last actual value (dashed line connects to solid line)
+        // - lower_bound = upper_bound = last actual value (band starts at zero width)
         if let Some(last_val) = last_historical_value {
             if let Some(last_row) = result_rows.last_mut() {
                 last_row.insert("forecast".to_string(), serde_json::json!(last_val));
+                last_row.insert("lower_bound".to_string(), serde_json::json!(last_val));
+                last_row.insert("upper_bound".to_string(), serde_json::json!(last_val));
             }
         }
 

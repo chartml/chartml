@@ -515,6 +515,7 @@ dependencies = [
 name = "chartml-core"
 version = "0.1.0"
 dependencies = [
+ "arrow",
  "async-trait",
  "chrono",
  "serde",

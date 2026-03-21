@@ -1,4 +1,4 @@
-use chartml_core::data::Row;
+use chartml_core::data::DataTable;
 use chartml_core::element::{ChartElement, Dimensions};
 use chartml_core::error::ChartError;
 use chartml_core::plugin::{ChartConfig, ChartRenderer};
@@ -28,7 +28,7 @@ impl Default for CartesianRenderer {
 }
 
 impl ChartRenderer for CartesianRenderer {
-    fn render(&self, data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
+    fn render(&self, data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
         match config.visualize.chart_type.as_str() {
             "bar" => bar::render_bar(data, config),
             "line" => line::render_line(data, config),
@@ -46,15 +46,19 @@ impl ChartRenderer for CartesianRenderer {
 mod tests {
     use super::*;
     use chartml_core::element::count_elements;
-    use chartml_core::data::Row;
+    use chartml_core::data::{Row, DataTable};
     use serde_json::json;
 
-    fn make_bar_data() -> Vec<Row> {
+    fn make_bar_rows() -> Vec<Row> {
         vec![
             [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(100))].into_iter().collect(),
             [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(200))].into_iter().collect(),
             [("month".to_string(), json!("Mar")), ("revenue".to_string(), json!(150))].into_iter().collect(),
         ]
+    }
+
+    fn make_bar_data() -> DataTable {
+        DataTable::from_rows(&make_bar_rows()).unwrap()
     }
 
     fn make_bar_config() -> ChartConfig {
@@ -270,10 +274,11 @@ mod tests {
         // inner_width = 800 - left_margin - right_margin ≈ 800 - 60 - 20 = 720
         // bandwidth = 0.8/2.2 * inner_width ≈ 0.3636 * inner_width ≈ 261px
         // Bar should NOT be close to 50% (which would indicate no padding).
-        let data: Vec<Row> = vec![
+        let rows: Vec<Row> = vec![
             [("region".to_string(), json!("US")), ("revenue".to_string(), json!(55000))].into_iter().collect(),
             [("region".to_string(), json!("EU")), ("revenue".to_string(), json!(40000))].into_iter().collect(),
         ];
+        let data = DataTable::from_rows(&rows).unwrap();
         let viz: VisualizeSpec = serde_yaml::from_str(r#"
             type: bar
             columns: region
@@ -328,12 +333,13 @@ mod tests {
 
     #[test]
     fn stacked_bar_chart_renders() {
-        let data: Vec<Row> = vec![
+        let rows: Vec<Row> = vec![
             [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(100)), ("product".to_string(), json!("A"))].into_iter().collect(),
             [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(50)), ("product".to_string(), json!("B"))].into_iter().collect(),
             [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(200)), ("product".to_string(), json!("A"))].into_iter().collect(),
             [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(80)), ("product".to_string(), json!("B"))].into_iter().collect(),
         ];
+        let data = DataTable::from_rows(&rows).unwrap();
         let viz: VisualizeSpec = serde_yaml::from_str(r#"
             type: bar
             mode: stacked
@@ -359,12 +365,13 @@ mod tests {
 
     #[test]
     fn grouped_bar_chart_renders() {
-        let data: Vec<Row> = vec![
+        let rows: Vec<Row> = vec![
             [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(100)), ("product".to_string(), json!("A"))].into_iter().collect(),
             [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(50)), ("product".to_string(), json!("B"))].into_iter().collect(),
             [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(200)), ("product".to_string(), json!("A"))].into_iter().collect(),
             [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(80)), ("product".to_string(), json!("B"))].into_iter().collect(),
         ];
+        let data = DataTable::from_rows(&rows).unwrap();
         let viz: VisualizeSpec = serde_yaml::from_str(r#"
             type: bar
             mode: grouped
@@ -390,12 +397,13 @@ mod tests {
 
     #[test]
     fn multi_series_line_chart_renders() {
-        let data: Vec<Row> = vec![
+        let rows: Vec<Row> = vec![
             [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(100)), ("product".to_string(), json!("A"))].into_iter().collect(),
             [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(50)), ("product".to_string(), json!("B"))].into_iter().collect(),
             [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(200)), ("product".to_string(), json!("A"))].into_iter().collect(),
             [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(80)), ("product".to_string(), json!("B"))].into_iter().collect(),
         ];
+        let data = DataTable::from_rows(&rows).unwrap();
         let viz: VisualizeSpec = serde_yaml::from_str(r#"
             type: line
             columns: month
@@ -421,7 +429,7 @@ mod tests {
     #[test]
     fn empty_data_returns_error() {
         let renderer = CartesianRenderer::new();
-        let data: Vec<Row> = vec![];
+        let data = DataTable::from_rows(&Vec::<Row>::new()).unwrap();
         let config = make_bar_config();
         let result = renderer.render(&data, &config);
         assert!(result.is_err(), "Empty data should produce an error");

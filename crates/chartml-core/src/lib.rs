@@ -19,7 +19,7 @@ pub use plugin::{ChartConfig, ChartRenderer, DataSource, TransformMiddleware, Da
 pub use registry::ChartMLRegistry;
 
 use std::collections::HashMap;
-use crate::data::Row;
+use crate::data::{Row, DataTable};
 use crate::spec::{ChartSpec, DataRef};
 
 /// Main ChartML instance. Orchestrates parsing, data fetching, and rendering.
@@ -29,7 +29,7 @@ pub struct ChartML {
     registry: ChartMLRegistry,
     /// Named source data, registered via register_component() or
     /// automatically collected from multi-document YAML specs.
-    sources: HashMap<String, Vec<Row>>,
+    sources: HashMap<String, DataTable>,
     /// Parameter default values, collected from type: params components.
     param_values: params::ParamValues,
 }
@@ -90,7 +90,8 @@ impl ChartML {
         match component {
             spec::Component::Source(source_spec) => {
                 if let Some(ref rows) = source_spec.rows {
-                    let data = self.convert_json_rows(rows)?;
+                    let json_rows = self.convert_json_rows(rows)?;
+                    let data = DataTable::from_rows(&json_rows)?;
                     self.sources.insert(source_spec.name.clone(), data);
                 }
                 Ok(())
@@ -112,8 +113,8 @@ impl ChartML {
         }
     }
 
-    /// Register a named source directly from data rows.
-    pub fn register_source(&mut self, name: &str, data: Vec<Row>) {
+    /// Register a named source directly from a DataTable.
+    pub fn register_source(&mut self, name: &str, data: DataTable) {
         self.sources.insert(name.to_string(), data);
     }
 
@@ -191,13 +192,14 @@ impl ChartML {
         };
 
         // Step 3: Collect sources (persistent + document-local).
-        let mut sources: HashMap<String, Vec<Row>> = self.sources.clone();
+        let mut sources: HashMap<String, DataTable> = self.sources.clone();
 
         if let ChartMLSpec::Array(ref components) = parsed {
             for component in components {
                 if let Component::Source(source_spec) = component {
                     if let Some(ref rows) = source_spec.rows {
-                        let data = self.convert_json_rows(rows)?;
+                        let json_rows = self.convert_json_rows(rows)?;
+                        let data = DataTable::from_rows(&json_rows)?;
                         sources.insert(source_spec.name.clone(), data);
                     }
                 }
@@ -297,7 +299,7 @@ impl ChartML {
         chart_spec: &ChartSpec,
         container_width: Option<f64>,
         container_height: Option<f64>,
-        sources: &HashMap<String, Vec<Row>>,
+        sources: &HashMap<String, DataTable>,
     ) -> Result<ChartElement, ChartError> {
         let chart_type = &chart_spec.visualize.chart_type;
 
@@ -308,9 +310,11 @@ impl ChartML {
         // Extract data (inline or from named source)
         let mut data = self.extract_data(chart_spec, sources)?;
 
-        // Apply transforms if specified
+        // Apply transforms if specified (sync fallback: DataTable → Vec<Row> → transform → DataTable)
         if let Some(ref transform_spec) = chart_spec.transform {
-            data = transform::apply_transforms(data, transform_spec)?;
+            let rows = data.to_rows();
+            let transformed_rows = transform::apply_transforms(rows, transform_spec)?;
+            data = DataTable::from_rows(&transformed_rows)?;
         }
 
         // Build chart config — spec dimensions override container dimensions
@@ -349,12 +353,13 @@ impl ChartML {
     }
 
     /// Extract data from a chart spec, resolving both inline and named sources.
-    fn extract_data(&self, chart_spec: &ChartSpec, sources: &HashMap<String, Vec<Row>>) -> Result<Vec<Row>, ChartError> {
+    fn extract_data(&self, chart_spec: &ChartSpec, sources: &HashMap<String, DataTable>) -> Result<DataTable, ChartError> {
         match &chart_spec.data {
             DataRef::Inline(inline) => {
                 let rows = inline.rows.as_ref()
                     .ok_or_else(|| ChartError::DataError("Inline data source has no rows".into()))?;
-                self.convert_json_rows(rows)
+                let json_rows = self.convert_json_rows(rows)?;
+                DataTable::from_rows(&json_rows)
             }
             DataRef::Named(name) => {
                 sources.get(name)
@@ -590,13 +595,14 @@ impl ChartML {
         let parsed = spec::parse(&resolved_yaml)?;
 
         // Step 2: Collect sources
-        let mut sources: HashMap<String, Vec<Row>> = self.sources.clone();
+        let mut sources: HashMap<String, DataTable> = self.sources.clone();
         if let ChartMLSpec::Array(ref components) = parsed {
             for component in components {
                 if let Component::Source(source_spec) = component {
                     if let Some(ref rows) = source_spec.rows {
-                        let converted = self.convert_json_rows(rows)?;
-                        sources.insert(source_spec.name.clone(), converted);
+                        let json_rows = self.convert_json_rows(rows)?;
+                        let data = DataTable::from_rows(&json_rows)?;
+                        sources.insert(source_spec.name.clone(), data);
                     }
                 }
             }
@@ -627,7 +633,10 @@ impl ChartML {
                 result.data
             } else {
                 // No middleware — fall back to built-in sync transform (aggregate only)
-                transform::apply_transforms(chart_data, transform_spec)?
+                // DataTable → Vec<Row> → apply_transforms → DataTable
+                let rows = chart_data.to_rows();
+                let transformed_rows = transform::apply_transforms(rows, transform_spec)?;
+                DataTable::from_rows(&transformed_rows)?
             }
         } else {
             chart_data
@@ -642,7 +651,7 @@ impl ChartML {
     pub async fn render_from_yaml_with_data_async(
         &self,
         yaml: &str,
-        data: Vec<Row>,
+        data: DataTable,
     ) -> Result<ChartElement, ChartError> {
         // Register data as "source", then delegate to full async render
         let parsed = spec::parse(yaml)?;
@@ -662,7 +671,8 @@ impl ChartML {
                     .map(|r| self.convert_json_rows(r))
                     .transpose()?
                     .unwrap_or_default();
-                if inline_rows.is_empty() && !data.is_empty() { data } else { inline_rows }
+                let inline_table = DataTable::from_rows(&inline_rows)?;
+                if inline_table.is_empty() && !data.is_empty() { data } else { inline_table }
             }
             DataRef::Named(name) => {
                 self.sources.get(name).cloned()
@@ -680,7 +690,10 @@ impl ChartML {
                     "Spec uses sql or forecast transforms but no TransformMiddleware is registered".into()
                 ));
             } else {
-                transform::apply_transforms(chart_data, transform_spec)?
+                // Sync fallback: DataTable → Vec<Row> → apply_transforms → DataTable
+                let rows = chart_data.to_rows();
+                let transformed_rows = transform::apply_transforms(rows, transform_spec)?;
+                DataTable::from_rows(&transformed_rows)?
             }
         } else {
             chart_data
@@ -690,13 +703,14 @@ impl ChartML {
     }
 
     /// Resolve chart data from inline rows or named sources.
-    fn resolve_chart_data(&self, chart_spec: &ChartSpec, sources: &HashMap<String, Vec<Row>>) -> Result<Vec<Row>, ChartError> {
+    fn resolve_chart_data(&self, chart_spec: &ChartSpec, sources: &HashMap<String, DataTable>) -> Result<DataTable, ChartError> {
         match &chart_spec.data {
             DataRef::Inline(inline) => {
-                inline.rows.as_ref()
+                let json_rows = inline.rows.as_ref()
                     .map(|r| self.convert_json_rows(r))
-                    .transpose()
-                    .map(|o| o.unwrap_or_default())
+                    .transpose()?
+                    .unwrap_or_default();
+                DataTable::from_rows(&json_rows)
             }
             DataRef::Named(name) => {
                 sources.get(name)
@@ -712,7 +726,7 @@ impl ChartML {
     fn build_and_render(
         &self,
         chart_spec: &ChartSpec,
-        data: &[Row],
+        data: &DataTable,
         container_width: Option<f64>,
         container_height: Option<f64>,
     ) -> Result<ChartElement, ChartError> {
@@ -774,7 +788,7 @@ mod tests {
     struct MockRenderer;
 
     impl ChartRenderer for MockRenderer {
-        fn render(&self, _data: &[Row], _config: &ChartConfig) -> Result<ChartElement, ChartError> {
+        fn render(&self, _data: &DataTable, _config: &ChartConfig) -> Result<ChartElement, ChartError> {
             Ok(ChartElement::Svg {
                 viewbox: ViewBox::new(0.0, 0.0, 800.0, 400.0),
                 width: Some(800.0),

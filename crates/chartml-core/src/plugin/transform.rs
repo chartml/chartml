@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use std::collections::HashMap;
-use crate::data::Row;
+use crate::data::DataTable;
 use crate::error::ChartError;
 use crate::spec::TransformSpec;
 
@@ -14,7 +14,7 @@ pub struct TransformContext {
 /// Result of a transform operation.
 #[derive(Debug, Clone)]
 pub struct TransformResult {
-    pub data: Vec<Row>,
+    pub data: DataTable,
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
@@ -24,7 +24,7 @@ pub trait TransformMiddleware: Send + Sync {
     /// Transform input data according to the spec.
     async fn transform(
         &self,
-        data: Vec<Row>,
+        data: DataTable,
         spec: &TransformSpec,
         context: &TransformContext,
     ) -> Result<TransformResult, ChartError>;

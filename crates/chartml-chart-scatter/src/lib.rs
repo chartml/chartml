@@ -1,11 +1,10 @@
 use chartml_core::plugin::{ChartRenderer, ChartConfig};
-use chartml_core::data::{Row, get_f64, get_string, extent, unique_values};
+use chartml_core::data::DataTable;
 use chartml_core::element::*;
 use chartml_core::error::ChartError;
 use chartml_core::scales::{ScaleLinear, ScaleSqrt};
 use chartml_core::spec::{VisualizeSpec, FieldRef, MarkEncoding};
 use chartml_core::layout::margins::Margins;
-use chartml_core::layout::labels::approximate_text_width;
 use chartml_core::layout::legend::{LegendMark, generate_legend_elements};
 
 pub struct ScatterRenderer;
@@ -23,7 +22,7 @@ impl Default for ScatterRenderer {
 }
 
 impl ChartRenderer for ScatterRenderer {
-    fn render(&self, data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
+    fn render(&self, data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
         let x_field = get_field_name(&config.visualize.columns)?;
         let y_field = get_field_name(&config.visualize.rows)?;
         let color_field = get_color_field(config);
@@ -43,9 +42,9 @@ impl ChartRenderer for ScatterRenderer {
         let inner_height = margins.inner_height(height);
 
         // Compute domains
-        let x_extent = extent(data, &x_field)
+        let x_extent = data.extent(&x_field)
             .ok_or_else(|| ChartError::DataError(format!("No numeric data for field '{}'", x_field)))?;
-        let y_extent = extent(data, &y_field)
+        let y_extent = data.extent(&y_field)
             .ok_or_else(|| ChartError::DataError(format!("No numeric data for field '{}'", y_field)))?;
 
         // Default: include 0 in both axes (matching JS D3 behavior)
@@ -56,21 +55,21 @@ impl ChartRenderer for ScatterRenderer {
 
         // Size scale (if marks.size present)
         let size_scale = size_field.as_ref().and_then(|f| {
-            extent(data, f).map(|ext| ScaleSqrt::new(ext, (3.0, 20.0))) // radius 3-20px
+            data.extent(f).map(|ext| ScaleSqrt::new(ext, (3.0, 20.0))) // radius 3-20px
         });
 
         // Color mapping
         let color_categories: Vec<String> = if let Some(ref cf) = color_field {
-            unique_values(data, cf)
+            data.unique_values(cf)
         } else {
             vec![]
         };
 
         // Generate scatter points
         let mut point_elements = Vec::new();
-        for row in data {
-            let x_val = get_f64(row, &x_field);
-            let y_val = get_f64(row, &y_field);
+        for i in 0..data.num_rows() {
+            let x_val = data.get_f64(i, &x_field);
+            let y_val = data.get_f64(i, &y_field);
 
             if let (Some(x), Some(y)) = (x_val, y_val) {
                 let cx = x_scale.map(x);
@@ -78,13 +77,13 @@ impl ChartRenderer for ScatterRenderer {
 
                 let r = match (&size_field, &size_scale) {
                     (Some(sf), Some(ss)) => {
-                        get_f64(row, sf).map(|v| ss.map(v)).unwrap_or(5.0)
+                        data.get_f64(i, sf).map(|v| ss.map(v)).unwrap_or(5.0)
                     }
                     _ => 5.0,
                 };
 
                 let color_idx = if let Some(ref cf) = color_field {
-                    get_string(row, cf)
+                    data.get_string(i, cf)
                         .and_then(|v| color_categories.iter().position(|c| c == &v))
                         .unwrap_or(0)
                 } else {
@@ -94,9 +93,9 @@ impl ChartRenderer for ScatterRenderer {
                     .cloned()
                     .unwrap_or_else(|| "#2E7D9A".to_string());
 
-                let label = get_string(row, &x_field).unwrap_or_default();
+                let label = data.get_string(i, &x_field).unwrap_or_default();
                 let value = format!("{}", y);
-                let data = ElementData::new(label, value);
+                let el_data = ElementData::new(label, value);
 
                 point_elements.push(ChartElement::Circle {
                     cx,
@@ -105,7 +104,7 @@ impl ChartRenderer for ScatterRenderer {
                     fill,
                     stroke: Some("#fff".to_string()),
                     class: "chartml-scatter-point".to_string(),
-                    data: Some(data),
+                    data: Some(el_data),
                 });
             }
         }
@@ -206,7 +205,7 @@ impl ChartRenderer for ScatterRenderer {
 
         // Legend
         if let Some(ref cf) = color_field {
-            let series_names = unique_values(data, cf);
+            let series_names = data.unique_values(cf);
             if series_names.len() > 1 {
                 let legend_elements = generate_legend_elements(
                     &series_names,
@@ -340,6 +339,7 @@ fn insert_commas(digits: &str) -> String {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use chartml_core::data::Row;
     use chartml_core::spec::{VisualizeSpec, MarksSpec, MarkEncoding};
 
     fn make_row(pairs: &[(&str, serde_json::Value)]) -> Row {
@@ -350,13 +350,14 @@ mod tests {
         map
     }
 
-    fn make_scatter_data() -> Vec<Row> {
-        vec![
+    fn make_scatter_data() -> DataTable {
+        let rows = vec![
             make_row(&[("price", serde_json::json!(10.0)), ("units", serde_json::json!(100.0)), ("category", serde_json::json!("A"))]),
             make_row(&[("price", serde_json::json!(20.0)), ("units", serde_json::json!(200.0)), ("category", serde_json::json!("B"))]),
             make_row(&[("price", serde_json::json!(30.0)), ("units", serde_json::json!(150.0)), ("category", serde_json::json!("A"))]),
             make_row(&[("price", serde_json::json!(40.0)), ("units", serde_json::json!(300.0)), ("category", serde_json::json!("B"))]),
-        ]
+        ];
+        DataTable::from_rows(&rows).unwrap()
     }
 
     fn make_scatter_config() -> ChartConfig {
@@ -394,12 +395,13 @@ mod tests {
         }
     }
 
-    fn make_bubble_data() -> Vec<Row> {
-        vec![
+    fn make_bubble_data() -> DataTable {
+        let rows = vec![
             make_row(&[("x", serde_json::json!(5.0)), ("y", serde_json::json!(10.0)), ("size", serde_json::json!(100.0))]),
             make_row(&[("x", serde_json::json!(15.0)), ("y", serde_json::json!(20.0)), ("size", serde_json::json!(400.0))]),
             make_row(&[("x", serde_json::json!(25.0)), ("y", serde_json::json!(15.0)), ("size", serde_json::json!(200.0))]),
-        ]
+        ];
+        DataTable::from_rows(&rows).unwrap()
     }
 
     fn make_bubble_config() -> ChartConfig {
@@ -456,7 +458,8 @@ mod tests {
     #[test]
     fn scatter_empty_data_errors() {
         let renderer = ScatterRenderer::new();
-        let result = renderer.render(&[], &make_scatter_config());
+        let data = DataTable::from_rows(&Vec::<Row>::new()).unwrap();
+        let result = renderer.render(&data, &make_scatter_config());
         assert!(result.is_err());
     }
 }

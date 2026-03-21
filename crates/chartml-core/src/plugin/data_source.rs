@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use crate::data::Row;
+use crate::data::DataTable;
 use crate::error::ChartError;
 
 /// Options for data fetching.
@@ -25,6 +25,6 @@ pub struct DataSpec {
 /// Data source plugin — fetches raw data from a provider.
 #[async_trait]
 pub trait DataSource: Send + Sync {
-    /// Fetch data rows from this source.
-    async fn fetch(&self, spec: &DataSpec, options: &FetchOptions) -> Result<Vec<Row>, ChartError>;
+    /// Fetch data as an Arrow-backed DataTable.
+    async fn fetch(&self, spec: &DataSpec, options: &FetchOptions) -> Result<DataTable, ChartError>;
 }

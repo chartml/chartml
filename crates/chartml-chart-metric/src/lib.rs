@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use chartml_core::plugin::{ChartRenderer, ChartConfig};
-use chartml_core::data::{Row, get_f64};
+use chartml_core::data::DataTable;
 use chartml_core::element::*;
 use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
@@ -13,19 +13,20 @@ impl MetricRenderer {
 }
 
 impl ChartRenderer for MetricRenderer {
-    fn render(&self, data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
+    fn render(&self, data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
         let viz = &config.visualize;
 
         // Get the value field name
         let value_field = viz.value.as_ref()
             .ok_or_else(|| ChartError::MissingField("visualize.value".into()))?;
 
-        // Get first row of data
-        let row = data.first()
-            .ok_or_else(|| ChartError::DataError("No data for metric chart".into()))?;
+        // Check for empty data
+        if data.is_empty() {
+            return Err(ChartError::DataError("No data for metric chart".into()));
+        }
 
-        // Extract the value
-        let raw_value = get_f64(row, value_field)
+        // Extract the value from the first row
+        let raw_value = data.get_f64(0, value_field)
             .ok_or_else(|| ChartError::DataError(format!("No numeric value for field '{}'", value_field)))?;
 
         // Format the value
@@ -66,7 +67,7 @@ impl ChartRenderer for MetricRenderer {
 
         // Comparison/trend (if compareWith is specified)
         if let Some(compare_field) = &viz.compare_with {
-            if let Some(compare_value) = get_f64(row, compare_field) {
+            if let Some(compare_value) = data.get_f64(0, compare_field) {
                 let change = raw_value - compare_value;
                 let pct_change = if compare_value != 0.0 {
                     (change / compare_value) * 100.0
@@ -119,13 +120,15 @@ impl ChartRenderer for MetricRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chartml_core::data::Row;
     use chartml_core::element::count_elements;
     use serde_json::json;
 
-    fn make_metric_data() -> Vec<Row> {
-        vec![
+    fn make_metric_data() -> DataTable {
+        let rows: Vec<Row> = vec![
             [("current".to_string(), json!(1234567)), ("previous".to_string(), json!(1100000))].into_iter().collect(),
-        ]
+        ];
+        DataTable::from_rows(&rows).unwrap()
     }
 
     fn make_metric_config() -> ChartConfig {
@@ -187,9 +190,10 @@ mod tests {
             colors: vec![],
         };
         // Error rate going down (0.023 < 0.031) should be green with invertTrend
-        let data = vec![
+        let rows: Vec<Row> = vec![
             [("current".to_string(), json!(0.023)), ("previous".to_string(), json!(0.031))].into_iter().collect(),
         ];
+        let data = DataTable::from_rows(&rows).unwrap();
         let renderer = MetricRenderer::new();
         let result = renderer.render(&data, &config);
         assert!(result.is_ok());
@@ -205,6 +209,7 @@ mod tests {
     #[test]
     fn metric_empty_data_errors() {
         let renderer = MetricRenderer::new();
-        assert!(renderer.render(&[], &make_metric_config()).is_err());
+        let data = DataTable::from_rows(&Vec::<Row>::new()).unwrap();
+        assert!(renderer.render(&data, &make_metric_config()).is_err());
     }
 }

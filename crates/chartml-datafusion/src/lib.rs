@@ -8,7 +8,7 @@ pub mod sql_builder;
 pub mod stages;
 
 use async_trait::async_trait;
-use chartml_core::data::Row;
+use chartml_core::data::DataTable;
 use chartml_core::error::ChartError;
 use chartml_core::plugin::transform::{TransformContext, TransformMiddleware, TransformResult};
 use chartml_core::spec::TransformSpec;
@@ -27,14 +27,15 @@ pub struct DataFusionTransform;
 impl TransformMiddleware for DataFusionTransform {
     async fn transform(
         &self,
-        data: Vec<Row>,
+        data: DataTable,
         spec: &TransformSpec,
         _context: &TransformContext,
     ) -> Result<TransformResult, ChartError> {
         let ctx = SessionContext::new();
 
-        // Register input data as "source" table
-        let batch = conversion::rows_to_record_batch(&data)?;
+        // Register input data as "source" table — no conversion needed,
+        // DataTable already holds an Arrow RecordBatch.
+        let batch = data.record_batch().clone();
         let schema = batch.schema();
         let mem_table =
             datafusion::datasource::MemTable::try_new(schema, vec![vec![batch]]).map_err(|e| {
@@ -74,10 +75,16 @@ impl TransformMiddleware for DataFusionTransform {
             .collect()
             .await
             .map_err(|e| ChartError::DataError(format!("Failed to collect results: {}", e)))?;
-        let rows = conversion::record_batch_to_rows(&batches);
+
+        // Concatenate all output batches into a single RecordBatch and wrap in DataTable.
+        let result_batch = arrow::compute::concat_batches(
+            &batches[0].schema(),
+            &batches,
+        )
+        .map_err(|e| ChartError::DataError(format!("Failed to concat result batches: {}", e)))?;
 
         Ok(TransformResult {
-            data: rows,
+            data: DataTable::from_record_batch(result_batch),
             metadata: HashMap::new(),
         })
     }
@@ -86,6 +93,7 @@ impl TransformMiddleware for DataFusionTransform {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chartml_core::data::Row;
     use chartml_core::spec::*;
     use serde_json::json;
 
@@ -96,7 +104,7 @@ mod tests {
             .collect()
     }
 
-    fn sales_data() -> Vec<Row> {
+    fn sales_rows() -> Vec<Row> {
         vec![
             make_row(vec![
                 ("region", json!("North")),
@@ -131,6 +139,10 @@ mod tests {
         ]
     }
 
+    fn sales_data() -> DataTable {
+        DataTable::from_rows(&sales_rows()).unwrap()
+    }
+
     #[tokio::test]
     async fn test_full_pipeline_aggregate() {
         let data = sales_data();
@@ -158,11 +170,11 @@ mod tests {
         let context = TransformContext::default();
         let result = transform.transform(data, &spec, &context).await.unwrap();
 
-        assert_eq!(result.data.len(), 3, "Should have 3 regions");
+        assert_eq!(result.data.num_rows(), 3, "Should have 3 regions");
 
         // Results should be sorted descending by total_revenue
-        let revenues: Vec<f64> = result
-            .data
+        let rows = result.data.to_rows();
+        let revenues: Vec<f64> = rows
             .iter()
             .map(|r| r.get("total_revenue").unwrap().as_f64().unwrap())
             .collect();
@@ -184,7 +196,7 @@ mod tests {
     #[tokio::test]
     async fn test_full_pipeline_forecast() {
         // Create time series data (linear: y = 10 + 2x)
-        let data: Vec<Row> = (0..20)
+        let rows: Vec<Row> = (0..20)
             .map(|i| {
                 make_row(vec![
                     ("timestamp", json!(1000 + i)),
@@ -192,6 +204,7 @@ mod tests {
                 ])
             })
             .collect();
+        let data = DataTable::from_rows(&rows).unwrap();
 
         let spec = TransformSpec {
             sql: None,
@@ -212,14 +225,16 @@ mod tests {
 
         // Should have 20 historical + 5 forecast rows
         assert_eq!(
-            result.data.len(),
+            result.data.num_rows(),
             25,
             "Should have 25 rows (20 historical + 5 forecast)"
         );
 
+        // Convert to rows for detailed field assertions
+        let result_rows = result.data.to_rows();
+
         // Check that forecast rows have is_forecast=true
-        let forecast_rows: Vec<&Row> = result
-            .data
+        let forecast_rows: Vec<&Row> = result_rows
             .iter()
             .filter(|r| r.get("is_forecast").and_then(|v| v.as_bool()) == Some(true))
             .collect();
@@ -242,8 +257,7 @@ mod tests {
         }
 
         // Historical rows should have is_forecast=false
-        let historical_rows: Vec<&Row> = result
-            .data
+        let historical_rows: Vec<&Row> = result_rows
             .iter()
             .filter(|r| r.get("is_forecast").and_then(|v| v.as_bool()) == Some(false))
             .collect();
@@ -266,12 +280,13 @@ mod tests {
         let result = transform.transform(data, &spec, &context).await.unwrap();
 
         // Only rows with revenue > 100 should remain
+        let result_rows = result.data.to_rows();
         assert!(
-            result.data.len() < 5,
+            result_rows.len() < 5,
             "Should filter out some rows, got {}",
-            result.data.len()
+            result_rows.len()
         );
-        for row in &result.data {
+        for row in &result_rows {
             let rev = row.get("revenue").unwrap().as_f64().unwrap();
             assert!(rev > 100.0, "Revenue should be > 100, got {}", rev);
         }
@@ -289,17 +304,16 @@ mod tests {
         impl ChartRenderer for MockBarRenderer {
             fn render(
                 &self,
-                data: &[Row],
+                data: &DataTable,
                 _config: &ChartConfig,
             ) -> Result<ChartElement, chartml_core::error::ChartError> {
                 // Verify the data was actually transformed (aggregated)
                 // We expect 3 region groups from the sales_data
-                assert_eq!(data.len(), 3, "Expected 3 aggregated groups, got {}", data.len());
+                assert_eq!(data.num_rows(), 3, "Expected 3 aggregated groups, got {}", data.num_rows());
 
                 // Verify sort order (desc by total_revenue)
-                let revenues: Vec<f64> = data
-                    .iter()
-                    .filter_map(|r| r.get("total_revenue").and_then(|v| v.as_f64()))
+                let revenues: Vec<f64> = (0..data.num_rows())
+                    .filter_map(|i| data.get_f64(i, "total_revenue"))
                     .collect();
                 assert!(revenues[0] >= revenues[1], "Should be sorted desc");
                 assert!(revenues[1] >= revenues[2], "Should be sorted desc");
@@ -364,13 +378,13 @@ visualize:
         impl ChartRenderer for MockBarRenderer {
             fn render(
                 &self,
-                data: &[Row],
+                data: &DataTable,
                 _config: &ChartConfig,
             ) -> Result<ChartElement, chartml_core::error::ChartError> {
                 // SQL filter: revenue > 100 should leave 3 rows (200, 150, 300)
-                assert_eq!(data.len(), 3, "Expected 3 rows after SQL filter, got {}", data.len());
-                for row in data {
-                    let rev = row.get("revenue").and_then(|v| v.as_f64()).unwrap();
+                assert_eq!(data.num_rows(), 3, "Expected 3 rows after SQL filter, got {}", data.num_rows());
+                for i in 0..data.num_rows() {
+                    let rev = data.get_f64(i, "revenue").unwrap();
                     assert!(rev > 100.0, "Revenue should be > 100, got {}", rev);
                 }
 
@@ -418,7 +432,7 @@ visualize:
         impl ChartRenderer for MockBarRenderer {
             fn render(
                 &self,
-                _data: &[Row],
+                _data: &DataTable,
                 _config: &ChartConfig,
             ) -> Result<ChartElement, chartml_core::error::ChartError> {
                 Ok(ChartElement::Svg {
@@ -450,7 +464,8 @@ visualize:
   rows: y
 "#;
 
-        let result = chartml.render_from_yaml_with_data_async(yaml, vec![]).await;
+        let empty = DataTable::from_rows(&[]).unwrap();
+        let result = chartml.render_from_yaml_with_data_async(yaml, empty).await;
         assert!(result.is_err(), "Should fail when sql transform used without middleware");
         let err = result.unwrap_err().to_string();
         assert!(err.contains("no TransformMiddleware is registered"), "Error should mention missing middleware, got: {}", err);
@@ -468,11 +483,11 @@ visualize:
         impl ChartRenderer for MockBarRenderer {
             fn render(
                 &self,
-                data: &[Row],
+                data: &DataTable,
                 _config: &ChartConfig,
             ) -> Result<ChartElement, chartml_core::error::ChartError> {
                 // Should be aggregated by the built-in transform
-                assert_eq!(data.len(), 3, "Expected 3 aggregated groups, got {}", data.len());
+                assert_eq!(data.num_rows(), 3, "Expected 3 aggregated groups, got {}", data.num_rows());
                 Ok(ChartElement::Svg {
                     viewbox: ViewBox::new(0.0, 0.0, 800.0, 400.0),
                     width: Some(800.0),
