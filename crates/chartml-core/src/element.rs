@@ -32,6 +32,7 @@ pub enum ChartElement {
         stroke: Option<String>,
         stroke_width: Option<f64>,
         stroke_dasharray: Option<String>,
+        opacity: Option<f64>,
         class: String,
         data: Option<ElementData>,
     },

@@ -1,4 +1,4 @@
-use crate::data::Row;
+use crate::data::DataTable;
 use crate::element::{ChartElement, Dimensions};
 use crate::error::ChartError;
 use crate::spec::VisualizeSpec;
@@ -21,7 +21,7 @@ pub struct ChartConfig {
 /// Chart renderer plugin — converts data + config into a ChartElement tree.
 pub trait ChartRenderer: Send + Sync {
     /// Render data with the given config into a ChartElement tree.
-    fn render(&self, data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError>;
+    fn render(&self, data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError>;
 
     /// Optional: provide default dimensions for this chart type.
     fn default_dimensions(&self, _spec: &VisualizeSpec) -> Option<Dimensions> {

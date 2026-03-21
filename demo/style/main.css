@@ -481,7 +481,7 @@ input[type="text"].chartml-param-control {
 
 /* ─── Examples Page (mirrors VitePress docs layout) ─── */
 .examples-page {
-    max-width: 900px;
+    max-width: 672px;
     margin: 0 auto;
     padding-bottom: 60px;
 }

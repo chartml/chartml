@@ -48,6 +48,11 @@ impl ChartMLRegistry {
         self.data_sources.get(name).map(|s| s.as_ref())
     }
 
+    /// Get the first registered transform middleware (if any).
+    pub fn get_transform(&self) -> Option<&dyn TransformMiddleware> {
+        self.transforms.first().map(|t| t.as_ref())
+    }
+
     pub fn has_renderer(&self, chart_type: &str) -> bool {
         self.renderers.contains_key(chart_type)
     }
@@ -66,7 +71,7 @@ impl Default for ChartMLRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::Row;
+    use crate::data::DataTable;
     use crate::element::{ChartElement, ViewBox};
     use crate::error::ChartError;
     use crate::plugin::ChartConfig;
@@ -75,7 +80,7 @@ mod tests {
     struct MockRenderer;
 
     impl ChartRenderer for MockRenderer {
-        fn render(&self, _data: &[Row], _config: &ChartConfig) -> Result<ChartElement, ChartError> {
+        fn render(&self, _data: &DataTable, _config: &ChartConfig) -> Result<ChartElement, ChartError> {
             Ok(ChartElement::Svg {
                 viewbox: ViewBox::new(0.0, 0.0, 800.0, 400.0),
                 width: Some(800.0),

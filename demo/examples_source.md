@@ -2407,6 +2407,798 @@ visualize:
 
 ---
 
+## DataFusion Transform Middleware
+
+These charts demonstrate the DataFusion-powered transform pipeline running entirely in the browser via WASM. Data is transformed using Apache DataFusion's columnar SQL engine before rendering.
+
+### SQL Filter: High-Revenue Products
+
+Filter raw data using SQL before visualization. Only products with revenue above $40,000 are shown.
+
+```chartml
+type: chart
+version: 1
+title: "High-Revenue Products (SQL Filter)"
+
+data:
+  provider: inline
+  rows:
+    - product: "Widget A"
+      revenue: 45000
+      units: 150
+    - product: "Widget B"
+      revenue: 32000
+      units: 210
+    - product: "Gadget X"
+      revenue: 68000
+      units: 95
+    - product: "Gadget Y"
+      revenue: 28000
+      units: 180
+    - product: "Device Z"
+      revenue: 52000
+      units: 120
+
+transform:
+  sql: "SELECT * FROM {source} WHERE revenue > 40000 ORDER BY revenue DESC"
+
+visualize:
+  type: bar
+  columns: product
+  rows: revenue
+```
+
+### SQL with Calculated Column
+
+Use SQL to create a computed column (revenue per unit) before charting.
+
+```chartml
+type: chart
+version: 1
+title: "Revenue per Unit by Product"
+
+data:
+  provider: inline
+  rows:
+    - product: "Widget A"
+      revenue: 45000
+      units: 150
+    - product: "Widget B"
+      revenue: 32000
+      units: 210
+    - product: "Gadget X"
+      revenue: 68000
+      units: 95
+    - product: "Gadget Y"
+      revenue: 28000
+      units: 180
+    - product: "Device Z"
+      revenue: 52000
+      units: 120
+
+transform:
+  sql: "SELECT product, CAST(revenue AS DOUBLE) / CAST(units AS DOUBLE) AS rev_per_unit FROM {source} ORDER BY rev_per_unit DESC"
+
+visualize:
+  type: bar
+  columns: product
+  rows: rev_per_unit
+```
+
+### Aggregate via DataFusion: Regional Revenue
+
+Group-by aggregation powered by DataFusion's columnar engine, not the built-in row-based transform.
+
+```chartml
+type: chart
+version: 1
+title: "Total Revenue by Region (DataFusion)"
+
+data:
+  provider: inline
+  rows:
+    - region: "North"
+      product: "Widget A"
+      revenue: 45000
+    - region: "South"
+      product: "Widget A"
+      revenue: 38000
+    - region: "East"
+      product: "Widget B"
+      revenue: 42000
+    - region: "North"
+      product: "Widget B"
+      revenue: 35000
+    - region: "West"
+      product: "Widget A"
+      revenue: 50000
+    - region: "South"
+      product: "Widget B"
+      revenue: 29000
+    - region: "East"
+      product: "Widget A"
+      revenue: 41000
+    - region: "West"
+      product: "Widget B"
+      revenue: 33000
+
+transform:
+  aggregate:
+    dimensions:
+      - region
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+    sort:
+      - field: total_revenue
+        direction: desc
+
+visualize:
+  type: bar
+  columns: region
+  rows: total_revenue
+```
+
+### Aggregate: Product Mix Pie Chart
+
+Aggregation feeding a pie chart — total units sold by product.
+
+```chartml
+type: chart
+version: 1
+title: "Units Sold by Product"
+
+data:
+  provider: inline
+  rows:
+    - product: "Widget A"
+      units: 150
+    - product: "Widget B"
+      units: 210
+    - product: "Gadget X"
+      units: 95
+    - product: "Widget A"
+      units: 120
+    - product: "Gadget X"
+      units: 85
+    - product: "Widget B"
+      units: 175
+
+transform:
+  aggregate:
+    dimensions:
+      - product
+    measures:
+      - column: units
+        aggregation: sum
+        name: total_units
+    sort:
+      - field: total_units
+        direction: desc
+
+visualize:
+  type: pie
+  columns: product
+  rows: total_units
+```
+
+### SQL + Aggregate Pipeline: Top Regions by Avg Revenue
+
+Two-stage pipeline: SQL filters to recent data, then aggregates by region.
+
+```chartml
+type: chart
+version: 1
+title: "Average Revenue by Region (Filtered)"
+
+data:
+  provider: inline
+  rows:
+    - region: "North"
+      quarter: "Q1"
+      revenue: 45000
+    - region: "North"
+      quarter: "Q2"
+      revenue: 52000
+    - region: "South"
+      quarter: "Q1"
+      revenue: 38000
+    - region: "South"
+      quarter: "Q2"
+      revenue: 41000
+    - region: "East"
+      quarter: "Q1"
+      revenue: 42000
+    - region: "East"
+      quarter: "Q2"
+      revenue: 48000
+    - region: "West"
+      quarter: "Q1"
+      revenue: 50000
+    - region: "West"
+      quarter: "Q2"
+      revenue: 55000
+
+transform:
+  sql: "SELECT * FROM {source} WHERE quarter = 'Q2'"
+  aggregate:
+    dimensions:
+      - region
+    measures:
+      - column: revenue
+        aggregation: avg
+        name: avg_revenue
+    sort:
+      - field: avg_revenue
+        direction: desc
+
+visualize:
+  type: bar
+  columns: region
+  rows: avg_revenue
+```
+
+### Aggregate with Expression Measure
+
+Calculated measure using field references — average price derived from total revenue and total units.
+
+```chartml
+type: chart
+version: 1
+title: "Average Price by Region"
+
+data:
+  provider: inline
+  rows:
+    - region: "North"
+      revenue: 45000
+      units: 150
+    - region: "North"
+      revenue: 35000
+      units: 120
+    - region: "South"
+      revenue: 38000
+      units: 180
+    - region: "South"
+      revenue: 29000
+      units: 140
+    - region: "East"
+      revenue: 42000
+      units: 95
+    - region: "East"
+      revenue: 41000
+      units: 110
+    - region: "West"
+      revenue: 50000
+      units: 130
+    - region: "West"
+      revenue: 33000
+      units: 100
+
+transform:
+  aggregate:
+    dimensions:
+      - region
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+      - column: units
+        aggregation: sum
+        name: total_units
+      - name: avg_price
+        expression: "total_revenue / total_units"
+    sort:
+      - field: avg_price
+        direction: desc
+
+visualize:
+  type: bar
+  columns: region
+  rows: avg_price
+```
+
+### Aggregate with Filters: WHERE vs HAVING
+
+Demonstrates automatic filter partitioning — region filter goes to WHERE, revenue threshold goes to HAVING.
+
+```chartml
+type: chart
+version: 1
+title: "High-Revenue Regions (Excluding West)"
+
+data:
+  provider: inline
+  rows:
+    - region: "North"
+      product: "A"
+      revenue: 45000
+    - region: "North"
+      product: "B"
+      revenue: 35000
+    - region: "South"
+      product: "A"
+      revenue: 38000
+    - region: "South"
+      product: "B"
+      revenue: 29000
+    - region: "East"
+      product: "A"
+      revenue: 42000
+    - region: "East"
+      product: "B"
+      revenue: 41000
+    - region: "West"
+      product: "A"
+      revenue: 22000
+    - region: "West"
+      product: "B"
+      revenue: 18000
+
+transform:
+  aggregate:
+    dimensions:
+      - region
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+    filters:
+      rules:
+        - field: region
+          operator: "!="
+          value: "West"
+        - field: total_revenue
+          operator: ">="
+          value: 60000
+    sort:
+      - field: total_revenue
+        direction: desc
+
+visualize:
+  type: bar
+  columns: region
+  rows: total_revenue
+```
+
+### Multi-Series Aggregate: Revenue by Region and Product
+
+Grouped bar chart from aggregated data — two dimensions creating a color series.
+
+```chartml
+type: chart
+version: 1
+title: "Revenue by Region and Product"
+
+data:
+  provider: inline
+  rows:
+    - region: "North"
+      product: "Widgets"
+      revenue: 45000
+    - region: "North"
+      product: "Gadgets"
+      revenue: 35000
+    - region: "South"
+      product: "Widgets"
+      revenue: 38000
+    - region: "South"
+      product: "Gadgets"
+      revenue: 42000
+    - region: "East"
+      product: "Widgets"
+      revenue: 31000
+    - region: "East"
+      product: "Gadgets"
+      revenue: 48000
+
+transform:
+  aggregate:
+    dimensions:
+      - region
+      - product
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+
+visualize:
+  type: bar
+  columns: region
+  rows: total_revenue
+  marks:
+    color: product
+```
+
+### Scatter from Aggregated Data
+
+Aggregate then scatter — each point is a region with total revenue vs total units.
+
+```chartml
+type: chart
+version: 1
+title: "Revenue vs Units by Region"
+
+data:
+  provider: inline
+  rows:
+    - region: "North"
+      revenue: 45000
+      units: 150
+    - region: "North"
+      revenue: 35000
+      units: 120
+    - region: "South"
+      revenue: 38000
+      units: 180
+    - region: "South"
+      revenue: 29000
+      units: 140
+    - region: "East"
+      revenue: 42000
+      units: 95
+    - region: "East"
+      revenue: 41000
+      units: 110
+    - region: "West"
+      revenue: 50000
+      units: 130
+    - region: "West"
+      revenue: 33000
+      units: 100
+
+transform:
+  aggregate:
+    dimensions:
+      - region
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+      - column: units
+        aggregation: sum
+        name: total_units
+
+visualize:
+  type: scatter
+  columns: total_units
+  rows: total_revenue
+  marks:
+    color: region
+```
+
+### Count Distinct Aggregation
+
+Count unique products per region using the countdistinct aggregation function.
+
+```chartml
+type: chart
+version: 1
+title: "Unique Products per Region"
+
+data:
+  provider: inline
+  rows:
+    - region: "North"
+      product: "Widget A"
+    - region: "North"
+      product: "Widget B"
+    - region: "North"
+      product: "Widget A"
+    - region: "South"
+      product: "Widget A"
+    - region: "South"
+      product: "Gadget X"
+    - region: "South"
+      product: "Gadget Y"
+    - region: "South"
+      product: "Widget A"
+    - region: "East"
+      product: "Widget B"
+    - region: "East"
+      product: "Widget B"
+    - region: "West"
+      product: "Widget A"
+    - region: "West"
+      product: "Gadget X"
+    - region: "West"
+      product: "Widget B"
+    - region: "West"
+      product: "Gadget Y"
+
+transform:
+  aggregate:
+    dimensions:
+      - region
+    measures:
+      - column: product
+        aggregation: countdistinct
+        name: unique_products
+    sort:
+      - field: unique_products
+        direction: desc
+
+visualize:
+  type: bar
+  columns: region
+  rows: unique_products
+```
+
+### Forecast: Linear Growth with Confidence Bands
+
+Time series forecasting with dashed forecast line and 95% confidence band. The DataFusion middleware runs the forecast, producing `is_forecast`, `lower_bound`, and `upper_bound` columns.
+
+```chartml
+type: chart
+version: 1
+title: "Revenue Forecast (Linear)"
+
+data:
+  provider: inline
+  rows:
+    - month: 1
+      revenue: 12000
+    - month: 2
+      revenue: 15000
+    - month: 3
+      revenue: 14500
+    - month: 4
+      revenue: 17000
+    - month: 5
+      revenue: 19500
+    - month: 6
+      revenue: 18000
+    - month: 7
+      revenue: 21000
+    - month: 8
+      revenue: 23500
+    - month: 9
+      revenue: 22000
+    - month: 10
+      revenue: 25000
+    - month: 11
+      revenue: 27500
+    - month: 12
+      revenue: 26000
+
+transform:
+  forecast:
+    timestamp: month
+    value: revenue
+    horizon: 6
+    model: linear
+    confidenceLevel: 0.95
+
+visualize:
+  type: line
+  columns: month
+  rows:
+    - field: revenue
+    - field: forecast
+      lineStyle: dashed
+    - mark: range
+      upper: upper_bound
+      lower: lower_bound
+      field: confidence
+      color: "#4285f4"
+      opacity: 0.15
+```
+
+### Forecast: Exponential Growth
+
+Exponential model for data showing accelerating growth patterns. Historical line is solid, forecast is automatically dashed.
+
+```chartml
+type: chart
+version: 1
+title: "User Growth Forecast (Exponential)"
+
+data:
+  provider: inline
+  rows:
+    - month: 1
+      users: 100
+    - month: 2
+      users: 115
+    - month: 3
+      users: 135
+    - month: 4
+      users: 160
+    - month: 5
+      users: 190
+    - month: 6
+      users: 225
+    - month: 7
+      users: 270
+    - month: 8
+      users: 320
+    - month: 9
+      users: 385
+    - month: 10
+      users: 460
+    - month: 11
+      users: 550
+    - month: 12
+      users: 660
+
+transform:
+  forecast:
+    timestamp: month
+    value: users
+    horizon: 6
+    model: exponential
+
+visualize:
+  type: line
+  columns: month
+  rows:
+    - field: users
+    - field: forecast
+      lineStyle: dashed
+    - mark: range
+      upper: upper_bound
+      lower: lower_bound
+      field: confidence
+      color: "#34a853"
+      opacity: 0.12
+```
+
+### Forecast: Auto Model Selection
+
+Auto mode uses cross-validation to pick the best model (ETS, linear, exponential, or logistic) for the data.
+
+```chartml
+type: chart
+version: 1
+title: "Sales Forecast (Auto)"
+
+data:
+  provider: inline
+  rows:
+    - week: 1
+      sales: 500
+    - week: 2
+      sales: 520
+    - week: 3
+      sales: 490
+    - week: 4
+      sales: 550
+    - week: 5
+      sales: 580
+    - week: 6
+      sales: 560
+    - week: 7
+      sales: 610
+    - week: 8
+      sales: 640
+    - week: 9
+      sales: 620
+    - week: 10
+      sales: 670
+    - week: 11
+      sales: 700
+    - week: 12
+      sales: 680
+    - week: 13
+      sales: 720
+    - week: 14
+      sales: 750
+    - week: 15
+      sales: 730
+    - week: 16
+      sales: 770
+    - week: 17
+      sales: 800
+    - week: 18
+      sales: 780
+    - week: 19
+      sales: 820
+    - week: 20
+      sales: 850
+
+transform:
+  forecast:
+    timestamp: week
+    value: sales
+    horizon: 8
+    model: auto
+
+visualize:
+  type: line
+  columns: week
+  rows:
+    - field: sales
+    - field: forecast
+      lineStyle: dashed
+    - mark: range
+      upper: upper_bound
+      lower: lower_bound
+      field: confidence
+      color: "#ea4335"
+      opacity: 0.15
+```
+
+### Forecast: Widening Confidence Bands
+
+Noisy data produces wide, visibly broadening confidence intervals as the forecast extends further into the future.
+
+```chartml
+type: chart
+version: 1
+title: "Temperature Forecast with Uncertainty"
+
+data:
+  provider: inline
+  rows:
+    - day: 1
+      temp: 22.1
+    - day: 2
+      temp: 19.8
+    - day: 3
+      temp: 24.5
+    - day: 4
+      temp: 21.0
+    - day: 5
+      temp: 26.3
+    - day: 6
+      temp: 20.7
+    - day: 7
+      temp: 23.9
+    - day: 8
+      temp: 18.2
+    - day: 9
+      temp: 25.6
+    - day: 10
+      temp: 22.4
+    - day: 11
+      temp: 27.1
+    - day: 12
+      temp: 19.5
+    - day: 13
+      temp: 24.8
+    - day: 14
+      temp: 21.3
+    - day: 15
+      temp: 26.7
+    - day: 16
+      temp: 20.1
+    - day: 17
+      temp: 23.4
+    - day: 18
+      temp: 25.9
+    - day: 19
+      temp: 18.7
+    - day: 20
+      temp: 24.2
+
+transform:
+  forecast:
+    timestamp: day
+    value: temp
+    horizon: 10
+    model: linear
+    confidenceLevel: 0.95
+
+visualize:
+  type: line
+  columns: day
+  rows:
+    - field: temp
+      color: "#e67e22"
+    - field: forecast
+      lineStyle: dashed
+      color: "#e67e22"
+    - mark: range
+      upper: upper_bound
+      lower: lower_bound
+      field: confidence
+      color: "#e67e22"
+      opacity: 0.18
+```
+
+---
+
 ## Summary
 
 These mock dashboards demonstrate:

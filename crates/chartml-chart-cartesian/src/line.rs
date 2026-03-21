@@ -1,4 +1,4 @@
-use chartml_core::data::{get_f64, get_string, unique_values, group_by, Row};
+use chartml_core::data::DataTable;
 use chartml_core::element::{ChartElement, ElementData, TextAnchor, Transform, ViewBox};
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
@@ -11,12 +11,12 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
 use crate::helpers::{GridConfig, LegendMark, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_legend_with_mark, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
-pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
+pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
 
     let category_field = get_field_name(&config.visualize.columns)?;
 
-    let categories = unique_values(data, &category_field);
+    let categories = data.unique_values(&category_field);
     if categories.is_empty() {
         return Err(ChartError::DataError("No category values found".into()));
     }
@@ -28,6 +28,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             FieldRefItem::Simple(name) => Some(FieldSpec {
                 field: name.clone(), mark: None, axis: None, label: None,
                 color: None, format: None, data_labels: None,
+                line_style: None, upper: None, lower: None, opacity: None,
             }),
         }).collect(),
         _ => vec![],
@@ -51,10 +52,48 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         _ => 0.0,
     };
 
+    // Step 1b: Pre-compute domain for left margin estimation (matches JS two-pass approach).
+    let all_value_fields_prelim: Vec<String> = if is_multi_field {
+        let mut fields: Vec<String> = multi_fields.iter()
+            .filter(|f| f.mark.as_deref() != Some("range"))
+            .map(|f| f.field.clone())
+            .collect();
+        // Include upper/lower bound fields from range marks for domain calculation
+        for f in &multi_fields {
+            if f.mark.as_deref() == Some("range") {
+                if let Some(ref upper) = f.upper { fields.push(upper.clone()); }
+                if let Some(ref lower) = f.lower { fields.push(lower.clone()); }
+            }
+        }
+        fields
+    } else {
+        vec![value_field.clone()]
+    };
+    let mut all_values_prelim: Vec<f64> = Vec::new();
+    for field in &all_value_fields_prelim {
+        for i in 0..data.num_rows() {
+            if let Some(v) = data.get_f64(i, field) {
+                all_values_prelim.push(v);
+            }
+        }
+    }
+    let prelim_value_max = all_values_prelim.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let prelim_value_min = all_values_prelim.iter().cloned().fold(f64::INFINITY, f64::min);
+    let prelim_domain_min = if prelim_value_min >= 0.0 { 0.0 } else { prelim_value_min };
+    let prelim_domain_max = if prelim_value_max <= 0.0 { 1.0 } else { prelim_value_max };
+    let (prelim_domain_min, prelim_domain_max) = crate::helpers::nice_domain(prelim_domain_min, prelim_domain_max, 10);
+    let y_fmt = get_y_format(config);
+    let y_fmt_ref = y_fmt.as_deref();
+    let prelim_labels = vec![
+        crate::helpers::format_value(prelim_domain_max, y_fmt_ref),
+        crate::helpers::format_value(prelim_domain_min, y_fmt_ref),
+    ];
+
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: has_series,
         x_label_strategy_margin: x_extra_margin,
+        y_tick_labels: prelim_labels,
         ..Default::default()
     };
     let margins = calculate_margins(&margin_config);
@@ -71,8 +110,8 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
     let mut all_values: Vec<f64> = Vec::new();
     for field in &all_value_fields {
-        for row in data {
-            if let Some(v) = get_f64(row, field) {
+        for i in 0..data.num_rows() {
+            if let Some(v) = data.get_f64(i, field) {
                 all_values.push(v);
             }
         }
@@ -94,26 +133,9 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
     let mut children = Vec::new();
 
-    // Title
-    if let Some(ref title) = config.title {
-        children.push(ChartElement::Text {
-            x: 10.0,
-            y: 20.0,
-            content: title.clone(),
-            anchor: TextAnchor::Start,
-            dominant_baseline: None,
-            transform: None,
-            font_size: Some("14px".to_string()),
-            font_weight: Some("bold".to_string()),
-            fill: Some("#333".to_string()),
-            class: "chart-title".to_string(),
-            data: None,
-        });
-    }
+    // Title is rendered as HTML outside the SVG — not added here.
 
     // Axes — read format string from spec
-    let y_fmt = get_y_format(config);
-    let y_fmt_ref = y_fmt.as_deref();
     let grid = GridConfig::from_config(config);
 
     let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
@@ -179,21 +201,83 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         let mut series_colors = Vec::new();
 
         for (field_idx, field_spec) in multi_fields.iter().enumerate() {
-            let field_name = &field_spec.field;
             let color = field_spec.color.clone()
                 .unwrap_or_else(|| config.colors.get(field_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string()));
+
+            // Range mark — render shaded area between upper and lower bounds
+            if field_spec.mark.as_deref() == Some("range") {
+                if let (Some(ref upper_field), Some(ref lower_field)) = (&field_spec.upper, &field_spec.lower) {
+                    let fill_opacity = field_spec.opacity.unwrap_or(0.15);
+                    let mut area_points: Vec<(f64, f64, f64)> = Vec::new(); // (x, y_upper, y_lower)
+
+                    for cat in &categories {
+                        let row_i = match (0..data.num_rows()).find(|&i| data.get_string(i, &category_field).as_deref() == Some(cat.as_str())) {
+                            Some(i) => i,
+                            None => continue,
+                        };
+                        // Skip rows where bounds are null (historical data)
+                        let upper_val = match data.get_f64(row_i, upper_field) {
+                            Some(v) => v,
+                            None => continue,
+                        };
+                        let lower_val = match data.get_f64(row_i, lower_field) {
+                            Some(v) => v,
+                            None => continue,
+                        };
+                        let x = match band.map(cat) {
+                            Some(x) => x + bandwidth / 2.0,
+                            None => continue,
+                        };
+                        area_points.push((x, linear.map(upper_val), linear.map(lower_val)));
+                    }
+
+                    if !area_points.is_empty() {
+                        // Build area path: forward along upper, backward along lower
+                        let mut d = String::new();
+                        for (i, &(x, y_upper, _)) in area_points.iter().enumerate() {
+                            if i == 0 { d.push_str(&format!("M{:.2},{:.2}", x, y_upper)); }
+                            else { d.push_str(&format!("L{:.2},{:.2}", x, y_upper)); }
+                        }
+                        for &(x, _, y_lower) in area_points.iter().rev() {
+                            d.push_str(&format!("L{:.2},{:.2}", x, y_lower));
+                        }
+                        d.push('Z');
+
+                        line_elements.push(ChartElement::Path {
+                            d,
+                            fill: Some(color.clone()),
+                            stroke: None,
+                            stroke_width: None,
+                            stroke_dasharray: None,
+                            opacity: Some(fill_opacity),
+                            class: "range-area".to_string(),
+                            data: None,
+                        });
+                    }
+                }
+                continue; // range marks don't render as lines
+            }
+
+            let field_name = &field_spec.field;
             let label = field_spec.label.clone().unwrap_or_else(|| field_name.clone());
+
+            // Determine dash pattern from lineStyle
+            let dasharray = match field_spec.line_style.as_deref() {
+                Some("dashed") => Some("8 4".to_string()),
+                Some("dotted") => Some("2 4".to_string()),
+                _ => None,
+            };
 
             let mut points: Vec<(f64, f64)> = Vec::new();
             let mut point_data: Vec<(String, f64)> = Vec::new();
 
             for cat in &categories {
                 // Find the row for this category
-                let row = match data.iter().find(|r| get_string(r, &category_field).as_deref() == Some(cat.as_str())) {
-                    Some(r) => r,
+                let row_i = match (0..data.num_rows()).find(|&i| data.get_string(i, &category_field).as_deref() == Some(cat.as_str())) {
+                    Some(i) => i,
                     None => continue,
                 };
-                let val = match get_f64(row, field_name) {
+                let val = match data.get_f64(row_i, field_name) {
                     Some(v) => v,
                     None => continue,
                 };
@@ -217,7 +301,8 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 fill: None,
                 stroke: Some(color.clone()),
                 stroke_width: Some(2.0),
-                stroke_dasharray: None,
+                stroke_dasharray: dasharray,
+                opacity: None,
                 class: "line".to_string(),
                 data: Some(ElementData::new(&label, "").with_series(&label)),
             });
@@ -272,12 +357,12 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             children: legend_elements,
         });
     } else if let Some(ref color_f) = color_field {
-        let series_names = unique_values(data, color_f);
-        let groups = group_by(data, color_f);
+        let series_names = data.unique_values(color_f);
+        let groups = data.group_by(color_f);
 
         for (series_idx, series_name) in series_names.iter().enumerate() {
-            let series_rows = match groups.get(series_name) {
-                Some(rows) => rows,
+            let series_data = match groups.get(series_name) {
+                Some(d) => d,
                 None => continue,
             };
 
@@ -285,13 +370,13 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             let mut point_data: Vec<(String, f64)> = Vec::new();
 
             for cat in &categories {
-                let row = match series_rows.iter().find(|r| {
-                    get_string(r, &category_field).as_deref() == Some(cat.as_str())
+                let row_i = match (0..series_data.num_rows()).find(|&i| {
+                    series_data.get_string(i, &category_field).as_deref() == Some(cat.as_str())
                 }) {
-                    Some(r) => r,
+                    Some(i) => i,
                     None => continue,
                 };
-                let val = match get_f64(row, &value_field) {
+                let val = match series_data.get_f64(row_i, &value_field) {
                     Some(v) => v,
                     None => continue,
                 };
@@ -321,6 +406,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 stroke: Some(color.clone()),
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
+                opacity: None,
                 class: "line".to_string(),
                 data: Some(ElementData::new(series_name, "").with_series(series_name)),
             });
@@ -354,13 +440,13 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         let mut point_data: Vec<(String, f64)> = Vec::new();
 
         for cat in &categories {
-            let row = match data.iter().find(|r| {
-                get_string(r, &category_field).as_deref() == Some(cat.as_str())
+            let row_i = match (0..data.num_rows()).find(|&i| {
+                data.get_string(i, &category_field).as_deref() == Some(cat.as_str())
             }) {
-                Some(r) => r,
+                Some(i) => i,
                 None => continue,
             };
-            let val = match get_f64(row, &value_field) {
+            let val = match data.get_f64(row_i, &value_field) {
                 Some(v) => v,
                 None => continue,
             };
@@ -387,6 +473,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 stroke: Some(color.clone()),
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
+                opacity: None,
                 class: "line".to_string(),
                 data: None,
             });

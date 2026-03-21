@@ -1,5 +1,5 @@
-use chartml_core::data::{get_f64, get_string, unique_values, group_by, Row};
-use chartml_core::element::{ChartElement, ElementData, TextAnchor, Transform, ViewBox};
+use chartml_core::data::DataTable;
+use chartml_core::element::{ChartElement, ElementData, Transform, ViewBox};
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
 use chartml_core::layout::stack::{StackLayout, StackOffset};
@@ -9,13 +9,13 @@ use chartml_core::shapes::AreaGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{GridConfig, format_value, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{GridConfig, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
-pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
+pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
     let value_field = get_field_name(&config.visualize.rows)?;
 
-    let categories = unique_values(data, &category_field);
+    let categories = data.unique_values(&category_field);
     if categories.is_empty() {
         return Err(ChartError::DataError("No category values found".into()));
     }
@@ -36,11 +36,22 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         _ => 0.0,
     };
 
+    // Step 1b: Pre-compute domain for left margin estimation (matches JS two-pass approach).
+    let prelim_values: Vec<f64> = (0..data.num_rows()).filter_map(|i| data.get_f64(i, &value_field)).collect();
+    let prelim_max = prelim_values.iter().cloned().fold(0.0_f64, f64::max);
+    let prelim_max = if prelim_max <= 0.0 { 1.0 } else { prelim_max };
+    let (_, prelim_nice_max) = crate::helpers::nice_domain(0.0, prelim_max, 10);
+    let area_prelim_fmt = if is_normalized { Some(".0%") } else { y_fmt_ref };
+    let area_prelim_labels = vec![
+        crate::helpers::format_value(prelim_nice_max, area_prelim_fmt),
+    ];
+
     // Step 2: Calculate margins including rotation
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: color_field.is_some(),
         x_label_strategy_margin: x_extra_margin,
+        y_tick_labels: area_prelim_labels,
         ..Default::default()
     };
     let margins = calculate_margins(&margin_config);
@@ -53,42 +64,32 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
     let mut children = Vec::new();
 
-    // Title
-    if let Some(ref title) = config.title {
-        children.push(ChartElement::Text {
-            x: 10.0,
-            y: 20.0,
-            content: title.clone(),
-            anchor: TextAnchor::Start,
-            dominant_baseline: None,
-            transform: None,
-            font_size: Some("14px".to_string()),
-            font_weight: Some("bold".to_string()),
-            fill: Some("#333".to_string()),
-            class: "chart-title".to_string(),
-            data: None,
-        });
-    }
+    // Title is rendered as HTML outside the SVG — not added here.
 
     let area_gen = AreaGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
     let mut area_elements = Vec::new();
 
     if let Some(ref color_f) = color_field {
-        let series_names = unique_values(data, color_f);
-        let groups = group_by(data, color_f);
+        let series_names = data.unique_values(color_f);
+        let groups = data.group_by(color_f);
 
         if (is_stacked || is_normalized) && series_names.len() > 1 {
             // Build values matrix for stacking
             let mut values_matrix: Vec<Vec<f64>> = Vec::new();
             for series in &series_names {
-                let rows = groups.get(series);
+                let series_data = groups.get(series);
                 let mut series_vals = Vec::new();
                 for cat in &categories {
-                    let val = rows
-                        .map(|rs| {
-                            rs.iter()
-                                .find(|r| get_string(r, &category_field).as_deref() == Some(cat.as_str()))
-                                .and_then(|r| get_f64(r, &value_field))
+                    let val = series_data
+                        .map(|sd| {
+                            (0..sd.num_rows())
+                                .find_map(|i| {
+                                    if sd.get_string(i, &category_field).as_deref() == Some(cat.as_str()) {
+                                        sd.get_f64(i, &value_field)
+                                    } else {
+                                        None
+                                    }
+                                })
                                 .unwrap_or(0.0)
                         })
                         .unwrap_or(0.0);
@@ -162,6 +163,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                     stroke: None,
                     stroke_width: None,
                     stroke_dasharray: None,
+                    opacity: Some(0.6),
                     class: "area".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
@@ -195,9 +197,8 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             });
         } else {
             // Multiple series, non-stacked: each area from baseline
-            let values: Vec<f64> = data
-                .iter()
-                .filter_map(|row| get_f64(row, &value_field))
+            let values: Vec<f64> = (0..data.num_rows())
+                .filter_map(|i| data.get_f64(i, &value_field))
                 .collect();
             let raw_value_max = values.iter().cloned().fold(0.0_f64, f64::max);
             let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
@@ -207,8 +208,8 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             let baseline = linear.map(0.0);
 
             for (series_idx, series_name) in series_names.iter().enumerate() {
-                let series_rows = match groups.get(series_name) {
-                    Some(rows) => rows,
+                let series_data = match groups.get(series_name) {
+                    Some(d) => d,
                     None => continue,
                 };
 
@@ -216,13 +217,13 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 let mut dot_data: Vec<(String, f64)> = Vec::new();
 
                 for cat in &categories {
-                    let row = match series_rows.iter().find(|r| {
-                        get_string(r, &category_field).as_deref() == Some(cat.as_str())
+                    let row_i = match (0..series_data.num_rows()).find(|&i| {
+                        series_data.get_string(i, &category_field).as_deref() == Some(cat.as_str())
                     }) {
-                        Some(r) => r,
+                        Some(i) => i,
                         None => continue,
                     };
-                    let val = match get_f64(row, &value_field) {
+                    let val = match series_data.get_f64(row_i, &value_field) {
                         Some(v) => v,
                         None => continue,
                     };
@@ -252,6 +253,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                     stroke: None,
                     stroke_width: None,
                     stroke_dasharray: None,
+                    opacity: Some(0.6),
                     class: "area".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
@@ -285,7 +287,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         }
 
         // Legend
-        let series_names_for_legend = unique_values(data, color_f);
+        let series_names_for_legend = data.unique_values(color_f);
         let legend_elements = generate_legend(
             &series_names_for_legend,
             &config.colors,
@@ -299,9 +301,8 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         });
     } else {
         // Single series area
-        let values: Vec<f64> = data
-            .iter()
-            .filter_map(|row| get_f64(row, &value_field))
+        let values: Vec<f64> = (0..data.num_rows())
+            .filter_map(|i| data.get_f64(i, &value_field))
             .collect();
         let raw_value_max = values.iter().cloned().fold(0.0_f64, f64::max);
         let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
@@ -313,13 +314,13 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         let mut points: Vec<(f64, f64, f64)> = Vec::new();
 
         for cat in &categories {
-            let row = match data.iter().find(|r| {
-                get_string(r, &category_field).as_deref() == Some(cat.as_str())
+            let row_i = match (0..data.num_rows()).find(|&i| {
+                data.get_string(i, &category_field).as_deref() == Some(cat.as_str())
             }) {
-                Some(r) => r,
+                Some(i) => i,
                 None => continue,
             };
-            let val = match get_f64(row, &value_field) {
+            let val = match data.get_f64(row_i, &value_field) {
                 Some(v) => v,
                 None => continue,
             };
@@ -345,6 +346,7 @@ pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 stroke: None,
                 stroke_width: None,
                 stroke_dasharray: None,
+                opacity: Some(0.6),
                 class: "area".to_string(),
                 data: None,
             });

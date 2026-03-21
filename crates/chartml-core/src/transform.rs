@@ -798,6 +798,8 @@ mod tests {
     fn apply_transforms_full_pipeline() {
         let data = sales_data();
         let spec = TransformSpec {
+            sql: None,
+            forecast: None,
             aggregate: Some(AggregateSpec {
                 dimensions: vec![Dimension::Simple("region".to_string())],
                 measures: vec![Measure {

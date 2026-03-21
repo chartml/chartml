@@ -56,11 +56,13 @@ mod tests {
 
     #[test]
     fn test_transform_result_creation() {
+        use crate::data::DataTable;
+
         let mut metadata = HashMap::new();
         metadata.insert("row_count".to_string(), serde_json::json!(5));
 
         let result = TransformResult {
-            data: vec![],
+            data: DataTable::from_rows(&[]).unwrap(),
             metadata,
         };
         assert!(result.data.is_empty());

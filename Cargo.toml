@@ -7,6 +7,8 @@ members = [
     "crates/chartml-chart-pie",
     "crates/chartml-chart-scatter",
     "crates/chartml-chart-metric",
+    "crates/chartml-forecast",
+    "crates/chartml-datafusion",
     "crates/chartml-leptos",
     "demo",
 ]
@@ -17,6 +19,8 @@ default-members = [
     "crates/chartml-chart-pie",
     "crates/chartml-chart-scatter",
     "crates/chartml-chart-metric",
+    "crates/chartml-forecast",
+    "crates/chartml-datafusion",
 ]
 
 # Optimize WASM release builds for size
