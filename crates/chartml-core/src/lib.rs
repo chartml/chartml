@@ -429,7 +429,7 @@ impl ChartML {
 
         let control = match param.param_type.as_str() {
             "multiselect" => {
-                let options_text = param.options.as_ref()
+                let _options_text = param.options.as_ref()
                     .map(|opts| opts.join(", "))
                     .unwrap_or_default();
                 let default_text = param.default.as_ref()
@@ -564,24 +564,33 @@ impl ChartML {
 
     // --- Async rendering (for use with TransformMiddleware, e.g. DataFusion) ---
 
-    /// Async render for use with registered TransformMiddleware (e.g., DataFusion).
-    ///
-    /// Parses the YAML spec, resolves data from `data` parameter or inline sources,
-    /// and if a TransformMiddleware is registered AND the spec contains sql or forecast
-    /// transforms, delegates to the middleware's async `transform()` method.
-    /// For aggregate-only specs without a middleware, falls back to the built-in sync
-    /// `apply_transforms`.
-    pub async fn render_from_yaml_with_data_async(
+    /// Async render with full parameter support — mirrors `render_from_yaml_with_params`
+    /// but uses the registered TransformMiddleware for ALL transforms (sql, aggregate, forecast).
+    /// Falls back to built-in sync transform only if no middleware is registered.
+    pub async fn render_from_yaml_with_params_async(
         &self,
         yaml: &str,
-        data: Vec<Row>,
+        container_width: Option<f64>,
+        container_height: Option<f64>,
+        param_overrides: Option<&params::ParamValues>,
     ) -> Result<ChartElement, ChartError> {
-        let parsed = spec::parse(yaml)?;
+        // Step 1: Resolve params (same as sync path)
+        let mut all_params = self.param_values.clone();
+        let inline_defaults = params::extract_inline_param_defaults(yaml);
+        all_params.extend(inline_defaults);
+        if let Some(overrides) = param_overrides {
+            all_params.extend(overrides.iter().map(|(k, v)| (k.clone(), v.clone())));
+        }
+        let resolved_yaml = if !all_params.is_empty() {
+            params::resolve_param_references(yaml, &all_params)
+        } else {
+            yaml.to_string()
+        };
 
-        // Collect named sources from persistent registry and document-local sources
+        let parsed = spec::parse(&resolved_yaml)?;
+
+        // Step 2: Collect sources
         let mut sources: HashMap<String, Vec<Row>> = self.sources.clone();
-        sources.insert("source".to_string(), data.clone());
-
         if let ChartMLSpec::Array(ref components) = parsed {
             for component in components {
                 if let Component::Source(source_spec) = component {
@@ -593,7 +602,7 @@ impl ChartML {
             }
         }
 
-        // Extract chart spec
+        // Step 3: Extract chart spec
         let chart_spec = match &parsed {
             ChartMLSpec::Single(Component::Chart(chart)) => chart,
             ChartMLSpec::Array(components) => {
@@ -607,54 +616,106 @@ impl ChartML {
             _ => return Err(ChartError::InvalidSpec("No chart component found".into())),
         };
 
-        // Resolve data for this chart.
-        // If the spec has inline data, try to use it; but if it's empty and the caller
-        // provided data via the `data` parameter, use that instead.
-        let chart_data = match &chart_spec.data {
-            DataRef::Inline(inline) => {
-                let inline_rows = inline.rows.as_ref()
-                    .map(|r| self.convert_json_rows(r))
-                    .transpose()?
-                    .unwrap_or_default();
-                if inline_rows.is_empty() && !data.is_empty() {
-                    data
-                } else {
-                    inline_rows
-                }
-            }
-            DataRef::Named(name) => {
-                sources.get(name)
-                    .cloned()
-                    .ok_or_else(|| ChartError::DataError(
-                        format!("Named data source '{}' not found", name)
-                    ))?
-            }
-        };
+        // Step 4: Resolve data
+        let chart_data = self.resolve_chart_data(chart_spec, &sources)?;
 
-        // Determine if we need async middleware transform
-        let needs_middleware = chart_spec.transform.as_ref().map_or(false, |t| {
-            t.sql.is_some() || t.forecast.is_some()
-        });
-
+        // Step 5: Transform — use middleware for ALL transforms when registered
         let transformed_data = if let Some(ref transform_spec) = chart_spec.transform {
-            if needs_middleware {
-                // Use registered TransformMiddleware for sql/forecast transforms
-                let middleware = self.registry.get_transform()
-                    .ok_or_else(|| ChartError::InvalidSpec(
-                        "Spec uses sql or forecast transforms but no TransformMiddleware is registered".into()
-                    ))?;
+            if let Some(middleware) = self.registry.get_transform() {
                 let context = plugin::TransformContext::default();
                 let result = middleware.transform(chart_data, transform_spec, &context).await?;
                 result.data
             } else {
-                // Aggregate-only — use built-in sync transform
+                // No middleware — fall back to built-in sync transform (aggregate only)
                 transform::apply_transforms(chart_data, transform_spec)?
             }
         } else {
             chart_data
         };
 
-        // Build chart config and render (same as render_chart_internal but with pre-transformed data)
+        // Step 6: Render
+        self.build_and_render(chart_spec, &transformed_data, container_width, container_height)
+    }
+
+    /// Async render with external data — for integration tests and programmatic use.
+    /// Data is used as fallback when spec has empty inline rows.
+    pub async fn render_from_yaml_with_data_async(
+        &self,
+        yaml: &str,
+        data: Vec<Row>,
+    ) -> Result<ChartElement, ChartError> {
+        // Register data as "source", then delegate to full async render
+        let parsed = spec::parse(yaml)?;
+        let chart_spec = match &parsed {
+            ChartMLSpec::Single(Component::Chart(chart)) => chart,
+            ChartMLSpec::Array(components) => {
+                components.iter()
+                    .find_map(|c| match c { Component::Chart(chart) => Some(chart), _ => None })
+                    .ok_or_else(|| ChartError::InvalidSpec("No chart component found".into()))?
+            }
+            _ => return Err(ChartError::InvalidSpec("No chart component found".into())),
+        };
+
+        let chart_data = match &chart_spec.data {
+            DataRef::Inline(inline) => {
+                let inline_rows = inline.rows.as_ref()
+                    .map(|r| self.convert_json_rows(r))
+                    .transpose()?
+                    .unwrap_or_default();
+                if inline_rows.is_empty() && !data.is_empty() { data } else { inline_rows }
+            }
+            DataRef::Named(name) => {
+                self.sources.get(name).cloned()
+                    .ok_or_else(|| ChartError::DataError(format!("Source '{}' not found", name)))?
+            }
+        };
+
+        let transformed_data = if let Some(ref transform_spec) = chart_spec.transform {
+            if let Some(middleware) = self.registry.get_transform() {
+                let context = plugin::TransformContext::default();
+                let result = middleware.transform(chart_data, transform_spec, &context).await?;
+                result.data
+            } else if transform_spec.sql.is_some() || transform_spec.forecast.is_some() {
+                return Err(ChartError::InvalidSpec(
+                    "Spec uses sql or forecast transforms but no TransformMiddleware is registered".into()
+                ));
+            } else {
+                transform::apply_transforms(chart_data, transform_spec)?
+            }
+        } else {
+            chart_data
+        };
+
+        self.build_and_render(chart_spec, &transformed_data, None, None)
+    }
+
+    /// Resolve chart data from inline rows or named sources.
+    fn resolve_chart_data(&self, chart_spec: &ChartSpec, sources: &HashMap<String, Vec<Row>>) -> Result<Vec<Row>, ChartError> {
+        match &chart_spec.data {
+            DataRef::Inline(inline) => {
+                inline.rows.as_ref()
+                    .map(|r| self.convert_json_rows(r))
+                    .transpose()
+                    .map(|o| o.unwrap_or_default())
+            }
+            DataRef::Named(name) => {
+                sources.get(name)
+                    .cloned()
+                    .ok_or_else(|| ChartError::DataError(
+                        format!("Named data source '{}' not found", name)
+                    ))
+            }
+        }
+    }
+
+    /// Build chart config and render — shared by sync and async paths.
+    fn build_and_render(
+        &self,
+        chart_spec: &ChartSpec,
+        data: &[Row],
+        container_width: Option<f64>,
+        container_height: Option<f64>,
+    ) -> Result<ChartElement, ChartError> {
         let chart_type = &chart_spec.visualize.chart_type;
         let renderer = self.registry.get_renderer(chart_type)
             .ok_or_else(|| ChartError::UnknownChartType(chart_type.clone()))?;
@@ -663,20 +724,15 @@ impl ChartML {
             .map(|d| d.height)
             .unwrap_or(400.0);
 
-        let height = chart_spec.visualize.style
-            .as_ref()
+        let height = chart_spec.visualize.style.as_ref()
             .and_then(|s| s.height)
-            .or(None)
-            .unwrap_or(default_height);
+            .unwrap_or(container_height.unwrap_or(default_height));
 
-        let width = chart_spec.visualize.style
-            .as_ref()
+        let width = chart_spec.visualize.style.as_ref()
             .and_then(|s| s.width)
-            .or(None)
-            .unwrap_or(800.0);
+            .unwrap_or(container_width.unwrap_or(800.0));
 
-        let colors = chart_spec.visualize.style
-            .as_ref()
+        let colors = chart_spec.visualize.style.as_ref()
             .and_then(|s| s.colors.clone())
             .unwrap_or_else(|| {
                 color::get_chart_colors(12, color::palettes::get_palette("autumn_forest"))
@@ -690,7 +746,7 @@ impl ChartML {
             colors,
         };
 
-        renderer.render(&transformed_data, &config)
+        renderer.render(data, &config)
     }
 
     /// Get a reference to the internal registry.

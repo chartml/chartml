@@ -17,6 +17,7 @@ thiserror = "2"
 getrandom03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 getrandom02 = { package = "getrandom", version = "0.2", features = ["js"] }
 uuid = { version = "1", features = ["js"] }
+chrono = { version = "0.4", features = ["wasmbind"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }

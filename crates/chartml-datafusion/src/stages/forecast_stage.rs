@@ -1,6 +1,6 @@
 //! Forecast stage: extract series from DataFusion, run chartml-forecast, merge results.
 
-use chartml_core::data::Row;
+use chartml_core::data::{Row, get_f64};
 use chartml_core::error::ChartError;
 use chartml_core::spec::ForecastSpec;
 use chartml_forecast::{ForecastConfig, ForecastModel, TimeSeries};
@@ -90,15 +90,23 @@ pub async fn execute(
         })?;
 
         // Add historical rows with is_forecast=false
-        for (i, row) in group_rows.iter().enumerate() {
+        let last_historical_value = group_rows.last()
+            .and_then(|r| get_f64(r, &spec.value));
+
+        for row in group_rows.iter() {
             let mut out_row = (*row).clone();
             out_row.insert("is_forecast".to_string(), serde_json::json!(false));
             out_row.insert("forecast".to_string(), serde_json::Value::Null);
             out_row.insert("lower_bound".to_string(), serde_json::Value::Null);
             out_row.insert("upper_bound".to_string(), serde_json::Value::Null);
-            // Keep the original value as-is (no forecast field override)
-            let _ = i; // suppress unused warning
             result_rows.push(out_row);
+        }
+
+        // Set forecast on last historical row for seamless dashed-line connection
+        if let Some(last_val) = last_historical_value {
+            if let Some(last_row) = result_rows.last_mut() {
+                last_row.insert("forecast".to_string(), serde_json::json!(last_val));
+            }
         }
 
         // Add forecast rows
@@ -111,7 +119,7 @@ pub async fn execute(
                 serde_json::json!(forecast_result.timestamps[i]),
             );
 
-            // Set value to null for forecast rows
+            // Original value is null for forecast rows (separate series)
             out_row.insert(spec.value.clone(), serde_json::Value::Null);
 
             // Set group-by columns

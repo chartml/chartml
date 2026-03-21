@@ -118,6 +118,14 @@ pub struct FieldSpec {
     pub color: Option<String>,
     pub format: Option<String>,
     pub data_labels: Option<DataLabelsSpec>,
+    /// Line style: "solid" (default), "dashed", "dotted"
+    pub line_style: Option<String>,
+    /// For range marks: upper bound field name
+    pub upper: Option<String>,
+    /// For range marks: lower bound field name
+    pub lower: Option<String>,
+    /// Fill opacity for range marks (default 0.15)
+    pub opacity: Option<f64>,
 }
 
 // --- DataLabelsSpec ---

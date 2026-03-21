@@ -5,6 +5,7 @@ use chartml_chart_cartesian::CartesianRenderer;
 use chartml_chart_pie::PieRenderer;
 use chartml_chart_scatter::ScatterRenderer;
 use chartml_chart_metric::MetricRenderer;
+use chartml_datafusion::DataFusionTransform;
 use chartml_leptos::ChartMLChart;
 
 use crate::editor::YamlEditor;
@@ -20,6 +21,8 @@ fn setup_chartml() -> Arc<ChartML> {
     c.register_renderer("doughnut", PieRenderer::new());
     c.register_renderer("scatter", ScatterRenderer::new());
     c.register_renderer("metric", MetricRenderer::new());
+    // Register DataFusion transform middleware
+    c.register_transform(DataFusionTransform);
     // Register named sources from the examples page
     register_page_sources(&mut c);
     Arc::new(c)

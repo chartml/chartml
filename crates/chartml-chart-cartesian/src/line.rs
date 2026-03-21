@@ -28,6 +28,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
             FieldRefItem::Simple(name) => Some(FieldSpec {
                 field: name.clone(), mark: None, axis: None, label: None,
                 color: None, format: None, data_labels: None,
+                line_style: None, upper: None, lower: None, opacity: None,
             }),
         }).collect(),
         _ => vec![],
@@ -53,7 +54,18 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
 
     // Step 1b: Pre-compute domain for left margin estimation (matches JS two-pass approach).
     let all_value_fields_prelim: Vec<String> = if is_multi_field {
-        multi_fields.iter().map(|f| f.field.clone()).collect()
+        let mut fields: Vec<String> = multi_fields.iter()
+            .filter(|f| f.mark.as_deref() != Some("range"))
+            .map(|f| f.field.clone())
+            .collect();
+        // Include upper/lower bound fields from range marks for domain calculation
+        for f in &multi_fields {
+            if f.mark.as_deref() == Some("range") {
+                if let Some(ref upper) = f.upper { fields.push(upper.clone()); }
+                if let Some(ref lower) = f.lower { fields.push(lower.clone()); }
+            }
+        }
+        fields
     } else {
         vec![value_field.clone()]
     };
@@ -189,10 +201,72 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
         let mut series_colors = Vec::new();
 
         for (field_idx, field_spec) in multi_fields.iter().enumerate() {
-            let field_name = &field_spec.field;
             let color = field_spec.color.clone()
                 .unwrap_or_else(|| config.colors.get(field_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string()));
+
+            // Range mark — render shaded area between upper and lower bounds
+            if field_spec.mark.as_deref() == Some("range") {
+                if let (Some(ref upper_field), Some(ref lower_field)) = (&field_spec.upper, &field_spec.lower) {
+                    let fill_opacity = field_spec.opacity.unwrap_or(0.15);
+                    let mut area_points: Vec<(f64, f64, f64)> = Vec::new(); // (x, y_upper, y_lower)
+
+                    for cat in &categories {
+                        let row = match data.iter().find(|r| get_string(r, &category_field).as_deref() == Some(cat.as_str())) {
+                            Some(r) => r,
+                            None => continue,
+                        };
+                        // Skip rows where bounds are null (historical data)
+                        let upper_val = match get_f64(row, upper_field) {
+                            Some(v) => v,
+                            None => continue,
+                        };
+                        let lower_val = match get_f64(row, lower_field) {
+                            Some(v) => v,
+                            None => continue,
+                        };
+                        let x = match band.map(cat) {
+                            Some(x) => x + bandwidth / 2.0,
+                            None => continue,
+                        };
+                        area_points.push((x, linear.map(upper_val), linear.map(lower_val)));
+                    }
+
+                    if !area_points.is_empty() {
+                        // Build area path: forward along upper, backward along lower
+                        let mut d = String::new();
+                        for (i, &(x, y_upper, _)) in area_points.iter().enumerate() {
+                            if i == 0 { d.push_str(&format!("M{:.2},{:.2}", x, y_upper)); }
+                            else { d.push_str(&format!("L{:.2},{:.2}", x, y_upper)); }
+                        }
+                        for &(x, _, y_lower) in area_points.iter().rev() {
+                            d.push_str(&format!("L{:.2},{:.2}", x, y_lower));
+                        }
+                        d.push('Z');
+
+                        line_elements.push(ChartElement::Path {
+                            d,
+                            fill: Some(color.clone()),
+                            stroke: None,
+                            stroke_width: None,
+                            stroke_dasharray: None,
+                            opacity: Some(fill_opacity),
+                            class: "range-area".to_string(),
+                            data: None,
+                        });
+                    }
+                }
+                continue; // range marks don't render as lines
+            }
+
+            let field_name = &field_spec.field;
             let label = field_spec.label.clone().unwrap_or_else(|| field_name.clone());
+
+            // Determine dash pattern from lineStyle
+            let dasharray = match field_spec.line_style.as_deref() {
+                Some("dashed") => Some("8 4".to_string()),
+                Some("dotted") => Some("2 4".to_string()),
+                _ => None,
+            };
 
             let mut points: Vec<(f64, f64)> = Vec::new();
             let mut point_data: Vec<(String, f64)> = Vec::new();
@@ -227,7 +301,7 @@ pub fn render_line(data: &[Row], config: &ChartConfig) -> Result<ChartElement, C
                 fill: None,
                 stroke: Some(color.clone()),
                 stroke_width: Some(2.0),
-                stroke_dasharray: None,
+                stroke_dasharray: dasharray,
                 opacity: None,
                 class: "line".to_string(),
                 data: Some(ElementData::new(&label, "").with_series(&label)),

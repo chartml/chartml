@@ -531,6 +531,7 @@ dependencies = [
  "async-trait",
  "chartml-core",
  "chartml-forecast",
+ "chrono",
  "datafusion",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
@@ -549,10 +550,12 @@ dependencies = [
  "chartml-chart-pie",
  "chartml-chart-scatter",
  "chartml-core",
+ "chartml-datafusion",
  "chartml-leptos",
  "console_error_panic_hook",
  "leptos",
  "serde_yaml",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -581,6 +584,7 @@ dependencies = [
  "leptos",
  "serde_json",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 
@@ -591,7 +595,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c673075a2e0e5f4a1dde27ce9dee1ea4558c7ffe648f576438a20ca1d2acc4b0"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
+ "wasm-bindgen",
  "windows-link",
 ]
 

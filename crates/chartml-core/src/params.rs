@@ -59,7 +59,7 @@ pub fn resolve_param_references(yaml: &str, param_values: &ParamValues) -> Strin
         }
 
         // Also handle unquoted references (e.g., value: $top_n without quotes)
-        let unquoted_pattern = format!("${}",  key);
+        let _unquoted_pattern = format!("${}",  key);
         // Only replace if it's a standalone reference (not inside a longer string)
         // This is trickier — skip for now, quoted refs cover the spec
     }
@@ -78,7 +78,7 @@ fn value_to_yaml(value: &serde_json::Value) -> String {
             let items: Vec<String> = arr.iter().map(value_to_yaml).collect();
             format!("[{}]", items.join(", "))
         }
-        serde_json::Value::Object(obj) => {
+        serde_json::Value::Object(_obj) => {
             // For objects, use JSON format which YAML also accepts
             serde_json::to_string(value).unwrap_or_else(|_| "{}".to_string())
         }

@@ -1,5 +1,5 @@
 use chartml_core::data::{get_f64, get_string, unique_values, group_by, Row};
-use chartml_core::element::{ChartElement, ElementData, TextAnchor, Transform, ViewBox};
+use chartml_core::element::{ChartElement, ElementData, Transform, ViewBox};
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
 use chartml_core::layout::stack::{StackLayout, StackOffset};
@@ -9,7 +9,7 @@ use chartml_core::shapes::AreaGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{GridConfig, format_value, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{GridConfig, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_area(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;

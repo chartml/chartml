@@ -517,13 +517,6 @@ pub fn generate_y_axis(
 
 /// Generate y-axis elements for numeric data (used by bar, line, and area charts).
 /// Grid lines are controlled by `grid` config and `chart_width`.
-/// Which side of the axis to render ticks and labels.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AxisSide {
-    Left,
-    Right,
-}
-
 pub fn generate_y_axis_numeric(
     domain: (f64, f64),
     range: (f64, f64),
@@ -743,24 +736,17 @@ pub fn generate_x_axis_numeric(
     elements
 }
 
-/// Legend symbol type — matches the JS renderSymbol() function.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum LegendMark {
-    Rect,    // bar, area, pie — rounded rectangle
-    Line,    // line charts — horizontal line
-    Circle,  // scatter, bubble — circle
-}
+// Re-export from core for backward compatibility
+pub use chartml_core::layout::legend::LegendMark;
 
-/// Generate legend elements for multi-series charts.
-/// Uses approximate text measurement for proper spacing, centers the legend,
-/// and renders mark-appropriate symbols (line/rect/circle).
+/// Generate legend elements for multi-series charts (default: Rect marks).
 pub fn generate_legend(
     series_names: &[String],
     colors: &[String],
     chart_width: f64,
     y_position: f64,
 ) -> Vec<ChartElement> {
-    generate_legend_with_mark(series_names, colors, chart_width, y_position, LegendMark::Rect)
+    chartml_core::layout::legend::generate_legend_elements(series_names, colors, chart_width, y_position, LegendMark::Rect)
 }
 
 /// Generate legend with a specific symbol mark type.
@@ -771,98 +757,7 @@ pub fn generate_legend_with_mark(
     y_position: f64,
     mark: LegendMark,
 ) -> Vec<ChartElement> {
-    use chartml_core::layout::labels::approximate_text_width;
-
-    // Skip legend for single series
-    if series_names.len() <= 1 {
-        return Vec::new();
-    }
-
-    const SYMBOL_SIZE: f64 = 12.0;
-    const SYMBOL_GAP: f64 = 6.0;
-    const ITEM_PADDING: f64 = 16.0;
-    const MAX_LABEL_LEN: usize = 20;
-
-    // Calculate item widths using text measurement
-    let items: Vec<(String, f64)> = series_names.iter().map(|name| {
-        let display = if name.len() > MAX_LABEL_LEN {
-            format!("{}…", &name[..MAX_LABEL_LEN - 1])
-        } else {
-            name.clone()
-        };
-        let text_w = approximate_text_width(&display);
-        let item_w = SYMBOL_SIZE + SYMBOL_GAP + text_w + ITEM_PADDING;
-        (display, item_w)
-    }).collect();
-
-    let total_width: f64 = items.iter().map(|(_, w)| w).sum();
-    let start_x = (chart_width - total_width).max(0.0) / 2.0; // center
-
-    let mut elements = Vec::new();
-    let mut x = start_x;
-
-    for (i, (display_name, item_w)) in items.iter().enumerate() {
-        let color = colors.get(i).cloned().unwrap_or_else(|| "#999".to_string());
-        let sym_y = y_position;
-
-        // Symbol — different per mark type
-        match mark {
-            LegendMark::Line => {
-                elements.push(ChartElement::Line {
-                    x1: x,
-                    y1: sym_y + SYMBOL_SIZE / 2.0,
-                    x2: x + SYMBOL_SIZE,
-                    y2: sym_y + SYMBOL_SIZE / 2.0,
-                    stroke: color.clone(),
-                    stroke_width: Some(2.5),
-                    stroke_dasharray: None,
-                    class: "legend-symbol legend-line".to_string(),
-                });
-            }
-            LegendMark::Circle => {
-                elements.push(ChartElement::Circle {
-                    cx: x + SYMBOL_SIZE / 2.0,
-                    cy: sym_y + SYMBOL_SIZE / 2.0,
-                    r: SYMBOL_SIZE / 2.0 - 1.0,
-                    fill: color.clone(),
-                    stroke: None,
-                    class: "legend-symbol legend-circle".to_string(),
-                    data: None,
-                });
-            }
-            LegendMark::Rect => {
-                elements.push(ChartElement::Rect {
-                    x,
-                    y: sym_y,
-                    width: SYMBOL_SIZE,
-                    height: SYMBOL_SIZE,
-                    fill: color,
-                    stroke: None,
-                    class: "legend-symbol".to_string(),
-                    data: None,
-                });
-            }
-        }
-
-        // Label
-        elements.push(ChartElement::Text {
-            x: x + SYMBOL_SIZE + SYMBOL_GAP,
-            y: sym_y + 10.0,
-            content: display_name.clone(),
-            anchor: TextAnchor::Start,
-            dominant_baseline: None,
-            transform: None,
-            font_size: Some("11px".to_string()),
-            font_weight: None,
-            fill: Some("#333".to_string()),
-            class: "legend-label".to_string(),
-            data: None,
-        });
-
-        x += item_w;
-    }
-
-    elements
+    chartml_core::layout::legend::generate_legend_elements(series_names, colors, chart_width, y_position, mark)
 }
 
 /// Generate ticks matching D3's `ticks(start, stop, count)` algorithm exactly.

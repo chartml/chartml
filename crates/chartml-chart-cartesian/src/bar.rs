@@ -13,7 +13,7 @@ use crate::helpers::{GridConfig, format_value, generate_annotations, generate_x_
 
 pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
-    use chartml_core::shapes::LineGenerator;
+    
 
     // Detect multi-field rows (combo chart pattern)
     let multi_fields: Vec<FieldSpec> = match &config.visualize.rows {
@@ -22,6 +22,7 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
             FieldRefItem::Simple(name) => Some(FieldSpec {
                 field: name.clone(), mark: None, axis: None, label: None,
                 color: None, format: None, data_labels: None,
+                line_style: None, upper: None, lower: None, opacity: None,
             }),
         }).collect(),
         _ => vec![],
@@ -124,7 +125,7 @@ pub fn render_bar(data: &[Row], config: &ChartConfig) -> Result<ChartElement, Ch
 
     let grid = GridConfig::from_config(config);
 
-    let tick_count = adaptive_tick_count(inner_height);
+    let _tick_count = adaptive_tick_count(inner_height);
 
     // Compute final domain (same as prelim for vertical bars).
     let raw_data_max = prelim_data_max;
@@ -877,12 +878,11 @@ fn render_combo(
     // Legend with mixed marks
     if series_names.len() > 1 {
         let mut legend_elements = Vec::new();
-        let mut x_offset = 0.0;
-        let total_w: f64 = series_names.iter().enumerate().map(|(i, name)| {
+        let total_w: f64 = series_names.iter().map(|name| {
             let tw = chartml_core::layout::labels::approximate_text_width(name);
             12.0 + 6.0 + tw + 16.0
         }).sum();
-        x_offset = (config.width - total_w).max(0.0) / 2.0;
+        let mut x_offset = (config.width - total_w).max(0.0) / 2.0;
 
         for (i, name) in series_names.iter().enumerate() {
             let color = &series_colors[i];

@@ -6,6 +6,7 @@ use chartml_core::scales::{ScaleLinear, ScaleSqrt};
 use chartml_core::spec::{VisualizeSpec, FieldRef, MarkEncoding};
 use chartml_core::layout::margins::Margins;
 use chartml_core::layout::labels::approximate_text_width;
+use chartml_core::layout::legend::{LegendMark, generate_legend_elements};
 
 pub struct ScatterRenderer;
 
@@ -207,11 +208,12 @@ impl ChartRenderer for ScatterRenderer {
         if let Some(ref cf) = color_field {
             let series_names = unique_values(data, cf);
             if series_names.len() > 1 {
-                let legend_elements = generate_legend_circles(
+                let legend_elements = generate_legend_elements(
                     &series_names,
                     &config.colors,
                     width,
                     height - 10.0,
+                    LegendMark::Circle,
                 );
                 children.push(ChartElement::Group {
                     class: "legend".to_string(),
@@ -332,81 +334,6 @@ fn insert_commas(digits: &str) -> String {
         result.push(ch);
     }
     result
-}
-
-/// Generate legend elements with circle symbols for scatter/bubble charts.
-///
-/// Mirrors `generate_legend_with_mark(..., LegendMark::Circle)` from cartesian
-/// helpers, centered horizontally at the given y_position.
-fn generate_legend_circles(
-    series_names: &[String],
-    colors: &[String],
-    chart_width: f64,
-    y_position: f64,
-) -> Vec<ChartElement> {
-    if series_names.len() <= 1 {
-        return Vec::new();
-    }
-
-    const SYMBOL_SIZE: f64 = 12.0;
-    const SYMBOL_GAP: f64 = 6.0;
-    const ITEM_PADDING: f64 = 16.0;
-    const MAX_LABEL_LEN: usize = 20;
-
-    // Calculate item widths using text measurement
-    let items: Vec<(String, f64)> = series_names.iter().map(|name| {
-        let display = if name.len() > MAX_LABEL_LEN {
-            format!("{}\u{2026}", &name[..MAX_LABEL_LEN - 1])
-        } else {
-            name.clone()
-        };
-        let text_w = approximate_text_width(&display);
-        let item_w = SYMBOL_SIZE + SYMBOL_GAP + text_w + ITEM_PADDING;
-        (display, item_w)
-    }).collect();
-
-    let total_width: f64 = items.iter().map(|(_, w)| w).sum();
-    let start_x = (chart_width - total_width).max(0.0) / 2.0;
-
-    let mut elements = Vec::new();
-    let mut x = start_x;
-
-    for (i, (display_name, item_w)) in items.iter().enumerate() {
-        let color = colors.get(i % colors.len())
-            .cloned()
-            .unwrap_or_else(|| "#999".to_string());
-        let sym_y = y_position;
-
-        // Circle symbol
-        elements.push(ChartElement::Circle {
-            cx: x + SYMBOL_SIZE / 2.0,
-            cy: sym_y + SYMBOL_SIZE / 2.0,
-            r: SYMBOL_SIZE / 2.0 - 1.0,
-            fill: color,
-            stroke: None,
-            class: "legend-symbol legend-circle".to_string(),
-            data: None,
-        });
-
-        // Label
-        elements.push(ChartElement::Text {
-            x: x + SYMBOL_SIZE + SYMBOL_GAP,
-            y: sym_y + 10.0,
-            content: display_name.clone(),
-            anchor: TextAnchor::Start,
-            dominant_baseline: None,
-            transform: None,
-            font_size: Some("11px".to_string()),
-            font_weight: None,
-            fill: Some("#333".to_string()),
-            class: "legend-label".to_string(),
-            data: None,
-        });
-
-        x += item_w;
-    }
-
-    elements
 }
 
 #[cfg(test)]

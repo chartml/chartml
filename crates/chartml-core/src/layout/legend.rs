@@ -1,3 +1,13 @@
+use crate::element::{ChartElement, TextAnchor};
+
+/// Legend symbol type — matches the JS renderSymbol() function.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LegendMark {
+    Rect,    // bar, area, pie — rounded rectangle
+    Line,    // line charts — horizontal line
+    Circle,  // scatter, bubble — circle
+}
+
 /// A positioned legend item.
 #[derive(Debug, Clone)]
 pub struct LegendItem {
@@ -151,6 +161,88 @@ pub fn calculate_legend_layout(
         total_height,
         overflow_count,
     }
+}
+
+/// Generate legend SVG elements for the given series.
+/// Computes layout, then renders symbol + label elements for each visible item.
+pub fn generate_legend_elements(
+    series_names: &[String],
+    colors: &[String],
+    chart_width: f64,
+    y_position: f64,
+    mark: LegendMark,
+) -> Vec<ChartElement> {
+    if series_names.len() <= 1 {
+        return Vec::new();
+    }
+
+    let config = LegendConfig::default();
+    let result = calculate_legend_layout(series_names, colors, chart_width, &config);
+
+    let mut elements = Vec::new();
+
+    for item in &result.items {
+        if !item.visible {
+            continue;
+        }
+
+        let x = item.x;
+        let sym_y = y_position + item.y;
+
+        match mark {
+            LegendMark::Line => {
+                elements.push(ChartElement::Line {
+                    x1: x,
+                    y1: sym_y + config.symbol_size / 2.0,
+                    x2: x + config.symbol_size,
+                    y2: sym_y + config.symbol_size / 2.0,
+                    stroke: item.color.clone(),
+                    stroke_width: Some(2.5),
+                    stroke_dasharray: None,
+                    class: "legend-symbol legend-line".to_string(),
+                });
+            }
+            LegendMark::Circle => {
+                elements.push(ChartElement::Circle {
+                    cx: x + config.symbol_size / 2.0,
+                    cy: sym_y + config.symbol_size / 2.0,
+                    r: config.symbol_size / 2.0 - 1.0,
+                    fill: item.color.clone(),
+                    stroke: None,
+                    class: "legend-symbol legend-circle".to_string(),
+                    data: None,
+                });
+            }
+            LegendMark::Rect => {
+                elements.push(ChartElement::Rect {
+                    x,
+                    y: sym_y,
+                    width: config.symbol_size,
+                    height: config.symbol_size,
+                    fill: item.color.clone(),
+                    stroke: None,
+                    class: "legend-symbol".to_string(),
+                    data: None,
+                });
+            }
+        }
+
+        elements.push(ChartElement::Text {
+            x: x + config.symbol_size + config.symbol_text_gap,
+            y: sym_y + 10.0,
+            content: item.label.clone(),
+            anchor: TextAnchor::Start,
+            dominant_baseline: None,
+            transform: None,
+            font_size: Some("11px".to_string()),
+            font_weight: None,
+            fill: Some("#333".to_string()),
+            class: "legend-label".to_string(),
+            data: None,
+        });
+    }
+
+    elements
 }
 
 #[cfg(test)]
