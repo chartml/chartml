@@ -19,8 +19,9 @@ pub struct TransformResult {
 }
 
 /// Transform middleware — processes data between fetch and render.
-#[async_trait]
-pub trait TransformMiddleware: Send + Sync {
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+pub trait TransformMiddleware: super::MaybeSend {
     /// Transform input data according to the spec.
     async fn transform(
         &self,

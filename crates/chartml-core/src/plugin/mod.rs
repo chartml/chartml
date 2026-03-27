@@ -8,6 +8,20 @@ pub use transform::{TransformMiddleware, TransformContext, TransformResult};
 pub use renderer::{ChartRenderer, ChartConfig};
 pub use resolver::{DatasourceResolver, ConnectionConfig};
 
+/// Conditional Send + Sync bounds for cross-target compatibility.
+/// On native targets, plugin traits require Send + Sync for thread safety.
+/// On wasm32 (single-threaded), these bounds are unnecessary and would
+/// prevent js_sys::Function from being stored in plugin adapters.
+#[cfg(not(target_arch = "wasm32"))]
+pub trait MaybeSend: Send + Sync {}
+#[cfg(not(target_arch = "wasm32"))]
+impl<T: Send + Sync> MaybeSend for T {}
+
+#[cfg(target_arch = "wasm32")]
+pub trait MaybeSend {}
+#[cfg(target_arch = "wasm32")]
+impl<T> MaybeSend for T {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

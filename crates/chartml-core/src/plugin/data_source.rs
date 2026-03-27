@@ -23,8 +23,9 @@ pub struct DataSpec {
 }
 
 /// Data source plugin — fetches raw data from a provider.
-#[async_trait]
-pub trait DataSource: Send + Sync {
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+pub trait DataSource: super::MaybeSend {
     /// Fetch data as an Arrow-backed DataTable.
     async fn fetch(&self, spec: &DataSpec, options: &FetchOptions) -> Result<DataTable, ChartError>;
 }
