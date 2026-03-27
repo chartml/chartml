@@ -8,6 +8,9 @@ pub enum CurveType {
     Linear,
     /// Monotone cubic Hermite interpolation in x (smooth, no overshooting).
     MonotoneX,
+    /// Step interpolation (horizontal-then-vertical at midpoint between x values).
+    /// Equivalent to D3's `curveStep` with t=0.5.
+    Step,
 }
 
 /// Generates SVG path `d` strings from a series of (x, y) points.
@@ -38,6 +41,7 @@ impl LineGenerator {
         match self.curve {
             CurveType::Linear => generate_linear(points),
             CurveType::MonotoneX => generate_monotone_x(points),
+            CurveType::Step => generate_step(points),
         }
     }
 }
@@ -67,6 +71,51 @@ fn generate_linear(points: &[(f64, f64)]) -> String {
             path.push_str(&format!("L{},{}", fmt(x), fmt(y)));
         }
     }
+    path
+}
+
+/// Step interpolation (D3 `curveStep`, t = 0.5).
+///
+/// For each consecutive pair of points, draws:
+///   1. A horizontal segment to the midpoint of their x-coordinates.
+///   2. A vertical segment to the new y value.
+/// This produces a staircase where each step transitions at the midpoint
+/// between adjacent x values.
+fn generate_step(points: &[(f64, f64)]) -> String {
+    let n = points.len();
+    if n == 0 {
+        return String::new();
+    }
+    if n == 1 {
+        return format!("M{},{}", fmt(points[0].0), fmt(points[0].1));
+    }
+
+    // D3 step with t = 0.5 (center):
+    // First point: moveTo(x0, y0)
+    // For each subsequent point (x, y):
+    //   x_mid = prev_x * 0.5 + x * 0.5
+    //   lineTo(x_mid, prev_y)
+    //   lineTo(x_mid, y)
+    // After the last point, the lineEnd adds lineTo(x_last, y_last)
+    // because 0 < t < 1 and point == 2.
+    let mut path = format!("M{},{}", fmt(points[0].0), fmt(points[0].1));
+
+    let mut prev_x = points[0].0;
+    let mut prev_y = points[0].1;
+
+    for &(x, y) in &points[1..] {
+        let x_mid = prev_x * 0.5 + x * 0.5;
+        path.push_str(&format!("L{},{}", fmt(x_mid), fmt(prev_y)));
+        path.push_str(&format!("L{},{}", fmt(x_mid), fmt(y)));
+        prev_x = x;
+        prev_y = y;
+    }
+
+    // D3's lineEnd: when 0 < t < 1 and point == 2, it adds lineTo(x, y)
+    // for the last stored point. This ensures the path extends all the way
+    // to the final data point's x coordinate.
+    path.push_str(&format!("L{},{}", fmt(prev_x), fmt(prev_y)));
+
     path
 }
 
@@ -174,6 +223,31 @@ mod tests {
         let gen = LineGenerator::new();
         let path = gen.generate(&[]);
         assert_eq!(path, "");
+    }
+
+    #[test]
+    fn line_step_basic() {
+        let gen = LineGenerator::new().curve(CurveType::Step);
+        let path = gen.generate(&[(0.0, 10.0), (50.0, 20.0), (100.0, 5.0)]);
+        // Step with t=0.5: midpoints at x=25 and x=75
+        // M0,10 L25,10 L25,20 L75,20 L75,5 L100,5
+        assert_eq!(path, "M0,10L25,10L25,20L75,20L75,5L100,5");
+        assert!(!path.contains("C"), "Step path should NOT contain C commands");
+    }
+
+    #[test]
+    fn line_step_single_point() {
+        let gen = LineGenerator::new().curve(CurveType::Step);
+        let path = gen.generate(&[(42.0, 7.0)]);
+        assert_eq!(path, "M42,7");
+    }
+
+    #[test]
+    fn line_step_two_points() {
+        let gen = LineGenerator::new().curve(CurveType::Step);
+        let path = gen.generate(&[(0.0, 10.0), (100.0, 20.0)]);
+        // Midpoint at x=50
+        assert_eq!(path, "M0,10L50,10L50,20L100,20");
     }
 
     #[test]

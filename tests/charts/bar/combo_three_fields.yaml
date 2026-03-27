@@ -1,0 +1,105 @@
+name: "Combo — revenue bars (left) + margin % and growth % lines (right)"
+tags: [bar, dual-axis, combo, multi-line, three-fields]
+description: >
+  Three-field combo chart with revenue as bars on the left axis and
+  two lines (gross margin % and YoY growth %) sharing the right axis.
+  Tests rendering multiple line series on the same secondary axis.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue, Margin & Growth by Quarter"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1 2024"
+        revenue: 520000
+        margin_pct: 61.2
+        growth_pct: 12.4
+      - quarter: "Q2 2024"
+        revenue: 584000
+        margin_pct: 63.8
+        growth_pct: 15.1
+      - quarter: "Q3 2024"
+        revenue: 547000
+        margin_pct: 58.9
+        growth_pct: 8.7
+      - quarter: "Q4 2024"
+        revenue: 671000
+        margin_pct: 66.4
+        growth_pct: 22.3
+      - quarter: "Q1 2025"
+        revenue: 612000
+        margin_pct: 64.1
+        growth_pct: 17.7
+  visualize:
+    type: bar
+    columns: quarter
+    rows:
+      - field: revenue
+        axis: left
+        label: "Revenue"
+      - field: margin_pct
+        mark: line
+        axis: right
+        label: "Gross Margin %"
+      - field: growth_pct
+        mark: line
+        axis: right
+        label: "YoY Growth %"
+    axes:
+      left:
+        label: "Revenue ($)"
+        format: "$,.0f"
+      right:
+        label: "Percentage (%)"
+        format: ".1f"
+        min: 0
+        max: 80
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+    y_axes: 2
+
+  bars:
+    - label: "Q1 2024"
+      value: 520000
+    - label: "Q2 2024"
+      value: 584000
+    - label: "Q3 2024"
+      value: 547000
+    - label: "Q4 2024"
+      value: 671000
+    - label: "Q1 2025"
+      value: 612000
+
+  dual_axis:
+    left_axis_present: true
+    right_axis_present: true
+    left_label: "Revenue ($)"
+    right_label: "Percentage (%)"
+
+  scale:
+    left:
+      y_min: 0
+      y_nice: true
+    right:
+      y_min: 0
+      y_max: 80
+
+  axes:
+    x:
+      labels: ["Q1 2024", "Q2 2024", "Q3 2024", "Q4 2024", "Q1 2025"]
+      orientation: horizontal
+    y_left:
+      min: 0
+      format: currency
+    y_right:
+      min: 0
+      max: 80
+      format: decimal

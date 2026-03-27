@@ -1,0 +1,63 @@
+name: "Y-axis label combined with percent format"
+tags: [line, axis-label, axis-format, percent, single-series]
+description: >
+  Y-axis label "Conversion Rate (%)" combined with ".1%" format string.
+  Tests that both the axis label and percent-formatted tick labels
+  render correctly together without overlap. The label provides context
+  while ticks show values like "3.2%", "3.4%", etc.
+
+chart:
+  type: chart
+  version: 1
+  title: "Funnel Conversion Rate (Weekly)"
+  data:
+    provider: inline
+    rows:
+      - week: "W1"
+        rate: 0.028
+      - week: "W2"
+        rate: 0.033
+      - week: "W3"
+        rate: 0.041
+      - week: "W4"
+        rate: 0.037
+      - week: "W5"
+        rate: 0.045
+      - week: "W6"
+        rate: 0.052
+      - week: "W7"
+        rate: 0.048
+      - week: "W8"
+        rate: 0.055
+      - week: "W9"
+        rate: 0.061
+      - week: "W10"
+        rate: 0.058
+  visualize:
+    type: line
+    columns: week
+    rows: rate
+    axes:
+      left:
+        label: "Conversion Rate (%)"
+        format: ".1%"
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  axes:
+    x:
+      labels: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10"]
+    y:
+      label: "Conversion Rate (%)"
+      format: percent
+      min: 0
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true

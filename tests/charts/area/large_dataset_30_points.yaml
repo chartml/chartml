@@ -1,0 +1,107 @@
+name: "Large dataset area — 30 daily data points"
+tags: [area, large-dataset, temporal, dates, single-series]
+description: >
+  30 consecutive daily data points of page views. Tests that the
+  renderer handles a larger number of x-axis values gracefully,
+  with readable tick labels and smooth area rendering.
+
+chart:
+  type: chart
+  version: 1
+  title: "Daily Page Views — March 2026"
+  data:
+    provider: inline
+    rows:
+      - date: "2026-03-01"
+        views: 14200
+      - date: "2026-03-02"
+        views: 12800
+      - date: "2026-03-03"
+        views: 15400
+      - date: "2026-03-04"
+        views: 16100
+      - date: "2026-03-05"
+        views: 15800
+      - date: "2026-03-06"
+        views: 16500
+      - date: "2026-03-07"
+        views: 13200
+      - date: "2026-03-08"
+        views: 11900
+      - date: "2026-03-09"
+        views: 15700
+      - date: "2026-03-10"
+        views: 16800
+      - date: "2026-03-11"
+        views: 17200
+      - date: "2026-03-12"
+        views: 16900
+      - date: "2026-03-13"
+        views: 17500
+      - date: "2026-03-14"
+        views: 13800
+      - date: "2026-03-15"
+        views: 12400
+      - date: "2026-03-16"
+        views: 16300
+      - date: "2026-03-17"
+        views: 17100
+      - date: "2026-03-18"
+        views: 18200
+      - date: "2026-03-19"
+        views: 17800
+      - date: "2026-03-20"
+        views: 18500
+      - date: "2026-03-21"
+        views: 14100
+      - date: "2026-03-22"
+        views: 12700
+      - date: "2026-03-23"
+        views: 17400
+      - date: "2026-03-24"
+        views: 18100
+      - date: "2026-03-25"
+        views: 19200
+      - date: "2026-03-26"
+        views: 18800
+      - date: "2026-03-27"
+        views: 19500
+      - date: "2026-03-28"
+        views: 14600
+      - date: "2026-03-29"
+        views: 13100
+      - date: "2026-03-30"
+        views: 17900
+  visualize:
+    type: area
+    columns: date
+    rows: views
+
+assertions:
+  structure:
+    root: svg
+    areas: 1
+    title_in_svg: false
+    legend: false
+
+  area_paths:
+    - series: "views"
+      has_fill: true
+      fills_to_baseline: true
+
+  axes:
+    x:
+      temporal: true
+      format: date
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  data:
+    point_count: 30

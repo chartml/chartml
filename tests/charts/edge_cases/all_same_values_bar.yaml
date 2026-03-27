@@ -1,0 +1,56 @@
+name: "Bar chart — all bars have the same value (100)"
+tags: [edge-case, same-values, bar]
+description: >
+  All four bars have the identical value of 100. Tests that the
+  renderer does not collapse or produce zero-height bars, and that
+  the y-axis still renders sensible ticks even when there is no
+  variation in the data.
+
+chart:
+  type: chart
+  version: 1
+  title: "Uniform Distribution Test"
+  data:
+    provider: inline
+    rows:
+      - category: "A"
+        value: 100
+      - category: "B"
+        value: 100
+      - category: "C"
+        value: 100
+      - category: "D"
+        value: 100
+  visualize:
+    type: bar
+    columns: category
+    rows: value
+
+assertions:
+  structure:
+    root: svg
+    bars: 4
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "A"
+      value: 100
+    - label: "B"
+      value: 100
+    - label: "C"
+      value: 100
+    - label: "D"
+      value: 100
+
+  scale:
+    all_bars_same_height: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["A", "B", "C", "D"]
+    y:
+      min: 0
+      format: numeric

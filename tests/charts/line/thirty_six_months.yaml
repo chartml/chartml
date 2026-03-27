@@ -1,0 +1,111 @@
+name: "Line chart — 36 monthly dates (3-year temporal x-axis)"
+tags: [line, label-density, temporal-x, many-categories, single-series, label-sampling]
+description: >
+  36 monthly ISO dates spanning Jan 2024 through Dec 2026. This forces
+  the temporal x-axis to sample labels aggressively since displaying all
+  36 month labels would create massive overlap. Tests date label density
+  and intelligent interval selection (e.g. showing every 3rd or 6th month).
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Recurring Revenue — 3 Year Trend"
+  data:
+    provider: inline
+    rows:
+      - date: "2024-01-01"
+        mrr: 42000
+      - date: "2024-02-01"
+        mrr: 43500
+      - date: "2024-03-01"
+        mrr: 45200
+      - date: "2024-04-01"
+        mrr: 46800
+      - date: "2024-05-01"
+        mrr: 48100
+      - date: "2024-06-01"
+        mrr: 50500
+      - date: "2024-07-01"
+        mrr: 52300
+      - date: "2024-08-01"
+        mrr: 51800
+      - date: "2024-09-01"
+        mrr: 54200
+      - date: "2024-10-01"
+        mrr: 56700
+      - date: "2024-11-01"
+        mrr: 58100
+      - date: "2024-12-01"
+        mrr: 60400
+      - date: "2025-01-01"
+        mrr: 62800
+      - date: "2025-02-01"
+        mrr: 64500
+      - date: "2025-03-01"
+        mrr: 67200
+      - date: "2025-04-01"
+        mrr: 69800
+      - date: "2025-05-01"
+        mrr: 71400
+      - date: "2025-06-01"
+        mrr: 74100
+      - date: "2025-07-01"
+        mrr: 76800
+      - date: "2025-08-01"
+        mrr: 75900
+      - date: "2025-09-01"
+        mrr: 78500
+      - date: "2025-10-01"
+        mrr: 81200
+      - date: "2025-11-01"
+        mrr: 83700
+      - date: "2025-12-01"
+        mrr: 86400
+      - date: "2026-01-01"
+        mrr: 89100
+      - date: "2026-02-01"
+        mrr: 91800
+      - date: "2026-03-01"
+        mrr: 94500
+      - date: "2026-04-01"
+        mrr: 97200
+      - date: "2026-05-01"
+        mrr: 99800
+      - date: "2026-06-01"
+        mrr: 102500
+      - date: "2026-07-01"
+        mrr: 105300
+      - date: "2026-08-01"
+        mrr: 104600
+      - date: "2026-09-01"
+        mrr: 108200
+      - date: "2026-10-01"
+        mrr: 111500
+      - date: "2026-11-01"
+        mrr: 114800
+      - date: "2026-12-01"
+        mrr: 118200
+  visualize:
+    type: line
+    columns: date
+    rows: mrr
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      label_count: 36
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

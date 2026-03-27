@@ -1,0 +1,37 @@
+name: "Metric card — revenue down 12.5% negative trend"
+tags: [metric, trend, negative, currency-format, comparison]
+description: >
+  Monthly revenue dropped from $800,000 to $700,000, a 12.5% decline.
+  The trend arrow should point down and display in red/negative styling
+  since a revenue decrease is undesirable (invertTrend is not set).
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Revenue"
+  data:
+    provider: inline
+    rows:
+      - current: 700000
+        previous: 800000
+  visualize:
+    type: metric
+    value: current
+    label: "Monthly Revenue"
+    format: "$,.0f"
+    compareWith: previous
+
+assertions:
+  structure:
+    root: div
+    is_metric_card: true
+
+  value:
+    raw: 700000
+    formatted: "$700,000"
+
+  trend:
+    direction: down
+    arrow: true
+    positive: false
+    compare_value: 800000

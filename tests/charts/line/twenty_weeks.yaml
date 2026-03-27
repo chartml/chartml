@@ -1,0 +1,79 @@
+name: "Line chart — 20 weekly labels (x-axis label thinning)"
+tags: [line, label-density, many-categories, single-series, label-thinning]
+description: >
+  20 weekly data points ("Wk1" through "Wk20") on a single-series line
+  chart. With 20 short labels, the renderer should thin the displayed
+  x-axis labels to prevent overlap while still drawing all data points.
+  Tests label sampling on categorical x-axis.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly Active Users"
+  data:
+    provider: inline
+    rows:
+      - week: "Wk1"
+        users: 12400
+      - week: "Wk2"
+        users: 13100
+      - week: "Wk3"
+        users: 12800
+      - week: "Wk4"
+        users: 14200
+      - week: "Wk5"
+        users: 15100
+      - week: "Wk6"
+        users: 14600
+      - week: "Wk7"
+        users: 15800
+      - week: "Wk8"
+        users: 16300
+      - week: "Wk9"
+        users: 15900
+      - week: "Wk10"
+        users: 17200
+      - week: "Wk11"
+        users: 17800
+      - week: "Wk12"
+        users: 18400
+      - week: "Wk13"
+        users: 17600
+      - week: "Wk14"
+        users: 19100
+      - week: "Wk15"
+        users: 19800
+      - week: "Wk16"
+        users: 20500
+      - week: "Wk17"
+        users: 19900
+      - week: "Wk18"
+        users: 21300
+      - week: "Wk19"
+        users: 22100
+      - week: "Wk20"
+        users: 23400
+  visualize:
+    type: line
+    columns: week
+    rows: users
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      label_count: 20
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

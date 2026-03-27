@@ -1,0 +1,71 @@
+name: "Bar chart — 5 bars with URL/path-like category labels (40-60 chars)"
+tags: [edge-case, bar, long-labels, url-labels, truncation]
+description: >
+  5 bars where every category label resembles a URL path or file path,
+  ranging from 40 to 60 characters. Slash-separated strings have no natural
+  word-break points, making them especially challenging for label layout.
+  Tests whether the renderer can handle monospace-like label strings.
+
+chart:
+  type: chart
+  version: 1
+  title: "Page Views by Route"
+  data:
+    provider: inline
+    rows:
+      - route: "app/dashboard/analytics/monthly-report"
+        views: 284500
+      - route: "app/settings/integrations/salesforce-crm"
+        views: 156200
+      - route: "app/billing/subscription/enterprise-plan"
+        views: 98400
+      - route: "app/users/admin/permissions-management"
+        views: 72100
+      - route: "app/reports/custom/revenue-by-segment"
+        views: 189300
+  visualize:
+    type: bar
+    columns: route
+    rows: views
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "app/dashboard/analytics/monthly-report"
+      value: 284500
+    - label: "app/settings/integrations/salesforce-crm"
+      value: 156200
+    - label: "app/billing/subscription/enterprise-plan"
+      value: 98400
+    - label: "app/users/admin/permissions-management"
+      value: 72100
+    - label: "app/reports/custom/revenue-by-segment"
+      value: 189300
+
+  label_rotation:
+    x_labels_rotated: true
+    transform_exists: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "app/dashboard/analytics/monthly-report"
+        - "app/settings/integrations/salesforce-crm"
+        - "app/billing/subscription/enterprise-plan"
+        - "app/users/admin/permissions-management"
+        - "app/reports/custom/revenue-by-segment"
+      orientation: horizontal
+      rotation: true
+    y:
+      min: 0
+      format: numeric

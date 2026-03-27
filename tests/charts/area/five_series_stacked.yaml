@@ -1,0 +1,158 @@
+name: "5-series stacked area — cost breakdown by category"
+tags: [area, stacked, multi-series, legend, palette]
+description: >
+  Monthly operating costs split into 5 categories (Infrastructure,
+  Personnel, Marketing, R&D, Operations) shown as stacked areas
+  over 6 months. Tests that the color palette assigns distinct
+  colors to all 5 series, the legend renders all 5 entries, and
+  the stacking order is correct.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Cost Breakdown"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        category: "Infrastructure"
+        cost: 45000
+      - month: "Jan"
+        category: "Personnel"
+        cost: 128000
+      - month: "Jan"
+        category: "Marketing"
+        cost: 67000
+      - month: "Jan"
+        category: "R&D"
+        cost: 89000
+      - month: "Jan"
+        category: "Operations"
+        cost: 34000
+      - month: "Feb"
+        category: "Infrastructure"
+        cost: 47000
+      - month: "Feb"
+        category: "Personnel"
+        cost: 131000
+      - month: "Feb"
+        category: "Marketing"
+        cost: 72000
+      - month: "Feb"
+        category: "R&D"
+        cost: 93000
+      - month: "Feb"
+        category: "Operations"
+        cost: 35000
+      - month: "Mar"
+        category: "Infrastructure"
+        cost: 49000
+      - month: "Mar"
+        category: "Personnel"
+        cost: 134000
+      - month: "Mar"
+        category: "Marketing"
+        cost: 78000
+      - month: "Mar"
+        category: "R&D"
+        cost: 97000
+      - month: "Mar"
+        category: "Operations"
+        cost: 36000
+      - month: "Apr"
+        category: "Infrastructure"
+        cost: 51000
+      - month: "Apr"
+        category: "Personnel"
+        cost: 137000
+      - month: "Apr"
+        category: "Marketing"
+        cost: 84000
+      - month: "Apr"
+        category: "R&D"
+        cost: 101000
+      - month: "Apr"
+        category: "Operations"
+        cost: 37000
+      - month: "May"
+        category: "Infrastructure"
+        cost: 53000
+      - month: "May"
+        category: "Personnel"
+        cost: 140000
+      - month: "May"
+        category: "Marketing"
+        cost: 89000
+      - month: "May"
+        category: "R&D"
+        cost: 105000
+      - month: "May"
+        category: "Operations"
+        cost: 38000
+      - month: "Jun"
+        category: "Infrastructure"
+        cost: 55000
+      - month: "Jun"
+        category: "Personnel"
+        cost: 143000
+      - month: "Jun"
+        category: "Marketing"
+        cost: 95000
+      - month: "Jun"
+        category: "R&D"
+        cost: 109000
+      - month: "Jun"
+        category: "Operations"
+        cost: 39000
+  transform:
+    aggregate:
+      dimensions: [month, category]
+      measures:
+        - column: cost
+          aggregation: sum
+          name: total_cost
+  visualize:
+    type: area
+    mode: stacked
+    columns: month
+    rows: total_cost
+    marks:
+      color: category
+
+assertions:
+  structure:
+    root: svg
+    areas: 5
+    title_in_svg: false
+    legend: true
+    legend_entries: 5
+
+  stacked:
+    series_order: ["Infrastructure", "Personnel", "Marketing", "R&D", "Operations"]
+    areas_stacked_on_each_other: true
+    totals:
+      - label: "Jan"
+        total: 363000
+      - label: "Feb"
+        total: 378000
+      - label: "Mar"
+        total: 394000
+      - label: "Apr"
+        total: 410000
+      - label: "May"
+        total: 425000
+      - label: "Jun"
+        total: 441000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

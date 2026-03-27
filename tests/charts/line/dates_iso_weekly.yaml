@@ -1,0 +1,65 @@
+name: "Date formatting — weekly ISO dates over 12 weeks"
+tags: [line, temporal, weekly, date-axis, date-formatting, single-series]
+description: >
+  Weekly data points using ISO date strings (Sundays) over a 12-week span.
+  Tests the renderer's ability to detect weekly intervals and format
+  x-axis labels appropriately for week-level granularity.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly Page Views"
+  data:
+    provider: inline
+    rows:
+      - week: "2024-01-07"
+        views: 14200
+      - week: "2024-01-14"
+        views: 15800
+      - week: "2024-01-21"
+        views: 16400
+      - week: "2024-01-28"
+        views: 15100
+      - week: "2024-02-04"
+        views: 17300
+      - week: "2024-02-11"
+        views: 18900
+      - week: "2024-02-18"
+        views: 19500
+      - week: "2024-02-25"
+        views: 20200
+      - week: "2024-03-03"
+        views: 21800
+      - week: "2024-03-10"
+        views: 22400
+      - week: "2024-03-17"
+        views: 23100
+      - week: "2024-03-24"
+        views: 24600
+  visualize:
+    type: line
+    columns: week
+    rows: views
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  temporal:
+    date_reformatted: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      label_count: 12
+      temporal: true
+    y:
+      min: 0
+      format: numeric

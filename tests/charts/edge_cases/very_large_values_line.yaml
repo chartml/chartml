@@ -1,0 +1,50 @@
+name: "Line chart — values in trillions (1.2e12 scale)"
+tags: [edge-case, line, large-values, scale, precision]
+description: >
+  Line chart with values in the trillions range. Tests that the
+  y-axis tick formatter can handle very large numbers without
+  overflow, truncation, or rendering artifacts. Labels should
+  use appropriate formatting (e.g., "1.2T" or scientific notation).
+
+chart:
+  type: chart
+  version: 1
+  title: "Global GDP Estimates — Top Economies"
+  data:
+    provider: inline
+    rows:
+      - country: "United States"
+        gdp: 25460000000000
+      - country: "China"
+        gdp: 17960000000000
+      - country: "Japan"
+        gdp: 4230000000000
+      - country: "Germany"
+        gdp: 4070000000000
+      - country: "India"
+        gdp: 3390000000000
+      - country: "United Kingdom"
+        gdp: 3070000000000
+  visualize:
+    type: line
+    columns: country
+    rows: gdp
+
+assertions:
+  structure:
+    root: svg
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+    large_values: true
+
+  axes:
+    x:
+      labels: ["United States", "China", "Japan", "Germany", "India", "United Kingdom"]
+    y:
+      min: 0
+      format: numeric

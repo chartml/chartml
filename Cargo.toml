@@ -10,6 +10,8 @@ members = [
     "crates/chartml-forecast",
     "crates/chartml-datafusion",
     "crates/chartml-leptos",
+    "crates/chartml-render",
+    "crates/chartml-test-runner",
     "demo",
 ]
 
@@ -21,6 +23,8 @@ default-members = [
     "crates/chartml-chart-metric",
     "crates/chartml-forecast",
     "crates/chartml-datafusion",
+    "crates/chartml-render",
+    "crates/chartml-test-runner",
 ]
 
 # Optimize WASM release builds for size

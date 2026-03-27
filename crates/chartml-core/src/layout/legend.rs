@@ -86,26 +86,45 @@ pub fn calculate_legend_layout(
     let mut rows: Vec<(usize, usize, f64)> = vec![(0, 0, 0.0)];
 
     for (i, label) in labels.iter().enumerate() {
-        // Truncate label if too long
-        let display_label = if label.chars().count() > config.max_label_chars {
-            let truncated: String = label.chars().take(config.max_label_chars - 1).collect();
-            format!("{}\u{2026}", truncated)
-        } else {
-            label.clone()
-        };
+        // First, compute full-label width to decide row placement
+        let full_text_width = approximate_text_width(label);
+        let full_item_width = config.symbol_size + config.symbol_text_gap + full_text_width + config.item_padding;
 
-        let text_width = approximate_text_width(&display_label);
-        let item_width = config.symbol_size + config.symbol_text_gap + text_width + config.item_padding;
-
-        // Check if item fits on current row
-        if current_x + item_width > available_width && current_x > 0.0 {
-            // Move to next row
+        // Check if full item fits on current row; if not, wrap to next row
+        if current_x + full_item_width > available_width && current_x > 0.0 {
             current_row += 1;
             current_x = 0.0;
             if current_row < config.max_rows {
                 rows.push((i, i, 0.0));
             }
         }
+
+        // Now truncate only if the label doesn't fit in the remaining row width
+        let remaining_width = available_width - current_x;
+        let non_text_width = config.symbol_size + config.symbol_text_gap + config.item_padding;
+        let max_text_width = remaining_width - non_text_width;
+
+        let display_label = if full_text_width > max_text_width {
+            // Progressively truncate until it fits
+            let char_count = label.chars().count();
+            let mut truncated_count = char_count.min(config.max_label_chars);
+            loop {
+                if truncated_count == 0 {
+                    break "\u{2026}".to_string();
+                }
+                let candidate: String = label.chars().take(truncated_count).collect();
+                let candidate_with_ellipsis = format!("{}\u{2026}", candidate);
+                if approximate_text_width(&candidate_with_ellipsis) <= max_text_width {
+                    break candidate_with_ellipsis;
+                }
+                truncated_count -= 1;
+            }
+        } else {
+            label.clone()
+        };
+
+        let text_width = approximate_text_width(&display_label);
+        let item_width = config.symbol_size + config.symbol_text_gap + text_width + config.item_padding;
 
         let visible = current_row < config.max_rows;
         if !visible {

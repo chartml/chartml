@@ -1,0 +1,87 @@
+name: "Annotation reference line — SLA target threshold"
+tags: [bar, annotation, reference-line, single-series]
+description: >
+  Monthly API uptime percentages with a horizontal reference line
+  at the 99.9% SLA target. Tests rendering of a single horizontal
+  line annotation (as opposed to the existing band annotation test).
+  Bars above the line meet SLA; those below do not.
+
+chart:
+  type: chart
+  version: 1
+  title: "API Uptime vs SLA Target"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        uptime: 99.95
+      - month: "Feb"
+        uptime: 99.87
+      - month: "Mar"
+        uptime: 99.97
+      - month: "Apr"
+        uptime: 99.92
+      - month: "May"
+        uptime: 99.78
+      - month: "Jun"
+        uptime: 99.94
+      - month: "Jul"
+        uptime: 99.99
+      - month: "Aug"
+        uptime: 99.91
+  visualize:
+    type: bar
+    columns: month
+    rows: uptime
+    annotations:
+      - type: line
+        axis: left
+        value: 99.9
+        label: "SLA Target (99.9%)"
+        color: "#e74c3c"
+        style: dashed
+
+assertions:
+  structure:
+    root: svg
+    bars: 8
+    title_in_svg: false
+    legend: false
+    annotation_lines: 1
+
+  bars:
+    - label: "Jan"
+      value: 99.95
+    - label: "Feb"
+      value: 99.87
+    - label: "Mar"
+      value: 99.97
+    - label: "Apr"
+      value: 99.92
+    - label: "May"
+      value: 99.78
+    - label: "Jun"
+      value: 99.94
+    - label: "Jul"
+      value: 99.99
+    - label: "Aug"
+      value: 99.91
+
+  annotations:
+    - type: line
+      value: 99.9
+      label: "SLA Target (99.9%)"
+      line_visible: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

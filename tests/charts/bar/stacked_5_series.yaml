@@ -1,0 +1,183 @@
+name: "Stacked bar — 5 product lines across 4 quarters"
+tags: [bar, stacked, multi-series, many-series, legend]
+description: >
+  Revenue broken down by 5 SaaS product lines over 4 quarters.
+  Tests stacked mode with a higher series count than the existing
+  3-series test. Verifies correct segment ordering, legend with
+  5 entries, and that all segment heights sum correctly.
+
+chart:
+  type: chart
+  version: 1
+  title: "2025 Revenue by Product Line"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1"
+        product: "CRM Platform"
+        revenue: 312000
+      - quarter: "Q1"
+        product: "Analytics Suite"
+        revenue: 187000
+      - quarter: "Q1"
+        product: "Marketing Automation"
+        revenue: 145000
+      - quarter: "Q1"
+        product: "Help Desk"
+        revenue: 98000
+      - quarter: "Q1"
+        product: "E-Commerce Engine"
+        revenue: 64000
+      - quarter: "Q2"
+        product: "CRM Platform"
+        revenue: 338000
+      - quarter: "Q2"
+        product: "Analytics Suite"
+        revenue: 201000
+      - quarter: "Q2"
+        product: "Marketing Automation"
+        revenue: 162000
+      - quarter: "Q2"
+        product: "Help Desk"
+        revenue: 107000
+      - quarter: "Q2"
+        product: "E-Commerce Engine"
+        revenue: 78000
+      - quarter: "Q3"
+        product: "CRM Platform"
+        revenue: 355000
+      - quarter: "Q3"
+        product: "Analytics Suite"
+        revenue: 218000
+      - quarter: "Q3"
+        product: "Marketing Automation"
+        revenue: 174000
+      - quarter: "Q3"
+        product: "Help Desk"
+        revenue: 115000
+      - quarter: "Q3"
+        product: "E-Commerce Engine"
+        revenue: 91000
+      - quarter: "Q4"
+        product: "CRM Platform"
+        revenue: 389000
+      - quarter: "Q4"
+        product: "Analytics Suite"
+        revenue: 241000
+      - quarter: "Q4"
+        product: "Marketing Automation"
+        revenue: 193000
+      - quarter: "Q4"
+        product: "Help Desk"
+        revenue: 128000
+      - quarter: "Q4"
+        product: "E-Commerce Engine"
+        revenue: 105000
+  transform:
+    aggregate:
+      dimensions: [quarter, product]
+      measures:
+        - column: revenue
+          aggregation: sum
+          name: total_revenue
+  visualize:
+    type: bar
+    mode: stacked
+    columns: quarter
+    rows: total_revenue
+    marks:
+      color: product
+
+assertions:
+  structure:
+    root: svg
+    bars: 20
+    title_in_svg: false
+    legend: true
+    legend_entries: 5
+
+  bars:
+    - label: "Q1"
+      series: "CRM Platform"
+      value: 312000
+    - label: "Q1"
+      series: "Analytics Suite"
+      value: 187000
+    - label: "Q1"
+      series: "Marketing Automation"
+      value: 145000
+    - label: "Q1"
+      series: "Help Desk"
+      value: 98000
+    - label: "Q1"
+      series: "E-Commerce Engine"
+      value: 64000
+    - label: "Q2"
+      series: "CRM Platform"
+      value: 338000
+    - label: "Q2"
+      series: "Analytics Suite"
+      value: 201000
+    - label: "Q2"
+      series: "Marketing Automation"
+      value: 162000
+    - label: "Q2"
+      series: "Help Desk"
+      value: 107000
+    - label: "Q2"
+      series: "E-Commerce Engine"
+      value: 78000
+    - label: "Q3"
+      series: "CRM Platform"
+      value: 355000
+    - label: "Q3"
+      series: "Analytics Suite"
+      value: 218000
+    - label: "Q3"
+      series: "Marketing Automation"
+      value: 174000
+    - label: "Q3"
+      series: "Help Desk"
+      value: 115000
+    - label: "Q3"
+      series: "E-Commerce Engine"
+      value: 91000
+    - label: "Q4"
+      series: "CRM Platform"
+      value: 389000
+    - label: "Q4"
+      series: "Analytics Suite"
+      value: 241000
+    - label: "Q4"
+      series: "Marketing Automation"
+      value: 193000
+    - label: "Q4"
+      series: "Help Desk"
+      value: 128000
+    - label: "Q4"
+      series: "E-Commerce Engine"
+      value: 105000
+
+  stacked:
+    totals:
+      - label: "Q1"
+        total: 806000
+      - label: "Q2"
+        total: 886000
+      - label: "Q3"
+        total: 953000
+      - label: "Q4"
+        total: 1056000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Q1", "Q2", "Q3", "Q4"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

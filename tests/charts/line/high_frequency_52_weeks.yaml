@@ -1,0 +1,143 @@
+name: "High frequency — 52 weekly data points"
+tags: [line, dense-data, high-frequency, single-series, 52-points]
+description: >
+  Weekly website sessions over a full year (52 data points). Tests the
+  renderer's ability to handle dense x-axis labels without overlap,
+  scale correctly across many data points, and maintain smooth line
+  rendering with a large number of path segments. The x-axis should
+  intelligently thin labels or rotate them to avoid collisions.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly Sessions — Full Year"
+  data:
+    provider: inline
+    rows:
+      - week: "W01"
+        sessions: 14200
+      - week: "W02"
+        sessions: 15100
+      - week: "W03"
+        sessions: 14800
+      - week: "W04"
+        sessions: 16000
+      - week: "W05"
+        sessions: 15500
+      - week: "W06"
+        sessions: 16200
+      - week: "W07"
+        sessions: 17100
+      - week: "W08"
+        sessions: 16800
+      - week: "W09"
+        sessions: 17500
+      - week: "W10"
+        sessions: 18200
+      - week: "W11"
+        sessions: 17900
+      - week: "W12"
+        sessions: 18800
+      - week: "W13"
+        sessions: 19500
+      - week: "W14"
+        sessions: 19100
+      - week: "W15"
+        sessions: 20000
+      - week: "W16"
+        sessions: 20800
+      - week: "W17"
+        sessions: 20400
+      - week: "W18"
+        sessions: 21200
+      - week: "W19"
+        sessions: 21900
+      - week: "W20"
+        sessions: 21500
+      - week: "W21"
+        sessions: 22300
+      - week: "W22"
+        sessions: 23000
+      - week: "W23"
+        sessions: 22600
+      - week: "W24"
+        sessions: 23400
+      - week: "W25"
+        sessions: 24100
+      - week: "W26"
+        sessions: 23700
+      - week: "W27"
+        sessions: 23200
+      - week: "W28"
+        sessions: 22800
+      - week: "W29"
+        sessions: 23500
+      - week: "W30"
+        sessions: 24200
+      - week: "W31"
+        sessions: 24800
+      - week: "W32"
+        sessions: 24400
+      - week: "W33"
+        sessions: 25100
+      - week: "W34"
+        sessions: 25800
+      - week: "W35"
+        sessions: 25400
+      - week: "W36"
+        sessions: 26200
+      - week: "W37"
+        sessions: 26900
+      - week: "W38"
+        sessions: 26500
+      - week: "W39"
+        sessions: 27200
+      - week: "W40"
+        sessions: 27900
+      - week: "W41"
+        sessions: 27500
+      - week: "W42"
+        sessions: 28200
+      - week: "W43"
+        sessions: 28900
+      - week: "W44"
+        sessions: 28500
+      - week: "W45"
+        sessions: 29200
+      - week: "W46"
+        sessions: 29900
+      - week: "W47"
+        sessions: 29500
+      - week: "W48"
+        sessions: 30200
+      - week: "W49"
+        sessions: 30900
+      - week: "W50"
+        sessions: 30500
+      - week: "W51"
+        sessions: 31200
+      - week: "W52"
+        sessions: 31900
+  visualize:
+    type: line
+    columns: week
+    rows: sessions
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      label_count: 52
+    y:
+      min: 0
+      format: numeric

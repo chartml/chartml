@@ -1,0 +1,15 @@
+[package]
+name = "chartml-render"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Server-side ChartML rendering: ChartElement tree → SVG → PNG"
+
+[dependencies]
+chartml-core = { path = "../chartml-core" }
+resvg = "0.44"
+usvg = "0.44"
+fontdb = "0.22"
+tiny-skia = "0.11"
+png = "0.17"
+thiserror = "2"

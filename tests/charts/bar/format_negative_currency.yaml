@@ -1,0 +1,79 @@
+name: "Negative currency values — mixed positive and negative dollars"
+tags: [bar, axis-format, currency, negative, mixed-sign]
+description: >
+  Mix of positive and negative dollar amounts with format "$,.0f".
+  Tests that y-axis ticks correctly display negative currency
+  (e.g. "-$50,000") and that the zero baseline is visible.
+  Common for P&L statements, budget variance, and cash flow charts.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Budget Variance"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        variance: 45000
+      - month: "Feb"
+        variance: -23000
+      - month: "Mar"
+        variance: 12000
+      - month: "Apr"
+        variance: -67000
+      - month: "May"
+        variance: -8000
+      - month: "Jun"
+        variance: 31000
+      - month: "Jul"
+        variance: -42000
+      - month: "Aug"
+        variance: 55000
+  visualize:
+    type: bar
+    columns: month
+    rows: variance
+    axes:
+      left:
+        label: "Variance ($)"
+        format: "$,.0f"
+
+assertions:
+  structure:
+    root: svg
+    bars: 8
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Jan"
+      value: 45000
+    - label: "Feb"
+      value: -23000
+    - label: "Mar"
+      value: 12000
+    - label: "Apr"
+      value: -67000
+    - label: "May"
+      value: -8000
+    - label: "Jun"
+      value: 31000
+    - label: "Jul"
+      value: -42000
+    - label: "Aug"
+      value: 55000
+
+  scale:
+    proportional: true
+    y_nice: true
+    crosses_zero: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"]
+      orientation: horizontal
+    y:
+      format: currency
+      label: "Variance ($)"
+      has_negative_ticks: true
+      has_positive_ticks: true

@@ -1,0 +1,100 @@
+name: "Extra-large multi-series line — 3 series at 4000x2000 (poster)"
+tags: [line, sizing, xlarge, 4000x2000, multi-series, poster]
+description: >
+  Multi-series line chart rendered at poster/presentation size
+  (4000x2000). Three product lines over 6 months. Tests that lines,
+  legend, and axes render correctly at very large dimensions used
+  for printed posters or high-resolution presentations.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Sales by Product Line"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        product: "Hardware"
+        sales: 320000
+      - month: "Jan"
+        product: "Software"
+        sales: 580000
+      - month: "Jan"
+        product: "Services"
+        sales: 210000
+      - month: "Feb"
+        product: "Hardware"
+        sales: 345000
+      - month: "Feb"
+        product: "Software"
+        sales: 620000
+      - month: "Feb"
+        product: "Services"
+        sales: 235000
+      - month: "Mar"
+        product: "Hardware"
+        sales: 310000
+      - month: "Mar"
+        product: "Software"
+        sales: 660000
+      - month: "Mar"
+        product: "Services"
+        sales: 250000
+      - month: "Apr"
+        product: "Hardware"
+        sales: 380000
+      - month: "Apr"
+        product: "Software"
+        sales: 710000
+      - month: "Apr"
+        product: "Services"
+        sales: 275000
+      - month: "May"
+        product: "Hardware"
+        sales: 395000
+      - month: "May"
+        product: "Software"
+        sales: 750000
+      - month: "May"
+        product: "Services"
+        sales: 290000
+      - month: "Jun"
+        product: "Hardware"
+        sales: 420000
+      - month: "Jun"
+        product: "Software"
+        sales: 800000
+      - month: "Jun"
+        product: "Services"
+        sales: 310000
+  visualize:
+    type: line
+    columns: month
+    rows: sales
+    marks:
+      color: product
+    style:
+      width: 4000
+      height: 2000
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 4000
+    svg_height: 2000
+    lines: 3
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+    y:
+      min: 0
+      format: numeric

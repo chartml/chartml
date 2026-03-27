@@ -13,8 +13,7 @@ struct FormatSpec {
     align: Align,
     sign: Sign,
     symbol: Symbol,
-    #[allow(dead_code)]
-    zero: bool,
+    _zero: bool,
     width: Option<usize>,
     comma: bool,
     precision: Option<usize>,
@@ -198,7 +197,7 @@ fn parse_spec(spec_str: &str) -> FormatSpec {
         align,
         sign,
         symbol,
-        zero,
+        _zero: zero,
         width,
         comma,
         precision,

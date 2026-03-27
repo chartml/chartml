@@ -1,0 +1,91 @@
+name: "Dual axis — left currency and right percentage format"
+tags: [line, dual-axis, axis-format, currency, percent, multi-field]
+description: >
+  Combo chart with left axis formatted as "$,.0f" (revenue) and
+  right axis formatted as ".1%" (margin). Tests that both format
+  strings are applied independently to their respective axes,
+  rendering ticks like "$100,000" on the left and "15.0%" on the right.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue vs Profit Margin (Monthly)"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 120000
+        margin: 0.142
+      - month: "Feb"
+        revenue: 135000
+        margin: 0.156
+      - month: "Mar"
+        revenue: 118000
+        margin: 0.131
+      - month: "Apr"
+        revenue: 152000
+        margin: 0.168
+      - month: "May"
+        revenue: 147000
+        margin: 0.159
+      - month: "Jun"
+        revenue: 163000
+        margin: 0.175
+      - month: "Jul"
+        revenue: 171000
+        margin: 0.182
+      - month: "Aug"
+        revenue: 158000
+        margin: 0.164
+  visualize:
+    type: line
+    columns: month
+    rows:
+      - field: revenue
+        axis: left
+        label: "Revenue"
+      - field: margin
+        axis: right
+        label: "Profit Margin"
+    axes:
+      left:
+        label: "Revenue ($)"
+        format: "$,.0f"
+      right:
+        label: "Profit Margin (%)"
+        format: ".1%"
+
+assertions:
+  structure:
+    root: svg
+    lines: 2
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+    y_axes: 2
+
+  dual_axis:
+    left_axis_present: true
+    right_axis_present: true
+    left_label: "Revenue ($)"
+    right_label: "Profit Margin (%)"
+
+  scale:
+    left:
+      y_min: 0
+      y_nice: true
+    right:
+      y_min: 0
+      y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"]
+    y_left:
+      min: 0
+      format: currency
+      label: "Revenue ($)"
+    y_right:
+      min: 0
+      format: percent
+      label: "Profit Margin (%)"

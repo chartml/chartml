@@ -1,0 +1,83 @@
+name: "Pie chart — 12 segments with several tiny slices"
+tags: [edge-case, pie, many-slices, tiny-segments, label-overlap]
+description: >
+  A pie chart with 12 segments where several represent less than 1%
+  of the total. Tests that tiny slices are still visible or at least
+  do not cause rendering errors, that 12 distinct colors are assigned,
+  and that slice labels do not catastrophically overlap.
+
+chart:
+  type: chart
+  version: 1
+  title: "Browser Market Share — March 2026"
+  data:
+    provider: inline
+    rows:
+      - browser: "Chrome"
+        share: 62.5
+      - browser: "Safari"
+        share: 18.3
+      - browser: "Firefox"
+        share: 6.2
+      - browser: "Edge"
+        share: 5.1
+      - browser: "Samsung Internet"
+        share: 2.8
+      - browser: "Opera"
+        share: 2.1
+      - browser: "Brave"
+        share: 1.2
+      - browser: "Vivaldi"
+        share: 0.6
+      - browser: "UC Browser"
+        share: 0.4
+      - browser: "Tor"
+        share: 0.3
+      - browser: "Pale Moon"
+        share: 0.1
+      - browser: "Other"
+        share: 0.4
+  visualize:
+    type: pie
+    columns: browser
+    rows: share
+
+assertions:
+  structure:
+    root: svg
+    slices: 12
+    title_in_svg: false
+    legend: true
+    legend_entries: 12
+
+  slices:
+    - label: "Chrome"
+      value: 62.5
+    - label: "Safari"
+      value: 18.3
+    - label: "Firefox"
+      value: 6.2
+    - label: "Edge"
+      value: 5.1
+    - label: "Samsung Internet"
+      value: 2.8
+    - label: "Opera"
+      value: 2.1
+    - label: "Brave"
+      value: 1.2
+    - label: "Vivaldi"
+      value: 0.6
+    - label: "UC Browser"
+      value: 0.4
+    - label: "Tor"
+      value: 0.3
+    - label: "Pale Moon"
+      value: 0.1
+    - label: "Other"
+      value: 0.4
+
+  geometry:
+    arcs_sum_to_360: true
+
+  colors:
+    distinct: 12

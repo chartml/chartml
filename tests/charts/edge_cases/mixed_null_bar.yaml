@@ -1,0 +1,49 @@
+name: "Bar chart — some categories have null/missing values"
+tags: [edge-case, bar, null-values, missing-data]
+description: >
+  A bar chart where some rows have null values for the measure column.
+  Tests that the renderer gracefully handles missing data — either by
+  skipping the bar, rendering a zero-height bar, or producing a
+  clear error. The chart should not crash.
+
+chart:
+  type: chart
+  version: 1
+  title: "Quarterly Sales by Product"
+  data:
+    provider: inline
+    rows:
+      - product: "Widget A"
+        sales: 15200
+      - product: "Widget B"
+        sales: null
+      - product: "Widget C"
+        sales: 8900
+      - product: "Widget D"
+        sales: null
+      - product: "Widget E"
+        sales: 22100
+      - product: "Widget F"
+        sales: 11400
+  visualize:
+    type: bar
+    columns: product
+    rows: sales
+
+assertions:
+  structure:
+    root: svg
+    title_in_svg: false
+    legend: false
+
+  scale:
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Widget A", "Widget B", "Widget C", "Widget D", "Widget E", "Widget F"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

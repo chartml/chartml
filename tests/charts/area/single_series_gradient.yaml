@@ -1,0 +1,70 @@
+name: "Single area with custom fill color — conversion rate"
+tags: [area, single-series, custom-color, style]
+description: >
+  Weekly conversion rate shown as a single area with an explicit
+  custom fill color (#8b5cf6, purple) instead of the default palette.
+  Tests that the renderer applies the user-specified color to both
+  the area fill and the stroke line.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly Conversion Rate"
+  data:
+    provider: inline
+    rows:
+      - week: "W1"
+        rate: 3.2
+      - week: "W2"
+        rate: 3.5
+      - week: "W3"
+        rate: 3.1
+      - week: "W4"
+        rate: 3.8
+      - week: "W5"
+        rate: 4.1
+      - week: "W6"
+        rate: 3.9
+      - week: "W7"
+        rate: 4.4
+      - week: "W8"
+        rate: 4.7
+      - week: "W9"
+        rate: 4.3
+      - week: "W10"
+        rate: 5.0
+  visualize:
+    type: area
+    columns: week
+    rows: rate
+    style:
+      colors: ["#8b5cf6"]
+
+assertions:
+  structure:
+    root: svg
+    areas: 1
+    title_in_svg: false
+    legend: false
+
+  area_paths:
+    - series: "rate"
+      has_fill: true
+      fills_to_baseline: true
+
+  colors:
+    explicit: true
+    palette: ["#8b5cf6"]
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

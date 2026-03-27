@@ -350,6 +350,24 @@ impl DataTable {
         result
     }
 
+    /// Get all string values for a field, preserving row order (including duplicates).
+    pub fn all_values(&self, field: &str) -> Vec<String> {
+        let col = match self.column(field) {
+            Some(c) => c,
+            None => return Vec::new(),
+        };
+        let mut result = Vec::new();
+        for i in 0..self.batch.num_rows() {
+            if col.is_null(i) {
+                continue;
+            }
+            if let Some(val) = arrow_to_string(col, i) {
+                result.push(val);
+            }
+        }
+        result
+    }
+
     /// Compute the extent (min, max) of a numeric field.
     pub fn extent(&self, field: &str) -> Option<(f64, f64)> {
         let col = self.column(field)?;

@@ -17,3 +17,6 @@ demo/dist/
 # Environment files
 .env
 .env.*
+
+# Test runner output
+test-output/

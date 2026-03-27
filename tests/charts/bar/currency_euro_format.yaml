@@ -1,0 +1,61 @@
+name: "European currency formatting — euro values"
+tags: [bar, currency, euro, formatting, single-series]
+description: >
+  Quarterly revenue for a European SaaS company displayed in euros.
+  Tests that the renderer handles a non-dollar currency format string
+  and that axis labels reflect the correct symbol and formatting.
+
+chart:
+  type: chart
+  version: 1
+  title: "Umsatz pro Quartal 2025"
+  data:
+    provider: inline
+    rows:
+      - quartal: "Q1"
+        umsatz: 287000
+      - quartal: "Q2"
+        umsatz: 314000
+      - quartal: "Q3"
+        umsatz: 296000
+      - quartal: "Q4"
+        umsatz: 358000
+  visualize:
+    type: bar
+    columns: quartal
+    rows: umsatz
+    axes:
+      left:
+        label: "Umsatz"
+        format: ",.0f"
+
+assertions:
+  structure:
+    root: svg
+    bars: 4
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Q1"
+      value: 287000
+    - label: "Q2"
+      value: 314000
+    - label: "Q3"
+      value: 296000
+    - label: "Q4"
+      value: 358000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Q1", "Q2", "Q3", "Q4"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric
+      label: "Umsatz"

@@ -1,0 +1,60 @@
+name: "Area chart — values spanning negative to positive range"
+tags: [edge-case, area, negative, mixed-domain, baseline]
+description: >
+  An area chart with values ranging from -50 to +150. Tests that
+  the area fill correctly handles the zero baseline when data crosses
+  from negative to positive. The filled region must not extend below
+  the actual data line into positive territory or above the data line
+  into negative territory.
+
+chart:
+  type: chart
+  version: 1
+  title: "Net Cash Flow — Monthly"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        cash_flow: -45
+      - month: "Feb"
+        cash_flow: -20
+      - month: "Mar"
+        cash_flow: 15
+      - month: "Apr"
+        cash_flow: 68
+      - month: "May"
+        cash_flow: 142
+      - month: "Jun"
+        cash_flow: 95
+      - month: "Jul"
+        cash_flow: -10
+      - month: "Aug"
+        cash_flow: 48
+  visualize:
+    type: area
+    columns: month
+    rows: cash_flow
+
+assertions:
+  structure:
+    root: svg
+    areas: 1
+    title_in_svg: false
+    legend: false
+
+  area_paths:
+    - series: "cash_flow"
+      has_fill: true
+
+  scale:
+    proportional: true
+    includes_negative: true
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"]
+      orientation: horizontal
+    y:
+      format: numeric
+      crosses_zero: true

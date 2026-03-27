@@ -1,0 +1,82 @@
+name: "Large line chart — 2 series at 1920x1080 (full HD)"
+tags: [line, sizing, large, 1920x1080, multi-series]
+description: >
+  Multi-series line chart rendered at full HD resolution (1920x1080).
+  Two revenue streams over 8 quarters. Tests that lines render
+  correctly at presentation-quality resolution with ample space
+  for labels and legend.
+
+chart:
+  type: chart
+  version: 1
+  title: "Quarterly Revenue — Product vs Services"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1-24"
+        stream: "Product"
+        revenue: 820000
+      - quarter: "Q1-24"
+        stream: "Services"
+        revenue: 340000
+      - quarter: "Q2-24"
+        stream: "Product"
+        revenue: 910000
+      - quarter: "Q2-24"
+        stream: "Services"
+        revenue: 380000
+      - quarter: "Q3-24"
+        stream: "Product"
+        revenue: 875000
+      - quarter: "Q3-24"
+        stream: "Services"
+        revenue: 420000
+      - quarter: "Q4-24"
+        stream: "Product"
+        revenue: 1050000
+      - quarter: "Q4-24"
+        stream: "Services"
+        revenue: 465000
+      - quarter: "Q1-25"
+        stream: "Product"
+        revenue: 980000
+      - quarter: "Q1-25"
+        stream: "Services"
+        revenue: 490000
+      - quarter: "Q2-25"
+        stream: "Product"
+        revenue: 1120000
+      - quarter: "Q2-25"
+        stream: "Services"
+        revenue: 530000
+  visualize:
+    type: line
+    columns: quarter
+    rows: revenue
+    marks:
+      color: stream
+    style:
+      width: 1920
+      height: 1080
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 1920
+    svg_height: 1080
+    lines: 2
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Q1-24", "Q2-24", "Q3-24", "Q4-24", "Q1-25", "Q2-25"]
+    y:
+      min: 0
+      format: numeric

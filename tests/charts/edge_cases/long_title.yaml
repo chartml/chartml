@@ -1,0 +1,60 @@
+name: "Bar chart — very long title (50+ characters)"
+tags: [edge-case, bar, long-title, layout, text-overflow]
+description: >
+  A bar chart with an unusually long title string (over 70 characters).
+  Tests that the title does not overflow the SVG bounds, does not
+  overlap chart content, and that the layout adjusts gracefully.
+
+chart:
+  type: chart
+  version: 1
+  title: "Quarterly Revenue Comparison Across All Regional Offices — FY 2025-2026 YTD Performance"
+  data:
+    provider: inline
+    rows:
+      - region: "Northeast"
+        revenue: 890000
+      - region: "Southeast"
+        revenue: 720000
+      - region: "Midwest"
+        revenue: 650000
+      - region: "Southwest"
+        revenue: 540000
+      - region: "West Coast"
+        revenue: 1120000
+  visualize:
+    type: bar
+    columns: region
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Northeast"
+      value: 890000
+    - label: "Southeast"
+      value: 720000
+    - label: "Midwest"
+      value: 650000
+    - label: "Southwest"
+      value: 540000
+    - label: "West Coast"
+      value: 1120000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Northeast", "Southeast", "Midwest", "Southwest", "West Coast"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

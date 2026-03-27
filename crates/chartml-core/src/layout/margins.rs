@@ -85,7 +85,7 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
     } else {
         70.0 // matches JS d3CartesianChart.js default marginLeft
     };
-    let left = (left_base + if config.has_y_axis_label { 20.0 } else { 0.0 })
+    let left = (left_base + if config.has_y_axis_label { 28.0 } else { 0.0 })
         .min(config.max_left_margin);
 
     // Right margin

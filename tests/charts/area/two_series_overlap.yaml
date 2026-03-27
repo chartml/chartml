@@ -1,0 +1,93 @@
+name: "Two overlapping area series — Organic vs Paid traffic"
+tags: [area, multi-series, overlap, transparency, legend]
+description: >
+  Two non-stacked area series plotted on the same axes, deliberately
+  overlapping. Organic and Paid traffic over 6 months. Tests that both
+  areas render with transparency so the overlap region is visible, and
+  that the legend distinguishes the two series.
+
+chart:
+  type: chart
+  version: 1
+  title: "Website Traffic — Organic vs Paid"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        source: "Organic"
+        visits: 18200
+      - month: "Jan"
+        source: "Paid"
+        visits: 12400
+      - month: "Feb"
+        source: "Organic"
+        visits: 19800
+      - month: "Feb"
+        source: "Paid"
+        visits: 14100
+      - month: "Mar"
+        source: "Organic"
+        visits: 22400
+      - month: "Mar"
+        source: "Paid"
+        visits: 17800
+      - month: "Apr"
+        source: "Organic"
+        visits: 24100
+      - month: "Apr"
+        source: "Paid"
+        visits: 21500
+      - month: "May"
+        source: "Organic"
+        visits: 25800
+      - month: "May"
+        source: "Paid"
+        visits: 23200
+      - month: "Jun"
+        source: "Organic"
+        visits: 27500
+      - month: "Jun"
+        source: "Paid"
+        visits: 19600
+  transform:
+    aggregate:
+      dimensions: [month, source]
+      measures:
+        - column: visits
+          aggregation: sum
+          name: total_visits
+  visualize:
+    type: area
+    columns: month
+    rows: total_visits
+    marks:
+      color: source
+
+assertions:
+  structure:
+    root: svg
+    areas: 2
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  area_paths:
+    - series: "Organic"
+      has_fill: true
+      fills_to_baseline: true
+    - series: "Paid"
+      has_fill: true
+      fills_to_baseline: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

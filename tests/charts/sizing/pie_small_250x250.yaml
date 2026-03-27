@@ -1,0 +1,52 @@
+name: "Small pie chart — 4 segments at 250x250 (small square widget)"
+tags: [pie, sizing, small, 250x250, square]
+description: >
+  Pie chart rendered at small square widget size (250x250). Tests that
+  arcs render correctly in a tight square viewport. Legend entries may
+  be cramped at this size.
+
+chart:
+  type: chart
+  version: 1
+  title: "Traffic Sources"
+  data:
+    provider: inline
+    rows:
+      - source: "Organic"
+        visits: 4500
+      - source: "Paid"
+        visits: 2800
+      - source: "Social"
+        visits: 1900
+      - source: "Direct"
+        visits: 1300
+  visualize:
+    type: pie
+    columns: source
+    rows: visits
+    style:
+      width: 250
+      height: 250
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 250
+    svg_height: 250
+    slices: 4
+    title_in_svg: false
+    legend: true
+    legend_entries: 4
+
+  slices:
+    - label: "Organic"
+      value: 4500
+    - label: "Paid"
+      value: 2800
+    - label: "Social"
+      value: 1900
+    - label: "Direct"
+      value: 1300
+
+  geometry:
+    arcs_sum_to_360: true

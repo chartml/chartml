@@ -1,0 +1,64 @@
+name: "Pie chart with 8 product category segments"
+tags: [pie, many-segments, 8-segments, legend]
+description: >
+  Eight product categories, testing that the renderer assigns 8 distinct
+  colors, the legend remains readable with many entries, and even the
+  smallest slices are visible as arcs (not collapsed to zero).
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue by Product Category"
+  data:
+    provider: inline
+    rows:
+      - category: "SaaS Platform"
+        revenue: 3200000
+      - category: "Consulting"
+        revenue: 1800000
+      - category: "Data Analytics"
+        revenue: 1500000
+      - category: "Cloud Hosting"
+        revenue: 1200000
+      - category: "Training"
+        revenue: 800000
+      - category: "Licensing"
+        revenue: 650000
+      - category: "Support Contracts"
+        revenue: 420000
+      - category: "Professional Services"
+        revenue: 310000
+  visualize:
+    type: pie
+    columns: category
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    slices: 8
+    title_in_svg: false
+    legend: true
+    legend_entries: 8
+
+  slices:
+    - label: "SaaS Platform"
+      value: 3200000
+    - label: "Consulting"
+      value: 1800000
+    - label: "Data Analytics"
+      value: 1500000
+    - label: "Cloud Hosting"
+      value: 1200000
+    - label: "Training"
+      value: 800000
+    - label: "Licensing"
+      value: 650000
+    - label: "Support Contracts"
+      value: 420000
+    - label: "Professional Services"
+      value: 310000
+
+  geometry:
+    arcs_sum_to_360: true
+    small_slices_visible: true

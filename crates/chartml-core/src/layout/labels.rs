@@ -36,9 +36,10 @@ impl LabelStrategy {
     ///
     /// Algorithm (cascading priority):
     /// 1. Horizontal: if labels fit without overlap
-    /// 2. Rotated: if <= 40 labels, rotate -45 degrees
-    /// 3. Truncated: if truncated labels fit and <= 50 labels
-    /// 4. Sampled: show an evenly-distributed subset
+    /// 2. Sampled-horizontal: if > 12 labels don't fit, sample to ~10 labels shown horizontally
+    /// 3. Rotated: if <= 40 labels, rotate -45 degrees
+    /// 4. Truncated: if truncated labels fit and <= 50 labels
+    /// 5. Sampled: show an evenly-distributed subset
     ///
     /// Parameters:
     /// - labels: the label strings
@@ -66,7 +67,16 @@ impl LabelStrategy {
             return LabelStrategy::Horizontal;
         }
 
-        // Strategy 2: Rotated -- rotate -45 degrees if not too many labels
+        // Strategy 2: Sampled-horizontal -- for dense axes (> 12 labels), prefer
+        // sampling over rotation. Compute a stride so ~10 labels are shown, keeping
+        // first and last. This avoids cluttered rotated text on temporal axes.
+        if label_count > 12 {
+            let target_count = 10usize.min(label_count);
+            let indices = strategic_indices(label_count, target_count);
+            return LabelStrategy::Sampled { indices };
+        }
+
+        // Strategy 3: Rotated -- rotate -45 degrees if not too many labels
         if label_count <= 40 {
             let angle_rad = config.rotation_angle_deg.to_radians();
             let required_vertical = max_width * angle_rad.sin();
@@ -75,12 +85,12 @@ impl LabelStrategy {
             return LabelStrategy::Rotated { margin, skip_factor };
         }
 
-        // Strategy 3: Truncated -- if truncated labels would fit
+        // Strategy 4: Truncated -- if truncated labels would fit
         if config.max_label_width + config.min_label_spacing <= available_per_label && label_count <= 50 {
             return LabelStrategy::Truncated { max_width: config.max_label_width };
         }
 
-        // Strategy 4: Sampled -- show a subset
+        // Strategy 5: Sampled -- show a subset
         let target_count = ((available_width / 120.0).floor() as usize).max(5);
         let indices = strategic_indices(label_count, target_count);
         LabelStrategy::Sampled { indices }
@@ -188,7 +198,9 @@ mod tests {
 
     #[test]
     fn strategy_rotated_when_moderate() {
-        let labels: Vec<String> = (0..20)
+        // Use <= 12 labels that don't fit horizontally to get Rotated
+        // (> 12 labels now prefer Sampled over Rotated)
+        let labels: Vec<String> = (0..10)
             .map(|i| format!("Category {}", i))
             .collect();
         let strategy = LabelStrategy::determine(&labels, 200.0, &LabelStrategyConfig::default());
@@ -197,17 +209,37 @@ mod tests {
     }
 
     #[test]
-    fn strategy_truncated_when_moderate_count() {
-        // 45 labels (> 40, so not Rotated; <= 50 so eligible for Truncated)
-        // with enough space per label for truncated width (120px + 10px spacing)
-        let labels: Vec<String> = (0..45)
-            .map(|i| format!("Very Long Category Name Number {}", i))
+    fn strategy_sampled_when_dense_axis() {
+        // > 12 labels that don't fit horizontally should be Sampled
+        let labels: Vec<String> = (0..20)
+            .map(|i| format!("Category {}", i))
             .collect();
-        // Need available_per_label >= 130 (120 + 10 spacing)
-        // 45 * 130 = 5850
-        let strategy = LabelStrategy::determine(&labels, 5850.0, &LabelStrategyConfig::default());
-        assert!(matches!(strategy, LabelStrategy::Truncated { .. }),
-            "Expected Truncated, got {:?}", strategy);
+        let strategy = LabelStrategy::determine(&labels, 200.0, &LabelStrategyConfig::default());
+        match &strategy {
+            LabelStrategy::Sampled { indices } => {
+                assert!(indices.contains(&0), "Should include first index");
+                assert!(indices.contains(&19), "Should include last index");
+                assert!(indices.len() <= 10, "Should show at most 10 labels, got {}", indices.len());
+            }
+            other => panic!("Expected Sampled, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn strategy_sampled_preserves_first_and_last() {
+        // 18 monthly labels (the temporal_x_axis_monthly case)
+        let labels: Vec<String> = (0..18)
+            .map(|i| format!("Jan {:02}", i + 1))
+            .collect();
+        let strategy = LabelStrategy::determine(&labels, 560.0, &LabelStrategyConfig::default());
+        match &strategy {
+            LabelStrategy::Sampled { indices } => {
+                assert!(indices.contains(&0), "Should include first index");
+                assert!(indices.contains(&17), "Should include last index");
+                assert!(indices.len() <= 10, "Should show at most 10 labels, got {}", indices.len());
+            }
+            other => panic!("Expected Sampled, got {:?}", other),
+        }
     }
 
     #[test]

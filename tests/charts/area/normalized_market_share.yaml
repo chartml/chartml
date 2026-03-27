@@ -1,0 +1,108 @@
+name: "Normalized (100%) stacked area — regional market share"
+tags: [area, normalized, multi-series, percentage, legend]
+description: >
+  Market share across 3 regions (Americas, EMEA, APAC) over 6 months,
+  shown as a 100% stacked area. Each vertical slice fills to 100%,
+  making it easy to see shifting proportions without absolute volume
+  distortion. Tests normalized mode and percentage y-axis.
+
+chart:
+  type: chart
+  version: 1
+  title: "Regional Market Share"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        region: "Americas"
+        revenue: 480000
+      - month: "Jan"
+        region: "EMEA"
+        revenue: 310000
+      - month: "Jan"
+        region: "APAC"
+        revenue: 210000
+      - month: "Feb"
+        region: "Americas"
+        revenue: 465000
+      - month: "Feb"
+        region: "EMEA"
+        revenue: 325000
+      - month: "Feb"
+        region: "APAC"
+        revenue: 230000
+      - month: "Mar"
+        region: "Americas"
+        revenue: 450000
+      - month: "Mar"
+        region: "EMEA"
+        revenue: 340000
+      - month: "Mar"
+        region: "APAC"
+        revenue: 260000
+      - month: "Apr"
+        region: "Americas"
+        revenue: 440000
+      - month: "Apr"
+        region: "EMEA"
+        revenue: 350000
+      - month: "Apr"
+        region: "APAC"
+        revenue: 290000
+      - month: "May"
+        region: "Americas"
+        revenue: 430000
+      - month: "May"
+        region: "EMEA"
+        revenue: 355000
+      - month: "May"
+        region: "APAC"
+        revenue: 315000
+      - month: "Jun"
+        region: "Americas"
+        revenue: 420000
+      - month: "Jun"
+        region: "EMEA"
+        revenue: 360000
+      - month: "Jun"
+        region: "APAC"
+        revenue: 340000
+  transform:
+    aggregate:
+      dimensions: [month, region]
+      measures:
+        - column: revenue
+          aggregation: sum
+          name: total_revenue
+  visualize:
+    type: area
+    mode: normalized
+    columns: month
+    rows: total_revenue
+    marks:
+      color: region
+
+assertions:
+  structure:
+    root: svg
+    areas: 3
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  normalized:
+    all_stacks_reach_100: true
+
+  scale:
+    y_min: 0
+    y_max: 100
+    y_unit: percent
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+      orientation: horizontal
+    y:
+      min: 0
+      max: 100
+      format: percent

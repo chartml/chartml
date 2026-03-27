@@ -1,0 +1,64 @@
+name: "Steep growth — 10x increase in value range"
+tags: [line, scale, large-range, growth, single-series]
+description: >
+  Monthly revenue showing exponential-looking growth from $12k to $125k
+  over 12 months — roughly a 10x increase. Tests that the y-axis scale
+  handles a very large value range gracefully with nice domain rounding,
+  reasonable tick distribution, and proportional bar heights that do not
+  visually compress the early low values into invisibility.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Revenue — Hypergrowth"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 12000
+      - month: "Feb"
+        revenue: 15000
+      - month: "Mar"
+        revenue: 19000
+      - month: "Apr"
+        revenue: 25000
+      - month: "May"
+        revenue: 32000
+      - month: "Jun"
+        revenue: 41000
+      - month: "Jul"
+        revenue: 52000
+      - month: "Aug"
+        revenue: 64000
+      - month: "Sep"
+        revenue: 78000
+      - month: "Oct"
+        revenue: 91000
+      - month: "Nov"
+        revenue: 108000
+      - month: "Dec"
+        revenue: 125000
+  visualize:
+    type: line
+    columns: month
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+    headroom_pct: "5-20"
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    y:
+      min: 0
+      format: numeric

@@ -86,7 +86,6 @@ impl ChartRenderer for PieRenderer {
         });
 
         // Legend — rendered below the pie, horizontally centered
-        let legend_y = cy + radius + 30.0;
         let legend_config = LegendConfig {
             alignment: LegendAlignment::Center,
             ..LegendConfig::default()
@@ -96,6 +95,8 @@ impl ChartRenderer for PieRenderer {
             .map(|i| config.colors.get(i % config.colors.len()).cloned().unwrap_or_else(|| "#999".to_string()))
             .collect();
         let legend_layout = calculate_legend_layout(&labels, &legend_colors, width, &legend_config);
+        // Position legend so it fits within the SVG: bottom of legend = height - 8
+        let legend_y = height - legend_layout.total_height - 8.0;
         for item in legend_layout.items.iter().filter(|i| i.visible) {
             // Colored swatch rect
             children.push(ChartElement::Rect {

@@ -1,0 +1,66 @@
+name: "Large values in billions — enterprise revenue"
+tags: [bar, large-values, formatting, single-series]
+description: >
+  Revenue figures in the billions, as seen in Fortune 500 dashboards.
+  Tests that the y-axis tick labels render with appropriate formatting
+  or abbreviation (e.g. 1B, 2B) rather than long numeric strings
+  like 1,000,000,000.
+
+chart:
+  type: chart
+  version: 1
+  title: "Global Revenue by Division (FY2025)"
+  data:
+    provider: inline
+    rows:
+      - division: "Cloud Services"
+        revenue: 3520000000
+      - division: "Enterprise Software"
+        revenue: 2870000000
+      - division: "Advertising"
+        revenue: 1940000000
+      - division: "Hardware"
+        revenue: 1260000000
+      - division: "Professional Services"
+        revenue: 890000000
+  visualize:
+    type: bar
+    columns: division
+    rows: revenue
+    axes:
+      left:
+        format: "$,.1f"
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Cloud Services"
+      value: 3520000000
+    - label: "Enterprise Software"
+      value: 2870000000
+    - label: "Advertising"
+      value: 1940000000
+    - label: "Hardware"
+      value: 1260000000
+    - label: "Professional Services"
+      value: 890000000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+    magnitude: billions
+
+  axes:
+    x:
+      labels: ["Cloud Services", "Enterprise Software", "Advertising", "Hardware", "Professional Services"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: currency
+      tick_labels_readable: true

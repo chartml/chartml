@@ -1,0 +1,81 @@
+name: "Annotation target band — revenue with acceptable range"
+tags: [bar, annotation, band, single-series]
+description: >
+  Monthly revenue with a shaded band annotation showing the
+  acceptable target range ($140k-$160k). Bars that fall within
+  the band are on-target; those outside are over- or under-performing.
+  Common in operational dashboards with tolerance ranges.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Revenue vs Target Band"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 132000
+      - month: "Feb"
+        revenue: 148000
+      - month: "Mar"
+        revenue: 157000
+      - month: "Apr"
+        revenue: 143000
+      - month: "May"
+        revenue: 161000
+      - month: "Jun"
+        revenue: 138000
+  visualize:
+    type: bar
+    columns: month
+    rows: revenue
+    annotations:
+      - type: band
+        axis: left
+        from: 140000
+        to: 160000
+        label: "Target Range"
+        color: "#27ae60"
+        opacity: 0.15
+
+assertions:
+  structure:
+    root: svg
+    bars: 6
+    title_in_svg: false
+    legend: false
+    annotation_bands: 1
+
+  bars:
+    - label: "Jan"
+      value: 132000
+    - label: "Feb"
+      value: 148000
+    - label: "Mar"
+      value: 157000
+    - label: "Apr"
+      value: 143000
+    - label: "May"
+      value: 161000
+    - label: "Jun"
+      value: 138000
+
+  annotations:
+    - type: band
+      from: 140000
+      to: 160000
+      label: "Target Range"
+      band_visible: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

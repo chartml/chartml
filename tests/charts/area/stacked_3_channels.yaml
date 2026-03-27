@@ -1,0 +1,108 @@
+name: "Stacked area — revenue by channel over 6 months"
+tags: [area, stacked, multi-series, legend]
+description: >
+  Revenue split across Direct, Partner, and Online channels shown
+  as stacked areas over 6 months. The stacking lets executives
+  see both individual channel growth and total revenue at a glance.
+  Tests stacked mode, color encoding, and legend rendering.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue by Channel"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        channel: "Direct"
+        revenue: 185000
+      - month: "Jan"
+        channel: "Partner"
+        revenue: 92000
+      - month: "Jan"
+        channel: "Online"
+        revenue: 64000
+      - month: "Feb"
+        channel: "Direct"
+        revenue: 198000
+      - month: "Feb"
+        channel: "Partner"
+        revenue: 105000
+      - month: "Feb"
+        channel: "Online"
+        revenue: 78000
+      - month: "Mar"
+        channel: "Direct"
+        revenue: 210000
+      - month: "Mar"
+        channel: "Partner"
+        revenue: 113000
+      - month: "Mar"
+        channel: "Online"
+        revenue: 91000
+      - month: "Apr"
+        channel: "Direct"
+        revenue: 224000
+      - month: "Apr"
+        channel: "Partner"
+        revenue: 118000
+      - month: "Apr"
+        channel: "Online"
+        revenue: 102000
+      - month: "May"
+        channel: "Direct"
+        revenue: 237000
+      - month: "May"
+        channel: "Partner"
+        revenue: 126000
+      - month: "May"
+        channel: "Online"
+        revenue: 119000
+      - month: "Jun"
+        channel: "Direct"
+        revenue: 251000
+      - month: "Jun"
+        channel: "Partner"
+        revenue: 134000
+      - month: "Jun"
+        channel: "Online"
+        revenue: 138000
+  transform:
+    aggregate:
+      dimensions: [month, channel]
+      measures:
+        - column: revenue
+          aggregation: sum
+          name: total_revenue
+  visualize:
+    type: area
+    mode: stacked
+    columns: month
+    rows: total_revenue
+    marks:
+      color: channel
+
+assertions:
+  structure:
+    root: svg
+    areas: 3
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  stacked:
+    series_order: ["Direct", "Partner", "Online"]
+    areas_stacked_on_each_other: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

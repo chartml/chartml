@@ -1,0 +1,54 @@
+name: "Portrait line chart — 6 points at 400x800"
+tags: [line, sizing, portrait, 400x800, unusual-aspect]
+description: >
+  Line chart rendered in portrait orientation (400x800). An unusual
+  aspect ratio where height is double the width. Tests that the line
+  path and axes render correctly in a very tall narrow viewport.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Churn Rate"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        churn: 5.2
+      - month: "Feb"
+        churn: 4.8
+      - month: "Mar"
+        churn: 4.5
+      - month: "Apr"
+        churn: 4.1
+      - month: "May"
+        churn: 3.8
+      - month: "Jun"
+        churn: 3.5
+  visualize:
+    type: line
+    columns: month
+    rows: churn
+    style:
+      width: 400
+      height: 800
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 400
+    svg_height: 800
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+    y:
+      min: 0
+      format: numeric

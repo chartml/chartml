@@ -1,0 +1,70 @@
+name: "Line chart with target band annotation"
+tags: [line, annotation, band, single-series]
+description: >
+  Weekly NPS score with a shaded band showing the acceptable range
+  (40-60). Scores within the band are on-target; those outside indicate
+  action needed. Tests band annotation rendering behind the line path,
+  with correct vertical positioning from the y-scale.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly NPS Score vs Target Band"
+  data:
+    provider: inline
+    rows:
+      - week: "Wk1"
+        nps: 52
+      - week: "Wk2"
+        nps: 48
+      - week: "Wk3"
+        nps: 55
+      - week: "Wk4"
+        nps: 38
+      - week: "Wk5"
+        nps: 61
+      - week: "Wk6"
+        nps: 57
+      - week: "Wk7"
+        nps: 44
+      - week: "Wk8"
+        nps: 50
+  visualize:
+    type: line
+    columns: week
+    rows: nps
+    annotations:
+      - type: band
+        axis: left
+        from: 40
+        to: 60
+        label: "Target Range"
+        color: "#27ae60"
+        opacity: 0.15
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+    annotation_bands: 1
+
+  annotations:
+    - type: band
+      from: 40
+      to: 60
+      label: "Target Range"
+      band_visible: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Wk1", "Wk2", "Wk3", "Wk4", "Wk5", "Wk6", "Wk7", "Wk8"]
+    y:
+      min: 0
+      format: numeric

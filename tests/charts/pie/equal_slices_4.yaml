@@ -1,0 +1,49 @@
+name: "Pie chart — 4 equal slices at 25% each"
+tags: [pie, equal-slices, edge-case, geometry]
+description: >
+  Four categories with identical values, producing four equal 90-degree
+  arcs. Tests the edge case where all slices are exactly equal, ensuring
+  no rounding errors cause visual asymmetry.
+
+chart:
+  type: chart
+  version: 1
+  title: "Quarterly Budget — Equal Allocation"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1"
+        budget: 250000
+      - quarter: "Q2"
+        budget: 250000
+      - quarter: "Q3"
+        budget: 250000
+      - quarter: "Q4"
+        budget: 250000
+  visualize:
+    type: pie
+    columns: quarter
+    rows: budget
+
+assertions:
+  structure:
+    root: svg
+    slices: 4
+    title_in_svg: false
+    legend: true
+    legend_entries: 4
+
+  slices:
+    - label: "Q1"
+      value: 250000
+    - label: "Q2"
+      value: 250000
+    - label: "Q3"
+      value: 250000
+    - label: "Q4"
+      value: 250000
+
+  geometry:
+    arcs_sum_to_360: true
+    equal_arc_angles: true
+    degrees_per_slice: 90

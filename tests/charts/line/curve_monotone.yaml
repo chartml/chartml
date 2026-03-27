@@ -1,0 +1,65 @@
+name: "Monotone curve — smooth temperature trend"
+tags: [line, curve, monotone, style, single-series]
+description: >
+  Average daily temperature over 10 days using monotone-x interpolation.
+  The default curve type produces smooth lines that do not overshoot
+  the data range, making it suitable for continuous physical measurements.
+  Tests that the SVG path contains cubic Bezier curve commands (C) rather
+  than only linear segments (L).
+
+chart:
+  type: chart
+  version: 1
+  title: "Average Daily Temperature"
+  data:
+    provider: inline
+    rows:
+      - day: "Mon"
+        temp: 62
+      - day: "Tue"
+        temp: 65
+      - day: "Wed"
+        temp: 59
+      - day: "Thu"
+        temp: 68
+      - day: "Fri"
+        temp: 72
+      - day: "Sat"
+        temp: 70
+      - day: "Sun"
+        temp: 64
+      - day: "Mon2"
+        temp: 67
+      - day: "Tue2"
+        temp: 71
+      - day: "Wed2"
+        temp: 74
+  visualize:
+    type: line
+    columns: day
+    rows: temp
+    style:
+      curveType: monotone
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  curve:
+    type: monotone
+    path_contains_C: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Mon2", "Tue2", "Wed2"]
+    y:
+      min: 0
+      format: numeric

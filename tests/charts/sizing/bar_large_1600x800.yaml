@@ -1,0 +1,77 @@
+name: "Large bar chart — 8 bars at 1600x800 (full-page)"
+tags: [bar, sizing, large, 1600x800]
+description: >
+  Bar chart rendered at full-page size (1600x800). Tests that bars
+  render correctly in a large viewport typical of full-page reports
+  or presentation slides.
+
+chart:
+  type: chart
+  version: 1
+  title: "Annual Revenue by Division"
+  data:
+    provider: inline
+    rows:
+      - division: "North America"
+        revenue: 4200000
+      - division: "Europe"
+        revenue: 3100000
+      - division: "Asia Pacific"
+        revenue: 2800000
+      - division: "Latin America"
+        revenue: 1500000
+      - division: "Middle East"
+        revenue: 950000
+      - division: "Africa"
+        revenue: 620000
+      - division: "India"
+        revenue: 1800000
+      - division: "Oceania"
+        revenue: 780000
+  visualize:
+    type: bar
+    columns: division
+    rows: revenue
+    style:
+      width: 1600
+      height: 800
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 1600
+    svg_height: 800
+    bars: 8
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "North America"
+      value: 4200000
+    - label: "Europe"
+      value: 3100000
+    - label: "Asia Pacific"
+      value: 2800000
+    - label: "Latin America"
+      value: 1500000
+    - label: "Middle East"
+      value: 950000
+    - label: "Africa"
+      value: 620000
+    - label: "India"
+      value: 1800000
+    - label: "Oceania"
+      value: 780000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["North America", "Europe", "Asia Pacific", "Latin America", "Middle East", "Africa", "India", "Oceania"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

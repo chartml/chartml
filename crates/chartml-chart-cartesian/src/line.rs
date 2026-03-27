@@ -9,6 +9,8 @@ use chartml_core::shapes::LineGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
+use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
+
 use crate::helpers::{GridConfig, LegendMark, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_legend_with_mark, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
@@ -81,7 +83,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     let prelim_value_min = all_values_prelim.iter().cloned().fold(f64::INFINITY, f64::min);
     let prelim_domain_min = if prelim_value_min >= 0.0 { 0.0 } else { prelim_value_min };
     let prelim_domain_max = if prelim_value_max <= 0.0 { 1.0 } else { prelim_value_max };
-    let (prelim_domain_min, prelim_domain_max) = crate::helpers::nice_domain(prelim_domain_min, prelim_domain_max, 10);
+    let (prelim_domain_min, prelim_domain_max) = crate::helpers::nice_domain(prelim_domain_min, prelim_domain_max, 5);
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
     let prelim_labels = vec![
@@ -89,9 +91,14 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         crate::helpers::format_value(prelim_domain_min, y_fmt_ref),
     ];
 
+    let has_y_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.left.as_ref())
+        .and_then(|a| a.label.as_ref())
+        .is_some();
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: has_series,
+        has_y_axis_label,
         x_label_strategy_margin: x_extra_margin,
         y_tick_labels: prelim_labels,
         ..Default::default()
@@ -126,7 +133,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
     // Apply D3-style nice domain rounding BEFORE creating the scale,
     // so data points and axis ticks use the same domain.
-    let (domain_min, domain_max) = crate::helpers::nice_domain(domain_min, domain_max, 10);
+    let (domain_min, domain_max) = crate::helpers::nice_domain(domain_min, domain_max, 5);
 
     let band = ScaleBand::new(categories.clone(), (0.0, inner_width));
     let linear = ScaleLinear::new((domain_min, domain_max), (inner_height, 0.0));
@@ -139,14 +146,18 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     let grid = GridConfig::from_config(config);
 
     let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
+    let left_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.left.as_ref())
+        .and_then(|a| a.label.as_deref());
     let y_axis_elements = generate_y_axis_numeric(
         (domain_min, domain_max),
         (inner_height, 0.0),
         margins.left,
-        None,
+        y_fmt_ref,
         adaptive_tick_count(inner_height),
         Some(inner_width),
         &grid,
+        left_axis_label,
     );
 
     children.push(ChartElement::Group {
@@ -190,8 +201,13 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         }
     }
 
-    // Line paths
-    let line_gen = LineGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
+    // Line paths — select curve type from style.curveType
+    let curve_type = match config.visualize.style.as_ref().and_then(|s| s.curve_type.as_deref()) {
+        Some("step") => chartml_core::shapes::CurveType::Step,
+        Some("linear") => chartml_core::shapes::CurveType::Linear,
+        _ => chartml_core::shapes::CurveType::MonotoneX,
+    };
+    let line_gen = LineGenerator::new().curve(curve_type);
     let bandwidth = band.bandwidth();
     let mut line_elements = Vec::new();
 
@@ -294,18 +310,22 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 continue;
             }
 
-            let path_d = line_gen.generate(&points);
+            // Only emit a line path when there are 2+ points (a single point
+            // produces a degenerate M-only path with no visible line).
+            if points.len() > 1 {
+                let path_d = line_gen.generate(&points);
 
-            line_elements.push(ChartElement::Path {
-                d: path_d,
-                fill: None,
-                stroke: Some(color.clone()),
-                stroke_width: Some(2.0),
-                stroke_dasharray: dasharray,
-                opacity: None,
-                class: "line".to_string(),
-                data: Some(ElementData::new(&label, "").with_series(&label)),
-            });
+                line_elements.push(ChartElement::Path {
+                    d: path_d,
+                    fill: None,
+                    stroke: Some(color.clone()),
+                    stroke_width: Some(2.0),
+                    stroke_dasharray: dasharray,
+                    opacity: None,
+                    class: "line".to_string(),
+                    data: Some(ElementData::new(&label, "").with_series(&label)),
+                });
+            }
 
             // Hover dots
             for (i, &(px, py)) in points.iter().enumerate() {
@@ -350,7 +370,10 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         }
 
         // Legend
-        let legend_elements = generate_legend_with_mark(&series_names, &series_colors, config.width, config.height - 10.0, LegendMark::Line);
+        let legend_config = LegendConfig::default();
+        let legend_layout = calculate_legend_layout(&series_names, &series_colors, config.width, &legend_config);
+        let legend_y = config.height - legend_layout.total_height - 8.0;
+        let legend_elements = generate_legend_with_mark(&series_names, &series_colors, config.width, legend_y, LegendMark::Line);
         children.push(ChartElement::Group {
             class: "legend".to_string(),
             transform: None,
@@ -393,23 +416,25 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 continue;
             }
 
-            let path_d = line_gen.generate(&points);
             let color = config
                 .colors
                 .get(series_idx)
                 .cloned()
                 .unwrap_or_else(|| "#2E7D9A".to_string());
 
-            line_elements.push(ChartElement::Path {
-                d: path_d,
-                fill: None,
-                stroke: Some(color.clone()),
-                stroke_width: Some(2.0),
-                stroke_dasharray: None,
-                opacity: None,
-                class: "line".to_string(),
-                data: Some(ElementData::new(series_name, "").with_series(series_name)),
-            });
+            if points.len() > 1 {
+                let path_d = line_gen.generate(&points);
+                line_elements.push(ChartElement::Path {
+                    d: path_d,
+                    fill: None,
+                    stroke: Some(color.clone()),
+                    stroke_width: Some(2.0),
+                    stroke_dasharray: None,
+                    opacity: None,
+                    class: "line".to_string(),
+                    data: Some(ElementData::new(series_name, "").with_series(series_name)),
+                });
+            }
 
             // Hover dots at each data point
             for (i, &(px, py)) in points.iter().enumerate() {
@@ -427,8 +452,11 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         }
 
         // Legend
+        let legend_config = LegendConfig::default();
+        let legend_layout = calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config);
+        let legend_y = config.height - legend_layout.total_height - 8.0;
         let legend_elements =
-            generate_legend_with_mark(&series_names, &config.colors, config.width, config.height - 10.0, LegendMark::Line);
+            generate_legend_with_mark(&series_names, &config.colors, config.width, legend_y, LegendMark::Line);
         children.push(ChartElement::Group {
             class: "legend".to_string(),
             transform: None,
@@ -460,23 +488,25 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         }
 
         if !points.is_empty() {
-            let path_d = line_gen.generate(&points);
             let color = config
                 .colors
                 .first()
                 .cloned()
                 .unwrap_or_else(|| "#2E7D9A".to_string());
 
-            line_elements.push(ChartElement::Path {
-                d: path_d,
-                fill: None,
-                stroke: Some(color.clone()),
-                stroke_width: Some(2.0),
-                stroke_dasharray: None,
-                opacity: None,
-                class: "line".to_string(),
-                data: None,
-            });
+            if points.len() > 1 {
+                let path_d = line_gen.generate(&points);
+                line_elements.push(ChartElement::Path {
+                    d: path_d,
+                    fill: None,
+                    stroke: Some(color.clone()),
+                    stroke_width: Some(2.0),
+                    stroke_dasharray: None,
+                    opacity: None,
+                    class: "line".to_string(),
+                    data: None,
+                });
+            }
 
             // Hover dots at each data point
             for (i, &(px, py)) in points.iter().enumerate() {

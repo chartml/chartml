@@ -1,0 +1,55 @@
+name: "Negative growth — declining metric over 8 weeks"
+tags: [line, declining, negative-trend, single-series]
+description: >
+  Active user count steadily declining over 8 weeks, representing churn
+  or product decline. All values decrease from week to week. Tests that
+  the renderer correctly handles a monotonically decreasing series,
+  scales the y-axis appropriately, and does not clip or distort the
+  downward trend.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly Active Users — Declining"
+  data:
+    provider: inline
+    rows:
+      - week: "Wk1"
+        users: 12500
+      - week: "Wk2"
+        users: 11800
+      - week: "Wk3"
+        users: 10900
+      - week: "Wk4"
+        users: 10200
+      - week: "Wk5"
+        users: 9400
+      - week: "Wk6"
+        users: 8700
+      - week: "Wk7"
+        users: 7900
+      - week: "Wk8"
+        users: 7100
+  visualize:
+    type: line
+    columns: week
+    rows: users
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Wk1", "Wk2", "Wk3", "Wk4", "Wk5", "Wk6", "Wk7", "Wk8"]
+    y:
+      min: 0
+      format: numeric

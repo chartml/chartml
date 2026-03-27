@@ -1,0 +1,46 @@
+name: "Line chart — flat line with all values 50"
+tags: [edge-case, same-values, line, flat-line]
+description: >
+  All data points have value 50, producing a perfectly horizontal
+  line. Tests that the renderer draws the flat line without errors
+  and that the y-axis still shows reasonable tick marks around the
+  constant value.
+
+chart:
+  type: chart
+  version: 1
+  title: "Constant Metric Over Time"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        value: 50
+      - month: "Feb"
+        value: 50
+      - month: "Mar"
+        value: 50
+      - month: "Apr"
+        value: 50
+      - month: "May"
+        value: 50
+  visualize:
+    type: line
+    columns: month
+    rows: value
+
+assertions:
+  structure:
+    root: svg
+    title_in_svg: false
+    legend: false
+
+  line:
+    flat: true
+    constant_value: 50
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May"]
+    y:
+      min: 0
+      format: numeric

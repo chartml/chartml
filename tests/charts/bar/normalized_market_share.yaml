@@ -1,0 +1,102 @@
+name: "Normalized (100%) stacked bar — market share by region"
+tags: [bar, normalized, multi-series, percentage, legend]
+description: >
+  Market share across 4 regions over 4 quarters, shown as 100%
+  stacked bars. Each bar reaches full chart height. Common in
+  competitive analysis dashboards to show shifting share without
+  absolute volume distortion.
+
+chart:
+  type: chart
+  version: 1
+  title: "Regional Market Share"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1"
+        region: "North America"
+        revenue: 520000
+      - quarter: "Q1"
+        region: "Europe"
+        revenue: 380000
+      - quarter: "Q1"
+        region: "Asia Pacific"
+        revenue: 290000
+      - quarter: "Q1"
+        region: "Latin America"
+        revenue: 110000
+      - quarter: "Q2"
+        region: "North America"
+        revenue: 540000
+      - quarter: "Q2"
+        region: "Europe"
+        revenue: 395000
+      - quarter: "Q2"
+        region: "Asia Pacific"
+        revenue: 320000
+      - quarter: "Q2"
+        region: "Latin America"
+        revenue: 125000
+      - quarter: "Q3"
+        region: "North America"
+        revenue: 510000
+      - quarter: "Q3"
+        region: "Europe"
+        revenue: 410000
+      - quarter: "Q3"
+        region: "Asia Pacific"
+        revenue: 355000
+      - quarter: "Q3"
+        region: "Latin America"
+        revenue: 135000
+      - quarter: "Q4"
+        region: "North America"
+        revenue: 560000
+      - quarter: "Q4"
+        region: "Europe"
+        revenue: 420000
+      - quarter: "Q4"
+        region: "Asia Pacific"
+        revenue: 385000
+      - quarter: "Q4"
+        region: "Latin America"
+        revenue: 145000
+  transform:
+    aggregate:
+      dimensions: [quarter, region]
+      measures:
+        - column: revenue
+          aggregation: sum
+          name: total_revenue
+  visualize:
+    type: bar
+    mode: normalized
+    columns: quarter
+    rows: total_revenue
+    marks:
+      color: region
+
+assertions:
+  structure:
+    root: svg
+    bars: 16
+    title_in_svg: false
+    legend: true
+    legend_entries: 4
+
+  normalized:
+    all_stacks_reach_100: true
+
+  scale:
+    y_min: 0
+    y_max: 100
+    y_unit: percent
+
+  axes:
+    x:
+      labels: ["Q1", "Q2", "Q3", "Q4"]
+      orientation: horizontal
+    y:
+      min: 0
+      max: 100
+      format: percent

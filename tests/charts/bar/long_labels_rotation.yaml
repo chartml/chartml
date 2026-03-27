@@ -1,0 +1,85 @@
+name: "Long x-axis labels requiring rotation"
+tags: [bar, label-rotation, long-labels, single-series]
+description: >
+  8 product categories with verbose names (20+ characters each).
+  Without rotation the labels would overlap. Tests that the renderer
+  detects overlap and applies a rotation transform on tick labels.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue by Product Category"
+  data:
+    provider: inline
+    rows:
+      - category: "Enterprise Resource Planning"
+        revenue: 1450000
+      - category: "Customer Relationship Mgmt"
+        revenue: 1280000
+      - category: "Supply Chain Management"
+        revenue: 980000
+      - category: "Human Capital Management"
+        revenue: 860000
+      - category: "Business Intelligence Suite"
+        revenue: 740000
+      - category: "Content Management System"
+        revenue: 620000
+      - category: "Project Portfolio Manager"
+        revenue: 510000
+      - category: "Identity & Access Control"
+        revenue: 430000
+  visualize:
+    type: bar
+    columns: category
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 8
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Enterprise Resource Planning"
+      value: 1450000
+    - label: "Customer Relationship Mgmt"
+      value: 1280000
+    - label: "Supply Chain Management"
+      value: 980000
+    - label: "Human Capital Management"
+      value: 860000
+    - label: "Business Intelligence Suite"
+      value: 740000
+    - label: "Content Management System"
+      value: 620000
+    - label: "Project Portfolio Manager"
+      value: 510000
+    - label: "Identity & Access Control"
+      value: 430000
+
+  label_rotation:
+    x_labels_rotated: true
+    transform_exists: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "Enterprise Resource Planning"
+        - "Customer Relationship Mgmt"
+        - "Supply Chain Management"
+        - "Human Capital Management"
+        - "Business Intelligence Suite"
+        - "Content Management System"
+        - "Project Portfolio Manager"
+        - "Identity & Access Control"
+      orientation: horizontal
+      rotation: true
+    y:
+      min: 0
+      format: numeric

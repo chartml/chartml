@@ -1,0 +1,41 @@
+name: "Single data point — edge case"
+tags: [line, edge-case, single-point, single-series]
+description: >
+  Only one data point in the entire dataset. The chart should render
+  without errors and display at least a dot/circle at the single point's
+  position. This edge case catches divide-by-zero bugs in scale
+  calculations and path generation that assumes multiple points.
+
+chart:
+  type: chart
+  version: 1
+  title: "Q1 Total Revenue"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1 2025"
+        revenue: 287000
+  visualize:
+    type: line
+    columns: quarter
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    lines: 0
+    title_in_svg: false
+    legend: false
+    dots_min: 1
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Q1 2025"]
+    y:
+      min: 0
+      format: numeric

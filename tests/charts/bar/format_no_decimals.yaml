@@ -1,0 +1,71 @@
+name: "Integer-only formatting — no decimal ticks"
+tags: [bar, axis-format, integer, no-decimals, single-series]
+description: >
+  Integer values from 1 to 50 with format ",.0f". Tests that y-axis
+  ticks show whole numbers only (e.g. 10, 20, 30) with no decimal
+  point or trailing zeros. Common for count-based metrics like
+  units sold, tickets closed, or team headcount.
+
+chart:
+  type: chart
+  version: 1
+  title: "Support Tickets by Agent"
+  data:
+    provider: inline
+    rows:
+      - agent: "Alice"
+        tickets: 47
+      - agent: "Bob"
+        tickets: 32
+      - agent: "Carol"
+        tickets: 19
+      - agent: "Dave"
+        tickets: 8
+      - agent: "Eve"
+        tickets: 1
+      - agent: "Frank"
+        tickets: 50
+  visualize:
+    type: bar
+    columns: agent
+    rows: tickets
+    axes:
+      left:
+        label: "Tickets Closed"
+        format: ",.0f"
+
+assertions:
+  structure:
+    root: svg
+    bars: 6
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Alice"
+      value: 47
+    - label: "Bob"
+      value: 32
+    - label: "Carol"
+      value: 19
+    - label: "Dave"
+      value: 8
+    - label: "Eve"
+      value: 1
+    - label: "Frank"
+      value: 50
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Alice", "Bob", "Carol", "Dave", "Eve", "Frank"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric
+      label: "Tickets Closed"
+      no_decimals: true

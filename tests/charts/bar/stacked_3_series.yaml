@@ -1,0 +1,135 @@
+name: "Stacked bar — revenue by product line across quarters"
+tags: [bar, stacked, multi-series, legend]
+description: >
+  Revenue broken down by Hardware, Software, and Services over
+  4 quarters. A classic stacked bar that lets execs see both the
+  total and the composition at a glance. Tests stacked mode, legend
+  rendering, and that segment heights sum correctly.
+
+chart:
+  type: chart
+  version: 1
+  title: "2025 Revenue by Product Line"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1"
+        product_line: "Hardware"
+        revenue: 185000
+      - quarter: "Q1"
+        product_line: "Software"
+        revenue: 124000
+      - quarter: "Q1"
+        product_line: "Services"
+        revenue: 67000
+      - quarter: "Q2"
+        product_line: "Hardware"
+        revenue: 198000
+      - quarter: "Q2"
+        product_line: "Software"
+        revenue: 141000
+      - quarter: "Q2"
+        product_line: "Services"
+        revenue: 73000
+      - quarter: "Q3"
+        product_line: "Hardware"
+        revenue: 176000
+      - quarter: "Q3"
+        product_line: "Software"
+        revenue: 159000
+      - quarter: "Q3"
+        product_line: "Services"
+        revenue: 81000
+      - quarter: "Q4"
+        product_line: "Hardware"
+        revenue: 221000
+      - quarter: "Q4"
+        product_line: "Software"
+        revenue: 183000
+      - quarter: "Q4"
+        product_line: "Services"
+        revenue: 92000
+  transform:
+    aggregate:
+      dimensions: [quarter, product_line]
+      measures:
+        - column: revenue
+          aggregation: sum
+          name: total_revenue
+  visualize:
+    type: bar
+    mode: stacked
+    columns: quarter
+    rows: total_revenue
+    marks:
+      color: product_line
+
+assertions:
+  structure:
+    root: svg
+    bars: 12
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  bars:
+    - label: "Q1"
+      series: "Hardware"
+      value: 185000
+    - label: "Q1"
+      series: "Software"
+      value: 124000
+    - label: "Q1"
+      series: "Services"
+      value: 67000
+    - label: "Q2"
+      series: "Hardware"
+      value: 198000
+    - label: "Q2"
+      series: "Software"
+      value: 141000
+    - label: "Q2"
+      series: "Services"
+      value: 73000
+    - label: "Q3"
+      series: "Hardware"
+      value: 176000
+    - label: "Q3"
+      series: "Software"
+      value: 159000
+    - label: "Q3"
+      series: "Services"
+      value: 81000
+    - label: "Q4"
+      series: "Hardware"
+      value: 221000
+    - label: "Q4"
+      series: "Software"
+      value: 183000
+    - label: "Q4"
+      series: "Services"
+      value: 92000
+
+  stacked:
+    totals:
+      - label: "Q1"
+        total: 376000
+      - label: "Q2"
+        total: 412000
+      - label: "Q3"
+        total: 416000
+      - label: "Q4"
+        total: 496000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Q1", "Q2", "Q3", "Q4"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

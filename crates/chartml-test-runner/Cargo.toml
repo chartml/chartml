@@ -1,0 +1,21 @@
+[package]
+name = "chartml-test-runner"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Test runner for chartml chart rendering: YAML spec → element tree dump + SVG"
+
+[[bin]]
+name = "chartml-test"
+path = "src/main.rs"
+
+[dependencies]
+chartml-core = { path = "../chartml-core" }
+chartml-chart-cartesian = { path = "../chartml-chart-cartesian" }
+chartml-chart-pie = { path = "../chartml-chart-pie" }
+chartml-chart-scatter = { path = "../chartml-chart-scatter" }
+chartml-chart-metric = { path = "../chartml-chart-metric" }
+chartml-render = { path = "../chartml-render" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"

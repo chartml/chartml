@@ -1,0 +1,120 @@
+name: "Bar chart — 15 product names (label rotation trigger)"
+tags: [bar, label-density, many-categories, label-rotation, single-series]
+description: >
+  15 SaaS product names as bar categories. With this many medium-length
+  labels, the renderer must detect overlap and apply rotation to keep
+  labels readable. Tests the rotation trigger threshold.
+
+chart:
+  type: chart
+  version: 1
+  title: "Annual Revenue by Product"
+  data:
+    provider: inline
+    rows:
+      - product: "Customer Analytics"
+        revenue: 2150000
+      - product: "Revenue Optimization"
+        revenue: 1980000
+      - product: "Inventory Tracker"
+        revenue: 1740000
+      - product: "Payroll Manager"
+        revenue: 1620000
+      - product: "Campaign Planner"
+        revenue: 1510000
+      - product: "Fraud Detection"
+        revenue: 1430000
+      - product: "Onboarding Suite"
+        revenue: 1350000
+      - product: "Billing Platform"
+        revenue: 1280000
+      - product: "Support Helpdesk"
+        revenue: 1190000
+      - product: "Data Warehouse"
+        revenue: 1110000
+      - product: "Email Automation"
+        revenue: 1040000
+      - product: "API Gateway"
+        revenue: 960000
+      - product: "File Storage"
+        revenue: 880000
+      - product: "Task Scheduler"
+        revenue: 810000
+      - product: "Audit Logger"
+        revenue: 740000
+  visualize:
+    type: bar
+    columns: product
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 15
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Customer Analytics"
+      value: 2150000
+    - label: "Revenue Optimization"
+      value: 1980000
+    - label: "Inventory Tracker"
+      value: 1740000
+    - label: "Payroll Manager"
+      value: 1620000
+    - label: "Campaign Planner"
+      value: 1510000
+    - label: "Fraud Detection"
+      value: 1430000
+    - label: "Onboarding Suite"
+      value: 1350000
+    - label: "Billing Platform"
+      value: 1280000
+    - label: "Support Helpdesk"
+      value: 1190000
+    - label: "Data Warehouse"
+      value: 1110000
+    - label: "Email Automation"
+      value: 1040000
+    - label: "API Gateway"
+      value: 960000
+    - label: "File Storage"
+      value: 880000
+    - label: "Task Scheduler"
+      value: 810000
+    - label: "Audit Logger"
+      value: 740000
+
+  label_rotation:
+    x_labels_rotated: true
+    transform_exists: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "Customer Analytics"
+        - "Revenue Optimization"
+        - "Inventory Tracker"
+        - "Payroll Manager"
+        - "Campaign Planner"
+        - "Fraud Detection"
+        - "Onboarding Suite"
+        - "Billing Platform"
+        - "Support Helpdesk"
+        - "Data Warehouse"
+        - "Email Automation"
+        - "API Gateway"
+        - "File Storage"
+        - "Task Scheduler"
+        - "Audit Logger"
+      orientation: horizontal
+      rotation: true
+    y:
+      min: 0
+      format: numeric

@@ -1,0 +1,69 @@
+name: "Date formatting — explicit format string on x-axis"
+tags: [bar, temporal, format-string, date-axis, date-formatting, single-series]
+description: >
+  Monthly dates with an explicit axes.x.format string to control display
+  formatting. Tests that the renderer respects user-provided format
+  strings rather than relying solely on auto-detection.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Expenses"
+  data:
+    provider: inline
+    rows:
+      - month: "2025-01-01"
+        expenses: 4200
+      - month: "2025-02-01"
+        expenses: 3800
+      - month: "2025-03-01"
+        expenses: 4500
+      - month: "2025-04-01"
+        expenses: 4100
+      - month: "2025-05-01"
+        expenses: 3900
+      - month: "2025-06-01"
+        expenses: 4700
+      - month: "2025-07-01"
+        expenses: 5100
+      - month: "2025-08-01"
+        expenses: 4800
+      - month: "2025-09-01"
+        expenses: 4300
+      - month: "2025-10-01"
+        expenses: 4600
+      - month: "2025-11-01"
+        expenses: 5200
+      - month: "2025-12-01"
+        expenses: 5800
+  visualize:
+    type: bar
+    columns: month
+    rows: expenses
+    axes:
+      x:
+        format: "%b %Y"
+
+assertions:
+  structure:
+    root: svg
+    bars: 12
+    title_in_svg: false
+    legend: false
+
+  temporal:
+    date_reformatted: true
+    expected_format: "Mon YYYY"
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      label_count: 12
+      temporal: true
+    y:
+      min: 0
+      format: numeric

@@ -1,0 +1,52 @@
+name: "Small line chart — weekly trend at 300x200 (mobile card)"
+tags: [line, sizing, small, 300x200]
+description: >
+  Line chart rendered at mobile card size (300x200). Tests that the
+  line path renders correctly in a constrained viewport typical of
+  mobile dashboard cards. Labels may be cramped.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly Active Users"
+  data:
+    provider: inline
+    rows:
+      - week: "W1"
+        users: 1200
+      - week: "W2"
+        users: 1350
+      - week: "W3"
+        users: 1280
+      - week: "W4"
+        users: 1520
+      - week: "W5"
+        users: 1610
+  visualize:
+    type: line
+    columns: week
+    rows: users
+    style:
+      width: 300
+      height: 200
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 300
+    svg_height: 200
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["W1", "W2", "W3", "W4", "W5"]
+    y:
+      min: 0
+      format: numeric

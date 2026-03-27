@@ -1,0 +1,52 @@
+name: "Doughnut chart — 5 expense categories"
+tags: [doughnut, 5-segments, legend, inner-radius]
+description: >
+  Five departmental expense categories displayed as a doughnut chart.
+  Tests that 5 arcs render with an inner radius, the legend has 5
+  entries, and all arc angles sum to 360 degrees.
+
+chart:
+  type: chart
+  version: 1
+  title: "Operating Expenses by Department"
+  data:
+    provider: inline
+    rows:
+      - department: "Engineering"
+        expense: 420000
+      - department: "Sales"
+        expense: 310000
+      - department: "Marketing"
+        expense: 185000
+      - department: "Customer Success"
+        expense: 140000
+      - department: "G&A"
+        expense: 95000
+  visualize:
+    type: doughnut
+    columns: department
+    rows: expense
+
+assertions:
+  structure:
+    root: svg
+    slices: 5
+    title_in_svg: false
+    legend: true
+    legend_entries: 5
+
+  slices:
+    - label: "Engineering"
+      value: 420000
+    - label: "Sales"
+      value: 310000
+    - label: "Marketing"
+      value: 185000
+    - label: "Customer Success"
+      value: 140000
+    - label: "G&A"
+      value: 95000
+
+  geometry:
+    arcs_sum_to_360: true
+    has_inner_radius: true

@@ -1,0 +1,50 @@
+name: "Single bar on a tiny chart — 200x150"
+tags: [edge-case, bar, sizing, tiny, minimum-viable]
+description: >
+  A single bar rendered at the minimum viable chart size (200x150).
+  Tests that the renderer does not panic or produce overlapping
+  elements when there is barely enough room for axes, labels, and
+  the bar itself. Margins and font sizes must degrade gracefully.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 52000
+  visualize:
+    type: bar
+    columns: month
+    rows: revenue
+    style:
+      width: 200
+      height: 150
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 200
+    svg_height: 150
+    bars: 1
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Jan"
+      value: 52000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

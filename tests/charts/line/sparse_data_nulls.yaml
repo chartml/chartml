@@ -1,0 +1,76 @@
+name: "Sparse data with gaps — multi-series with missing values"
+tags: [line, sparse, nulls, multi-series, edge-case]
+description: >
+  Two product lines tracked over 6 months, but Product B launched late
+  and has no data for the first 2 months (null values). The renderer
+  should still draw both lines using only the available data points,
+  without crashing on missing values. Product A has complete data;
+  Product B starts from Month 3.
+
+chart:
+  type: chart
+  version: 1
+  title: "Product Revenue — Staggered Launch"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        product: "Product A"
+        revenue: 45000
+      - month: "Feb"
+        product: "Product A"
+        revenue: 52000
+      - month: "Mar"
+        product: "Product A"
+        revenue: 58000
+      - month: "Mar"
+        product: "Product B"
+        revenue: 12000
+      - month: "Apr"
+        product: "Product A"
+        revenue: 61000
+      - month: "Apr"
+        product: "Product B"
+        revenue: 18000
+      - month: "May"
+        product: "Product A"
+        revenue: 64000
+      - month: "May"
+        product: "Product B"
+        revenue: 25000
+      - month: "Jun"
+        product: "Product A"
+        revenue: 67000
+      - month: "Jun"
+        product: "Product B"
+        revenue: 31000
+  visualize:
+    type: line
+    columns: month
+    rows: revenue
+    marks:
+      color: product
+
+assertions:
+  structure:
+    root: svg
+    lines: 2
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  sparse:
+    product_a_points: 6
+    product_b_points: 4
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+    y:
+      min: 0
+      format: numeric

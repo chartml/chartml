@@ -1,0 +1,68 @@
+name: "Millions abbreviated — dollar values with SI suffix"
+tags: [bar, axis-format, millions, currency, single-series]
+description: >
+  Revenue values ranging from 1.2M to 8.5M with format "$,.0f".
+  Tests that y-axis ticks render with SI abbreviation (e.g. "$2M",
+  "$4M") rather than full numeric strings like "$2,000,000".
+  Common in executive dashboards showing mid-scale financials.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue by Region (FY2025)"
+  data:
+    provider: inline
+    rows:
+      - region: "North America"
+        revenue: 8500000
+      - region: "Europe"
+        revenue: 5200000
+      - region: "Asia Pacific"
+        revenue: 3700000
+      - region: "Latin America"
+        revenue: 2100000
+      - region: "Middle East"
+        revenue: 1200000
+  visualize:
+    type: bar
+    columns: region
+    rows: revenue
+    axes:
+      left:
+        label: "Revenue"
+        format: "$,.0f"
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "North America"
+      value: 8500000
+    - label: "Europe"
+      value: 5200000
+    - label: "Asia Pacific"
+      value: 3700000
+    - label: "Latin America"
+      value: 2100000
+    - label: "Middle East"
+      value: 1200000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+    magnitude: millions
+
+  axes:
+    x:
+      labels: ["North America", "Europe", "Asia Pacific", "Latin America", "Middle East"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: currency
+      label: "Revenue"
+      tick_labels_readable: true

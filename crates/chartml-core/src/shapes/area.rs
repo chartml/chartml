@@ -22,6 +22,19 @@ impl AreaGenerator {
         self
     }
 
+    /// Generate an SVG path for just the top edge of the area (the stroke line).
+    ///
+    /// This traces only the (x, y1) points — no baseline return, no close.
+    /// Used to render a visible stroke line on top of the filled area.
+    pub fn generate_line(&self, points: &[(f64, f64, f64)]) -> String {
+        if points.is_empty() {
+            return String::new();
+        }
+        let top_points: Vec<(f64, f64)> = points.iter().map(|&(x, _y0, y1)| (x, y1)).collect();
+        let line_gen = LineGenerator::new().curve(self.curve);
+        line_gen.generate(&top_points)
+    }
+
     /// Generate an SVG path from a series of (x, y0, y1) points.
     ///
     /// The area is formed by:

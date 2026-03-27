@@ -1,0 +1,67 @@
+name: "Custom hex colors — 5 department bars"
+tags: [bar, custom-colors, styling, single-series]
+description: >
+  Headcount by department with 5 explicitly specified custom hex
+  colors. Tests that the renderer applies user-defined colors to
+  individual bars rather than using the default palette. Each bar
+  should render in its assigned brand color.
+
+chart:
+  type: chart
+  version: 1
+  title: "Headcount by Department"
+  data:
+    provider: inline
+    rows:
+      - department: "Engineering"
+        headcount: 142
+      - department: "Sales"
+        headcount: 87
+      - department: "Marketing"
+        headcount: 53
+      - department: "Customer Success"
+        headcount: 68
+      - department: "Operations"
+        headcount: 34
+  visualize:
+    type: bar
+    columns: department
+    rows: headcount
+    style:
+      colors: ["#1a73e8", "#e8710a", "#0d652d", "#8430ce", "#c5221f"]
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Engineering"
+      value: 142
+    - label: "Sales"
+      value: 87
+    - label: "Marketing"
+      value: 53
+    - label: "Customer Success"
+      value: 68
+    - label: "Operations"
+      value: 34
+
+  colors:
+    explicit: true
+    values: ["#1a73e8", "#e8710a", "#0d652d", "#8430ce", "#c5221f"]
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Engineering", "Sales", "Marketing", "Customer Success", "Operations"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

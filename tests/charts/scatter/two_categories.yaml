@@ -1,0 +1,91 @@
+name: "Scatter — price vs satisfaction by 2 tiers"
+tags: [scatter, color-encoding, 2-categories, legend]
+description: >
+  Price vs customer satisfaction colored by two product tiers (Standard
+  and Premium). Tests 2-color encoding with exactly 2 legend entries and
+  distinct fill colors per tier.
+
+chart:
+  type: chart
+  version: 1
+  title: "Price vs Satisfaction by Tier"
+  data:
+    provider: inline
+    rows:
+      - price: 35
+        satisfaction: 68
+        tier: "Standard"
+      - price: 50
+        satisfaction: 74
+        tier: "Standard"
+      - price: 65
+        satisfaction: 71
+        tier: "Standard"
+      - price: 80
+        satisfaction: 77
+        tier: "Standard"
+      - price: 120
+        satisfaction: 86
+        tier: "Premium"
+      - price: 150
+        satisfaction: 89
+        tier: "Premium"
+      - price: 180
+        satisfaction: 92
+        tier: "Premium"
+      - price: 210
+        satisfaction: 95
+        tier: "Premium"
+  visualize:
+    type: scatter
+    columns: price
+    rows: satisfaction
+    marks:
+      color: tier
+
+assertions:
+  structure:
+    root: svg
+    circles: 8
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  points:
+    - x: 35
+      y: 68
+      series: "Standard"
+    - x: 50
+      y: 74
+      series: "Standard"
+    - x: 65
+      y: 71
+      series: "Standard"
+    - x: 80
+      y: 77
+      series: "Standard"
+    - x: 120
+      y: 86
+      series: "Premium"
+    - x: 150
+      y: 89
+      series: "Premium"
+    - x: 180
+      y: 92
+      series: "Premium"
+    - x: 210
+      y: 95
+      series: "Premium"
+
+  color_encoding:
+    field: tier
+    categories: ["Standard", "Premium"]
+    distinct_fills: 2
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

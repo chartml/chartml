@@ -1,0 +1,69 @@
+name: "Extra-large bar chart — 6 bars at 3000x1500 (high-DPI retina)"
+tags: [bar, sizing, xlarge, 3000x1500, retina]
+description: >
+  Bar chart rendered at high-DPI retina size (3000x1500). Tests that
+  bars render correctly at very large dimensions typical of retina
+  displays where the logical viewport is doubled.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue by Market Segment"
+  data:
+    provider: inline
+    rows:
+      - segment: "Enterprise"
+        revenue: 8500000
+      - segment: "Mid-Market"
+        revenue: 5200000
+      - segment: "SMB"
+        revenue: 3100000
+      - segment: "Startup"
+        revenue: 1400000
+      - segment: "Government"
+        revenue: 2800000
+      - segment: "Education"
+        revenue: 950000
+  visualize:
+    type: bar
+    columns: segment
+    rows: revenue
+    style:
+      width: 3000
+      height: 1500
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 3000
+    svg_height: 1500
+    bars: 6
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Enterprise"
+      value: 8500000
+    - label: "Mid-Market"
+      value: 5200000
+    - label: "SMB"
+      value: 3100000
+    - label: "Startup"
+      value: 1400000
+    - label: "Government"
+      value: 2800000
+    - label: "Education"
+      value: 950000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Enterprise", "Mid-Market", "SMB", "Startup", "Government", "Education"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

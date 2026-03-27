@@ -1,0 +1,72 @@
+name: "Temporal x-axis — daily sales for 2 weeks"
+tags: [line, temporal, daily, date-axis, single-series]
+description: >
+  Daily sales figures from 2025-03-01 to 2025-03-14 with ISO date strings
+  as the x-axis column. Tests the renderer's ability to detect date-formatted
+  strings and reformat them as human-readable labels (e.g., "Mar 01").
+  A common pattern when charting data pulled from a SQL query with a
+  DATE column.
+
+chart:
+  type: chart
+  version: 1
+  title: "Daily Sales — March 2025"
+  data:
+    provider: inline
+    rows:
+      - date: "2025-03-01"
+        sales: 8400
+      - date: "2025-03-02"
+        sales: 5200
+      - date: "2025-03-03"
+        sales: 9100
+      - date: "2025-03-04"
+        sales: 8800
+      - date: "2025-03-05"
+        sales: 9500
+      - date: "2025-03-06"
+        sales: 10200
+      - date: "2025-03-07"
+        sales: 11300
+      - date: "2025-03-08"
+        sales: 6800
+      - date: "2025-03-09"
+        sales: 5400
+      - date: "2025-03-10"
+        sales: 9800
+      - date: "2025-03-11"
+        sales: 10500
+      - date: "2025-03-12"
+        sales: 11000
+      - date: "2025-03-13"
+        sales: 10800
+      - date: "2025-03-14"
+        sales: 12100
+  visualize:
+    type: line
+    columns: date
+    rows: sales
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  temporal:
+    date_reformatted: true
+    expected_format: "Mar DD"
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      label_count: 14
+      temporal: true
+    y:
+      min: 0
+      format: numeric

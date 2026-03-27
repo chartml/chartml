@@ -1,0 +1,59 @@
+name: "Doughnut chart with explicit custom colors"
+tags: [doughnut, custom-colors, style, inner-radius, legend]
+description: >
+  Doughnut chart where the color palette is explicitly provided via
+  style.colors. Tests that each arc uses the specified color rather
+  than the default palette, and that legend swatches match the
+  custom colors. Uses a brand-aligned palette.
+
+chart:
+  type: chart
+  version: 1
+  title: "Content Performance by Type"
+  data:
+    provider: inline
+    rows:
+      - content_type: "Blog Posts"
+        engagement: 34000
+      - content_type: "Video"
+        engagement: 52000
+      - content_type: "Webinars"
+        engagement: 18000
+      - content_type: "Case Studies"
+        engagement: 11000
+  visualize:
+    type: doughnut
+    columns: content_type
+    rows: engagement
+    style:
+      colors: ["#6366f1", "#f43f5e", "#10b981", "#f59e0b"]
+
+assertions:
+  structure:
+    root: svg
+    slices: 4
+    title_in_svg: false
+    legend: true
+    legend_entries: 4
+
+  slices:
+    - label: "Blog Posts"
+      value: 34000
+      color: "#6366f1"
+    - label: "Video"
+      value: 52000
+      color: "#f43f5e"
+    - label: "Webinars"
+      value: 18000
+      color: "#10b981"
+    - label: "Case Studies"
+      value: 11000
+      color: "#f59e0b"
+
+  colors:
+    explicit: true
+    palette: ["#6366f1", "#f43f5e", "#10b981", "#f59e0b"]
+
+  geometry:
+    arcs_sum_to_360: true
+    has_inner_radius: true

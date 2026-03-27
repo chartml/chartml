@@ -1,0 +1,74 @@
+name: "Multi-field — 3 metrics from single data rows using fields array"
+tags: [line, multi-field, fields-array, legend, three-lines]
+description: >
+  Monthly business metrics (revenue, costs, profit) stored as separate
+  columns in each data row, plotted as 3 distinct lines using the fields
+  array format. Unlike marks.color grouping which requires long-format
+  data, the fields array maps multiple numeric columns from wide-format
+  data into separate series. Tests field-based multi-line rendering,
+  legend labels from field definitions, and correct color assignment.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue, Costs & Profit"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 95000
+        costs: 72000
+        profit: 23000
+      - month: "Feb"
+        revenue: 102000
+        costs: 74000
+        profit: 28000
+      - month: "Mar"
+        revenue: 98000
+        costs: 76000
+        profit: 22000
+      - month: "Apr"
+        revenue: 110000
+        costs: 78000
+        profit: 32000
+      - month: "May"
+        revenue: 118000
+        costs: 80000
+        profit: 38000
+      - month: "Jun"
+        revenue: 125000
+        costs: 82000
+        profit: 43000
+  visualize:
+    type: line
+    columns: month
+    rows:
+      - field: revenue
+        label: "Revenue"
+      - field: costs
+        label: "Costs"
+      - field: profit
+        label: "Profit"
+
+assertions:
+  structure:
+    root: svg
+    lines: 3
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  colors:
+    distinct: 3
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+    y:
+      min: 0
+      format: numeric

@@ -9,7 +9,9 @@ use chartml_core::shapes::AreaGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{GridConfig, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
+
+use crate::helpers::{GridConfig, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -26,6 +28,9 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
     let grid = GridConfig::from_config(config);
+    let left_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.left.as_ref())
+        .and_then(|a| a.label.as_deref());
 
     // Step 1: Compute label strategy for margin estimation
     let estimated_width = config.width - 80.0;
@@ -38,11 +43,15 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
     // Step 1b: Pre-compute domain for left margin estimation (matches JS two-pass approach).
     let prelim_values: Vec<f64> = (0..data.num_rows()).filter_map(|i| data.get_f64(i, &value_field)).collect();
-    let prelim_max = prelim_values.iter().cloned().fold(0.0_f64, f64::max);
+    let prelim_min = prelim_values.iter().cloned().fold(f64::INFINITY, f64::min);
+    let prelim_max = prelim_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let prelim_max = if prelim_max <= 0.0 { 1.0 } else { prelim_max };
-    let (_, prelim_nice_max) = crate::helpers::nice_domain(0.0, prelim_max, 10);
+    // When data has negative values, use the actual minimum; otherwise anchor at 0
+    let prelim_domain_min = if prelim_min < 0.0 { prelim_min } else { 0.0 };
+    let (prelim_nice_min, prelim_nice_max) = crate::helpers::nice_domain(prelim_domain_min, prelim_max, 5);
     let area_prelim_fmt = if is_normalized { Some(".0%") } else { y_fmt_ref };
     let area_prelim_labels = vec![
+        crate::helpers::format_value(prelim_nice_min, area_prelim_fmt),
         crate::helpers::format_value(prelim_nice_max, area_prelim_fmt),
     ];
 
@@ -68,6 +77,10 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
     let area_gen = AreaGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
     let mut area_elements = Vec::new();
+
+    // Track Y domain for annotations (set inside each branch)
+    let mut y_domain_min = 0.0_f64;
+    let mut y_domain_max = 1.0_f64;
 
     if let Some(ref color_f) = color_field {
         let series_names = data.unique_values(color_f);
@@ -117,10 +130,12 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     .fold(0.0_f64, f64::max);
                 let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
                 // Match JS: yLeft.nice() uses default count=10 for domain rounding.
-                let (_, nice_max) = crate::helpers::nice_domain(0.0, raw_value_max, 10);
+                let (_, nice_max) = crate::helpers::nice_domain(0.0, raw_value_max, 5);
                 (0.0, nice_max, y_fmt_ref)
             };
             let linear = ScaleLinear::new((value_min, value_max), (inner_height, 0.0));
+            y_domain_min = value_min;
+            y_domain_max = value_max;
 
             // Group stacked points by series
             for (series_idx, series_name) in series_names.iter().enumerate() {
@@ -168,6 +183,19 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
 
+                // Stroke line along the top edge of the area
+                let line_d = area_gen.generate_line(&series_points);
+                area_elements.push(ChartElement::Path {
+                    d: line_d,
+                    fill: None,
+                    stroke: Some(color.clone()),
+                    stroke_width: Some(2.0),
+                    stroke_dasharray: None,
+                    opacity: None,
+                    class: "line".to_string(),
+                    data: Some(ElementData::new(series_name, "").with_series(series_name)),
+                });
+
                 // Area charts do not show dots by default (matches JS reference behaviour)
             }
 
@@ -175,7 +203,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             let x_axis_result =
                 generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
             let y_axis_elements =
-                generate_y_axis_numeric((value_min, value_max), (inner_height, 0.0), margins.left, y_axis_fmt, 5, Some(inner_width), &grid);
+                generate_y_axis_numeric((value_min, value_max), (inner_height, 0.0), margins.left, y_axis_fmt, 5, Some(inner_width), &grid, left_axis_label);
 
             children.push(ChartElement::Group {
                 class: "axes".to_string(),
@@ -200,11 +228,15 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             let values: Vec<f64> = (0..data.num_rows())
                 .filter_map(|i| data.get_f64(i, &value_field))
                 .collect();
-            let raw_value_max = values.iter().cloned().fold(0.0_f64, f64::max);
+            let raw_value_min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+            let raw_value_max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
             let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
-            // Match JS: yLeft.nice() uses default count=10 for domain rounding.
-            let (_, value_max) = crate::helpers::nice_domain(0.0, raw_value_max, 10);
-            let linear = ScaleLinear::new((0.0, value_max), (inner_height, 0.0));
+            // When data has negative values, use the actual minimum; otherwise anchor at 0
+            let domain_min = if raw_value_min < 0.0 { raw_value_min } else { 0.0 };
+            let (value_min, value_max) = crate::helpers::nice_domain(domain_min, raw_value_max, 5);
+            let linear = ScaleLinear::new((value_min, value_max), (inner_height, 0.0));
+            y_domain_min = value_min;
+            y_domain_max = value_max;
             let baseline = linear.map(0.0);
 
             for (series_idx, series_name) in series_names.iter().enumerate() {
@@ -258,13 +290,26 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
 
+                // Stroke line along the top edge of the area
+                let line_d = area_gen.generate_line(&points);
+                area_elements.push(ChartElement::Path {
+                    d: line_d,
+                    fill: None,
+                    stroke: Some(color.clone()),
+                    stroke_width: Some(2.0),
+                    stroke_dasharray: None,
+                    opacity: None,
+                    class: "line".to_string(),
+                    data: Some(ElementData::new(series_name, "").with_series(series_name)),
+                });
+
             }
 
             // Axes
             let x_axis_result =
                 generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
             let y_axis_elements =
-                generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, None, 5, Some(inner_width), &grid);
+                generate_y_axis_numeric((value_min, value_max), (inner_height, 0.0), margins.left, None, 5, Some(inner_width), &grid, left_axis_label);
 
             children.push(ChartElement::Group {
                 class: "axes".to_string(),
@@ -288,11 +333,14 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
         // Legend
         let series_names_for_legend = data.unique_values(color_f);
+        let legend_config = LegendConfig::default();
+        let legend_layout = calculate_legend_layout(&series_names_for_legend, &config.colors, config.width, &legend_config);
+        let legend_y = config.height - legend_layout.total_height - 8.0;
         let legend_elements = generate_legend(
             &series_names_for_legend,
             &config.colors,
             config.width,
-            config.height - 10.0,
+            legend_y,
         );
         children.push(ChartElement::Group {
             class: "legend".to_string(),
@@ -304,11 +352,15 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         let values: Vec<f64> = (0..data.num_rows())
             .filter_map(|i| data.get_f64(i, &value_field))
             .collect();
-        let raw_value_max = values.iter().cloned().fold(0.0_f64, f64::max);
+        let raw_value_min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+        let raw_value_max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
-        // Match JS: yLeft.nice() uses default count=10 for domain rounding.
-        let (_, value_max) = crate::helpers::nice_domain(0.0, raw_value_max, 10);
-        let linear = ScaleLinear::new((0.0, value_max), (inner_height, 0.0));
+        // When data has negative values, use the actual minimum; otherwise anchor at 0
+        let domain_min = if raw_value_min < 0.0 { raw_value_min } else { 0.0 };
+        let (value_min, value_max) = crate::helpers::nice_domain(domain_min, raw_value_max, 5);
+        let linear = ScaleLinear::new((value_min, value_max), (inner_height, 0.0));
+        y_domain_min = value_min;
+        y_domain_max = value_max;
         let baseline = linear.map(0.0);
 
         let mut points: Vec<(f64, f64, f64)> = Vec::new();
@@ -351,6 +403,19 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 data: None,
             });
 
+            // Stroke line along the top edge of the area
+            let line_d = area_gen.generate_line(&points);
+            area_elements.push(ChartElement::Path {
+                d: line_d,
+                fill: None,
+                stroke: Some(color.clone()),
+                stroke_width: Some(2.0),
+                stroke_dasharray: None,
+                opacity: None,
+                class: "line".to_string(),
+                data: None,
+            });
+
             // Area charts do not show dots by default (matches JS reference behaviour)
         }
 
@@ -358,7 +423,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         let x_axis_result =
             generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
         let y_axis_elements =
-            generate_y_axis_numeric((0.0, value_max), (inner_height, 0.0), margins.left, None, 5, Some(inner_width), &grid);
+            generate_y_axis_numeric((value_min, value_max), (inner_height, 0.0), margins.left, None, 5, Some(inner_width), &grid, left_axis_label);
 
         children.push(ChartElement::Group {
             class: "axes".to_string(),
@@ -385,6 +450,29 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         transform: Some(Transform::Translate(margins.left, margins.top)),
         children: area_elements,
     });
+
+    // Annotations — rendered on top of marks, in inner coordinate space
+    if let Some(annotations) = config.visualize.annotations.as_deref() {
+        if !annotations.is_empty() {
+            use chartml_core::scales::ScaleLinear;
+            let ann_scale = ScaleLinear::new((y_domain_min, y_domain_max), (inner_height, 0.0));
+            let ann_elements = generate_annotations(
+                annotations,
+                &ann_scale,
+                0.0,
+                inner_width,
+                inner_height,
+                Some(&categories),
+            );
+            if !ann_elements.is_empty() {
+                children.push(ChartElement::Group {
+                    class: "annotations".to_string(),
+                    transform: Some(Transform::Translate(margins.left, margins.top)),
+                    children: ann_elements,
+                });
+            }
+        }
+    }
 
     Ok(ChartElement::Svg {
         viewbox: ViewBox::new(0.0, 0.0, config.width, config.height),

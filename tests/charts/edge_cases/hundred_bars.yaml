@@ -1,0 +1,239 @@
+name: "Bar chart — 100 categories (extreme label density)"
+tags: [edge-case, bar, stress, many-categories, label-density]
+description: >
+  A bar chart with 100 categories to stress-test label rendering,
+  bar width computation, and overall layout when there are far more
+  categories than horizontal pixels can comfortably label. The
+  renderer should not crash and bars should still be visible.
+
+chart:
+  type: chart
+  version: 1
+  title: "Daily Website Visits — Q1 2026"
+  data:
+    provider: inline
+    rows:
+      - day: "Day 001"
+        visits: 1420
+      - day: "Day 002"
+        visits: 1385
+      - day: "Day 003"
+        visits: 1510
+      - day: "Day 004"
+        visits: 1290
+      - day: "Day 005"
+        visits: 1675
+      - day: "Day 006"
+        visits: 1120
+      - day: "Day 007"
+        visits: 980
+      - day: "Day 008"
+        visits: 1445
+      - day: "Day 009"
+        visits: 1390
+      - day: "Day 010"
+        visits: 1520
+      - day: "Day 011"
+        visits: 1310
+      - day: "Day 012"
+        visits: 1680
+      - day: "Day 013"
+        visits: 1100
+      - day: "Day 014"
+        visits: 960
+      - day: "Day 015"
+        visits: 1460
+      - day: "Day 016"
+        visits: 1410
+      - day: "Day 017"
+        visits: 1550
+      - day: "Day 018"
+        visits: 1330
+      - day: "Day 019"
+        visits: 1700
+      - day: "Day 020"
+        visits: 1140
+      - day: "Day 021"
+        visits: 990
+      - day: "Day 022"
+        visits: 1480
+      - day: "Day 023"
+        visits: 1425
+      - day: "Day 024"
+        visits: 1570
+      - day: "Day 025"
+        visits: 1350
+      - day: "Day 026"
+        visits: 1720
+      - day: "Day 027"
+        visits: 1160
+      - day: "Day 028"
+        visits: 1010
+      - day: "Day 029"
+        visits: 1500
+      - day: "Day 030"
+        visits: 1440
+      - day: "Day 031"
+        visits: 1590
+      - day: "Day 032"
+        visits: 1370
+      - day: "Day 033"
+        visits: 1740
+      - day: "Day 034"
+        visits: 1180
+      - day: "Day 035"
+        visits: 1030
+      - day: "Day 036"
+        visits: 1520
+      - day: "Day 037"
+        visits: 1455
+      - day: "Day 038"
+        visits: 1610
+      - day: "Day 039"
+        visits: 1390
+      - day: "Day 040"
+        visits: 1760
+      - day: "Day 041"
+        visits: 1200
+      - day: "Day 042"
+        visits: 1050
+      - day: "Day 043"
+        visits: 1540
+      - day: "Day 044"
+        visits: 1470
+      - day: "Day 045"
+        visits: 1630
+      - day: "Day 046"
+        visits: 1410
+      - day: "Day 047"
+        visits: 1780
+      - day: "Day 048"
+        visits: 1220
+      - day: "Day 049"
+        visits: 1070
+      - day: "Day 050"
+        visits: 1560
+      - day: "Day 051"
+        visits: 1485
+      - day: "Day 052"
+        visits: 1650
+      - day: "Day 053"
+        visits: 1430
+      - day: "Day 054"
+        visits: 1800
+      - day: "Day 055"
+        visits: 1240
+      - day: "Day 056"
+        visits: 1090
+      - day: "Day 057"
+        visits: 1580
+      - day: "Day 058"
+        visits: 1500
+      - day: "Day 059"
+        visits: 1670
+      - day: "Day 060"
+        visits: 1450
+      - day: "Day 061"
+        visits: 1820
+      - day: "Day 062"
+        visits: 1260
+      - day: "Day 063"
+        visits: 1110
+      - day: "Day 064"
+        visits: 1600
+      - day: "Day 065"
+        visits: 1515
+      - day: "Day 066"
+        visits: 1690
+      - day: "Day 067"
+        visits: 1470
+      - day: "Day 068"
+        visits: 1840
+      - day: "Day 069"
+        visits: 1280
+      - day: "Day 070"
+        visits: 1130
+      - day: "Day 071"
+        visits: 1620
+      - day: "Day 072"
+        visits: 1530
+      - day: "Day 073"
+        visits: 1710
+      - day: "Day 074"
+        visits: 1490
+      - day: "Day 075"
+        visits: 1860
+      - day: "Day 076"
+        visits: 1300
+      - day: "Day 077"
+        visits: 1150
+      - day: "Day 078"
+        visits: 1640
+      - day: "Day 079"
+        visits: 1545
+      - day: "Day 080"
+        visits: 1730
+      - day: "Day 081"
+        visits: 1510
+      - day: "Day 082"
+        visits: 1880
+      - day: "Day 083"
+        visits: 1320
+      - day: "Day 084"
+        visits: 1170
+      - day: "Day 085"
+        visits: 1660
+      - day: "Day 086"
+        visits: 1560
+      - day: "Day 087"
+        visits: 1750
+      - day: "Day 088"
+        visits: 1530
+      - day: "Day 089"
+        visits: 1900
+      - day: "Day 090"
+        visits: 1340
+      - day: "Day 091"
+        visits: 1190
+      - day: "Day 092"
+        visits: 1680
+      - day: "Day 093"
+        visits: 1575
+      - day: "Day 094"
+        visits: 1770
+      - day: "Day 095"
+        visits: 1550
+      - day: "Day 096"
+        visits: 1920
+      - day: "Day 097"
+        visits: 1360
+      - day: "Day 098"
+        visits: 1210
+      - day: "Day 099"
+        visits: 1700
+      - day: "Day 100"
+        visits: 1950
+  visualize:
+    type: bar
+    columns: day
+    rows: visits
+
+assertions:
+  structure:
+    root: svg
+    bars: 100
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      label_count: 100
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

@@ -63,13 +63,49 @@ pub fn detect_date_format(labels: &[String]) -> Option<String> {
 
     // If at least 80% of sampled labels are dates, treat as date axis
     if date_count * 5 >= sample_size * 4 {
+        // Check if the data spans multiple calendar years
+        let multi_year = spans_multiple_years(labels);
+
         if has_time {
-            Some("%b %d %H:%M".to_string())
+            if multi_year {
+                Some("%b %d '%y %H:%M".to_string())
+            } else {
+                Some("%b %d %H:%M".to_string())
+            }
+        } else if multi_year {
+            Some("%b '%y".to_string())
         } else {
             Some("%b %d".to_string())
         }
     } else {
         None
+    }
+}
+
+/// Check whether the labels span multiple calendar years by comparing the
+/// year of the first parseable date with the year of the last parseable date.
+fn spans_multiple_years(labels: &[String]) -> bool {
+    fn extract_year(s: &str) -> Option<i32> {
+        use chrono::Datelike;
+        let t = s.trim();
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(t, "%Y-%m-%d") {
+            return Some(d.year());
+        }
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(t, "%Y-%m-%dT%H:%M:%S") {
+            return Some(dt.date().year());
+        }
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(t, "%Y-%m-%dT%H:%M:%S%.f") {
+            return Some(dt.date().year());
+        }
+        None
+    }
+
+    let first_year = labels.iter().find_map(|l| extract_year(l));
+    let last_year = labels.iter().rev().find_map(|l| extract_year(l));
+
+    match (first_year, last_year) {
+        (Some(f), Some(l)) => f != l,
+        _ => false,
     }
 }
 

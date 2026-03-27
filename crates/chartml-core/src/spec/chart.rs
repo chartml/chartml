@@ -207,6 +207,8 @@ pub struct AnnotationSpec {
     pub dash_array: Option<String>,
     pub opacity: Option<f64>,
     pub stroke_color: Option<String>,
+    /// Line style shorthand: "solid" (default), "dashed", "dotted"
+    pub style: Option<String>,
 }
 
 // --- ChartStyleSpec ---

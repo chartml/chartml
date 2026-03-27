@@ -1,0 +1,102 @@
+name: "Combo — revenue bars (left, $) + churn rate line (right, %)"
+tags: [bar, dual-axis, combo, line, saas]
+description: >
+  Classic SaaS dashboard combining monthly recurring revenue as bars
+  on the left axis with churn rate as a line on the right axis.
+  Revenue is in dollars (thousands) while churn is a small percentage,
+  requiring vastly different scales on each axis.
+
+chart:
+  type: chart
+  version: 1
+  title: "MRR & Churn Rate by Quarter"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1 2024"
+        mrr: 245000
+        churn_rate: 4.2
+      - quarter: "Q2 2024"
+        mrr: 278000
+        churn_rate: 3.8
+      - quarter: "Q3 2024"
+        mrr: 312000
+        churn_rate: 3.1
+      - quarter: "Q4 2024"
+        mrr: 356000
+        churn_rate: 2.6
+      - quarter: "Q1 2025"
+        mrr: 398000
+        churn_rate: 2.9
+      - quarter: "Q2 2025"
+        mrr: 421000
+        churn_rate: 2.3
+  visualize:
+    type: bar
+    columns: quarter
+    rows:
+      - field: mrr
+        axis: left
+        label: "MRR"
+      - field: churn_rate
+        mark: line
+        axis: right
+        label: "Churn Rate %"
+    axes:
+      left:
+        label: "Monthly Recurring Revenue ($)"
+        format: "$,.0f"
+      right:
+        label: "Churn Rate (%)"
+        format: ".1f"
+        min: 0
+        max: 6
+
+assertions:
+  structure:
+    root: svg
+    bars: 6
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+    y_axes: 2
+
+  bars:
+    - label: "Q1 2024"
+      value: 245000
+    - label: "Q2 2024"
+      value: 278000
+    - label: "Q3 2024"
+      value: 312000
+    - label: "Q4 2024"
+      value: 356000
+    - label: "Q1 2025"
+      value: 398000
+    - label: "Q2 2025"
+      value: 421000
+
+  dual_axis:
+    left_axis_present: true
+    right_axis_present: true
+    left_label: "Monthly Recurring Revenue ($)"
+    right_label: "Churn Rate (%)"
+
+  scale:
+    left:
+      y_min: 0
+      y_nice: true
+    right:
+      y_min: 0
+      y_max: 6
+
+  axes:
+    x:
+      labels: ["Q1 2024", "Q2 2024", "Q3 2024", "Q4 2024", "Q1 2025", "Q2 2025"]
+      orientation: horizontal
+    y_left:
+      min: 0
+      format: currency
+    y_right:
+      min: 0
+      max: 6
+      format: decimal

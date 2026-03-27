@@ -5,7 +5,7 @@ use chartml_core::error::ChartError;
 use chartml_core::scales::{ScaleLinear, ScaleSqrt};
 use chartml_core::spec::{VisualizeSpec, FieldRef, MarkEncoding};
 use chartml_core::layout::margins::Margins;
-use chartml_core::layout::legend::{LegendMark, generate_legend_elements};
+use chartml_core::layout::legend::{LegendMark, LegendConfig, calculate_legend_layout, generate_legend_elements};
 
 pub struct ScatterRenderer;
 
@@ -47,9 +47,10 @@ impl ChartRenderer for ScatterRenderer {
         let y_extent = data.extent(&y_field)
             .ok_or_else(|| ChartError::DataError(format!("No numeric data for field '{}'", y_field)))?;
 
-        // Default: include 0 in both axes (matching JS D3 behavior)
-        let x_domain = (x_extent.0.min(0.0), x_extent.1);
-        let y_domain = (y_extent.0.min(0.0), y_extent.1);
+        // Use actual data extent for axis domains so tightly-clustered data
+        // fills the plot area instead of being crammed near a forced zero origin.
+        let x_domain = (x_extent.0, x_extent.1);
+        let y_domain = (y_extent.0, y_extent.1);
         let x_scale = ScaleLinear::new(x_domain, (margins.left, margins.left + inner_width)).nice(5);
         let y_scale = ScaleLinear::new(y_domain, (margins.top + inner_height, margins.top)).nice(5); // inverted for SVG
 
@@ -207,11 +208,14 @@ impl ChartRenderer for ScatterRenderer {
         if let Some(ref cf) = color_field {
             let series_names = data.unique_values(cf);
             if series_names.len() > 1 {
+                let legend_config = LegendConfig::default();
+                let legend_layout = calculate_legend_layout(&series_names, &config.colors, width, &legend_config);
+                let legend_y = height - legend_layout.total_height - 8.0;
                 let legend_elements = generate_legend_elements(
                     &series_names,
                     &config.colors,
                     width,
-                    height - 10.0,
+                    legend_y,
                     LegendMark::Circle,
                 );
                 children.push(ChartElement::Group {

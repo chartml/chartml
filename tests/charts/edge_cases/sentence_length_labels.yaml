@@ -1,0 +1,76 @@
+name: "Bar chart — 6 bars with sentence-length category labels (50-80 chars)"
+tags: [edge-case, bar, long-labels, truncation, label-density]
+description: >
+  6 bars where every category label is a full sentence ranging from 50 to 80
+  characters. These absurdly long labels stress-test the renderer's ability
+  to truncate, rotate, or ellipsize labels without overlapping or clipping
+  the chart area. Rendered at default 800x400 dimensions.
+
+chart:
+  type: chart
+  version: 1
+  title: "Regional Division Quarterly Revenue"
+  data:
+    provider: inline
+    rows:
+      - division: "Q1 North America Enterprise Software Division"
+        revenue: 12400000
+      - division: "Q2 Asia Pacific Cloud Infrastructure Services"
+        revenue: 8750000
+      - division: "Q3 European Digital Transformation Consulting"
+        revenue: 10200000
+      - division: "Q4 Latin America Financial Technology Products"
+        revenue: 6300000
+      - division: "Q1 Middle East Cybersecurity Solutions Group"
+        revenue: 4850000
+      - division: "Q2 Africa Emerging Markets Development Fund"
+        revenue: 3200000
+  visualize:
+    type: bar
+    columns: division
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 6
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Q1 North America Enterprise Software Division"
+      value: 12400000
+    - label: "Q2 Asia Pacific Cloud Infrastructure Services"
+      value: 8750000
+    - label: "Q3 European Digital Transformation Consulting"
+      value: 10200000
+    - label: "Q4 Latin America Financial Technology Products"
+      value: 6300000
+    - label: "Q1 Middle East Cybersecurity Solutions Group"
+      value: 4850000
+    - label: "Q2 Africa Emerging Markets Development Fund"
+      value: 3200000
+
+  label_rotation:
+    x_labels_rotated: true
+    transform_exists: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "Q1 North America Enterprise Software Division"
+        - "Q2 Asia Pacific Cloud Infrastructure Services"
+        - "Q3 European Digital Transformation Consulting"
+        - "Q4 Latin America Financial Technology Products"
+        - "Q1 Middle East Cybersecurity Solutions Group"
+        - "Q2 Africa Emerging Markets Development Fund"
+      orientation: horizontal
+      rotation: true
+    y:
+      min: 0
+      format: numeric

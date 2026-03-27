@@ -1,0 +1,58 @@
+name: "Linear curve — straight segments between points"
+tags: [line, curve, linear, style, single-series]
+description: >
+  Temperature readings over 7 days rendered with curveType: linear,
+  producing straight line segments between data points with no
+  interpolation or smoothing. This is the default curve type but
+  explicitly specified here to test that the linear option is recognized
+  and produces the expected SVG path with only L (lineTo) commands.
+
+chart:
+  type: chart
+  version: 1
+  title: "Daily High Temperature"
+  data:
+    provider: inline
+    rows:
+      - day: "Mon"
+        temp: 72
+      - day: "Tue"
+        temp: 68
+      - day: "Wed"
+        temp: 75
+      - day: "Thu"
+        temp: 80
+      - day: "Fri"
+        temp: 77
+      - day: "Sat"
+        temp: 82
+      - day: "Sun"
+        temp: 71
+  visualize:
+    type: line
+    columns: day
+    rows: temp
+    style:
+      curveType: linear
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  curve:
+    type: linear
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    y:
+      min: 0
+      format: numeric

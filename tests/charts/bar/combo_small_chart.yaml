@@ -1,0 +1,101 @@
+name: "Combo — dual axis at 400x300 (small viewport)"
+tags: [bar, dual-axis, combo, line, small, sizing]
+description: >
+  Combo chart rendered at a small 400x300 size. Tests that dual axis
+  labels, legend, bars, and line all fit without overlapping in a
+  tight viewport. Both axes must remain legible at this size.
+
+chart:
+  type: chart
+  version: 1
+  title: "Orders & AOV"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        orders: 342
+        aov: 67.50
+      - month: "Feb"
+        orders: 389
+        aov: 71.20
+      - month: "Mar"
+        orders: 415
+        aov: 69.80
+      - month: "Apr"
+        orders: 478
+        aov: 74.30
+      - month: "May"
+        orders: 512
+        aov: 76.90
+  visualize:
+    type: bar
+    columns: month
+    rows:
+      - field: orders
+        axis: left
+        label: "Orders"
+      - field: aov
+        mark: line
+        axis: right
+        label: "Avg Order Value"
+    axes:
+      left:
+        label: "Orders"
+        format: ",.0f"
+      right:
+        label: "AOV ($)"
+        format: "$,.2f"
+        min: 60
+        max: 85
+    style:
+      width: 400
+      height: 300
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 400
+    svg_height: 300
+    bars: 5
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+    y_axes: 2
+
+  bars:
+    - label: "Jan"
+      value: 342
+    - label: "Feb"
+      value: 389
+    - label: "Mar"
+      value: 415
+    - label: "Apr"
+      value: 478
+    - label: "May"
+      value: 512
+
+  dual_axis:
+    left_axis_present: true
+    right_axis_present: true
+    left_label: "Orders"
+    right_label: "AOV ($)"
+
+  scale:
+    left:
+      y_min: 0
+      y_nice: true
+    right:
+      y_min: 60
+      y_max: 85
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May"]
+      orientation: horizontal
+    y_left:
+      min: 0
+      format: numeric
+    y_right:
+      min: 60
+      max: 85
+      format: currency

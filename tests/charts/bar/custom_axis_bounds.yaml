@@ -1,0 +1,67 @@
+name: "Custom y-axis bounds — explicit min/max/nice"
+tags: [bar, axis-config, custom-bounds, single-series]
+description: >
+  Revenue chart where the y-axis is explicitly set to 0-200000
+  with nice rounding. This overrides the auto-scaling that would
+  normally be derived from the data range. Tests that the renderer
+  respects explicit axis domain configuration.
+
+chart:
+  type: chart
+  version: 1
+  title: "Quarterly Revenue — Fixed Scale"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1"
+        revenue: 124000
+      - quarter: "Q2"
+        revenue: 156000
+      - quarter: "Q3"
+        revenue: 143000
+      - quarter: "Q4"
+        revenue: 178000
+  visualize:
+    type: bar
+    columns: quarter
+    rows: revenue
+    axes:
+      left:
+        label: "Revenue ($)"
+        min: 0
+        max: 200000
+        nice: true
+
+assertions:
+  structure:
+    root: svg
+    bars: 4
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Q1"
+      value: 124000
+    - label: "Q2"
+      value: 156000
+    - label: "Q3"
+      value: 143000
+    - label: "Q4"
+      value: 178000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_max: 200000
+    y_nice: true
+    respects_explicit_bounds: true
+
+  axes:
+    x:
+      labels: ["Q1", "Q2", "Q3", "Q4"]
+      orientation: horizontal
+    y:
+      min: 0
+      max: 200000
+      label: "Revenue ($)"
+      format: numeric

@@ -1,0 +1,109 @@
+name: "Bubble chart — 15 bubbles across 3 categories"
+tags: [bubble, many-points, 3-categories, size-encoding, color-encoding, legend]
+description: >
+  Fifteen data points across 3 product lines with varying bubble sizes.
+  Tests rendering at moderate density with both size and color encodings
+  active. The legend should show 3 entries and all 15 circles must render.
+
+chart:
+  type: chart
+  version: 1
+  title: "Product Revenue vs Growth — Sized by Customer Count"
+  data:
+    provider: inline
+    rows:
+      # Enterprise (5 points)
+      - revenue: 5000000
+        growth: 12
+        customers: 200
+        product: "Enterprise"
+      - revenue: 3500000
+        growth: 18
+        customers: 150
+        product: "Enterprise"
+      - revenue: 7200000
+        growth: 8
+        customers: 280
+        product: "Enterprise"
+      - revenue: 4100000
+        growth: 15
+        customers: 170
+        product: "Enterprise"
+      - revenue: 6000000
+        growth: 10
+        customers: 240
+        product: "Enterprise"
+      # Pro (5 points)
+      - revenue: 1200000
+        growth: 35
+        customers: 800
+        product: "Pro"
+      - revenue: 900000
+        growth: 42
+        customers: 600
+        product: "Pro"
+      - revenue: 1800000
+        growth: 28
+        customers: 1100
+        product: "Pro"
+      - revenue: 1500000
+        growth: 31
+        customers: 950
+        product: "Pro"
+      - revenue: 700000
+        growth: 48
+        customers: 450
+        product: "Pro"
+      # Starter (5 points)
+      - revenue: 200000
+        growth: 65
+        customers: 3000
+        product: "Starter"
+      - revenue: 150000
+        growth: 72
+        customers: 2500
+        product: "Starter"
+      - revenue: 350000
+        growth: 55
+        customers: 4200
+        product: "Starter"
+      - revenue: 280000
+        growth: 60
+        customers: 3800
+        product: "Starter"
+      - revenue: 100000
+        growth: 80
+        customers: 1800
+        product: "Starter"
+  visualize:
+    type: bubble
+    columns: revenue
+    rows: growth
+    marks:
+      color: product
+      size: customers
+
+assertions:
+  structure:
+    root: svg
+    circles: 15
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  size_encoding:
+    field: customers
+    varying_radii: true
+
+  color_encoding:
+    field: product
+    categories: ["Enterprise", "Pro", "Starter"]
+    distinct_fills: 3
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

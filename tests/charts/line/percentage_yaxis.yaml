@@ -1,0 +1,68 @@
+name: "Percentage y-axis — churn rates with .1% format"
+tags: [line, axis-format, percent, small-values, single-series]
+description: >
+  Monthly churn rate expressed as small decimal values (0.01-0.05) with
+  a y-axis format string of ".1%" to render labels as "1.0%", "2.0%",
+  etc. Tests precise percentage formatting for small decimal values,
+  a common pattern in SaaS metrics dashboards where rates are stored
+  as decimals but displayed as percentages.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Churn Rate"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        churn: 0.032
+      - month: "Feb"
+        churn: 0.028
+      - month: "Mar"
+        churn: 0.035
+      - month: "Apr"
+        churn: 0.041
+      - month: "May"
+        churn: 0.038
+      - month: "Jun"
+        churn: 0.045
+      - month: "Jul"
+        churn: 0.042
+      - month: "Aug"
+        churn: 0.039
+      - month: "Sep"
+        churn: 0.033
+      - month: "Oct"
+        churn: 0.029
+      - month: "Nov"
+        churn: 0.025
+      - month: "Dec"
+        churn: 0.022
+  visualize:
+    type: line
+    columns: month
+    rows: churn
+    axes:
+      left:
+        label: "Churn Rate"
+        format: ".1%"
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    y:
+      label: "Churn Rate"
+      format: percent
+      min: 0
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true

@@ -1,0 +1,148 @@
+name: "Bar chart — maximum feature density (all options enabled)"
+tags: [edge-case, bar, stress, all-features, annotation, legend, grid, colors]
+description: >
+  A bar chart exercising every optional feature simultaneously: title,
+  legend (via stacked series), grid lines, annotation reference line,
+  annotation band, custom colors, and long x-axis labels that force
+  rotation. Tests that all features compose correctly without overlap,
+  clipping, or layout collapse.
+
+chart:
+  type: chart
+  version: 1
+  title: "Quarterly Revenue by Region — FY2026 vs Target"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1 2026 (Jan-Mar)"
+        region: "North America"
+        revenue: 185000
+      - quarter: "Q1 2026 (Jan-Mar)"
+        region: "Europe & UK"
+        revenue: 142000
+      - quarter: "Q1 2026 (Jan-Mar)"
+        region: "Asia Pacific"
+        revenue: 98000
+      - quarter: "Q2 2026 (Apr-Jun)"
+        region: "North America"
+        revenue: 197000
+      - quarter: "Q2 2026 (Apr-Jun)"
+        region: "Europe & UK"
+        revenue: 155000
+      - quarter: "Q2 2026 (Apr-Jun)"
+        region: "Asia Pacific"
+        revenue: 112000
+      - quarter: "Q3 2026 (Jul-Sep)"
+        region: "North America"
+        revenue: 210000
+      - quarter: "Q3 2026 (Jul-Sep)"
+        region: "Europe & UK"
+        revenue: 168000
+      - quarter: "Q3 2026 (Jul-Sep)"
+        region: "Asia Pacific"
+        revenue: 125000
+      - quarter: "Q4 2026 (Oct-Dec)"
+        region: "North America"
+        revenue: 225000
+      - quarter: "Q4 2026 (Oct-Dec)"
+        region: "Europe & UK"
+        revenue: 178000
+      - quarter: "Q4 2026 (Oct-Dec)"
+        region: "Asia Pacific"
+        revenue: 138000
+  transform:
+    aggregate:
+      dimensions: [quarter, region]
+      measures:
+        - column: revenue
+          aggregation: sum
+          name: total_revenue
+  visualize:
+    type: bar
+    mode: stacked
+    columns: quarter
+    rows: total_revenue
+    marks:
+      color: region
+    style:
+      colors: ["#1a73e8", "#e8710a", "#0d652d"]
+      grid:
+        x: true
+        y: true
+    annotations:
+      - type: line
+        axis: left
+        value: 450000
+        label: "Quarterly Target"
+        color: "#e74c3c"
+        style: dashed
+      - type: band
+        axis: left
+        from: 420000
+        to: 480000
+        label: "Acceptable Range"
+        color: "#27ae60"
+        opacity: 0.12
+
+assertions:
+  structure:
+    root: svg
+    bars: 12
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+    annotation_lines: 1
+    annotation_bands: 1
+    grid_lines_present: true
+
+  stacked:
+    totals:
+      - label: "Q1 2026 (Jan-Mar)"
+        total: 425000
+      - label: "Q2 2026 (Apr-Jun)"
+        total: 464000
+      - label: "Q3 2026 (Jul-Sep)"
+        total: 503000
+      - label: "Q4 2026 (Oct-Dec)"
+        total: 541000
+
+  colors:
+    explicit: true
+    values: ["#1a73e8", "#e8710a", "#0d652d"]
+
+  annotations:
+    - type: line
+      value: 450000
+      label: "Quarterly Target"
+      line_visible: true
+    - type: band
+      from: 420000
+      to: 480000
+      label: "Acceptable Range"
+      band_visible: true
+
+  grid:
+    x_grid: true
+    y_grid: true
+
+  label_rotation:
+    x_labels_rotated: true
+    transform_exists: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "Q1 2026 (Jan-Mar)"
+        - "Q2 2026 (Apr-Jun)"
+        - "Q3 2026 (Jul-Sep)"
+        - "Q4 2026 (Oct-Dec)"
+      orientation: horizontal
+      rotation: true
+    y:
+      min: 0
+      format: numeric

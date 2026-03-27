@@ -2,7 +2,7 @@ use chartml_core::element::{ChartElement, ElementData, TextAnchor, Transform};
 use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
 use chartml_core::format::{detect_date_format, reformat_date_label};
-use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, truncate_label};
+use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, approximate_text_width, truncate_label};
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::spec::{AnnotationSpec, FieldRef, FieldRefItem, MarkEncoding};
@@ -112,7 +112,7 @@ pub fn get_color_field(config: &ChartConfig) -> Option<String> {
 /// Extract the y-axis (rows/left) format string from the spec.
 pub fn get_y_format(config: &ChartConfig) -> Option<String> {
     config.visualize.axes.as_ref().and_then(|axes| {
-        axes.left.as_ref().or(axes.x.as_ref()).and_then(|a| a.format.clone())
+        axes.left.as_ref().and_then(|a| a.format.clone())
     })
 }
 
@@ -129,6 +129,58 @@ pub fn format_value(value: f64, format_str: Option<&str>) -> String {
         Some(fmt) => NumberFormatter::new(fmt).format(value),
         None => default_format_value(value),
     }
+}
+
+/// Format a tick label with SI suffix abbreviation when values are large.
+///
+/// When `tick_step` is >= 1_000_000_000 uses "B" suffix, >= 1_000_000 uses "M",
+/// >= 1_000 uses "K". The value is divided by the magnitude before formatting
+/// with the given format string, and the suffix is appended after the formatted
+/// number. Trailing ".0" or unnecessary decimals are cleaned up so that e.g.
+/// "$1.0B" becomes "$1B".
+///
+/// This is only applied when an explicit format string is provided AND the tick
+/// step indicates large magnitude. For tick labels without an explicit format,
+/// the standard `format_tick_value` is used unchanged.
+fn format_tick_value_si(value: f64, tick_step: f64, fmt: &str) -> String {
+    let (divisor, suffix) = if tick_step >= 1_000_000_000.0 {
+        (1_000_000_000.0, "B")
+    } else if tick_step >= 1_000_000.0 {
+        (1_000_000.0, "M")
+    } else if tick_step >= 1_000.0 {
+        (1_000.0, "K")
+    } else {
+        // No abbreviation needed — use standard format_value
+        return format_value(value, Some(fmt));
+    };
+
+    let scaled = value / divisor;
+
+    // Build a modified format string: strip comma grouping since abbreviated
+    // values are small (e.g. 1, 2, 3) and commas are meaningless.
+    let fmt_no_comma = fmt.replace(',', "");
+    let formatted = NumberFormatter::new(&fmt_no_comma).format(scaled);
+
+    // Clean up unnecessary trailing decimals: "$1.0" -> "$1", "$2.00" -> "$2"
+    // but preserve meaningful decimals like "$1.5" or "$3.52".
+    let cleaned = strip_trailing_zero_decimals(&formatted);
+
+    format!("{}{}", cleaned, suffix)
+}
+
+/// Strip trailing ".0", ".00", etc. from a formatted number string.
+/// Handles currency prefixes/signs: finds the decimal point in the numeric
+/// portion and removes it if all digits after it are zeros.
+fn strip_trailing_zero_decimals(s: &str) -> String {
+    // Find the position of the decimal point
+    if let Some(dot_pos) = s.rfind('.') {
+        // Check if everything after the dot is zeros
+        let after_dot = &s[dot_pos + 1..];
+        if !after_dot.is_empty() && after_dot.chars().all(|c| c == '0') {
+            return s[..dot_pos].to_string();
+        }
+    }
+    s.to_string()
 }
 
 /// Format a numeric value for use as an axis tick label.
@@ -230,7 +282,33 @@ fn default_format_value(value: f64) -> String {
             formatted
         }
     } else {
-        format!("{:.1}", value)
+        // Use enough decimal places to show significant digits.
+        // For values like 0.007, we need 3 decimals; for 1.5, 1 decimal suffices.
+        // Compute precision from the value's magnitude: at least 1, and for small
+        // values, enough to reveal the first significant fractional digit plus two.
+        let abs_val = value.abs();
+        let precision = if abs_val < 1e-15 {
+            1usize
+        } else if abs_val >= 1.0 {
+            // For values >= 1, one decimal is fine (e.g. 3.5 -> "3.5")
+            1usize
+        } else {
+            // For values < 1, compute digits needed: -floor(log10(abs)) gives the
+            // position of the first significant digit. Add 1 to show at least two
+            // significant fractional digits (e.g. 0.007 -> precision 3 -> "0.007").
+            let digits = -(abs_val.log10().floor()) as usize;
+            digits.max(1)
+        };
+        // Format and strip unnecessary trailing zeros after the decimal point,
+        // but keep at least one decimal digit.
+        let formatted = format!("{:.prec$}", value, prec = precision);
+        let trimmed = formatted.trim_end_matches('0');
+        // Ensure we don't end with just a decimal point (e.g. "3." -> "3.0")
+        if trimmed.ends_with('.') {
+            format!("{}0", trimmed)
+        } else {
+            trimmed.to_string()
+        }
     }
 }
 
@@ -267,16 +345,35 @@ pub fn generate_x_axis(
     chart_height: Option<f64>,
     grid: &GridConfig,
 ) -> XAxisResult {
-    let band = ScaleBand::new(labels.to_vec(), range);
+    generate_x_axis_with_display(labels, None, range, y_position, available_width, x_format, chart_height, grid)
+}
+
+/// Generate x-axis with optional separate display labels.
+/// `band_keys` are used for ScaleBand positioning (must be unique).
+/// `display_label_overrides`, when Some, provides the text to show (may contain duplicates).
+pub fn generate_x_axis_with_display(
+    band_keys: &[String],
+    display_label_overrides: Option<&[String]>,
+    range: (f64, f64),
+    y_position: f64,
+    available_width: f64,
+    x_format: Option<&str>,
+    chart_height: Option<f64>,
+    grid: &GridConfig,
+) -> XAxisResult {
+    let band = ScaleBand::new(band_keys.to_vec(), range);
     let bandwidth = band.bandwidth();
+
+    // Use display overrides if provided, otherwise use band_keys as labels
+    let raw_labels: &[String] = display_label_overrides.unwrap_or(band_keys);
 
     // Step 1: Format labels (date detection or explicit format)
     let display_labels: Vec<String> = if let Some(fmt) = x_format {
-        labels.iter().map(|l| reformat_date_label(l, fmt)).collect()
-    } else if let Some(detected_fmt) = detect_date_format(labels) {
-        labels.iter().map(|l| reformat_date_label(l, &detected_fmt)).collect()
+        raw_labels.iter().map(|l| reformat_date_label(l, fmt)).collect()
+    } else if let Some(detected_fmt) = detect_date_format(raw_labels) {
+        raw_labels.iter().map(|l| reformat_date_label(l, &detected_fmt)).collect()
     } else {
-        labels.to_vec()
+        raw_labels.to_vec()
     };
 
     // Step 2: Determine label strategy
@@ -300,8 +397,8 @@ pub fn generate_x_axis(
     // Vertical grid lines (if grid.show_x and chart_height provided)
     if grid.show_x {
         if let Some(ch) = chart_height {
-            for (_i, orig_label) in labels.iter().enumerate() {
-                let x = match band.map(orig_label) {
+            for (_i, band_key) in band_keys.iter().enumerate() {
+                let x = match band.map(band_key) {
                     Some(x) => x + bandwidth / 2.0,
                     None => continue,
                 };
@@ -320,7 +417,7 @@ pub fn generate_x_axis(
         LabelStrategy::Horizontal => {
             // no extra margin needed
             for (i, label) in display_labels.iter().enumerate() {
-                let orig_label = &labels[i];
+                let orig_label = &band_keys[i];
                 let x = match band.map(orig_label) {
                     Some(x) => x + bandwidth / 2.0,
                     None => continue,
@@ -350,7 +447,7 @@ pub fn generate_x_axis(
         LabelStrategy::Rotated { margin: _, skip_factor } => {
             // rotation margin handled by MarginConfig
             for (i, label) in display_labels.iter().enumerate() {
-                let orig_label = &labels[i];
+                let orig_label = &band_keys[i];
                 let x = match band.map(orig_label) {
                     Some(x) => x + bandwidth / 2.0,
                     None => continue,
@@ -386,7 +483,7 @@ pub fn generate_x_axis(
         LabelStrategy::Truncated { max_width } => {
             // no extra margin needed
             for (i, label) in display_labels.iter().enumerate() {
-                let orig_label = &labels[i];
+                let orig_label = &band_keys[i];
                 let x = match band.map(orig_label) {
                     Some(x) => x + bandwidth / 2.0,
                     None => continue,
@@ -420,7 +517,7 @@ pub fn generate_x_axis(
         LabelStrategy::Sampled { indices } => {
             // no extra margin needed
             for (i, label) in display_labels.iter().enumerate() {
-                let orig_label = &labels[i];
+                let orig_label = &band_keys[i];
                 let x = match band.map(orig_label) {
                     Some(x) => x + bandwidth / 2.0,
                     None => continue,
@@ -460,9 +557,24 @@ pub fn generate_y_axis(
     x_position: f64,
     _formatter: Option<&str>,
 ) -> Vec<ChartElement> {
-    let band = ScaleBand::new(labels.to_vec(), range);
+    generate_y_axis_with_display(labels, None, range, x_position, _formatter)
+}
+
+/// Generate y-axis with optional separate display labels.
+/// `band_keys` are used for ScaleBand positioning (must be unique).
+/// `display_label_overrides`, when Some, provides the text to show (may contain duplicates).
+pub fn generate_y_axis_with_display(
+    band_keys: &[String],
+    display_label_overrides: Option<&[String]>,
+    range: (f64, f64),
+    x_position: f64,
+    _formatter: Option<&str>,
+) -> Vec<ChartElement> {
+    let band = ScaleBand::new(band_keys.to_vec(), range);
     let bandwidth = band.bandwidth();
     let mut elements = Vec::new();
+
+    let display_labels: &[String] = display_label_overrides.unwrap_or(band_keys);
 
     // Axis line
     elements.push(ChartElement::Line {
@@ -476,8 +588,8 @@ pub fn generate_y_axis(
         class: "axis-line".to_string(),
     });
 
-    for label in labels {
-        let y = match band.map(label) {
+    for (i, band_key) in band_keys.iter().enumerate() {
+        let y = match band.map(band_key) {
             Some(y) => y + bandwidth / 2.0,
             None => continue,
         };
@@ -498,7 +610,7 @@ pub fn generate_y_axis(
         elements.push(ChartElement::Text {
             x: x_position - 8.0,
             y,
-            content: label.clone(),
+            content: display_labels[i].clone(),
             anchor: TextAnchor::End,
             dominant_baseline: Some("middle".to_string()),
             transform: None,
@@ -523,6 +635,7 @@ pub fn generate_y_axis_numeric(
     tick_count: usize,
     chart_width: Option<f64>,
     grid: &GridConfig,
+    axis_label: Option<&str>,
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     // Match JS: d3.axisLeft(yLeft).ticks(5) — fixed count of 5 regardless of tick_count param.
@@ -548,9 +661,10 @@ pub fn generate_y_axis_numeric(
     for val in &ticks {
         let y = scale.map(*val);
         // When an explicit format string is provided (e.g. ".0%" for normalized
-        // stacked charts), use it. Otherwise fall back to D3-style auto-formatting.
+        // stacked charts), use it with SI abbreviation for large values.
+        // Otherwise fall back to D3-style auto-formatting.
         let label = match fmt {
-            Some(f) => format_value(*val, Some(f)),
+            Some(f) => format_tick_value_si(*val, tick_step, f),
             None => format_tick_value(*val, tick_step),
         };
 
@@ -597,6 +711,35 @@ pub fn generate_y_axis_numeric(
         });
     }
 
+    // Axis label (rotated -90°, centered along the axis)
+    if let Some(label_text) = axis_label {
+        let mid_y = (range.0 + range.1) / 2.0;
+        // Position left of the widest tick label: estimate max tick width and offset
+        let max_tick_width = ticks.iter()
+            .map(|val| {
+                let label = match fmt {
+                    Some(f) => format_value(*val, Some(f)),
+                    None => format_tick_value(*val, tick_step),
+                };
+                approximate_text_width(&label)
+            })
+            .fold(0.0_f64, f64::max);
+        let label_x = (x_position - 8.0 - max_tick_width - 12.0).max(10.0);
+        elements.push(ChartElement::Text {
+            x: label_x,
+            y: mid_y,
+            content: label_text.to_string(),
+            anchor: TextAnchor::Middle,
+            dominant_baseline: Some("middle".to_string()),
+            transform: Some(Transform::Rotate(-90.0, label_x, mid_y)),
+            font_size: Some("12px".to_string()),
+            font_weight: None,
+            fill: Some("#666".to_string()),
+            class: "axis-label".to_string(),
+            data: None,
+        });
+    }
+
     elements
 }
 
@@ -607,6 +750,7 @@ pub fn generate_y_axis_numeric_right(
     x_position: f64,
     _fmt: Option<&str>,
     tick_count: usize,
+    axis_label: Option<&str>,
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     let ticks = scale.ticks(tick_count);
@@ -648,6 +792,25 @@ pub fn generate_y_axis_numeric_right(
         });
     }
 
+    // Axis label (rotated 90°, centered along the axis, to the right of tick labels)
+    if let Some(label_text) = axis_label {
+        let mid_y = (range.0 + range.1) / 2.0;
+        let label_x = x_position + 45.0;
+        elements.push(ChartElement::Text {
+            x: label_x,
+            y: mid_y,
+            content: label_text.to_string(),
+            anchor: TextAnchor::Middle,
+            dominant_baseline: Some("middle".to_string()),
+            transform: Some(Transform::Rotate(90.0, label_x, mid_y)),
+            font_size: Some("12px".to_string()),
+            font_weight: None,
+            fill: Some("#666".to_string()),
+            class: "axis-label".to_string(),
+            data: None,
+        });
+    }
+
     elements
 }
 
@@ -683,9 +846,9 @@ pub fn generate_x_axis_numeric(
         let x = scale.map(*val);
         // JS horizontal bar uses `d => d` (plain toString) as default tick format,
         // which does NOT add comma separators. Only use formatted output when an
-        // explicit format string is provided.
+        // explicit format string is provided. Apply SI abbreviation for large values.
         let label = match fmt {
-            Some(f) => format_value(*val, Some(f)),
+            Some(f) => format_tick_value_si(*val, tick_step, f),
             None => format_tick_value_plain(*val, tick_step),
         };
 
@@ -912,8 +1075,13 @@ pub fn nice_domain(domain_min: f64, domain_max: f64, tick_count: usize) -> (f64,
             start = (start / step).floor() * step;
             stop = (stop / step).ceil() * step;
         } else if step < 0.0 {
-            start = (start * -step).ceil() / -step;
-            stop = (stop * -step).floor() / -step;
+            // D3: start = Math.ceil(start * step) / step;
+            //     stop  = Math.floor(stop * step) / step;
+            // step is NEGATIVE, so multiplying by step flips sign.
+            // floor(negative) rounds towards -∞, then dividing by negative
+            // flips back — net effect is rounding OUTWARD (expanding domain).
+            start = (start * step).ceil() / step;
+            stop = (stop * step).floor() / step;
         } else {
             break;
         }
@@ -1024,6 +1192,19 @@ pub fn generate_annotations(
 ) -> Vec<ChartElement> {
     let mut elements = Vec::new();
 
+    // Resolve the effective dash array for an annotation: explicit dash_array takes
+    // precedence, then the style shorthand ("dashed" → "6,4", "dotted" → "2,3").
+    let resolve_dash_array = |ann: &AnnotationSpec| -> Option<String> {
+        if ann.dash_array.is_some() {
+            return ann.dash_array.clone();
+        }
+        match ann.style.as_deref() {
+            Some("dashed") => Some("6,4".to_string()),
+            Some("dotted") => Some("2,3".to_string()),
+            _ => None,
+        }
+    };
+
     for ann in annotations {
         let ann_type = ann.annotation_type.as_str();
         let orientation = ann.orientation.as_deref().unwrap_or("horizontal");
@@ -1046,7 +1227,7 @@ pub fn generate_annotations(
             };
             let color = ann.color.as_deref().unwrap_or("#666").to_string();
             let stroke_width = ann.stroke_width;
-            let dash_array = ann.dash_array.clone();
+            let dash_array = resolve_dash_array(ann);
 
             elements.push(ChartElement::Line {
                 x1: x_px, y1: 0.0,
@@ -1080,7 +1261,7 @@ pub fn generate_annotations(
             let y_px = scale_y.map(value);
             let color = ann.color.as_deref().unwrap_or("#666").to_string();
             let stroke_width = ann.stroke_width;
-            let dash_array = ann.dash_array.clone();
+            let dash_array = resolve_dash_array(ann);
 
             elements.push(ChartElement::Line {
                 x1: x_start,

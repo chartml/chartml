@@ -1,0 +1,37 @@
+name: "Metric card — large dollar amount with comparison"
+tags: [metric, trend, currency-format, large-number, comparison]
+description: >
+  Total revenue of $1,234,567, up from $1,100,000 in the prior period.
+  Tests dollar formatting with comma separators on a 7-digit number
+  combined with an upward trend indicator.
+
+chart:
+  type: chart
+  version: 1
+  title: "Total Revenue"
+  data:
+    provider: inline
+    rows:
+      - current: 1234567
+        previous: 1100000
+  visualize:
+    type: metric
+    value: current
+    label: "Total Revenue"
+    format: "$,.0f"
+    compareWith: previous
+
+assertions:
+  structure:
+    root: div
+    is_metric_card: true
+
+  value:
+    raw: 1234567
+    formatted: "$1,234,567"
+
+  trend:
+    direction: up
+    arrow: true
+    positive: true
+    compare_value: 1100000

@@ -1,0 +1,37 @@
+name: "Metric card — conversion rate percentage with upward trend"
+tags: [metric, trend, percentage-format, comparison]
+description: >
+  Conversion rate of 3.2%, up from 2.8% in the previous period. Tests
+  percentage formatting with a small decimal value and an upward trend
+  arrow rendered in green.
+
+chart:
+  type: chart
+  version: 1
+  title: "Conversion Rate"
+  data:
+    provider: inline
+    rows:
+      - current: 0.032
+        previous: 0.028
+  visualize:
+    type: metric
+    value: current
+    label: "Conversion Rate"
+    format: ".1%"
+    compareWith: previous
+
+assertions:
+  structure:
+    root: div
+    is_metric_card: true
+
+  value:
+    raw: 0.032
+    formatted_contains: "3.2%"
+
+  trend:
+    direction: up
+    arrow: true
+    positive: true
+    compare_value: 0.028

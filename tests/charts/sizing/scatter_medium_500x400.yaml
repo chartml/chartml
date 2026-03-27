@@ -1,0 +1,72 @@
+name: "Medium scatter plot — 8 points at 500x400 (half-width panel)"
+tags: [scatter, sizing, medium, 500x400]
+description: >
+  Scatter plot rendered at half-width panel size (500x400). Tests that
+  circle elements render with correct positioning in a medium viewport.
+  Slightly taller aspect ratio gives more room for y-axis labels.
+
+chart:
+  type: chart
+  version: 1
+  title: "Ad Spend vs Conversions"
+  data:
+    provider: inline
+    rows:
+      - spend: 2000
+        conversions: 45
+      - spend: 5000
+        conversions: 120
+      - spend: 3500
+        conversions: 82
+      - spend: 8000
+        conversions: 195
+      - spend: 6500
+        conversions: 160
+      - spend: 1200
+        conversions: 28
+      - spend: 9500
+        conversions: 230
+      - spend: 4200
+        conversions: 98
+  visualize:
+    type: scatter
+    columns: spend
+    rows: conversions
+    style:
+      width: 500
+      height: 400
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 500
+    svg_height: 400
+    circles: 8
+    title_in_svg: false
+    legend: false
+
+  points:
+    - x: 2000
+      y: 45
+    - x: 5000
+      y: 120
+    - x: 3500
+      y: 82
+    - x: 8000
+      y: 195
+    - x: 6500
+      y: 160
+    - x: 1200
+      y: 28
+    - x: 9500
+      y: 230
+    - x: 4200
+      y: 98
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

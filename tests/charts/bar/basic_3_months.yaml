@@ -1,0 +1,52 @@
+name: "Basic bar chart — 3 months of revenue"
+tags: [bar, basic, categorical-x, single-series]
+description: >
+  The simplest real-world bar chart: monthly revenue for Q1.
+  This is the most common chart a business user creates first.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Revenue"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 125000
+      - month: "Feb"
+        revenue: 138000
+      - month: "Mar"
+        revenue: 152000
+  visualize:
+    type: bar
+    columns: month
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 3
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Jan"
+      value: 125000
+    - label: "Feb"
+      value: 138000
+    - label: "Mar"
+      value: 152000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+    headroom_pct: "5-30"
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

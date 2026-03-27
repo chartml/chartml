@@ -1,0 +1,140 @@
+name: "Stacked area with reference line annotation — support tickets"
+tags: [area, stacked, multi-series, annotation, reference-line, legend]
+description: >
+  Three support ticket priority levels (Critical, High, Normal) shown
+  as stacked areas over 8 weeks, with a horizontal reference line at
+  the 150-ticket SLA capacity threshold. Tests stacked rendering
+  combined with annotation overlay.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly Support Tickets by Priority"
+  data:
+    provider: inline
+    rows:
+      - week: "W1"
+        priority: "Critical"
+        tickets: 12
+      - week: "W1"
+        priority: "High"
+        tickets: 34
+      - week: "W1"
+        priority: "Normal"
+        tickets: 78
+      - week: "W2"
+        priority: "Critical"
+        tickets: 15
+      - week: "W2"
+        priority: "High"
+        tickets: 41
+      - week: "W2"
+        priority: "Normal"
+        tickets: 85
+      - week: "W3"
+        priority: "Critical"
+        tickets: 9
+      - week: "W3"
+        priority: "High"
+        tickets: 38
+      - week: "W3"
+        priority: "Normal"
+        tickets: 92
+      - week: "W4"
+        priority: "Critical"
+        tickets: 18
+      - week: "W4"
+        priority: "High"
+        tickets: 45
+      - week: "W4"
+        priority: "Normal"
+        tickets: 97
+      - week: "W5"
+        priority: "Critical"
+        tickets: 22
+      - week: "W5"
+        priority: "High"
+        tickets: 52
+      - week: "W5"
+        priority: "Normal"
+        tickets: 105
+      - week: "W6"
+        priority: "Critical"
+        tickets: 14
+      - week: "W6"
+        priority: "High"
+        tickets: 43
+      - week: "W6"
+        priority: "Normal"
+        tickets: 88
+      - week: "W7"
+        priority: "Critical"
+        tickets: 11
+      - week: "W7"
+        priority: "High"
+        tickets: 36
+      - week: "W7"
+        priority: "Normal"
+        tickets: 81
+      - week: "W8"
+        priority: "Critical"
+        tickets: 16
+      - week: "W8"
+        priority: "High"
+        tickets: 48
+      - week: "W8"
+        priority: "Normal"
+        tickets: 94
+  transform:
+    aggregate:
+      dimensions: [week, priority]
+      measures:
+        - column: tickets
+          aggregation: sum
+          name: total_tickets
+  visualize:
+    type: area
+    mode: stacked
+    columns: week
+    rows: total_tickets
+    marks:
+      color: priority
+    annotations:
+      - type: line
+        axis: left
+        value: 150
+        label: "SLA Capacity"
+        color: "#e74c3c"
+        dashArray: "6,3"
+
+assertions:
+  structure:
+    root: svg
+    areas: 3
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+    annotation_lines: 1
+
+  stacked:
+    series_order: ["Critical", "High", "Normal"]
+    areas_stacked_on_each_other: true
+
+  annotations:
+    - type: line
+      value: 150
+      label: "SLA Capacity"
+      dashed: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

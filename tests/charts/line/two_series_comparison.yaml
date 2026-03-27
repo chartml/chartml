@@ -1,0 +1,80 @@
+name: "Two series comparison — Plan vs Actual over 6 months"
+tags: [line, multi-series, comparison, legend, two-colors]
+description: >
+  Classic plan-vs-actual comparison chart showing budgeted revenue against
+  actual revenue over 6 months. A fundamental business reporting pattern
+  where two lines diverge or converge relative to each other. Tests
+  marks.color grouping with exactly 2 series and legend with 2 entries.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue — Plan vs Actual"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        series: "Plan"
+        revenue: 50000
+      - month: "Jan"
+        series: "Actual"
+        revenue: 48000
+      - month: "Feb"
+        series: "Plan"
+        revenue: 55000
+      - month: "Feb"
+        series: "Actual"
+        revenue: 53000
+      - month: "Mar"
+        series: "Plan"
+        revenue: 60000
+      - month: "Mar"
+        series: "Actual"
+        revenue: 62000
+      - month: "Apr"
+        series: "Plan"
+        revenue: 65000
+      - month: "Apr"
+        series: "Actual"
+        revenue: 61000
+      - month: "May"
+        series: "Plan"
+        revenue: 70000
+      - month: "May"
+        series: "Actual"
+        revenue: 74000
+      - month: "Jun"
+        series: "Plan"
+        revenue: 75000
+      - month: "Jun"
+        series: "Actual"
+        revenue: 79000
+  visualize:
+    type: line
+    columns: month
+    rows: revenue
+    marks:
+      color: series
+
+assertions:
+  structure:
+    root: svg
+    lines: 2
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  colors:
+    distinct: 2
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+    y:
+      min: 0
+      format: numeric

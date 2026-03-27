@@ -9,7 +9,9 @@ use chartml_core::spec::{ChartMode, Orientation};
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
-use crate::helpers::{GridConfig, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_y_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
+use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
+
+use crate::helpers::{GridConfig, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
 
 pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
@@ -35,12 +37,39 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     let category_field = get_field_name(&config.visualize.columns)?;
     let value_field = get_field_name(&config.visualize.rows)?;
 
-    let categories = data.unique_values(&category_field);
-    if categories.is_empty() {
-        return Err(ChartError::DataError("No category values found".into()));
-    }
-
     let color_field = get_color_field(config);
+
+    // For single-series bars (no color field), use per-row categories to support
+    // duplicate category names. Each row gets a unique band key for positioning,
+    // while display_labels preserves the original (possibly duplicate) text.
+    // For multi-series (with color field), use unique categories as before since
+    // stacking/grouping logic depends on deduplication.
+    let (categories, display_labels): (Vec<String>, Option<Vec<String>>) = if color_field.is_none() {
+        let all_vals = data.all_values(&category_field);
+        if all_vals.is_empty() {
+            return Err(ChartError::DataError("No category values found".into()));
+        }
+        // Check if there are any duplicates; if so, create indexed band keys
+        let has_duplicates = {
+            let mut seen = std::collections::HashSet::new();
+            all_vals.iter().any(|v| !seen.insert(v.as_str()))
+        };
+        if has_duplicates {
+            let band_keys: Vec<String> = all_vals.iter().enumerate()
+                .map(|(i, v)| format!("{}\x00{}", v, i))
+                .collect();
+            (band_keys, Some(all_vals))
+        } else {
+            (all_vals, None)
+        }
+    } else {
+        let unique = data.unique_values(&category_field);
+        if unique.is_empty() {
+            return Err(ChartError::DataError("No category values found".into()));
+        }
+        (unique, None)
+    };
+
     let is_horizontal = matches!(config.visualize.orientation, Some(Orientation::Horizontal));
     let is_normalized = matches!(config.visualize.mode, Some(ChartMode::Normalized));
     let is_stacked = matches!(config.visualize.mode, Some(ChartMode::Stacked)) || is_normalized;
@@ -52,9 +81,11 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     let y_fmt_ref = y_fmt.as_deref();
     let (axis_min, axis_max) = get_y_axis_bounds(config);
 
+    // Use display labels for width estimation (original text, not indexed keys)
+    let labels_for_strategy = display_labels.as_deref().unwrap_or(&categories);
     let x_extra_margin = if !is_horizontal {
         let estimated_width = config.width - 80.0;
-        let x_strategy = LabelStrategy::determine(&categories, estimated_width, &LabelStrategyConfig::default());
+        let x_strategy = LabelStrategy::determine(labels_for_strategy, estimated_width, &LabelStrategyConfig::default());
         match &x_strategy {
             LabelStrategy::Rotated { margin, .. } => *margin,
             _ => 0.0,
@@ -65,11 +96,11 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
 
     // Step 1b: Pre-compute domain for left margin estimation (matches JS two-pass approach).
     // JS computes finalMarginLeft from actual y-axis tick label widths; we approximate here.
-    let prelim_data_max: f64 = if let Some(ref color_f) = color_field {
+    let (prelim_data_min, prelim_data_max): (f64, f64) = if let Some(ref color_f) = color_field {
         if is_stacked {
             let groups = data.group_by(color_f);
             let series_names = data.unique_values(color_f);
-            categories.iter().map(|cat| {
+            let stacked_vals: Vec<f64> = categories.iter().map(|cat| {
                 series_names.iter().map(|s| {
                     groups.get(s).and_then(|series_data| {
                         (0..series_data.num_rows()).find_map(|i| {
@@ -81,22 +112,33 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
                         })
                     }).unwrap_or(0.0)
                 }).sum::<f64>()
-            }).fold(0.0_f64, f64::max)
+            }).collect();
+            let mn = stacked_vals.iter().cloned().fold(f64::INFINITY, f64::min);
+            let mx = stacked_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            (mn, mx)
         } else {
-            (0..data.num_rows()).filter_map(|i| data.get_f64(i, &value_field)).fold(0.0_f64, f64::max)
+            let vals: Vec<f64> = (0..data.num_rows()).filter_map(|i| data.get_f64(i, &value_field)).collect();
+            let mn = vals.iter().cloned().fold(f64::INFINITY, f64::min);
+            let mx = vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            (mn, mx)
         }
     } else {
-        (0..data.num_rows()).filter_map(|i| data.get_f64(i, &value_field)).fold(0.0_f64, f64::max)
+        let vals: Vec<f64> = (0..data.num_rows()).filter_map(|i| data.get_f64(i, &value_field)).collect();
+        let mn = vals.iter().cloned().fold(f64::INFINITY, f64::min);
+        let mx = vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        (mn, mx)
     };
     let prelim_data_max = if prelim_data_max <= 0.0 { 1.0 } else { prelim_data_max };
+    // Keep data_min at 0 when all values are non-negative (standard bar chart behavior)
+    let prelim_data_min = if prelim_data_min >= 0.0 { 0.0 } else { prelim_data_min };
 
     let prelim_domain_max = if is_normalized {
         1.0
     } else {
         let raw_max = axis_max.unwrap_or(prelim_data_max);
-        if axis_max.is_none() { nice_domain(axis_min.unwrap_or(0.0), raw_max, 10).1 } else { raw_max }
+        if axis_max.is_none() { nice_domain(axis_min.unwrap_or(prelim_data_min), raw_max, 5).1 } else { raw_max }
     };
-    let prelim_domain_min = if is_normalized { 0.0 } else { axis_min.unwrap_or(0.0) };
+    let prelim_domain_min = if is_normalized { 0.0 } else { axis_min.unwrap_or(prelim_data_min) };
 
     // Generate representative tick label (domain max is typically widest label).
     // For horizontal charts the y-axis shows categories (handled separately).
@@ -139,22 +181,23 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     let (domain_min, domain_max) = if is_normalized {
         (0.0, 1.0)
     } else {
-        let raw_domain_min = axis_min.unwrap_or(0.0);
+        let raw_domain_min = axis_min.unwrap_or(prelim_data_min);
         let raw_domain_max = axis_max.unwrap_or(raw_data_max);
         // Apply nice rounding to domain so ticks are round numbers with headroom (Regressions 2 & 3).
         // Only apply when no explicit axis bounds are set by the user.
         if axis_min.is_none() && axis_max.is_none() {
             // Match JS: yLeft.nice() uses default count=10 for domain rounding.
-            nice_domain(raw_domain_min, raw_domain_max, 10)
+            nice_domain(raw_domain_min, raw_domain_max, 5)
         } else {
             (raw_domain_min, raw_domain_max)
         }
     };
     // For normalized mode, override Y-axis format to show percentages.
+    // Otherwise, use the format from config (axes.left.format).
     let effective_y_fmt: Option<String> = if is_normalized {
         Some(".0%".to_string())
     } else {
-        None
+        y_fmt.clone()
     };
     let effective_y_fmt_ref = effective_y_fmt.as_deref();
 
@@ -197,15 +240,18 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     // Axes (use domain_min/domain_max instead of 0.0/value_max)
     let axis_elements = if is_horizontal {
         // Category y-axis: generate at x=0 relative, then offset by margins.left
-        let x_axis = generate_y_axis(&categories, (0.0, inner_height), 0.0, None);
+        let x_axis = generate_y_axis_with_display(&categories, display_labels.as_deref(), (0.0, inner_height), 0.0, None);
         let y_axis = generate_x_axis_numeric((domain_min, domain_max), (0.0, inner_width), margins.top + inner_height, effective_y_fmt_ref, 5, Some(inner_height), &grid);
         let mut axes = Vec::new();
         axes.extend(x_axis.into_iter().map(|e| offset_element(e, margins.left, margins.top)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes
     } else {
-        let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
-        let y_axis = generate_y_axis_numeric((domain_min, domain_max), (inner_height, 0.0), margins.left, effective_y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid);
+        let x_axis_result = generate_x_axis_with_display(&categories, display_labels.as_deref(), (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
+        let left_axis_label = config.visualize.axes.as_ref()
+            .and_then(|a| a.left.as_ref())
+            .and_then(|a| a.label.as_deref());
+        let y_axis = generate_y_axis_numeric((domain_min, domain_max), (inner_height, 0.0), margins.left, effective_y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid, left_axis_label);
         let mut axes = Vec::new();
         axes.extend(x_axis_result.elements.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
@@ -230,13 +276,14 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
             if !annotations.is_empty() {
                 use chartml_core::scales::ScaleLinear;
                 let ann_scale = ScaleLinear::new((domain_min, domain_max), (inner_height, 0.0));
+                let ann_cats = display_labels.as_deref().unwrap_or(&categories);
                 let ann_elements = generate_annotations(
                     annotations,
                     &ann_scale,
                     0.0,
                     inner_width,
                     inner_height,
-                    Some(&categories),
+                    Some(ann_cats),
                 );
                 if !ann_elements.is_empty() {
                     children.push(ChartElement::Group {
@@ -252,7 +299,10 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     // Legend
     if let Some(ref color_f) = color_field {
         let series_names = data.unique_values(color_f);
-        let legend_elements = generate_legend(&series_names, &config.colors, config.width, config.height - 10.0);
+        let legend_config = LegendConfig::default();
+        let legend_layout = calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config);
+        let legend_y = config.height - legend_layout.total_height - 8.0;
+        let legend_elements = generate_legend(&series_names, &config.colors, config.width, legend_y);
         children.push(ChartElement::Group {
             class: "legend".to_string(),
             transform: None,
@@ -293,7 +343,8 @@ fn render_single_series_bars(
     let effective_max = domain_max;
 
     let mut elements = Vec::new();
-    let fill = config.colors.first().cloned().unwrap_or_else(|| "#2E7D9A".to_string());
+    let default_colors = vec!["#2E7D9A".to_string()];
+    let palette = if config.colors.is_empty() { &default_colors } else { &config.colors };
 
     if is_horizontal {
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_height))
@@ -309,7 +360,9 @@ fn render_single_series_bars(
                 None => continue,
             };
             let val = data.get_f64(i, value_field).unwrap_or(0.0);
-            let y = match band.map(&cat) {
+            // Use indexed band key for positioning (handles duplicate categories)
+            let band_key = categories.get(i).map(|k| k.as_str()).unwrap_or(&cat);
+            let y = match band.map(band_key) {
                 Some(y) => y,
                 None => continue,
             };
@@ -320,7 +373,7 @@ fn render_single_series_bars(
                 y: y + y_inset,
                 width: bar_width,
                 height: bar_render_height,
-                fill: fill.clone(),
+                fill: palette[i % palette.len()].clone(),
                 stroke: None,
                 class: "bar".to_string(),
                 data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
@@ -341,20 +394,25 @@ fn render_single_series_bars(
                 None => continue,
             };
             let val = data.get_f64(i, value_field).unwrap_or(0.0);
-            let x = match band.map(&cat) {
+            // Use indexed band key for positioning (handles duplicate categories)
+            let band_key = categories.get(i).map(|k| k.as_str()).unwrap_or(&cat);
+            let x = match band.map(band_key) {
                 Some(x) => x,
                 None => continue,
             };
-            let bar_top = linear.map(val);
-            let bar_bottom = linear.map(0.0);
-            let bar_height = (bar_bottom - bar_top).abs();
+            let bar_val_y = linear.map(val);
+            let bar_zero_y = linear.map(0.0);
+            let bar_height = (bar_zero_y - bar_val_y).abs();
+            // For positive bars, rect y is at the value (above zero line).
+            // For negative bars, rect y is at zero line (bar extends downward).
+            let rect_y = bar_val_y.min(bar_zero_y);
 
             elements.push(ChartElement::Rect {
                 x: x + x_inset,
-                y: bar_top,
+                y: rect_y,
                 width: bar_render_width,
                 height: bar_height,
-                fill: fill.clone(),
+                fill: palette[i % palette.len()].clone(),
                 stroke: None,
                 class: "bar".to_string(),
                 data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
@@ -365,9 +423,9 @@ fn render_single_series_bars(
                 if dl.show == Some(true) {
                     let label_fmt = dl.format.as_deref().or(y_fmt_ref);
                     let label_y = match dl.position.as_deref() {
-                        Some("center") => bar_top + bar_height / 2.0,
-                        Some("bottom") => bar_bottom - 5.0,
-                        _ => bar_top - 5.0, // "top" or default
+                        Some("center") => rect_y + bar_height / 2.0,
+                        Some("bottom") => rect_y + bar_height - 5.0,
+                        _ => if val >= 0.0 { rect_y - 5.0 } else { rect_y + bar_height + 12.0 }, // "top" or default
                     };
                     elements.push(ChartElement::Text {
                         x: x + band.bandwidth() / 2.0,
@@ -639,8 +697,8 @@ fn render_combo(
     let raw_left_domain_min = left_explicit_min.unwrap_or(0.0);
     let raw_left_domain_max = left_explicit_max.unwrap_or(if left_max <= 0.0 { 1.0 } else { left_max });
     let (left_domain_min, left_domain_max) = if left_explicit_min.is_none() && left_explicit_max.is_none() {
-        // Match JS: yLeft.nice() uses default count=10 for domain rounding.
-        nice_domain(raw_left_domain_min, raw_left_domain_max, 10)
+        // Use count=5 to align with generate_y_axis_numeric's hardcoded tick count of 5.
+        nice_domain(raw_left_domain_min, raw_left_domain_max, 5)
     } else {
         (raw_left_domain_min, raw_left_domain_max)
     };
@@ -657,8 +715,8 @@ fn render_combo(
         let raw_right_domain_min = right_explicit_min.unwrap_or(0.0);
         let raw_right_domain_max = right_explicit_max.unwrap_or(if right_max <= 0.0 { 1.0 } else { right_max });
         let (right_domain_min, right_domain_max) = if right_explicit_min.is_none() && right_explicit_max.is_none() {
-            // Match JS: yLeft.nice() uses default count=10 for domain rounding.
-            nice_domain(raw_right_domain_min, raw_right_domain_max, 10)
+            // Use count=5 to align with generate_y_axis_numeric's hardcoded tick count of 5.
+            nice_domain(raw_right_domain_min, raw_right_domain_max, 5)
         } else {
             (raw_right_domain_min, raw_right_domain_max)
         };
@@ -673,9 +731,11 @@ fn render_combo(
 
     // Axes
     let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
+    let left_axis_label = axes_left.and_then(|a| a.label.as_deref());
     let y_axis_left = generate_y_axis_numeric(
         (left_domain_min, left_domain_max), (inner_height, 0.0), margins.left,
-        None, adaptive_tick_count(inner_height), Some(inner_width), &grid,
+        y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid,
+        left_axis_label,
     );
 
     let mut axis_elements = Vec::new();
@@ -687,18 +747,18 @@ fn render_combo(
         let right_fmt = config.visualize.axes.as_ref()
             .and_then(|a| a.right.as_ref())
             .and_then(|a| a.format.as_deref());
+        // Right axis label is rendered manually below (outside this block),
+        // so pass None here to avoid duplication.
         let right_axis = generate_y_axis_numeric_right(
             rs.domain(), (inner_height, 0.0), margins.left + inner_width,
             right_fmt, adaptive_tick_count(inner_height),
+            None,
         );
         axis_elements.extend(right_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
     }
 
-    // Axis title labels — left Y-axis label is intentionally not rendered.
-    // The axis label text (e.g. "Revenue ($)") is communicated via the spec's
-    // axes.rows.label field, but the JS reference does not render a rotated
-    // Y-axis label for combo charts; it relies on the axis ticks and legend
-    // to convey the units. Only the right-axis label is rendered if present.
+    // Right axis title label — rendered manually here with absolute positioning
+    // (the left axis label is already handled by generate_y_axis_numeric above).
     if let Some(label) = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()).and_then(|a| a.label.clone()) {
         let rx = config.width - 12.0;
         axis_elements.push(ChartElement::Text {
