@@ -1,10 +1,12 @@
+use serde::{Deserialize, Serialize};
+
 use crate::data::DataTable;
 use crate::element::{ChartElement, Dimensions};
 use crate::error::ChartError;
 use crate::spec::VisualizeSpec;
 
 /// Configuration passed to chart renderers.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChartConfig {
     /// The visualize spec from the parsed YAML.
     pub visualize: VisualizeSpec,
