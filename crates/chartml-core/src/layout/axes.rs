@@ -26,10 +26,10 @@ pub struct CategoryTickMark {
 }
 
 /// Calculate the optimal number of ticks based on available axis length in pixels.
-/// Formula: floor(axis_length / 50), clamped to 4..=10
-/// Matches JS chartml: maxFittableTicks = floor(chartWidth / 50), clamped 4-10.
+/// Formula: floor(axis_length / 50), clamped to 3..=10
+/// For very small charts (< ~150px), allows as few as 3 ticks to avoid crowding.
 pub fn adaptive_tick_count(axis_length_px: f64) -> usize {
-    ((axis_length_px / 50.0).floor() as usize).clamp(4, 10)
+    ((axis_length_px / 50.0).floor() as usize).clamp(3, 10)
 }
 
 /// Generates tick positions and formatted labels for a continuous axis.
@@ -183,7 +183,7 @@ mod tests {
 
     #[test]
     fn adaptive_tick_count_small() {
-        assert_eq!(adaptive_tick_count(150.0), 4); // floor(150/50)=3, clamped to 4
+        assert_eq!(adaptive_tick_count(150.0), 3); // floor(150/50)=3, minimum is now 3
     }
 
     #[test]

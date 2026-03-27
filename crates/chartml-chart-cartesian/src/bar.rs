@@ -775,10 +775,16 @@ fn render_combo(
             .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
             .fold(0.0_f64, f64::max)
     };
+    // Compute left-axis data minimum to support negative bar values.
+    let left_data_min = left_fields.iter()
+        .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
+        .fold(0.0_f64, f64::min);
+    // Keep data_min at 0 when all values are non-negative (standard bar chart behavior)
+    let left_data_min = if left_data_min >= 0.0 { 0.0 } else { left_data_min };
     let axes_left = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref());
     let left_explicit_min = axes_left.and_then(|a| a.min);
     let left_explicit_max = axes_left.and_then(|a| a.max);
-    let raw_left_domain_min = left_explicit_min.unwrap_or(0.0);
+    let raw_left_domain_min = left_explicit_min.unwrap_or(left_data_min);
     let raw_left_domain_max = left_explicit_max.unwrap_or(if left_max <= 0.0 { 1.0 } else { left_max });
     let (left_domain_min, left_domain_max) = if left_explicit_min.is_none() && left_explicit_max.is_none() {
         // Use count=5 to align with generate_y_axis_numeric's hardcoded tick count of 5.

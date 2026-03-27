@@ -137,7 +137,7 @@ assertions:
 
   axes:
     x:
-      label_count: 52
+      labels_sampled: true
     y:
       min: 0
       format: numeric

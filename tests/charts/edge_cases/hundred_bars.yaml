@@ -232,7 +232,7 @@ assertions:
 
   axes:
     x:
-      label_count: 100
+      labels_sampled: true
       orientation: horizontal
     y:
       min: 0
