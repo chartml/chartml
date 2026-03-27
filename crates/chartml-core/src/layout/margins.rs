@@ -41,6 +41,8 @@ pub struct MarginConfig {
     pub x_label_strategy_margin: f64,
     pub max_left_margin: f64,
     pub max_right_margin: f64,
+    /// Total SVG height — used to scale bottom margin for small charts.
+    pub chart_height: f64,
 }
 
 impl Default for MarginConfig {
@@ -56,6 +58,7 @@ impl Default for MarginConfig {
             x_label_strategy_margin: 0.0,
             max_left_margin: 250.0,
             max_right_margin: 250.0,
+            chart_height: 400.0,
         }
     }
 }
@@ -101,8 +104,19 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
         30.0 // matches JS d3CartesianChart.js default marginRight
     };
 
-    // Bottom margin
-    let bottom = 40.0
+    // Bottom margin: 40px base covers tick marks (+5px) and horizontal label text (+18px)
+    // with some padding.  For small charts (< 300px tall), scale proportionally to
+    // avoid the base consuming too much of the chart height.
+    // The rotation margin from x_label_strategy_margin adds the vertical descent of
+    // rotated labels beyond the horizontal baseline.
+    let base_bottom = if config.chart_height < 300.0 {
+        // Scale: at 150px tall => ~25px base; at 300px => 40px base.
+        // This keeps horizontal labels visible while leaving room for the plot.
+        (config.chart_height * 0.16).clamp(20.0, 40.0)
+    } else {
+        40.0
+    };
+    let bottom = base_bottom
         + config.x_label_strategy_margin
         + if config.has_x_axis_label { 20.0 } else { 0.0 }
         + if config.has_legend { 30.0 } else { 0.0 };
