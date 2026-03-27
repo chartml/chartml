@@ -56,9 +56,14 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     ];
 
     // Step 2: Calculate margins including rotation
+    let has_x_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.x.as_ref())
+        .and_then(|a| a.label.as_ref())
+        .is_some();
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: color_field.is_some(),
+        has_x_axis_label,
         x_label_strategy_margin: x_extra_margin,
         y_tick_labels: area_prelim_labels,
         ..Default::default()
@@ -78,9 +83,9 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     let area_gen = AreaGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
     let mut area_elements = Vec::new();
 
-    // Track Y domain for annotations (set inside each branch)
-    let mut y_domain_min = 0.0_f64;
-    let mut y_domain_max = 1.0_f64;
+    // Track Y domain for annotations (set inside each branch below)
+    let y_domain_min: f64;
+    let y_domain_max: f64;
 
     if let Some(ref color_f) = color_field {
         let series_names = data.unique_values(color_f);
@@ -200,10 +205,32 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             }
 
             // Axes
+            let bottom_axis_label = config.visualize.axes.as_ref()
+                .and_then(|a| a.x.as_ref())
+                .and_then(|a| a.label.as_deref());
             let x_axis_result =
-                generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
+                generate_x_axis(&crate::helpers::XAxisParams {
+                    labels: &categories,
+                    display_label_overrides: None,
+                    range: (0.0, inner_width),
+                    y_position: margins.top + inner_height,
+                    available_width: inner_width,
+                    x_format: x_format.as_deref(),
+                    chart_height: Some(inner_height),
+                    grid: &grid,
+                    axis_label: bottom_axis_label,
+                });
             let y_axis_elements =
-                generate_y_axis_numeric((value_min, value_max), (inner_height, 0.0), margins.left, y_axis_fmt, 5, Some(inner_width), &grid, left_axis_label);
+                generate_y_axis_numeric(&crate::helpers::YAxisNumericParams {
+                    domain: (value_min, value_max),
+                    range: (inner_height, 0.0),
+                    x_position: margins.left,
+                    fmt: y_axis_fmt,
+                    tick_count: 5,
+                    chart_width: Some(inner_width),
+                    grid: &grid,
+                    axis_label: left_axis_label,
+                });
 
             children.push(ChartElement::Group {
                 class: "axes".to_string(),
@@ -306,10 +333,32 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             }
 
             // Axes
+            let bottom_axis_label = config.visualize.axes.as_ref()
+                .and_then(|a| a.x.as_ref())
+                .and_then(|a| a.label.as_deref());
             let x_axis_result =
-                generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
+                generate_x_axis(&crate::helpers::XAxisParams {
+                    labels: &categories,
+                    display_label_overrides: None,
+                    range: (0.0, inner_width),
+                    y_position: margins.top + inner_height,
+                    available_width: inner_width,
+                    x_format: x_format.as_deref(),
+                    chart_height: Some(inner_height),
+                    grid: &grid,
+                    axis_label: bottom_axis_label,
+                });
             let y_axis_elements =
-                generate_y_axis_numeric((value_min, value_max), (inner_height, 0.0), margins.left, None, 5, Some(inner_width), &grid, left_axis_label);
+                generate_y_axis_numeric(&crate::helpers::YAxisNumericParams {
+                    domain: (value_min, value_max),
+                    range: (inner_height, 0.0),
+                    x_position: margins.left,
+                    fmt: None,
+                    tick_count: 5,
+                    chart_width: Some(inner_width),
+                    grid: &grid,
+                    axis_label: left_axis_label,
+                });
 
             children.push(ChartElement::Group {
                 class: "axes".to_string(),
@@ -420,10 +469,32 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         }
 
         // Axes
+        let bottom_axis_label = config.visualize.axes.as_ref()
+            .and_then(|a| a.x.as_ref())
+            .and_then(|a| a.label.as_deref());
         let x_axis_result =
-            generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
+            generate_x_axis(&crate::helpers::XAxisParams {
+                    labels: &categories,
+                    display_label_overrides: None,
+                    range: (0.0, inner_width),
+                    y_position: margins.top + inner_height,
+                    available_width: inner_width,
+                    x_format: x_format.as_deref(),
+                    chart_height: Some(inner_height),
+                    grid: &grid,
+                    axis_label: bottom_axis_label,
+                });
         let y_axis_elements =
-            generate_y_axis_numeric((value_min, value_max), (inner_height, 0.0), margins.left, None, 5, Some(inner_width), &grid, left_axis_label);
+            generate_y_axis_numeric(&crate::helpers::YAxisNumericParams {
+                domain: (value_min, value_max),
+                range: (inner_height, 0.0),
+                x_position: margins.left,
+                fmt: None,
+                tick_count: 5,
+                chart_width: Some(inner_width),
+                grid: &grid,
+                axis_label: left_axis_label,
+            });
 
         children.push(ChartElement::Group {
             class: "axes".to_string(),

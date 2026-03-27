@@ -1,0 +1,47 @@
+#!/bin/bash
+# Pre-commit hook: blocks new lint suppressions and clippy warnings.
+
+set -e
+
+# --- Check 1: Reject new lint suppressions in staged files ---
+echo "🔍 Checking for new lint suppressions..."
+
+# Check .rs files for #[allow(...)]
+rs_violations=$(git diff --cached -- '*.rs' | grep '^+' | grep -v '^+++' | grep '#\[allow(' || true)
+
+# Check Cargo.toml for = "allow" lint downgrades
+toml_violations=$(git diff --cached -- '*/Cargo.toml' 'Cargo.toml' | grep '^+' | grep -v '^+++' | grep '= "allow"' || true)
+
+violations="${rs_violations}${toml_violations}"
+
+if [ -n "$violations" ]; then
+    echo ""
+    echo "❌ New lint suppressions detected — commit blocked."
+    echo ""
+    [ -n "$rs_violations" ] && echo "In .rs files:" && echo "$rs_violations" && echo ""
+    [ -n "$toml_violations" ] && echo "In Cargo.toml:" && echo "$toml_violations" && echo ""
+    echo "Fix the lint warning instead of suppressing it."
+    exit 1
+fi
+
+echo "✅ No new lint suppressions."
+
+# --- Check 2: Cargo clippy ---
+echo "🔍 Running cargo clippy..."
+
+warnings=$(cargo clippy --workspace 2>&1 \
+    | grep "^warning:" \
+    | grep -v "cargo:warning\|generated\|Model file\|Downloaded\|Downloading" \
+    || true)
+
+if [ -n "$warnings" ]; then
+    echo ""
+    echo "❌ Clippy warnings found — commit blocked."
+    echo ""
+    echo "$warnings"
+    echo ""
+    echo "Fix warnings and try again."
+    exit 1
+fi
+
+echo "✅ Clippy clean."

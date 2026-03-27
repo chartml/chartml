@@ -25,13 +25,13 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
     // Detect multi-field rows (e.g., [{field: revenue, color: ...}, {field: target, ...}])
     let multi_fields: Vec<FieldSpec> = match &config.visualize.rows {
-        Some(FieldRef::Multiple(items)) => items.iter().filter_map(|item| match item {
-            FieldRefItem::Detailed(spec) => Some(spec.clone()),
-            FieldRefItem::Simple(name) => Some(FieldSpec {
+        Some(FieldRef::Multiple(items)) => items.iter().map(|item| match item {
+            FieldRefItem::Detailed(spec) => spec.as_ref().clone(),
+            FieldRefItem::Simple(name) => FieldSpec {
                 field: name.clone(), mark: None, axis: None, label: None,
                 color: None, format: None, data_labels: None,
                 line_style: None, upper: None, lower: None, opacity: None,
-            }),
+            },
         }).collect(),
         _ => vec![],
     };
@@ -95,10 +95,15 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         .and_then(|a| a.left.as_ref())
         .and_then(|a| a.label.as_ref())
         .is_some();
+    let has_x_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.x.as_ref())
+        .and_then(|a| a.label.as_ref())
+        .is_some();
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: has_series,
         has_y_axis_label,
+        has_x_axis_label,
         x_label_strategy_margin: x_extra_margin,
         y_tick_labels: prelim_labels,
         ..Default::default()
@@ -145,20 +150,33 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     // Axes — read format string from spec
     let grid = GridConfig::from_config(config);
 
-    let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
+    let bottom_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.x.as_ref())
+        .and_then(|a| a.label.as_deref());
+    let x_axis_result = generate_x_axis(&crate::helpers::XAxisParams {
+        labels: &categories,
+        display_label_overrides: None,
+        range: (0.0, inner_width),
+        y_position: margins.top + inner_height,
+        available_width: inner_width,
+        x_format: x_format.as_deref(),
+        chart_height: Some(inner_height),
+        grid: &grid,
+        axis_label: bottom_axis_label,
+    });
     let left_axis_label = config.visualize.axes.as_ref()
         .and_then(|a| a.left.as_ref())
         .and_then(|a| a.label.as_deref());
-    let y_axis_elements = generate_y_axis_numeric(
-        (domain_min, domain_max),
-        (inner_height, 0.0),
-        margins.left,
-        y_fmt_ref,
-        adaptive_tick_count(inner_height),
-        Some(inner_width),
-        &grid,
-        left_axis_label,
-    );
+    let y_axis_elements = generate_y_axis_numeric(&crate::helpers::YAxisNumericParams {
+        domain: (domain_min, domain_max),
+        range: (inner_height, 0.0),
+        x_position: margins.left,
+        fmt: y_fmt_ref,
+        tick_count: adaptive_tick_count(inner_height),
+        chart_width: Some(inner_width),
+        grid: &grid,
+        axis_label: left_axis_label,
+    });
 
     children.push(ChartElement::Group {
         class: "axes".to_string(),

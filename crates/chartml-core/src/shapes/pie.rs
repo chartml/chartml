@@ -1,6 +1,5 @@
 /// Computes start/end angles for pie slices from data values.
 /// Equivalent to D3's `d3.pie()`.
-
 use std::f64::consts::PI;
 
 /// A computed pie slice with angular position.

@@ -46,6 +46,31 @@ impl GridConfig {
     }
 }
 
+/// Parameters for generating an x-axis with band-based labels.
+pub struct XAxisParams<'a> {
+    pub labels: &'a [String],
+    pub display_label_overrides: Option<&'a [String]>,
+    pub range: (f64, f64),
+    pub y_position: f64,
+    pub available_width: f64,
+    pub x_format: Option<&'a str>,
+    pub chart_height: Option<f64>,
+    pub grid: &'a GridConfig,
+    pub axis_label: Option<&'a str>,
+}
+
+/// Parameters for generating a numeric y-axis.
+pub struct YAxisNumericParams<'a> {
+    pub domain: (f64, f64),
+    pub range: (f64, f64),
+    pub x_position: f64,
+    pub fmt: Option<&'a str>,
+    pub tick_count: usize,
+    pub chart_width: Option<f64>,
+    pub grid: &'a GridConfig,
+    pub axis_label: Option<&'a str>,
+}
+
 /// Extract axis min/max bounds from the spec.
 /// Adaptive bar padding matching JS d3CartesianChart.js behavior.
 /// More bars = less padding to prevent overlap; fewer bars = more padding.
@@ -133,8 +158,8 @@ pub fn format_value(value: f64, format_str: Option<&str>) -> String {
 
 /// Format a tick label with SI suffix abbreviation when values are large.
 ///
-/// When `tick_step` is >= 1_000_000_000 uses "B" suffix, >= 1_000_000 uses "M",
-/// >= 1_000 uses "K". The value is divided by the magnitude before formatting
+/// When `tick_step` is \>= 1_000_000_000 uses "B" suffix, \>= 1_000_000 uses "M",
+/// \>= 1_000 uses "K". The value is divided by the magnitude before formatting
 /// with the given format string, and the suffix is appended after the formatted
 /// number. Trailing ".0" or unnecessary decimals are cleaned up so that e.g.
 /// "$1.0B" becomes "$1B".
@@ -214,8 +239,8 @@ pub fn format_tick_value(value: f64, tick_step: f64) -> String {
     };
 
     // Handle negative sign
-    let (sign, digits) = if int_part.starts_with('-') {
-        ("-", &int_part[1..])
+    let (sign, digits) = if let Some(stripped) = int_part.strip_prefix('-') {
+        ("-", stripped)
     } else {
         ("", int_part)
     };
@@ -250,7 +275,7 @@ fn insert_commas_str(digits: &str) -> String {
     }
     let mut result = String::with_capacity(len + len / 3);
     for (i, ch) in digits.chars().enumerate() {
-        if i > 0 && (len - i) % 3 == 0 {
+        if i > 0 && (len - i).is_multiple_of(3) {
             result.push(',');
         }
         result.push(ch);
@@ -320,7 +345,7 @@ fn insert_commas(n: u64) -> String {
     }
     let mut result = String::with_capacity(len + len / 3);
     for (i, ch) in s.chars().enumerate() {
-        if i > 0 && (len - i) % 3 == 0 {
+        if i > 0 && (len - i).is_multiple_of(3) {
             result.push(',');
         }
         result.push(ch);
@@ -336,31 +361,25 @@ pub struct XAxisResult {
 /// Generate x-axis elements with smart label handling.
 /// Applies LabelStrategy (horizontal/rotated/truncated/sampled) based on available space.
 /// Auto-detects date labels and reformats them if no explicit format is provided.
-pub fn generate_x_axis(
-    labels: &[String],
-    range: (f64, f64),
-    y_position: f64,
-    available_width: f64,
-    x_format: Option<&str>,
-    chart_height: Option<f64>,
-    grid: &GridConfig,
-) -> XAxisResult {
-    generate_x_axis_with_display(labels, None, range, y_position, available_width, x_format, chart_height, grid)
+pub fn generate_x_axis(params: &XAxisParams) -> XAxisResult {
+    generate_x_axis_with_display(params)
 }
 
 /// Generate x-axis with optional separate display labels.
-/// `band_keys` are used for ScaleBand positioning (must be unique).
+/// `labels` are used for ScaleBand positioning (must be unique).
 /// `display_label_overrides`, when Some, provides the text to show (may contain duplicates).
 pub fn generate_x_axis_with_display(
-    band_keys: &[String],
-    display_label_overrides: Option<&[String]>,
-    range: (f64, f64),
-    y_position: f64,
-    available_width: f64,
-    x_format: Option<&str>,
-    chart_height: Option<f64>,
-    grid: &GridConfig,
+    params: &XAxisParams,
 ) -> XAxisResult {
+    let band_keys = params.labels;
+    let display_label_overrides = params.display_label_overrides;
+    let range = params.range;
+    let y_position = params.y_position;
+    let available_width = params.available_width;
+    let x_format = params.x_format;
+    let chart_height = params.chart_height;
+    let grid = params.grid;
+    let axis_label = params.axis_label;
     let band = ScaleBand::new(band_keys.to_vec(), range);
     let bandwidth = band.bandwidth();
 
@@ -397,7 +416,7 @@ pub fn generate_x_axis_with_display(
     // Vertical grid lines (if grid.show_x and chart_height provided)
     if grid.show_x {
         if let Some(ch) = chart_height {
-            for (_i, band_key) in band_keys.iter().enumerate() {
+            for band_key in band_keys.iter() {
                 let x = match band.map(band_key) {
                     Some(x) => x + bandwidth / 2.0,
                     None => continue,
@@ -446,6 +465,29 @@ pub fn generate_x_axis_with_display(
 
         LabelStrategy::Rotated { margin: _, skip_factor } => {
             // rotation margin handled by MarginConfig
+
+            // Compute the effective visible label count (after skip_factor thinning)
+            let visible_count = match skip_factor {
+                Some(factor) if *factor > 1 => {
+                    (0..display_labels.len()).filter(|i| i % factor == 0).count()
+                }
+                _ => display_labels.len(),
+            };
+
+            // Post-rotation truncation: a label of width W rotated -45deg projects
+            // W * cos(45deg) horizontally. To avoid overlap, this projection must fit
+            // in the space available per visible label.
+            let cos45 = std::f64::consts::FRAC_PI_4.cos(); // ~0.707
+            let available_per_visible = if visible_count > 0 {
+                available_width / visible_count as f64
+            } else {
+                available_width
+            };
+            // max_full_width: maximum unrotated label width such that the rotated
+            // horizontal projection fits: available_per_visible >= width * cos45 + spacing
+            let spacing = 6.0;
+            let max_full_width = (available_per_visible - spacing) / cos45;
+
             for (i, label) in display_labels.iter().enumerate() {
                 let orig_label = &band_keys[i];
                 let x = match band.map(orig_label) {
@@ -458,15 +500,22 @@ pub fn generate_x_axis_with_display(
                     stroke: "#999".to_string(), stroke_width: Some(1.0),
                     stroke_dasharray: None, class: "tick".to_string(),
                 });
-                // Label — skip if skip_factor says so
+                // Label -- skip if skip_factor says so
                 let should_show = match skip_factor {
                     Some(factor) => i % factor == 0,
                     None => true,
                 };
                 if should_show {
+                    // Truncate the label if its rotated projection would cause overlap
+                    let display_text = if max_full_width > 0.0 {
+                        truncate_label(label, max_full_width)
+                    } else {
+                        label.clone()
+                    };
+                    let is_truncated = display_text != *label;
                     elements.push(ChartElement::Text {
                         x, y: y_position + 10.0,
-                        content: label.clone(),
+                        content: display_text,
                         anchor: TextAnchor::End,
                         dominant_baseline: None,
                         transform: Some(Transform::Rotate(-45.0, x, y_position + 10.0)),
@@ -474,7 +523,11 @@ pub fn generate_x_axis_with_display(
                         font_weight: None,
                         fill: Some("#666".to_string()),
                         class: "tick-label".to_string(),
-                        data: None,
+                        data: if is_truncated {
+                            Some(ElementData::new(label.clone(), ""))
+                        } else {
+                            None
+                        },
                     });
                 }
             }
@@ -515,7 +568,15 @@ pub fn generate_x_axis_with_display(
         }
 
         LabelStrategy::Sampled { indices } => {
-            // no extra margin needed
+            // Compute available space per sampled label for truncation
+            let sampled_count = indices.len();
+            let available_per_sampled = if sampled_count > 0 {
+                available_width / sampled_count as f64
+            } else {
+                available_width
+            };
+            let sampled_max_width = available_per_sampled - 10.0; // 10px spacing
+
             for (i, label) in display_labels.iter().enumerate() {
                 let orig_label = &band_keys[i];
                 let x = match band.map(orig_label) {
@@ -528,11 +589,17 @@ pub fn generate_x_axis_with_display(
                     stroke: "#999".to_string(), stroke_width: Some(1.0),
                     stroke_dasharray: None, class: "tick".to_string(),
                 });
-                // Label only for sampled indices
+                // Label only for sampled indices, with truncation if needed
                 if indices.contains(&i) {
+                    let display_text = if sampled_max_width > 0.0 {
+                        truncate_label(label, sampled_max_width)
+                    } else {
+                        label.clone()
+                    };
+                    let is_truncated = display_text != *label;
                     elements.push(ChartElement::Text {
                         x, y: y_position + 18.0,
-                        content: label.clone(),
+                        content: display_text,
                         anchor: TextAnchor::Middle,
                         dominant_baseline: None,
                         transform: None,
@@ -540,24 +607,38 @@ pub fn generate_x_axis_with_display(
                         font_weight: None,
                         fill: Some("#666".to_string()),
                         class: "tick-label".to_string(),
-                        data: None,
+                        data: if is_truncated {
+                            Some(ElementData::new(label.clone(), ""))
+                        } else {
+                            None
+                        },
                     });
                 }
             }
         }
     }
 
-    XAxisResult { elements }
-}
+    // Axis label (centered below the tick labels)
+    if let Some(label_text) = axis_label {
+        let mid_x = (range.0 + range.1) / 2.0;
+        // Position below the tick labels: y_position + tick offset + label height + gap
+        let label_y = y_position + 38.0;
+        elements.push(ChartElement::Text {
+            x: mid_x,
+            y: label_y,
+            content: label_text.to_string(),
+            anchor: TextAnchor::Middle,
+            dominant_baseline: None,
+            transform: None,
+            font_size: Some("12px".to_string()),
+            font_weight: None,
+            fill: Some("#666".to_string()),
+            class: "axis-label".to_string(),
+            data: None,
+        });
+    }
 
-/// Generate y-axis elements for category data (used in horizontal bar charts).
-pub fn generate_y_axis(
-    labels: &[String],
-    range: (f64, f64),
-    x_position: f64,
-    _formatter: Option<&str>,
-) -> Vec<ChartElement> {
-    generate_y_axis_with_display(labels, None, range, x_position, _formatter)
+    XAxisResult { elements }
 }
 
 /// Generate y-axis with optional separate display labels.
@@ -628,15 +709,16 @@ pub fn generate_y_axis_with_display(
 /// Generate y-axis elements for numeric data (used by bar, line, and area charts).
 /// Grid lines are controlled by `grid` config and `chart_width`.
 pub fn generate_y_axis_numeric(
-    domain: (f64, f64),
-    range: (f64, f64),
-    x_position: f64,
-    fmt: Option<&str>,
-    tick_count: usize,
-    chart_width: Option<f64>,
-    grid: &GridConfig,
-    axis_label: Option<&str>,
+    params: &YAxisNumericParams,
 ) -> Vec<ChartElement> {
+    let domain = params.domain;
+    let range = params.range;
+    let x_position = params.x_position;
+    let fmt = params.fmt;
+    let tick_count = params.tick_count;
+    let chart_width = params.chart_width;
+    let grid = params.grid;
+    let axis_label = params.axis_label;
     let scale = ScaleLinear::new(domain, range);
     // Match JS: d3.axisLeft(yLeft).ticks(5) — fixed count of 5 regardless of tick_count param.
     // tick_count is kept for future use / callers that may pass it.
@@ -679,7 +761,7 @@ pub fn generate_y_axis_numeric(
                     stroke: grid.color.clone(),
                     stroke_width: Some(1.0),
                     stroke_dasharray: grid.dash_array.clone(),
-                    class: format!("grid-line grid-line-y"),
+                    class: "grid-line grid-line-y".to_string(),
                 });
             }
         }
@@ -953,15 +1035,13 @@ pub fn d3_ticks(start: f64, stop: f64, count: usize) -> Vec<f64> {
                 ticks.push((i2 - i as f64) * inc);
             }
         }
+    } else if inc < 0.0 {
+        for i in 0..n {
+            ticks.push((i1 + i as f64) / -inc);
+        }
     } else {
-        if inc < 0.0 {
-            for i in 0..n {
-                ticks.push((i1 + i as f64) / -inc);
-            }
-        } else {
-            for i in 0..n {
-                ticks.push((i1 + i as f64) * inc);
-            }
+        for i in 0..n {
+            ticks.push((i1 + i as f64) * inc);
         }
     }
     ticks

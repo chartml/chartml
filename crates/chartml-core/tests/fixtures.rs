@@ -21,7 +21,10 @@ fn parse_fixture(name: &str) -> chartml_core::spec::ChartSpec {
     let spec = parse(&yaml)
         .unwrap_or_else(|e| panic!("Failed to parse fixture {}: {}", name, e));
     match spec {
-        ChartMLSpec::Single(Component::Chart(chart)) => chart,
+        ChartMLSpec::Single(component) => match *component {
+            Component::Chart(chart) => *chart,
+            other => panic!("Expected Chart for {}, got {:?}", name, other),
+        },
         other => panic!("Expected Single(Chart) for {}, got {:?}", name, other),
     }
 }
@@ -50,7 +53,7 @@ fn all_fixtures_parse_successfully() {
             // Every fixture should be a Single(Chart(...))
             let spec = result.unwrap();
             assert!(
-                matches!(&spec, ChartMLSpec::Single(Component::Chart(_))),
+                matches!(&spec, ChartMLSpec::Single(component) if matches!(component.as_ref(), Component::Chart(_))),
                 "Expected Single(Chart) for {}, got {:?}",
                 path.display(),
                 spec

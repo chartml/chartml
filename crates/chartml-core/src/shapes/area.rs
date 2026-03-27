@@ -1,6 +1,5 @@
 /// Generates SVG path `d` strings for area charts.
 /// Equivalent to D3's `d3.area()`.
-
 use super::line::{CurveType, LineGenerator};
 
 /// Generates SVG path `d` strings for area charts.

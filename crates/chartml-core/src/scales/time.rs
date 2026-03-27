@@ -36,7 +36,7 @@ impl ScaleTime {
         } else {
             t0 + (value - r0) / range_span * (t1 - t0)
         };
-        self.from_timestamp(t)
+        self.secs_to_datetime(t)
     }
 
     /// Generate nice time ticks.
@@ -50,7 +50,7 @@ impl ScaleTime {
         let min = t0.min(t1);
         let max = t0.max(t1);
         if min == max {
-            return vec![self.from_timestamp(min)];
+            return vec![self.secs_to_datetime(min)];
         }
 
         let step = tick_step(min, max, count);
@@ -65,7 +65,7 @@ impl ScaleTime {
         let mut i = start;
         while i <= stop {
             let tick = i * step;
-            ticks.push(self.from_timestamp(tick));
+            ticks.push(self.secs_to_datetime(tick));
             i += 1.0;
         }
 
@@ -97,7 +97,7 @@ impl ScaleTime {
         )
     }
 
-    fn from_timestamp(&self, secs: f64) -> NaiveDateTime {
+    fn secs_to_datetime(&self, secs: f64) -> NaiveDateTime {
         // Clamp to valid chrono timestamp range to avoid panics
         let secs = (secs as i64).clamp(-8_334_632_851_200, 8_210_298_412_799);
         chrono::DateTime::from_timestamp(secs, 0)

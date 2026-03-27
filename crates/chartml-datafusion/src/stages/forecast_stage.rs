@@ -9,6 +9,9 @@ use std::collections::HashMap;
 
 use crate::conversion;
 
+/// A partitioned group: (group key pairs, rows in that group).
+type GroupPartition<'a> = (Vec<(String, String)>, Vec<&'a Row>);
+
 /// Map a model name string to the ForecastModel enum.
 /// Returns an error for unrecognized model names.
 fn parse_model(model_str: &str) -> Result<ForecastModel, ChartError> {
@@ -66,7 +69,7 @@ pub async fn execute(
     };
 
     // 3. Group data if needed
-    let groups: Vec<(Vec<(String, String)>, Vec<&Row>)> =
+    let groups: Vec<GroupPartition<'_>> =
         if let Some(ref group_by) = spec.group_by {
             if group_by.is_empty() {
                 vec![(vec![], rows.iter().collect())]
@@ -250,7 +253,7 @@ fn extract_series(
 fn partition_by_groups<'a>(
     rows: &'a [Row],
     group_by: &[String],
-) -> Vec<(Vec<(String, String)>, Vec<&'a Row>)> {
+) -> Vec<GroupPartition<'a>> {
     let mut groups: HashMap<Vec<String>, Vec<&'a Row>> = HashMap::new();
     let mut key_order: Vec<Vec<String>> = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -260,10 +263,10 @@ fn partition_by_groups<'a>(
             .iter()
             .map(|col| {
                 row.get(col)
-                    .and_then(|v| match v {
-                        serde_json::Value::String(s) => Some(s.clone()),
-                        serde_json::Value::Number(n) => Some(n.to_string()),
-                        _ => Some(v.to_string()),
+                    .map(|v| match v {
+                        serde_json::Value::String(s) => s.clone(),
+                        serde_json::Value::Number(n) => n.to_string(),
+                        _ => v.to_string(),
                     })
                     .unwrap_or_default()
             })

@@ -14,7 +14,6 @@ use std::path::{Path, PathBuf};
 struct SpecInfo {
     id: String,       // e.g. "bar/basic_3_months"
     chart_type: String,
-    name: String,
     title: String,
     svg_width: u32,
     svg_height: u32,
@@ -71,8 +70,8 @@ fn discover_specs() -> Vec<SpecInfo> {
         if let Ok(yaml_text) = fs::read_to_string(yaml_path) {
             for line in yaml_text.lines() {
                 let trimmed = line.trim();
-                if trimmed.starts_with("name:") {
-                    title = trimmed[5..].trim().trim_matches('"').trim_matches('\'').to_string();
+                if let Some(rest) = trimmed.strip_prefix("name:") {
+                    title = rest.trim().trim_matches('"').trim_matches('\'').to_string();
                     break;
                 }
             }
@@ -81,7 +80,7 @@ fn discover_specs() -> Vec<SpecInfo> {
         // Read SVG and extract dimensions
         let (mut svg_width, mut svg_height) = (800u32, 400u32);
         let svg_content = if has_svg {
-            fs::read_to_string(&svg_path).ok().map(|svg_text| {
+            fs::read_to_string(&svg_path).ok().inspect(|svg_text| {
                 let head: String = svg_text.chars().take(500).collect();
                 if let Some(w) = extract_attr(&head, "width") {
                     svg_width = w;
@@ -89,7 +88,6 @@ fn discover_specs() -> Vec<SpecInfo> {
                 if let Some(h) = extract_attr(&head, "height") {
                     svg_height = h;
                 }
-                svg_text
             })
         } else {
             None
@@ -98,7 +96,6 @@ fn discover_specs() -> Vec<SpecInfo> {
         specs.push(SpecInfo {
             id,
             chart_type,
-            name,
             title,
             svg_width,
             svg_height,

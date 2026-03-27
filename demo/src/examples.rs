@@ -37,7 +37,7 @@ enum Block {
     Paragraph(String),
     Chart(String),
     Params(String),
-    CodeBlock(String),
+    Code(String),
     HorizontalRule,
 }
 
@@ -87,7 +87,7 @@ fn parse_examples(md: &str) -> Vec<Block> {
                 } else if is_params_yaml(&yaml) {
                     blocks.push(Block::Params(yaml));
                 } else {
-                    blocks.push(Block::CodeBlock(yaml));
+                    blocks.push(Block::Code(yaml));
                 }
             }
             continue;
@@ -105,7 +105,7 @@ fn parse_examples(md: &str) -> Vec<Block> {
                 code.push_str(inner);
             }
             if !code.trim().is_empty() && code.contains("type:") {
-                blocks.push(Block::CodeBlock(code));
+                blocks.push(Block::Code(code));
             }
             continue;
         }
@@ -115,16 +115,16 @@ fn parse_examples(md: &str) -> Vec<Block> {
             continue;
         }
 
-        if line.starts_with("### ") {
-            blocks.push(Block::Heading { level: 3, text: line[4..].to_string() });
+        if let Some(text) = line.strip_prefix("### ") {
+            blocks.push(Block::Heading { level: 3, text: text.to_string() });
             continue;
         }
-        if line.starts_with("## ") {
-            blocks.push(Block::Heading { level: 2, text: line[3..].to_string() });
+        if let Some(text) = line.strip_prefix("## ") {
+            blocks.push(Block::Heading { level: 2, text: text.to_string() });
             continue;
         }
-        if line.starts_with("# ") {
-            blocks.push(Block::Heading { level: 1, text: line[2..].to_string() });
+        if let Some(text) = line.strip_prefix("# ") {
+            blocks.push(Block::Heading { level: 1, text: text.to_string() });
             continue;
         }
 
@@ -187,7 +187,7 @@ pub fn ExamplesPage(chartml: Arc<ChartML>) -> impl IntoView {
                 Block::HorizontalRule => {
                     view! { <hr class="examples-hr" /> }.into_any()
                 }
-                Block::CodeBlock(yaml) => {
+                Block::Code(yaml) => {
                     view! {
                         <pre class="examples-code"><code>{yaml}</code></pre>
                     }.into_any()

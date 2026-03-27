@@ -260,7 +260,7 @@ pub fn forecast_logistic(
                 l * (x_pred - x0) * exp_term / denom_sq,   // df/dk
                 -l * k * exp_term / denom_sq,               // df/dx0
             );
-            (j_pred.transpose() * cov * &j_pred)[(0, 0)] + s_sq
+            (j_pred.transpose() * cov * j_pred)[(0, 0)] + s_sq
         } else {
             // Residual-only: no parameter uncertainty, just observation noise
             s_sq

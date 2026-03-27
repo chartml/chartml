@@ -243,7 +243,7 @@ fn insert_commas(int_part: &str) -> String {
     }
     let mut result = String::with_capacity(len + len / 3);
     for (idx, ch) in int_part.chars().enumerate() {
-        if idx > 0 && (len - idx) % 3 == 0 {
+        if idx > 0 && (len - idx).is_multiple_of(3) {
             result.push(',');
         }
         result.push(ch);
@@ -255,7 +255,7 @@ fn trim_trailing_zeros(s: &str) -> String {
     if s.contains('.') {
         let trimmed = s.trim_end_matches('0');
         if trimmed.ends_with('.') {
-            trimmed[..trimmed.len() - 1].to_string()
+            trimmed.strip_suffix('.').unwrap_or(trimmed).to_string()
         } else {
             trimmed.to_string()
         }
@@ -425,7 +425,7 @@ impl NumberFormatter {
         }
 
         let pad_len = w - body_len;
-        let padding: String = std::iter::repeat(spec.fill).take(pad_len).collect();
+        let padding: String = std::iter::repeat_n(spec.fill, pad_len).collect();
 
         match spec.align {
             Align::Left => format!("{}{}", body, padding),
@@ -433,8 +433,8 @@ impl NumberFormatter {
             Align::Center => {
                 let left = pad_len / 2;
                 let right = pad_len - left;
-                let lpad: String = std::iter::repeat(spec.fill).take(left).collect();
-                let rpad: String = std::iter::repeat(spec.fill).take(right).collect();
+                let lpad: String = std::iter::repeat_n(spec.fill, left).collect();
+                let rpad: String = std::iter::repeat_n(spec.fill, right).collect();
                 format!("{}{}{}", lpad, body, rpad)
             }
             Align::SignFirst => {

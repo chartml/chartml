@@ -76,7 +76,7 @@ impl ChartML {
     pub fn register_component(&mut self, yaml: &str) -> Result<(), ChartError> {
         let parsed = spec::parse(yaml)?;
         match parsed {
-            ChartMLSpec::Single(component) => self.register_single_component(component),
+            ChartMLSpec::Single(component) => self.register_single_component(*component),
             ChartMLSpec::Array(components) => {
                 for component in components {
                     self.register_single_component(component)?;
@@ -105,7 +105,7 @@ impl ChartML {
                 // Style/config registration — stored for future use
                 Ok(())
             }
-            spec::Component::Chart(_) => {
+            spec::Component::Chart(..) => {
                 Err(ChartError::InvalidSpec(
                     "Cannot register chart components. Use render_from_yaml() instead.".into()
                 ))
@@ -208,22 +208,27 @@ impl ChartML {
 
         // Collect all chart components
         let chart_specs: Vec<&ChartSpec> = match &parsed {
-            ChartMLSpec::Single(Component::Chart(chart)) => vec![chart],
+            ChartMLSpec::Single(component) => match component.as_ref() {
+                Component::Chart(chart) => vec![chart.as_ref()],
+                _ => vec![],
+            },
             ChartMLSpec::Array(components) => {
                 components.iter()
                     .filter_map(|c| match c {
-                        Component::Chart(chart) => Some(chart),
+                        Component::Chart(chart) => Some(chart.as_ref()),
                         _ => None,
                     })
                     .collect()
             }
-            _ => vec![],
         };
 
         // If no charts, check for params components to render as UI controls
         if chart_specs.is_empty() {
             let params_specs: Vec<&spec::ParamsSpec> = match &parsed {
-                ChartMLSpec::Single(Component::Params(p)) => vec![p],
+                ChartMLSpec::Single(component) => match component.as_ref() {
+                    Component::Params(p) => vec![p],
+                    _ => vec![],
+                },
                 ChartMLSpec::Array(components) => {
                     components.iter()
                         .filter_map(|c| match c {
@@ -232,7 +237,6 @@ impl ChartML {
                         })
                         .collect()
                 }
-                _ => vec![],
             };
 
             if !params_specs.is_empty() {
@@ -609,17 +613,19 @@ impl ChartML {
         }
 
         // Step 3: Extract chart spec
-        let chart_spec = match &parsed {
-            ChartMLSpec::Single(Component::Chart(chart)) => chart,
+        let chart_spec: &ChartSpec = match &parsed {
+            ChartMLSpec::Single(component) => match component.as_ref() {
+                Component::Chart(chart) => chart.as_ref(),
+                _ => return Err(ChartError::InvalidSpec("No chart component found".into())),
+            },
             ChartMLSpec::Array(components) => {
                 components.iter()
                     .find_map(|c| match c {
-                        Component::Chart(chart) => Some(chart),
+                        Component::Chart(chart) => Some(chart.as_ref()),
                         _ => None,
                     })
                     .ok_or_else(|| ChartError::InvalidSpec("No chart component found".into()))?
             }
-            _ => return Err(ChartError::InvalidSpec("No chart component found".into())),
         };
 
         // Step 4: Resolve data
@@ -655,14 +661,16 @@ impl ChartML {
     ) -> Result<ChartElement, ChartError> {
         // Register data as "source", then delegate to full async render
         let parsed = spec::parse(yaml)?;
-        let chart_spec = match &parsed {
-            ChartMLSpec::Single(Component::Chart(chart)) => chart,
+        let chart_spec: &ChartSpec = match &parsed {
+            ChartMLSpec::Single(component) => match component.as_ref() {
+                Component::Chart(chart) => chart.as_ref(),
+                _ => return Err(ChartError::InvalidSpec("No chart component found".into())),
+            },
             ChartMLSpec::Array(components) => {
                 components.iter()
-                    .find_map(|c| match c { Component::Chart(chart) => Some(chart), _ => None })
+                    .find_map(|c| match c { Component::Chart(chart) => Some(chart.as_ref()), _ => None })
                     .ok_or_else(|| ChartError::InvalidSpec("No chart component found".into()))?
             }
-            _ => return Err(ChartError::InvalidSpec("No chart component found".into())),
         };
 
         let chart_data = match &chart_spec.data {

@@ -144,7 +144,7 @@ fn compute_aggregation(rows: &[&Row], column: &str, agg: &str) -> Result<f64, Ch
             let mut sorted = values.clone();
             sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let mid = sorted.len() / 2;
-            if sorted.len() % 2 == 0 {
+            if sorted.len().is_multiple_of(2) {
                 (sorted[mid - 1] + sorted[mid]) / 2.0
             } else {
                 sorted[mid]
@@ -236,11 +236,11 @@ fn eval_filter_rule(row: &Row, rule: &FilterRule) -> bool {
         "=" | "==" => rule
             .value
             .as_ref()
-            .map_or(false, |v| field_val == Some(v)),
+            .is_some_and(|v| field_val == Some(v)),
         "!=" => rule
             .value
             .as_ref()
-            .map_or(false, |v| field_val != Some(v)),
+            .is_some_and(|v| field_val != Some(v)),
         ">" => compare_values(field_val, rule.value.as_ref(), |a, b| a > b),
         ">=" => compare_values(field_val, rule.value.as_ref(), |a, b| a >= b),
         "<" => compare_values(field_val, rule.value.as_ref(), |a, b| a < b),
@@ -284,7 +284,7 @@ fn compare_values(
     }
 }
 
-fn apply_sort(data: &mut Vec<Row>, sorts: &[SortSpec]) {
+fn apply_sort(data: &mut [Row], sorts: &[SortSpec]) {
     data.sort_by(|a, b| {
         for sort in sorts {
             let a_val = get_f64(a, &sort.field);

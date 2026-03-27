@@ -44,7 +44,7 @@ pub struct InlineData {
 #[serde(untagged)]
 pub enum StyleRefOrInline {
     Named(String),
-    Inline(ChartStyleSpec),
+    Inline(Box<ChartStyleSpec>),
 }
 
 // --- VisualizeSpec ---
@@ -96,7 +96,7 @@ pub enum Orientation {
 #[serde(untagged)]
 pub enum FieldRef {
     Simple(String),
-    Detailed(FieldSpec),
+    Detailed(Box<FieldSpec>),
     Multiple(Vec<FieldRefItem>),
 }
 
@@ -105,7 +105,7 @@ pub enum FieldRef {
 #[serde(untagged)]
 pub enum FieldRefItem {
     Simple(String),
-    Detailed(FieldSpec),
+    Detailed(Box<FieldSpec>),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -171,7 +171,7 @@ pub struct MarkEncodingSpec {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AxesSpec {
-    #[serde(alias = "columns")]
+    #[serde(alias = "columns", alias = "bottom")]
     pub x: Option<AxisSpec>,
     #[serde(alias = "rows")]
     pub left: Option<AxisSpec>,

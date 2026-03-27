@@ -27,7 +27,7 @@ pub use transform::{
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ChartMLSpec {
-    Single(Component),
+    Single(Box<Component>),
     Array(Vec<Component>),
 }
 
@@ -36,11 +36,11 @@ pub enum ChartMLSpec {
 #[serde(tag = "type")]
 pub enum Component {
     #[serde(rename = "chart")]
-    Chart(ChartSpec),
+    Chart(Box<ChartSpec>),
     #[serde(rename = "source")]
     Source(SourceSpec),
     #[serde(rename = "style")]
-    Style(StyleSpec),
+    Style(Box<StyleSpec>),
     #[serde(rename = "config")]
     Config(ConfigSpec),
     #[serde(rename = "params")]
@@ -135,6 +135,14 @@ fn split_yaml_documents(input: &str) -> Vec<&str> {
 mod tests {
     use super::*;
 
+    /// Helper: unwrap a ChartMLSpec::Single into its inner Component.
+    fn unwrap_single(spec: ChartMLSpec) -> Component {
+        match spec {
+            ChartMLSpec::Single(component) => *component,
+            other => panic!("Expected Single, got {:?}", other),
+        }
+    }
+
     #[test]
     fn test_parse_single_source() {
         let yaml = r#"
@@ -147,14 +155,14 @@ rows:
   - { month: "Feb", revenue: 200 }
 "#;
         let result = parse(yaml).unwrap();
-        match result {
-            ChartMLSpec::Single(Component::Source(source)) => {
+        match unwrap_single(result) {
+            Component::Source(source) => {
                 assert_eq!(source.name, "sales");
                 assert_eq!(source.provider, "inline");
                 assert!(source.rows.is_some());
                 assert_eq!(source.rows.unwrap().len(), 2);
             }
-            other => panic!("Expected Single(Source), got {:?}", other),
+            other => panic!("Expected Source, got {:?}", other),
         }
     }
 
@@ -171,8 +179,8 @@ visualize:
   rows: revenue
 "#;
         let result = parse(yaml).unwrap();
-        match result {
-            ChartMLSpec::Single(Component::Chart(chart)) => {
+        match unwrap_single(result) {
+            Component::Chart(chart) => {
                 assert_eq!(chart.title, Some("Revenue by Month".to_string()));
                 assert_eq!(chart.visualize.chart_type, "bar");
                 match &chart.data {
@@ -180,7 +188,7 @@ visualize:
                     other => panic!("Expected Named data ref, got {:?}", other),
                 }
             }
-            other => panic!("Expected Single(Chart), got {:?}", other),
+            other => panic!("Expected Chart, got {:?}", other),
         }
     }
 
@@ -229,8 +237,8 @@ visualize:
   rows: y
 "#;
         let result = parse(yaml).unwrap();
-        match result {
-            ChartMLSpec::Single(Component::Chart(chart)) => {
+        match unwrap_single(result) {
+            Component::Chart(chart) => {
                 match &chart.data {
                     DataRef::Inline(data) => {
                         assert_eq!(data.provider, "inline");
@@ -239,7 +247,7 @@ visualize:
                     other => panic!("Expected Inline data ref, got {:?}", other),
                 }
             }
-            other => panic!("Expected Single(Chart), got {:?}", other),
+            other => panic!("Expected Chart, got {:?}", other),
         }
     }
 
@@ -258,8 +266,8 @@ visualize:
     label: "Revenue ($)"
 "#;
         let result = parse(yaml).unwrap();
-        match result {
-            ChartMLSpec::Single(Component::Chart(chart)) => {
+        match unwrap_single(result) {
+            Component::Chart(chart) => {
                 match &chart.visualize.columns {
                     Some(FieldRef::Simple(s)) => assert_eq!(s, "month"),
                     other => panic!("Expected Simple field ref, got {:?}", other),
@@ -272,7 +280,7 @@ visualize:
                     other => panic!("Expected Detailed field ref, got {:?}", other),
                 }
             }
-            other => panic!("Expected Single(Chart), got {:?}", other),
+            other => panic!("Expected Chart, got {:?}", other),
         }
     }
 
@@ -291,14 +299,14 @@ visualize:
   invertTrend: false
 "#;
         let result = parse(yaml).unwrap();
-        match result {
-            ChartMLSpec::Single(Component::Chart(chart)) => {
+        match unwrap_single(result) {
+            Component::Chart(chart) => {
                 assert_eq!(chart.visualize.chart_type, "metric");
                 assert_eq!(chart.visualize.value, Some("totalRevenue".to_string()));
                 assert_eq!(chart.visualize.compare_with, Some("previousRevenue".to_string()));
                 assert_eq!(chart.visualize.invert_trend, Some(false));
             }
-            other => panic!("Expected Single(Chart), got {:?}", other),
+            other => panic!("Expected Chart, got {:?}", other),
         }
     }
 
@@ -330,8 +338,8 @@ legend:
   orientation: horizontal
 "##;
         let result = parse(yaml).unwrap();
-        match result {
-            ChartMLSpec::Single(Component::Style(style)) => {
+        match unwrap_single(result) {
+            Component::Style(style) => {
                 assert_eq!(style.name, "custom_theme");
                 assert_eq!(style.colors.unwrap().len(), 3);
                 assert_eq!(style.height, Some(400.0));
@@ -342,7 +350,7 @@ legend:
                 let legend = style.legend.unwrap();
                 assert_eq!(legend.position, Some("top".to_string()));
             }
-            other => panic!("Expected Single(Style), got {:?}", other),
+            other => panic!("Expected Style, got {:?}", other),
         }
     }
 
@@ -354,15 +362,15 @@ version: 1
 style: custom_theme
 "#;
         let result = parse(yaml).unwrap();
-        match result {
-            ChartMLSpec::Single(Component::Config(config)) => {
+        match unwrap_single(result) {
+            Component::Config(config) => {
                 assert_eq!(config.version, 1);
                 match &config.style {
                     StyleRef::Named(name) => assert_eq!(name, "custom_theme"),
                     other => panic!("Expected Named style ref, got {:?}", other),
                 }
             }
-            other => panic!("Expected Single(Config), got {:?}", other),
+            other => panic!("Expected Config, got {:?}", other),
         }
     }
 
@@ -391,8 +399,8 @@ params:
     placeholder: "Enter number"
 "#;
         let result = parse(yaml).unwrap();
-        match result {
-            ChartMLSpec::Single(Component::Params(params)) => {
+        match unwrap_single(result) {
+            Component::Params(params) => {
                 assert_eq!(params.name, Some("dashboard_filters".to_string()));
                 assert_eq!(params.params.len(), 3);
                 assert_eq!(params.params[0].id, "date_range");
@@ -400,7 +408,7 @@ params:
                 assert_eq!(params.params[1].options.as_ref().unwrap().len(), 3);
                 assert_eq!(params.params[2].placeholder, Some("Enter number".to_string()));
             }
-            other => panic!("Expected Single(Params), got {:?}", other),
+            other => panic!("Expected Params, got {:?}", other),
         }
     }
 
@@ -424,8 +432,8 @@ visualize:
       label: "Target"
 "##;
         let result = parse(yaml).unwrap();
-        match result {
-            ChartMLSpec::Single(Component::Chart(chart)) => {
+        match unwrap_single(result) {
+            Component::Chart(chart) => {
                 match &chart.visualize.rows {
                     Some(FieldRef::Multiple(items)) => {
                         assert_eq!(items.len(), 2);
@@ -433,7 +441,7 @@ visualize:
                     other => panic!("Expected Multiple field ref, got {:?}", other),
                 }
             }
-            other => panic!("Expected Single(Chart), got {:?}", other),
+            other => panic!("Expected Chart, got {:?}", other),
         }
     }
 
@@ -463,8 +471,8 @@ visualize:
   rows: totalAmount
 "#;
         let result = parse(yaml).unwrap();
-        match result {
-            ChartMLSpec::Single(Component::Chart(chart)) => {
+        match unwrap_single(result) {
+            Component::Chart(chart) => {
                 let transform = chart.transform.unwrap();
                 let agg = transform.aggregate.unwrap();
                 assert_eq!(agg.dimensions.len(), 2);
@@ -472,7 +480,7 @@ visualize:
                 assert_eq!(agg.measures[0].name, "totalAmount");
                 assert_eq!(agg.limit, Some(10));
             }
-            other => panic!("Expected Single(Chart), got {:?}", other),
+            other => panic!("Expected Chart, got {:?}", other),
         }
     }
 }

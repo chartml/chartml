@@ -13,5 +13,5 @@ pub struct ConfigSpec {
 #[serde(untagged)]
 pub enum StyleRef {
     Named(String),
-    Inline(ChartStyleSpec),
+    Inline(Box<ChartStyleSpec>),
 }

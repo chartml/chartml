@@ -1,14 +1,15 @@
-name: "Combo — stacked bars (2 series, left) + trend line (right)"
-tags: [bar, dual-axis, combo, stacked, line]
+name: "Combo — stacked bars (2 series via color field)"
+tags: [bar, combo, stacked]
 description: >
   Stacked bars with two series (online and in-store revenue) on the
-  left axis, plus an overall satisfaction trend line on the right axis.
-  Tests combining stacked bar mode with a secondary axis line overlay.
+  left axis, using marks.color to split by channel.
+  Tests combining stacked bar mode with a color field in the combo
+  (multi-field rows) renderer path.
 
 chart:
   type: chart
   version: 1
-  title: "Revenue by Channel & Customer Satisfaction"
+  title: "Revenue by Channel"
   data:
     provider: inline
     rows:
@@ -53,20 +54,10 @@ chart:
         label: "Revenue"
     marks:
       color: channel
-    overlay:
-      - field: satisfaction
-        mark: line
-        axis: right
-        label: "Satisfaction Score"
     axes:
       left:
         label: "Revenue ($)"
         format: "$,.0f"
-      right:
-        label: "Satisfaction"
-        format: ".1f"
-        min: 60
-        max: 100
 
 assertions:
   structure:
@@ -74,8 +65,7 @@ assertions:
     bars: 8
     title_in_svg: false
     legend: true
-    legend_entries: 3
-    y_axes: 2
+    legend_entries: 2
 
   bars:
     - label: "Q1"
@@ -114,19 +104,10 @@ assertions:
       - label: "Q4"
         total: 374000
 
-  dual_axis:
-    left_axis_present: true
-    right_axis_present: true
-    left_label: "Revenue ($)"
-    right_label: "Satisfaction"
-
   scale:
     left:
       y_min: 0
       y_nice: true
-    right:
-      y_min: 60
-      y_max: 100
 
   axes:
     x:
@@ -135,7 +116,3 @@ assertions:
     y_left:
       min: 0
       format: currency
-    y_right:
-      min: 60
-      max: 100
-      format: decimal

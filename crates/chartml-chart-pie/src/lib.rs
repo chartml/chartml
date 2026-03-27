@@ -6,6 +6,7 @@ use chartml_core::shapes::{ArcGenerator, PieLayout};
 use chartml_core::spec::{VisualizeSpec, FieldRef};
 use chartml_core::layout::{calculate_legend_layout, LegendConfig, LegendAlignment};
 
+#[derive(Default)]
 pub struct PieRenderer;
 
 impl PieRenderer {
@@ -60,7 +61,7 @@ impl ChartRenderer for PieRenderer {
                 .cloned()
                 .unwrap_or_else(|| "#999".to_string());
 
-            let data = ElementData::new(&labels[slice.index], &format!("{}", values[slice.index]))
+            let data = ElementData::new(&labels[slice.index], format!("{}", values[slice.index]))
                 .with_series(&labels[slice.index]);
 
             slice_elements.push(ChartElement::Path {

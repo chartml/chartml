@@ -18,7 +18,6 @@ impl TimeSeries {
     }
 
     /// Returns true if the series has no data points.
-    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }

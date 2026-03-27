@@ -13,7 +13,6 @@ pub struct GroupedTimeSeries {
     pub group_key: Vec<String>,
     /// The column names for each group, e.g. ["region", "product"].
     /// Retained for future use.
-    #[allow(dead_code)]
     pub group_columns: Vec<String>,
     /// The time series data for this group.
     pub series: TimeSeries,

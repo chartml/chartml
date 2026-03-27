@@ -16,7 +16,7 @@ pub fn get_chart_colors(series_count: usize, base_palette: &[&str]) -> Vec<Strin
     let combined: Vec<String> = base_palette
         .iter()
         .map(|c| c.to_string())
-        .chain(fallbacks.into_iter())
+        .chain(fallbacks)
         .collect();
 
     let combined_len = combined.len();
@@ -33,7 +33,7 @@ pub fn get_color_at_index(index: usize, base_palette: &[&str]) -> String {
     let combined: Vec<String> = base_palette
         .iter()
         .map(|c| c.to_string())
-        .chain(fallbacks.into_iter())
+        .chain(fallbacks)
         .collect();
 
     let combined_len = combined.len();

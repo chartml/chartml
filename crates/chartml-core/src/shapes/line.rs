@@ -1,6 +1,5 @@
 /// Generates SVG path `d` strings for line charts.
 /// Equivalent to D3's `d3.line()`.
-
 /// Curve interpolation strategy.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CurveType {
@@ -79,6 +78,7 @@ fn generate_linear(points: &[(f64, f64)]) -> String {
 /// For each consecutive pair of points, draws:
 ///   1. A horizontal segment to the midpoint of their x-coordinates.
 ///   2. A vertical segment to the new y value.
+///
 /// This produces a staircase where each step transitions at the midpoint
 /// between adjacent x values.
 fn generate_step(points: &[(f64, f64)]) -> String {

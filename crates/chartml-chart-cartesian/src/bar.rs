@@ -13,19 +13,45 @@ use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
 
 use crate::helpers::{GridConfig, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
 
+struct SingleSeriesBarParams<'a> {
+    category_field: &'a str,
+    value_field: &'a str,
+    categories: &'a [String],
+    inner_width: f64,
+    inner_height: f64,
+    is_horizontal: bool,
+    y_fmt_ref: Option<&'a str>,
+    domain_min: f64,
+    domain_max: f64,
+}
+
+struct MultiSeriesBarParams<'a> {
+    category_field: &'a str,
+    value_field: &'a str,
+    color_field: &'a str,
+    categories: &'a [String],
+    inner_width: f64,
+    inner_height: f64,
+    is_stacked: bool,
+    is_normalized: bool,
+    y_fmt_ref: Option<&'a str>,
+    domain_min: f64,
+    domain_max: f64,
+}
+
 pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
     
 
     // Detect multi-field rows (combo chart pattern)
     let multi_fields: Vec<FieldSpec> = match &config.visualize.rows {
-        Some(FieldRef::Multiple(items)) => items.iter().filter_map(|item| match item {
-            FieldRefItem::Detailed(spec) => Some(spec.clone()),
-            FieldRefItem::Simple(name) => Some(FieldSpec {
+        Some(FieldRef::Multiple(items)) => items.iter().map(|item| match item {
+            FieldRefItem::Detailed(spec) => spec.as_ref().clone(),
+            FieldRefItem::Simple(name) => FieldSpec {
                 field: name.clone(), mark: None, axis: None, label: None,
                 color: None, format: None, data_labels: None,
                 line_style: None, upper: None, lower: None, opacity: None,
-            }),
+            },
         }).collect(),
         _ => vec![],
     };
@@ -73,7 +99,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     let is_horizontal = matches!(config.visualize.orientation, Some(Orientation::Horizontal));
     let is_normalized = matches!(config.visualize.mode, Some(ChartMode::Normalized));
     let is_stacked = matches!(config.visualize.mode, Some(ChartMode::Stacked)) || is_normalized;
-    let is_grouped = matches!(config.visualize.mode, Some(ChartMode::Grouped));
+    let _is_grouped = matches!(config.visualize.mode, Some(ChartMode::Grouped));
 
     // Step 1: Compute label strategy for margin estimation (only for vertical bars)
     let x_format = get_x_format(config);
@@ -153,9 +179,14 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     };
 
     // Step 2: Calculate margins including rotation
+    let has_x_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.x.as_ref())
+        .and_then(|a| a.label.as_ref())
+        .is_some();
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         has_legend: color_field.is_some(),
+        has_x_axis_label,
         x_label_strategy_margin: x_extra_margin,
         y_tick_labels: y_tick_labels_for_margin,
         ..Default::default()
@@ -205,35 +236,35 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         render_multi_series_bars(
             data,
             config,
-            &category_field,
-            &value_field,
-            color_f,
-            &categories,
-            &margins,
-            inner_width,
-            inner_height,
-            is_stacked,
-            is_grouped,
-            is_horizontal,
-            is_normalized,
-            y_fmt_ref,
-            domain_min,
-            domain_max,
+            &MultiSeriesBarParams {
+                category_field: &category_field,
+                value_field: &value_field,
+                color_field: color_f,
+                categories: &categories,
+                inner_width,
+                inner_height,
+                is_stacked,
+                is_normalized,
+                y_fmt_ref,
+                domain_min,
+                domain_max,
+            },
         )?
     } else {
         render_single_series_bars(
             data,
             config,
-            &category_field,
-            &value_field,
-            &categories,
-            &margins,
-            inner_width,
-            inner_height,
-            is_horizontal,
-            y_fmt_ref,
-            domain_min,
-            domain_max,
+            &SingleSeriesBarParams {
+                category_field: &category_field,
+                value_field: &value_field,
+                categories: &categories,
+                inner_width,
+                inner_height,
+                is_horizontal,
+                y_fmt_ref,
+                domain_min,
+                domain_max,
+            },
         )?
     };
 
@@ -247,11 +278,33 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes
     } else {
-        let x_axis_result = generate_x_axis_with_display(&categories, display_labels.as_deref(), (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
+        let bottom_axis_label = config.visualize.axes.as_ref()
+            .and_then(|a| a.x.as_ref())
+            .and_then(|a| a.label.as_deref());
+        let x_axis_result = generate_x_axis_with_display(&crate::helpers::XAxisParams {
+            labels: &categories,
+            display_label_overrides: display_labels.as_deref(),
+            range: (0.0, inner_width),
+            y_position: margins.top + inner_height,
+            available_width: inner_width,
+            x_format: x_format.as_deref(),
+            chart_height: Some(inner_height),
+            grid: &grid,
+            axis_label: bottom_axis_label,
+        });
         let left_axis_label = config.visualize.axes.as_ref()
             .and_then(|a| a.left.as_ref())
             .and_then(|a| a.label.as_deref());
-        let y_axis = generate_y_axis_numeric((domain_min, domain_max), (inner_height, 0.0), margins.left, effective_y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid, left_axis_label);
+        let y_axis = generate_y_axis_numeric(&crate::helpers::YAxisNumericParams {
+            domain: (domain_min, domain_max),
+            range: (inner_height, 0.0),
+            x_position: margins.left,
+            fmt: effective_y_fmt_ref,
+            tick_count: adaptive_tick_count(inner_height),
+            chart_width: Some(inner_width),
+            grid: &grid,
+            axis_label: left_axis_label,
+        });
         let mut axes = Vec::new();
         axes.extend(x_axis_result.elements.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
@@ -322,17 +375,17 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
 fn render_single_series_bars(
     data: &DataTable,
     config: &ChartConfig,
-    category_field: &str,
-    value_field: &str,
-    categories: &[String],
-    _margins: &chartml_core::layout::margins::Margins,
-    inner_width: f64,
-    inner_height: f64,
-    is_horizontal: bool,
-    y_fmt_ref: Option<&str>,
-    domain_min: f64,
-    domain_max: f64,
+    params: &SingleSeriesBarParams,
 ) -> Result<(f64, Vec<ChartElement>), ChartError> {
+    let category_field = params.category_field;
+    let value_field = params.value_field;
+    let categories = params.categories;
+    let inner_width = params.inner_width;
+    let inner_height = params.inner_height;
+    let is_horizontal = params.is_horizontal;
+    let y_fmt_ref = params.y_fmt_ref;
+    let domain_min = params.domain_min;
+    let domain_max = params.domain_max;
     // Find the max value (for return value only — domain_max is already caller-computed)
     let values: Vec<f64> = (0..data.num_rows())
         .filter_map(|i| data.get_f64(i, value_field))
@@ -451,21 +504,19 @@ fn render_single_series_bars(
 fn render_multi_series_bars(
     data: &DataTable,
     config: &ChartConfig,
-    category_field: &str,
-    value_field: &str,
-    color_field: &str,
-    categories: &[String],
-    _margins: &chartml_core::layout::margins::Margins,
-    inner_width: f64,
-    inner_height: f64,
-    is_stacked: bool,
-    _is_grouped: bool,
-    _is_horizontal: bool,
-    is_normalized: bool,
-    y_fmt_ref: Option<&str>,
-    domain_min: f64,
-    domain_max: f64,
+    params: &MultiSeriesBarParams,
 ) -> Result<(f64, Vec<ChartElement>), ChartError> {
+    let category_field = params.category_field;
+    let value_field = params.value_field;
+    let color_field = params.color_field;
+    let categories = params.categories;
+    let inner_width = params.inner_width;
+    let inner_height = params.inner_height;
+    let is_stacked = params.is_stacked;
+    let is_normalized = params.is_normalized;
+    let y_fmt_ref = params.y_fmt_ref;
+    let domain_min = params.domain_min;
+    let domain_max = params.domain_max;
     use chartml_core::layout::stack::{StackLayout, StackOffset};
 
     let series_names = data.unique_values(color_field);
@@ -626,6 +677,7 @@ fn render_combo(
     fields: &[chartml_core::spec::FieldSpec],
 ) -> Result<ChartElement, ChartError> {
     use chartml_core::shapes::LineGenerator;
+    use chartml_core::layout::stack::StackLayout;
 
     let category_field = get_field_name(&config.visualize.columns)?;
     let categories = data.unique_values(&category_field);
@@ -637,6 +689,10 @@ fn render_combo(
     let y_fmt_ref = y_fmt.as_deref();
     let grid = GridConfig::from_config(config);
     let x_format = get_x_format(config);
+
+    // Detect stacking mode and color field for bar sub-series
+    let color_field = get_color_field(config);
+    let is_stacked = matches!(config.visualize.mode, Some(ChartMode::Stacked));
 
     // Margins — account for right axis if present
     let has_right = fields.iter().any(|f| f.axis.as_deref() == Some("right"));
@@ -661,12 +717,17 @@ fn render_combo(
         vec![]
     };
 
+    let has_x_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.x.as_ref())
+        .and_then(|a| a.label.as_ref())
+        .is_some();
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
-        has_legend: fields.len() > 1,
+        has_legend: fields.len() > 1 || color_field.is_some(),
         // Left Y-axis label is not rendered for combo charts (see comment below),
         // so do not reserve extra left-margin space for it.
         has_y_axis_label: false,
+        has_x_axis_label,
         has_right_axis: has_right,
         right_tick_labels,
         ..Default::default()
@@ -688,9 +749,32 @@ fn render_combo(
         .collect();
 
     // Compute left-axis domain with D3-style nice rounding (Regressions 2 & 3).
-    let left_max = left_fields.iter()
-        .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
-        .fold(0.0_f64, f64::max);
+    // When stacked with a color field, the domain max is the per-category sum of all series.
+    let left_max = if let (true, Some(color_f)) = (is_stacked, color_field.as_ref()) {
+        let color_series = data.unique_values(color_f);
+        let mut max_stack = 0.0_f64;
+        for f in &left_fields {
+            for cat in &categories {
+                let mut stack_total = 0.0_f64;
+                for series in &color_series {
+                    let val = (0..data.num_rows())
+                        .find(|&i| {
+                            data.get_string(i, &category_field).as_deref() == Some(cat.as_str())
+                                && data.get_string(i, color_f).as_deref() == Some(series.as_str())
+                        })
+                        .and_then(|i| data.get_f64(i, &f.field))
+                        .unwrap_or(0.0);
+                    stack_total += val;
+                }
+                max_stack = max_stack.max(stack_total);
+            }
+        }
+        max_stack
+    } else {
+        left_fields.iter()
+            .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
+            .fold(0.0_f64, f64::max)
+    };
     let axes_left = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref());
     let left_explicit_min = axes_left.and_then(|a| a.min);
     let left_explicit_max = axes_left.and_then(|a| a.max);
@@ -730,13 +814,31 @@ fn render_combo(
     // Title is rendered as HTML outside the SVG — not added here.
 
     // Axes
-    let x_axis_result = generate_x_axis(&categories, (0.0, inner_width), margins.top + inner_height, inner_width, x_format.as_deref(), Some(inner_height), &grid);
+    let bottom_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.x.as_ref())
+        .and_then(|a| a.label.as_deref());
+    let x_axis_result = generate_x_axis(&crate::helpers::XAxisParams {
+        labels: &categories,
+        display_label_overrides: None,
+        range: (0.0, inner_width),
+        y_position: margins.top + inner_height,
+        available_width: inner_width,
+        x_format: x_format.as_deref(),
+        chart_height: Some(inner_height),
+        grid: &grid,
+        axis_label: bottom_axis_label,
+    });
     let left_axis_label = axes_left.and_then(|a| a.label.as_deref());
-    let y_axis_left = generate_y_axis_numeric(
-        (left_domain_min, left_domain_max), (inner_height, 0.0), margins.left,
-        y_fmt_ref, adaptive_tick_count(inner_height), Some(inner_width), &grid,
-        left_axis_label,
-    );
+    let y_axis_left = generate_y_axis_numeric(&crate::helpers::YAxisNumericParams {
+        domain: (left_domain_min, left_domain_max),
+        range: (inner_height, 0.0),
+        x_position: margins.left,
+        fmt: y_fmt_ref,
+        tick_count: adaptive_tick_count(inner_height),
+        chart_width: Some(inner_width),
+        grid: &grid,
+        axis_label: left_axis_label,
+    });
 
     let mut axis_elements = Vec::new();
     axis_elements.extend(x_axis_result.elements.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
@@ -800,6 +902,79 @@ fn render_combo(
     let mut series_colors = Vec::new();
     let mut series_marks = Vec::new();
 
+    // Pre-compute stacked bar layout if stacking with color field
+    let stacked_bar_rendered = if let (true, Some(color_f)) = (is_stacked, color_field.as_ref()) {
+        let color_series = data.unique_values(color_f);
+
+        // For each bar field, render stacked bars by color series
+        for field_spec in fields.iter() {
+            let mark = field_spec.mark.as_deref().unwrap_or("bar");
+            if mark != "bar" { continue; }
+
+            let field_name = &field_spec.field;
+            let is_right = field_spec.axis.as_deref() == Some("right");
+            let scale = if is_right { right_scale.as_ref().unwrap_or(&left_scale) } else { &left_scale };
+            let fmt_ref = if is_right {
+                config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()).and_then(|a| a.format.as_deref())
+            } else {
+                y_fmt_ref
+            };
+
+            // Build values matrix: values[series_idx][category_idx]
+            let mut values_matrix: Vec<Vec<f64>> = Vec::new();
+            for series in &color_series {
+                let mut series_vals = Vec::new();
+                for cat in &categories {
+                    let val = (0..data.num_rows())
+                        .find(|&i| {
+                            data.get_string(i, &category_field).as_deref() == Some(cat.as_str())
+                                && data.get_string(i, color_f).as_deref() == Some(series.as_str())
+                        })
+                        .and_then(|i| data.get_f64(i, field_name))
+                        .unwrap_or(0.0);
+                    series_vals.push(val);
+                }
+                values_matrix.push(series_vals);
+            }
+
+            let stack = StackLayout::new();
+            let stacked_points = stack.layout(&categories, &color_series, &values_matrix);
+
+            let bar_render_width = bandwidth.min(max_bar_width);
+            let x_inset = (bandwidth - bar_render_width) / 2.0;
+
+            for point in &stacked_points {
+                let x = match band.map(&point.key) { Some(x) => x, None => continue };
+                let y_top = scale.map(point.y1);
+                let y_bottom = scale.map(point.y0);
+                let bar_height = (y_bottom - y_top).abs();
+
+                let series_idx = color_series.iter().position(|s| s == &point.series).unwrap_or(0);
+                let fill = config.colors.get(series_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string());
+
+                mark_elements.push(ChartElement::Rect {
+                    x: x + x_inset + margins.left, y: y_top + margins.top,
+                    width: bar_render_width, height: bar_height,
+                    fill, stroke: None,
+                    class: "bar".to_string(),
+                    data: Some(ElementData::new(&point.key, format_value(point.value, fmt_ref)).with_series(&point.series)),
+                });
+            }
+        }
+
+        // Add color series to legend tracking
+        for (si, series_name) in color_series.iter().enumerate() {
+            let color = config.colors.get(si).cloned().unwrap_or_else(|| "#2E7D9A".to_string());
+            series_names.push(series_name.clone());
+            series_colors.push(color);
+            series_marks.push("bar".to_string());
+        }
+
+        true
+    } else {
+        false
+    };
+
     for (field_idx, field_spec) in fields.iter().enumerate() {
         let field_name = &field_spec.field;
         let is_right = field_spec.axis.as_deref() == Some("right");
@@ -815,6 +990,9 @@ fn render_combo(
         };
 
         match mark {
+            "bar" if stacked_bar_rendered => {
+                // Already rendered above via stacked layout — skip
+            }
             "bar" => {
                 let this_bar_idx = bar_field_idx;
                 bar_field_idx += 1;
@@ -855,7 +1033,7 @@ fn render_combo(
                     }
                 }
             }
-            "line" | _ => {
+            _ => {
                 let mut points = Vec::new();
                 let mut point_data = Vec::new();
                 for cat in &categories {
@@ -913,9 +1091,13 @@ fn render_combo(
             }
         }
 
-        series_names.push(label);
-        series_colors.push(color);
-        series_marks.push(mark.to_string());
+        // When stacked bars were rendered via color field, the color series are already
+        // tracked for legend — skip adding the bar field itself.
+        if !(stacked_bar_rendered && mark == "bar") {
+            series_names.push(label);
+            series_colors.push(color);
+            series_marks.push(mark.to_string());
+        }
     }
 
     children.push(ChartElement::Group {

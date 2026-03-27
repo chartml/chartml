@@ -36,10 +36,10 @@ impl LabelStrategy {
     ///
     /// Algorithm (cascading priority):
     /// 1. Horizontal: if labels fit without overlap
-    /// 2. Sampled-horizontal: if > 12 labels don't fit, sample to ~10 labels shown horizontally
-    /// 3. Rotated: if <= 40 labels, rotate -45 degrees
-    /// 4. Truncated: if truncated labels fit and <= 50 labels
-    /// 5. Sampled: show an evenly-distributed subset
+    /// 2. Rotated: if <= 40 labels, rotate -45 degrees (post-rotation truncation
+    ///    is applied later in generate_x_axis to guarantee no overlap)
+    /// 3. Truncated: if truncated labels fit and <= 50 labels
+    /// 4. Sampled: show an evenly-distributed subset
     ///
     /// Parameters:
     /// - labels: the label strings
@@ -67,16 +67,9 @@ impl LabelStrategy {
             return LabelStrategy::Horizontal;
         }
 
-        // Strategy 2: Sampled-horizontal -- for dense axes (> 12 labels), prefer
-        // sampling over rotation. Compute a stride so ~10 labels are shown, keeping
-        // first and last. This avoids cluttered rotated text on temporal axes.
-        if label_count > 12 {
-            let target_count = 10usize.min(label_count);
-            let indices = strategic_indices(label_count, target_count);
-            return LabelStrategy::Sampled { indices };
-        }
-
-        // Strategy 3: Rotated -- rotate -45 degrees if not too many labels
+        // Strategy 2: Rotated -- rotate -45 degrees if not too many labels.
+        // Post-rotation truncation is handled in generate_x_axis to ensure
+        // rotated labels don't collide even when they are long.
         if label_count <= 40 {
             let angle_rad = config.rotation_angle_deg.to_radians();
             let required_vertical = max_width * angle_rad.sin();
@@ -85,12 +78,12 @@ impl LabelStrategy {
             return LabelStrategy::Rotated { margin, skip_factor };
         }
 
-        // Strategy 4: Truncated -- if truncated labels would fit
+        // Strategy 3: Truncated -- if truncated labels would fit
         if config.max_label_width + config.min_label_spacing <= available_per_label && label_count <= 50 {
             return LabelStrategy::Truncated { max_width: config.max_label_width };
         }
 
-        // Strategy 5: Sampled -- show a subset
+        // Strategy 4: Sampled -- show a subset
         let target_count = ((available_width / 120.0).floor() as usize).max(5);
         let indices = strategic_indices(label_count, target_count);
         LabelStrategy::Sampled { indices }
@@ -114,7 +107,9 @@ pub fn approximate_text_width(text: &str) -> f64 {
 }
 
 /// After rotation, check if labels still overlap and compute skip factor.
-/// Matches JS: if overlapRatio > 1.5 && labelCount > 8, skip = ceil(overlapRatio / 2)
+/// Since post-rotation truncation is applied in generate_x_axis, the skip
+/// factor only needs to engage when there are so many labels that even a
+/// minimal truncated label (~40px wide) would overlap after rotation.
 pub fn compute_skip_factor(
     labels: &[String],
     available_width: f64,
@@ -124,11 +119,16 @@ pub fn compute_skip_factor(
         return None;
     }
     let available_per_label = available_width / labels.len() as f64;
-    let max_width = labels.iter().map(|l| approximate_text_width(l)).fold(0.0_f64, f64::max);
-    let rotated_width = max_width * rotation_angle_deg.to_radians().cos();
-    let overlap_ratio = (rotated_width + 6.0) / available_per_label;
-    if overlap_ratio > 1.5 {
-        Some((overlap_ratio / 2.0).ceil() as usize)
+    let cos_angle = rotation_angle_deg.to_radians().cos();
+    // Minimum useful label width: ~40px (about 5 chars + ellipsis).
+    // If even this minimal rotated width doesn't fit, we need to skip.
+    let min_label_width = 40.0;
+    let min_rotated_width = min_label_width * cos_angle;
+    let spacing = 6.0;
+    let overlap_ratio = (min_rotated_width + spacing) / available_per_label;
+    if overlap_ratio > 1.0 {
+        // Compute skip so that the remaining labels have enough room
+        Some((overlap_ratio.ceil() as usize).max(2))
     } else {
         None
     }
@@ -209,37 +209,25 @@ mod tests {
     }
 
     #[test]
-    fn strategy_sampled_when_dense_axis() {
-        // > 12 labels that don't fit horizontally should be Sampled
+    fn strategy_rotated_when_dense_axis() {
+        // 20 labels that don't fit horizontally should be Rotated (<=40 labels)
         let labels: Vec<String> = (0..20)
             .map(|i| format!("Category {}", i))
             .collect();
         let strategy = LabelStrategy::determine(&labels, 200.0, &LabelStrategyConfig::default());
-        match &strategy {
-            LabelStrategy::Sampled { indices } => {
-                assert!(indices.contains(&0), "Should include first index");
-                assert!(indices.contains(&19), "Should include last index");
-                assert!(indices.len() <= 10, "Should show at most 10 labels, got {}", indices.len());
-            }
-            other => panic!("Expected Sampled, got {:?}", other),
-        }
+        assert!(matches!(strategy, LabelStrategy::Rotated { .. }),
+            "Expected Rotated, got {:?}", strategy);
     }
 
     #[test]
-    fn strategy_sampled_preserves_first_and_last() {
-        // 18 monthly labels (the temporal_x_axis_monthly case)
+    fn strategy_rotated_for_monthly_labels() {
+        // 18 monthly labels should be Rotated (<=40 labels)
         let labels: Vec<String> = (0..18)
             .map(|i| format!("Jan {:02}", i + 1))
             .collect();
         let strategy = LabelStrategy::determine(&labels, 560.0, &LabelStrategyConfig::default());
-        match &strategy {
-            LabelStrategy::Sampled { indices } => {
-                assert!(indices.contains(&0), "Should include first index");
-                assert!(indices.contains(&17), "Should include last index");
-                assert!(indices.len() <= 10, "Should show at most 10 labels, got {}", indices.len());
-            }
-            other => panic!("Expected Sampled, got {:?}", other),
-        }
+        assert!(matches!(strategy, LabelStrategy::Rotated { .. }),
+            "Expected Rotated, got {:?}", strategy);
     }
 
     #[test]

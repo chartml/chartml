@@ -145,7 +145,7 @@ fn resolve_expression(expression: &str, symbols: &HashMap<String, Symbol>) -> St
 
     // Sort field names by length (longest first) to avoid partial replacements
     let mut field_names: Vec<&String> = symbols.keys().collect();
-    field_names.sort_by(|a, b| b.len().cmp(&a.len()));
+    field_names.sort_by_key(|b| std::cmp::Reverse(b.len()));
 
     for field_name in field_names {
         if let Some(symbol) = symbols.get(field_name) {
@@ -364,7 +364,7 @@ fn partition_filters(
 
     for rule in &filter.rules {
         let symbol = symbols.get(&rule.field);
-        if symbol.map_or(false, |s| s.is_aggregated) {
+        if symbol.is_some_and(|s| s.is_aggregated) {
             having_rules.push(rule.clone());
         } else {
             where_rules.push(rule.clone());

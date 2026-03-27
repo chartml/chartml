@@ -1,6 +1,5 @@
 /// Generates SVG path `d` strings for pie/doughnut slices.
 /// Equivalent to D3's `d3.arc()`.
-
 use super::line::fmt;
 use std::f64::consts::PI;
 

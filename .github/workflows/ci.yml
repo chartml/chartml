@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint-policy:
+    name: Lint Suppression Policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reject new lint suppressions
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          # Check .rs files for #[allow(...)]
+          RS=$(git diff "$BASE"...HEAD -- '*.rs' | grep '^+' | grep -v '^+++' | grep '#\[allow(' || true)
+          # Check Cargo.toml for = "allow" lint downgrades
+          TOML=$(git diff "$BASE"...HEAD -- '*/Cargo.toml' 'Cargo.toml' | grep '^+' | grep -v '^+++' | grep '= "allow"' || true)
+          if [ -n "$RS" ] || [ -n "$TOML" ]; then
+            echo "::error::Lint suppressions detected. Fix the lint instead of suppressing it."
+            [ -n "$RS" ] && echo "" && echo "In .rs files:" && echo "$RS"
+            [ -n "$TOML" ] && echo "" && echo "In Cargo.toml:" && echo "$TOML"
+            exit 1
+          fi
+          echo "✅ No new lint suppressions."
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo clippy (workspace)
+        run: cargo clippy --workspace -- -D warnings

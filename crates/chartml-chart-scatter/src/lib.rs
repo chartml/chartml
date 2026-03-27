@@ -309,8 +309,8 @@ fn format_tick_value(value: f64, tick_step: f64) -> String {
     };
 
     // Handle negative sign
-    let (sign, digits) = if int_part.starts_with('-') {
-        ("-", &int_part[1..])
+    let (sign, digits) = if let Some(stripped) = int_part.strip_prefix('-') {
+        ("-", stripped)
     } else {
         ("", int_part)
     };
@@ -331,7 +331,7 @@ fn insert_commas(digits: &str) -> String {
     }
     let mut result = String::with_capacity(len + len / 3);
     for (i, ch) in digits.chars().enumerate() {
-        if i > 0 && (len - i) % 3 == 0 {
+        if i > 0 && (len - i).is_multiple_of(3) {
             result.push(',');
         }
         result.push(ch);

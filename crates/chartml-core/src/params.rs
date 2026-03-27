@@ -47,7 +47,7 @@ pub fn resolve_param_references(yaml: &str, param_values: &ParamValues) -> Strin
     // Sort keys by length descending so longer paths are replaced first
     // (prevents "$dashboard_filters.region" matching "$dashboard_filters" first)
     let mut keys: Vec<&String> = param_values.keys().collect();
-    keys.sort_by(|a, b| b.len().cmp(&a.len()));
+    keys.sort_by_key(|b| std::cmp::Reverse(b.len()));
 
     for key in keys {
         let value = &param_values[key];
@@ -96,7 +96,7 @@ pub fn extract_inline_param_defaults(yaml: &str) -> ParamValues {
     // Try to parse the YAML as a mapping and look for a "params" key
     // that contains an array of param definitions
     if let Ok(serde_yaml::Value::Mapping(map)) = serde_yaml::from_str::<serde_yaml::Value>(yaml) {
-        if let Some(params_val) = map.get(&serde_yaml::Value::String("params".into())) {
+        if let Some(params_val) = map.get(serde_yaml::Value::String("params".into())) {
             if let Ok(params) = serde_yaml::from_value::<Vec<ParamDef>>(params_val.clone()) {
                 for param in &params {
                     if let Some(ref default) = param.default {

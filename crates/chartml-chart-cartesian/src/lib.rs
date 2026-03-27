@@ -439,7 +439,11 @@ mod tests {
     fn x_axis_horizontal_few_labels() {
         use crate::helpers::{generate_x_axis, GridConfig};
         let labels = vec!["A".into(), "B".into(), "C".into()];
-        let result = generate_x_axis(&labels, (0.0, 800.0), 350.0, 800.0, None, None, &GridConfig::default());
+        let result = generate_x_axis(&crate::helpers::XAxisParams {
+            labels: &labels, display_label_overrides: None,
+            range: (0.0, 800.0), y_position: 350.0, available_width: 800.0,
+            x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
+        });
         // Should be horizontal — no transforms on text elements
         let text_with_transform = result.elements.iter().filter(|e| {
             matches!(e, ChartElement::Text { transform: Some(_), .. })
@@ -451,7 +455,11 @@ mod tests {
     fn x_axis_rotated_many_labels() {
         use crate::helpers::{generate_x_axis, GridConfig};
         let labels: Vec<String> = (0..20).map(|i| format!("Category Number {}", i)).collect();
-        let result = generate_x_axis(&labels, (0.0, 300.0), 350.0, 300.0, None, None, &GridConfig::default());
+        let result = generate_x_axis(&crate::helpers::XAxisParams {
+            labels: &labels, display_label_overrides: None,
+            range: (0.0, 300.0), y_position: 350.0, available_width: 300.0,
+            x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
+        });
         // Should be rotated — text elements have transforms
         let text_with_transform = result.elements.iter().filter(|e| {
             matches!(e, ChartElement::Text { transform: Some(_), .. })
@@ -463,7 +471,11 @@ mod tests {
     fn x_axis_sampled_100_labels() {
         use crate::helpers::{generate_x_axis, GridConfig};
         let labels: Vec<String> = (0..100).map(|i| format!("Long Category Name {}", i)).collect();
-        let result = generate_x_axis(&labels, (0.0, 400.0), 350.0, 400.0, None, None, &GridConfig::default());
+        let result = generate_x_axis(&crate::helpers::XAxisParams {
+            labels: &labels, display_label_overrides: None,
+            range: (0.0, 400.0), y_position: 350.0, available_width: 400.0,
+            x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
+        });
         // Should be sampled — fewer label texts than total categories
         let label_count = result.elements.iter().filter(|e| {
             matches!(e, ChartElement::Text { class, .. } if class == "tick-label")
@@ -548,7 +560,11 @@ style:
         let labels: Vec<String> = vec![
             "2024-01-01".into(), "2024-01-02".into(), "2024-01-03".into()
         ];
-        let result = generate_x_axis(&labels, (0.0, 800.0), 350.0, 800.0, None, None, &GridConfig::default());
+        let result = generate_x_axis(&crate::helpers::XAxisParams {
+            labels: &labels, display_label_overrides: None,
+            range: (0.0, 800.0), y_position: 350.0, available_width: 800.0,
+            x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
+        });
         // Labels should be reformatted as "Jan 01", "Jan 02", etc.
         let has_reformatted = result.elements.iter().any(|e| {
             matches!(e, ChartElement::Text { content, .. } if content.starts_with("Jan"))

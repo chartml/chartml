@@ -9,3 +9,6 @@ chartml-core = { path = "../chartml-core" }
 
 [dev-dependencies]
 serde_json = "1"
+
+[lints]
+workspace = true

@@ -6,6 +6,7 @@ use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
 use chartml_core::spec::VisualizeSpec;
 
+#[derive(Default)]
 pub struct MetricRenderer;
 
 impl MetricRenderer {
