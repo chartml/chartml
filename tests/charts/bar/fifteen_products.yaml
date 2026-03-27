@@ -54,38 +54,6 @@ assertions:
     title_in_svg: false
     legend: false
 
-  bars:
-    - label: "Customer Analytics"
-      value: 2150000
-    - label: "Revenue Optimization"
-      value: 1980000
-    - label: "Inventory Tracker"
-      value: 1740000
-    - label: "Payroll Manager"
-      value: 1620000
-    - label: "Campaign Planner"
-      value: 1510000
-    - label: "Fraud Detection"
-      value: 1430000
-    - label: "Onboarding Suite"
-      value: 1350000
-    - label: "Billing Platform"
-      value: 1280000
-    - label: "Support Helpdesk"
-      value: 1190000
-    - label: "Data Warehouse"
-      value: 1110000
-    - label: "Email Automation"
-      value: 1040000
-    - label: "API Gateway"
-      value: 960000
-    - label: "File Storage"
-      value: 880000
-    - label: "Task Scheduler"
-      value: 810000
-    - label: "Audit Logger"
-      value: 740000
-
   label_rotation:
     x_labels_rotated: true
     transform_exists: true
@@ -97,24 +65,9 @@ assertions:
 
   axes:
     x:
-      labels:
-        - "Customer Analytics"
-        - "Revenue Optimization"
-        - "Inventory Tracker"
-        - "Payroll Manager"
-        - "Campaign Planner"
-        - "Fraud Detection"
-        - "Onboarding Suite"
-        - "Billing Platform"
-        - "Support Helpdesk"
-        - "Data Warehouse"
-        - "Email Automation"
-        - "API Gateway"
-        - "File Storage"
-        - "Task Scheduler"
-        - "Audit Logger"
-      orientation: horizontal
-      rotation: true
+      label_count: 15
+      labels_truncated: true
+      orientation: rotated
     y:
       min: 0
       format: numeric

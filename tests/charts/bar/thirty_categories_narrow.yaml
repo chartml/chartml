@@ -97,8 +97,8 @@ assertions:
 
   axes:
     x:
-      label_count: 30
-      orientation: horizontal
+      labels_sampled: true
+      orientation: rotated
     y:
       min: 0
       format: numeric

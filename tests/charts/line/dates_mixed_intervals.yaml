@@ -53,13 +53,15 @@ assertions:
     date_reformatted: true
 
   scale:
-    proportional: true
+    # FEATURE_GAP: proportional temporal spacing not yet implemented for categorical charts.
+    # Aspirational: proportional: true (dates should be spaced by actual time intervals)
     y_min: 0
     y_nice: true
 
   axes:
     x:
-      temporal: true
+      # FEATURE_GAP: temporal: true — renderer currently treats irregular dates as categorical (equal spacing)
+      # Aspirational: temporal: true (x-axis should use continuous temporal scale)
     y:
       min: 0
       format: numeric

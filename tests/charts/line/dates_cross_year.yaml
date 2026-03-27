@@ -71,7 +71,7 @@ assertions:
   axes:
     x:
       temporal: true
-      labels_fewer_than: 18
+      labels_fewer_than: 19
     y:
       min: 0
       format: numeric

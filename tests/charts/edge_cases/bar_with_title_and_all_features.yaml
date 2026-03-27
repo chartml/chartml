@@ -126,8 +126,8 @@ assertions:
     y_grid: true
 
   label_rotation:
-    x_labels_rotated: true
-    transform_exists: true
+    x_labels_rotated: false
+    # Labels are 18 chars but fit in 177px spacing without rotation
 
   scale:
     proportional: true
@@ -142,7 +142,7 @@ assertions:
         - "Q3 2026 (Jul-Sep)"
         - "Q4 2026 (Oct-Dec)"
       orientation: horizontal
-      rotation: true
+      rotation: false
     y:
       min: 0
       format: numeric

@@ -895,10 +895,13 @@ fn render_combo(
         let right_max = right_fields.iter()
             .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
             .fold(0.0_f64, f64::max);
+        let right_data_min = right_fields.iter()
+            .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
+            .fold(0.0_f64, f64::min);
         let axes_right = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref());
         let right_explicit_min = axes_right.and_then(|a| a.min);
         let right_explicit_max = axes_right.and_then(|a| a.max);
-        let raw_right_domain_min = right_explicit_min.unwrap_or(0.0);
+        let raw_right_domain_min = right_explicit_min.unwrap_or(if right_data_min < 0.0 { right_data_min } else { 0.0 });
         let raw_right_domain_max = right_explicit_max.unwrap_or(if right_max <= 0.0 { 1.0 } else { right_max });
         let (right_domain_min, right_domain_max) = if right_explicit_min.is_none() && right_explicit_max.is_none() {
             // Use count=5 to align with generate_y_axis_numeric's hardcoded tick count of 5.
@@ -1104,12 +1107,13 @@ fn render_combo(
                     let val = data.get_f64(row_i, field_name).unwrap_or(0.0);
                     let x = match band.map(&cat) { Some(x) => x, None => continue };
                     let bar_x = x + combo_x_inset + this_bar_idx as f64 * (sub_bar_width + sub_bar_padding);
-                    let bar_top = scale.map(val);
-                    let bar_bottom = scale.map(0.0);
-                    let bar_height = (bar_bottom - bar_top).abs();
+                    let bar_val_y = scale.map(val);
+                    let bar_zero_y = scale.map(0.0);
+                    let bar_height = (bar_zero_y - bar_val_y).abs();
+                    let rect_y = bar_val_y.min(bar_zero_y);
 
                     mark_elements.push(ChartElement::Rect {
-                        x: bar_x + margins.left, y: bar_top + margins.top,
+                        x: bar_x + margins.left, y: rect_y + margins.top,
                         width: sub_bar_width, height: bar_height,
                         fill: color.clone(), stroke: None,
                         class: "bar".to_string(),
@@ -1122,7 +1126,7 @@ fn render_combo(
                             let dl_fmt = dl.format.as_deref().or(fmt_ref);
                             mark_elements.push(ChartElement::Text {
                                 x: bar_x + sub_bar_width / 2.0 + margins.left,
-                                y: bar_top + margins.top - 5.0,
+                                y: rect_y + margins.top - 5.0,
                                 content: format_value(val, dl_fmt),
                                 anchor: TextAnchor::Middle, dominant_baseline: None,
                                 transform: None,
