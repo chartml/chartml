@@ -50,8 +50,9 @@ assertions:
       value: 34
 
   colors:
-    explicit: true
-    values: ["#1a73e8", "#e8710a", "#0d652d", "#8430ce", "#c5221f"]
+    # Single-series bars use only the first palette color (per JS behavior).
+    # The remaining colors are available for multi-series charts.
+    first_color: "#1a73e8"
 
   scale:
     proportional: true

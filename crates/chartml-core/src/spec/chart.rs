@@ -218,6 +218,14 @@ pub struct AnnotationSpec {
 pub struct ChartStyleSpec {
     pub height: Option<f64>,
     pub width: Option<f64>,
+    /// Color palette for chart series.
+    ///
+    /// Colors are assigned **per series**, not per category/bar:
+    /// - Single-series chart (no `marks.color`): ALL bars/points use `colors[0]`
+    /// - Multi-series chart (`marks.color` or multiple `rows`): each series gets
+    ///   `colors[series_index]`, cycling if more series than colors
+    ///
+    /// This matches the JS chartml behavior (d3ChartMapper.js lines 139-146).
     pub colors: Option<Vec<String>>,
     pub grid: Option<GridSpec>,
     pub show_dots: Option<bool>,

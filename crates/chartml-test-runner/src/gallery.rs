@@ -66,14 +66,13 @@ fn discover_specs() -> Vec<SpecInfo> {
         let has_svg = svg_path.exists();
 
         // Extract title from YAML (simple line scan, no yaml parser needed)
+        let yaml_text = fs::read_to_string(yaml_path).unwrap_or_default();
         let mut title = name.replace('_', " ");
-        if let Ok(yaml_text) = fs::read_to_string(yaml_path) {
-            for line in yaml_text.lines() {
-                let trimmed = line.trim();
-                if let Some(rest) = trimmed.strip_prefix("name:") {
-                    title = rest.trim().trim_matches('"').trim_matches('\'').to_string();
-                    break;
-                }
+        for line in yaml_text.lines() {
+            let trimmed = line.trim();
+            if let Some(rest) = trimmed.strip_prefix("name:") {
+                title = rest.trim().trim_matches('"').trim_matches('\'').to_string();
+                break;
             }
         }
 
@@ -208,7 +207,7 @@ fn build_html(specs: &[SpecInfo]) -> String {
                 r#"<div class="card" data-id="{id}">
                     <div class="card-header">
                         <span class="card-title">{title}</span>
-                        <span class="card-size">{size}</span>
+                        <span class="card-actions"><button class="info-btn" onclick="showYaml('{id}');event.stopPropagation()">YAML</button><span class="card-size">{size}</span></span>
                     </div>
                     {chart}
                     <div class="card-footer"><code>{id}</code></div>
@@ -269,6 +268,17 @@ section h2 .section-count{{color:#86868b;font-weight:400;font-size:16px}}
 .chart-frame.no-render{{color:#86868b;font-size:13px}}
 .card-footer{{padding:8px 16px 12px}}
 .card-footer code{{font-size:11px;color:#86868b}}
+.card-actions{{display:flex;align-items:center;gap:8px}}
+.info-btn{{padding:2px 8px;border:1px solid #d2d2d7;border-radius:4px;background:#fff;cursor:pointer;font-size:10px;font-weight:600;color:#0071e3;transition:all .15s}}
+.info-btn:hover{{background:#0071e3;color:#fff}}
+.yaml-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:2000;align-items:center;justify-content:center;padding:40px}}
+.yaml-modal.active{{display:flex}}
+.yaml-modal-content{{background:#1e1e1e;border-radius:12px;max-width:800px;width:90vw;max-height:90vh;overflow:auto;padding:0}}
+.yaml-modal-header{{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #333;position:sticky;top:0;background:#1e1e1e;z-index:1}}
+.yaml-modal-header h3{{color:#e5e5e5;font-size:14px;margin:0}}
+.yaml-modal-close{{color:#999;font-size:24px;cursor:pointer;background:none;border:none;padding:0 4px}}
+.yaml-modal-close:hover{{color:#fff}}
+.yaml-modal pre{{margin:0;padding:20px;color:#d4d4d4;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:12px;line-height:1.5;white-space:pre;overflow-x:auto}}
 .hidden{{display:none!important}}
 .lightbox{{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1000;align-items:center;justify-content:center;padding:40px}}
 .lightbox.active{{display:flex}}
@@ -293,6 +303,12 @@ section h2 .section-count{{color:#86868b;font-weight:400;font-size:16px}}
 <div class="lightbox" id="lightbox">
 <div class="lightbox-close" onclick="closeLightbox()">&times;</div>
 <div class="lightbox-content" id="lightbox-content"></div>
+</div>
+<div class="yaml-modal" id="yaml-modal" onclick="if(event.target===this)closeYaml()">
+<div class="yaml-modal-content">
+<div class="yaml-modal-header"><h3 id="yaml-title"></h3><button class="yaml-modal-close" onclick="closeYaml()">&times;</button></div>
+<pre id="yaml-pre"></pre>
+</div>
 </div>
 <div id="chart-tooltip" class="chartml-tooltip" style="display:none;position:fixed;z-index:2000;">
   <div class="chartml-tooltip-label" id="tt-label"></div>
@@ -334,7 +350,18 @@ document.querySelectorAll('.card').forEach(c=>{{
 }});
 function closeLightbox(){{document.getElementById('lightbox').classList.remove('active')}}
 document.getElementById('lightbox').addEventListener('click',e=>{{if(e.target.id==='lightbox')closeLightbox()}});
-document.addEventListener('keydown',e=>{{if(e.key==='Escape')closeLightbox()}});
+document.addEventListener('keydown',e=>{{if(e.key==='Escape'){{closeLightbox();closeYaml()}}}});
+
+// YAML modal — fetches and shows the spec YAML
+async function showYaml(id){{
+  const res=await fetch('/yaml/'+id);
+  const yaml=await res.text();
+  const m=document.getElementById('yaml-modal');
+  document.getElementById('yaml-title').textContent=id;
+  document.getElementById('yaml-pre').textContent=yaml;
+  m.classList.add('active');
+}}
+function closeYaml(){{document.getElementById('yaml-modal').classList.remove('active')}}
 
 // Tooltip — reads data-label/data-value/data-series from SVG elements
 const tt=document.getElementById('chart-tooltip');
@@ -400,6 +427,18 @@ fn handle_request(mut stream: TcpStream) {
         );
         let _ = stream.write_all(response.as_bytes());
         let _ = stream.write_all(html.as_bytes());
+    } else if let Some(spec_id) = path.strip_prefix("/yaml/") {
+        let yaml_path = specs_dir().join(format!("{}.yaml", spec_id));
+        if let Ok(yaml_data) = fs::read(&yaml_path) {
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+                yaml_data.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.write_all(&yaml_data);
+        } else {
+            let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\nYAML not found");
+        }
     } else if let Some(spec_id) = path.strip_prefix("/svg/") {
         let svg_path = output_dir().join(format!("{}.svg", spec_id));
         if let Ok(svg_data) = fs::read(&svg_path) {

@@ -399,8 +399,11 @@ fn render_single_series_bars(
     let effective_max = domain_max;
 
     let mut elements = Vec::new();
-    let default_colors = vec!["#2E7D9A".to_string()];
-    let palette = if config.colors.is_empty() { &default_colors } else { &config.colors };
+    // Single-series bars always use one color (the first palette color).
+    // Color is per-series, not per-category — matches JS d3ChartMapper.js behavior.
+    let fill_color = config.colors.first()
+        .cloned()
+        .unwrap_or_else(|| "#2E7D9A".to_string());
 
     if is_horizontal {
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_height))
@@ -429,7 +432,7 @@ fn render_single_series_bars(
                 y: y + y_inset,
                 width: bar_width,
                 height: bar_render_height,
-                fill: palette[i % palette.len()].clone(),
+                fill: fill_color.clone(),
                 stroke: None,
                 class: "bar".to_string(),
                 data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
@@ -468,7 +471,7 @@ fn render_single_series_bars(
                 y: rect_y,
                 width: bar_render_width,
                 height: bar_height,
-                fill: palette[i % palette.len()].clone(),
+                fill: fill_color.clone(),
                 stroke: None,
                 class: "bar".to_string(),
                 data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
