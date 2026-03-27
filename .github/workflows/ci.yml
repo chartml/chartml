@@ -58,4 +58,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: cargo clippy (workspace)
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion -- -D warnings

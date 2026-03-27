@@ -12,6 +12,7 @@ members = [
     "crates/chartml-leptos",
     "crates/chartml-render",
     "crates/chartml-test-runner",
+    "crates/chartml-wasm",
     "demo",
 ]
 

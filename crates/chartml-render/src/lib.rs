@@ -4,6 +4,11 @@
 //! converting ChartElement trees into static PNG images without
 //! requiring a browser, DOM, or JavaScript runtime.
 //!
+//! # Features
+//!
+//! - **SVG serialization** (always available): converts `ChartElement` trees to SVG strings
+//! - **PNG rasterization** (requires `rasterize` feature, enabled by default): converts SVG to PNG
+//!
 //! # Usage
 //!
 //! ```rust,no_run
@@ -31,19 +36,24 @@
 //! ```
 
 pub mod error;
+#[cfg(feature = "rasterize")]
 pub mod rasterize;
 pub mod svg;
 
 pub use error::RenderError;
+#[cfg(feature = "rasterize")]
 pub use rasterize::svg_to_png;
 pub use svg::element_to_svg;
 
+#[cfg(feature = "rasterize")]
 use chartml_core::ChartML;
 
 /// Default padding in CSS pixels around the chart.
+#[cfg(feature = "rasterize")]
 const DEFAULT_PADDING: u32 = 16;
 
 /// White background color.
+#[cfg(feature = "rasterize")]
 const WHITE: [u8; 3] = [255, 255, 255];
 
 /// Render a ChartML YAML spec to PNG bytes (synchronous).
@@ -57,6 +67,7 @@ const WHITE: [u8; 3] = [255, 255, 255];
 /// * `width` — chart width in CSS pixels
 /// * `height` — chart height in CSS pixels
 /// * `density` — DPI (72 = 1x, 144 = 2x for PDF)
+#[cfg(feature = "rasterize")]
 pub fn render_to_png(
     chartml: &ChartML,
     yaml: &str,
@@ -85,6 +96,7 @@ pub fn render_to_png(
 /// * `width` — chart width in CSS pixels
 /// * `height` — chart height in CSS pixels
 /// * `density` — DPI (72 = 1x, 144 = 2x for PDF)
+#[cfg(feature = "rasterize")]
 pub async fn render_to_png_async(
     chartml: &ChartML,
     yaml: &str,
@@ -106,6 +118,7 @@ pub async fn render_to_png_async(
 /// Render a pre-built ChartElement tree to PNG bytes.
 ///
 /// Use this when you already have a ChartElement (e.g. from a custom rendering pipeline).
+#[cfg(feature = "rasterize")]
 pub fn element_to_png(
     element: &chartml_core::ChartElement,
     width: u32,

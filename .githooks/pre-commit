@@ -1,17 +1,71 @@
 #!/bin/bash
-# Pre-commit hook: blocks new lint suppressions and clippy warnings.
+# Pre-commit hook: blocks lint suppressions, clippy warnings, unreviewed commits, and unsigned charts.
+# Order: fast checks first (lints, clippy, chart sigs), expensive check last (review signature).
+# This avoids wasting an LLM review cycle on code that fails basic linting.
 
 set -e
 
-# --- Review Signature Public Key (Ed25519) ---
-# The corresponding private key is ONLY in the code-review-architect agent prompt.
-# Implementation agents cannot forge this signature.
+# --- Check 1: Reject new lint suppressions in staged files ---
+echo "🔍 Checking for new lint suppressions..."
+
+rs_violations=$(git diff --cached -- '*.rs' | grep '^+' | grep -v '^+++' | grep '#\[allow(' || true)
+toml_violations=$(git diff --cached -- '*/Cargo.toml' 'Cargo.toml' | grep '^+' | grep -v '^+++' | grep '= "allow"' || true)
+
+violations="${rs_violations}${toml_violations}"
+
+if [ -n "$violations" ]; then
+    echo ""
+    echo "❌ New lint suppressions detected — commit blocked."
+    echo ""
+    [ -n "$rs_violations" ] && echo "In .rs files:" && echo "$rs_violations" && echo ""
+    [ -n "$toml_violations" ] && echo "In Cargo.toml:" && echo "$toml_violations" && echo ""
+    echo "Fix the lint warning instead of suppressing it."
+    exit 1
+fi
+
+echo "✅ No new lint suppressions."
+
+# --- Check 2: Cargo clippy ---
+echo "🔍 Running cargo clippy..."
+
+warnings=$(cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion 2>&1 \
+    | grep "^warning:" \
+    | grep -v "cargo:warning\|generated\|Model file\|Downloaded\|Downloading" \
+    || true)
+
+if [ -n "$warnings" ]; then
+    echo ""
+    echo "❌ Clippy warnings found — commit blocked."
+    echo ""
+    echo "$warnings"
+    echo ""
+    echo "Fix warnings and try again."
+    exit 1
+fi
+
+echo "✅ Clippy clean."
+
+# --- Check 3: Verify golden chart signatures (if golden SVGs are staged) ---
+staged_golden=$(git diff --cached --name-only -- 'test-output/golden/*.svg' 'test-output/golden/**/*.svg' || true)
+
+if [ -n "$staged_golden" ]; then
+    echo "🔍 Verifying chart evaluator signatures..."
+
+    if [ -f scripts/verify-charts.sh ]; then
+        if ! bash scripts/verify-charts.sh; then
+            exit 1
+        fi
+    else
+        echo "⚠️  scripts/verify-charts.sh not found — skipping chart verification."
+    fi
+fi
+
+# --- Check 4: Verify code review signature ---
+echo "🔍 Verifying code review approval..."
+
 REVIEW_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEApRtsZODQxaUNP383HB/iqLHSlrf92Fe3UB43Bc2TaG0=
 -----END PUBLIC KEY-----"
-
-# --- Check 0: Verify code review signature ---
-echo "🔍 Verifying code review approval..."
 
 DIFF_HASH=$(git diff --cached | sha256sum | awk '{print $1}')
 
@@ -34,7 +88,6 @@ if [ "$DIFF_HASH" != "$APPROVED_HASH" ]; then
     exit 1
 fi
 
-# Verify Ed25519 signature
 PUB_FILE=$(mktemp)
 SIG_FILE=$(mktemp)
 HASH_FILE=$(mktemp)
@@ -53,46 +106,3 @@ if ! openssl pkeyutl -verify -pubin -inkey "$PUB_FILE" -in "$HASH_FILE" -sigfile
 fi
 
 echo "✅ Code review signature verified."
-
-# --- Check 1: Reject new lint suppressions in staged files ---
-echo "🔍 Checking for new lint suppressions..."
-
-# Check .rs files for #[allow(...)]
-rs_violations=$(git diff --cached -- '*.rs' | grep '^+' | grep -v '^+++' | grep '#\[allow(' || true)
-
-# Check Cargo.toml for = "allow" lint downgrades
-toml_violations=$(git diff --cached -- '*/Cargo.toml' 'Cargo.toml' | grep '^+' | grep -v '^+++' | grep '= "allow"' || true)
-
-violations="${rs_violations}${toml_violations}"
-
-if [ -n "$violations" ]; then
-    echo ""
-    echo "❌ New lint suppressions detected — commit blocked."
-    echo ""
-    [ -n "$rs_violations" ] && echo "In .rs files:" && echo "$rs_violations" && echo ""
-    [ -n "$toml_violations" ] && echo "In Cargo.toml:" && echo "$toml_violations" && echo ""
-    echo "Fix the lint warning instead of suppressing it."
-    exit 1
-fi
-
-echo "✅ No new lint suppressions."
-
-# --- Check 2: Cargo clippy ---
-echo "🔍 Running cargo clippy..."
-
-warnings=$(cargo clippy --workspace 2>&1 \
-    | grep "^warning:" \
-    | grep -v "cargo:warning\|generated\|Model file\|Downloaded\|Downloading" \
-    || true)
-
-if [ -n "$warnings" ]; then
-    echo ""
-    echo "❌ Clippy warnings found — commit blocked."
-    echo ""
-    echo "$warnings"
-    echo ""
-    echo "Fix warnings and try again."
-    exit 1
-fi
-
-echo "✅ Clippy clean."

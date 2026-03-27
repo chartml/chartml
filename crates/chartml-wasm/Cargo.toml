@@ -1,0 +1,25 @@
+[package]
+name = "chartml-wasm"
+version = "2.0.0"
+edition = "2021"
+license = "MIT"
+description = "ChartML WASM bindings for npm — chart rendering engine for JavaScript"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+chartml-core = { path = "../chartml-core" }
+chartml-chart-cartesian = { path = "../chartml-chart-cartesian" }
+chartml-chart-pie = { path = "../chartml-chart-pie" }
+chartml-chart-scatter = { path = "../chartml-chart-scatter" }
+chartml-chart-metric = { path = "../chartml-chart-metric" }
+chartml-render = { path = "../chartml-render", default-features = false }
+wasm-bindgen = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+js-sys = "0.3"
+getrandom = { version = "0.2", features = ["js"] }
+
+[lints]
+workspace = true
