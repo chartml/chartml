@@ -20,3 +20,6 @@ demo/dist/
 
 # Test runner output
 test-output/
+
+# Review approval (cryptographic signature file)
+.review-approval

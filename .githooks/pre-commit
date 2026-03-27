@@ -3,6 +3,57 @@
 
 set -e
 
+# --- Review Signature Public Key (Ed25519) ---
+# The corresponding private key is ONLY in the code-review-architect agent prompt.
+# Implementation agents cannot forge this signature.
+REVIEW_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEApRtsZODQxaUNP383HB/iqLHSlrf92Fe3UB43Bc2TaG0=
+-----END PUBLIC KEY-----"
+
+# --- Check 0: Verify code review signature ---
+echo "🔍 Verifying code review approval..."
+
+DIFF_HASH=$(git diff --cached | sha256sum | awk '{print $1}')
+
+if [ ! -f .review-approval ]; then
+    echo ""
+    echo "❌ No code review approval found — commit blocked."
+    echo "   Run the code-review-architect agent to review and sign off on changes."
+    exit 1
+fi
+
+APPROVED_HASH=$(sed -n '1p' .review-approval)
+SIGNATURE=$(sed -n '2p' .review-approval)
+
+if [ "$DIFF_HASH" != "$APPROVED_HASH" ]; then
+    echo ""
+    echo "❌ Code review approval is stale — staged diff has changed since review."
+    echo "   Expected: $APPROVED_HASH"
+    echo "   Got:      $DIFF_HASH"
+    echo "   Re-run the code-review-architect agent to review current changes."
+    exit 1
+fi
+
+# Verify Ed25519 signature
+PUB_FILE=$(mktemp)
+SIG_FILE=$(mktemp)
+HASH_FILE=$(mktemp)
+trap 'rm -f "$PUB_FILE" "$SIG_FILE" "$HASH_FILE"' EXIT
+
+echo "$REVIEW_PUBLIC_KEY" > "$PUB_FILE"
+echo -n "$DIFF_HASH" > "$HASH_FILE"
+echo "$SIGNATURE" | base64 -d > "$SIG_FILE"
+
+if ! openssl pkeyutl -verify -pubin -inkey "$PUB_FILE" -in "$HASH_FILE" -sigfile "$SIG_FILE" >/dev/null 2>&1; then
+    echo ""
+    echo "❌ Code review signature is INVALID — commit blocked."
+    echo "   The approval file may have been tampered with."
+    echo "   Only the code-review-architect agent can produce valid signatures."
+    exit 1
+fi
+
+echo "✅ Code review signature verified."
+
 # --- Check 1: Reject new lint suppressions in staged files ---
 echo "🔍 Checking for new lint suppressions..."
 

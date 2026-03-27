@@ -34,6 +34,7 @@ struct MultiSeriesBarParams<'a> {
     inner_height: f64,
     is_stacked: bool,
     is_normalized: bool,
+    is_horizontal: bool,
     y_fmt_ref: Option<&'a str>,
     domain_min: f64,
     domain_max: f64,
@@ -167,7 +168,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     let prelim_domain_min = if is_normalized { 0.0 } else { axis_min.unwrap_or(prelim_data_min) };
 
     // Generate representative tick label (domain max is typically widest label).
-    // For horizontal charts the y-axis shows categories (handled separately).
+    // For horizontal charts the y-axis shows categories, so use those for left margin.
     let y_tick_labels_for_margin: Vec<String> = if !is_horizontal {
         let prelim_fmt = if is_normalized { Some(".0%") } else { y_fmt_ref };
         vec![
@@ -175,7 +176,8 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
             format_value(prelim_domain_min, prelim_fmt),
         ]
     } else {
-        vec![]
+        let display = display_labels.as_deref().unwrap_or(&categories);
+        display.to_vec()
     };
 
     // Step 2: Calculate margins including rotation
@@ -245,6 +247,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
                 inner_height,
                 is_stacked,
                 is_normalized,
+                is_horizontal,
                 y_fmt_ref,
                 domain_min,
                 domain_max,
@@ -514,6 +517,7 @@ fn render_multi_series_bars(
     let inner_height = params.inner_height;
     let is_stacked = params.is_stacked;
     let is_normalized = params.is_normalized;
+    let is_horizontal = params.is_horizontal;
     let y_fmt_ref = params.y_fmt_ref;
     let domain_min = params.domain_min;
     let domain_max = params.domain_max;
@@ -568,43 +572,84 @@ fn render_multi_series_bars(
             (domain_min, if domain_max < f64::MAX { domain_max } else { value_max })
         };
 
-        let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
-            .padding(crate::helpers::adaptive_bar_padding(categories.len()));
-        let linear = ScaleLinear::new((effective_min, effective_max), (inner_height, 0.0));
-        // Match JS: barWidth = min(bandwidth, chartWidth * 0.2), centered in band
-        let max_bar_width = inner_width * 0.2;
-        let bar_render_width = band.bandwidth().min(max_bar_width);
-        let x_inset = (band.bandwidth() - bar_render_width) / 2.0;
+        if is_horizontal {
+            // Horizontal stacked: band on y-axis (height), linear on x-axis (width)
+            let band = ScaleBand::new(categories.to_vec(), (0.0, inner_height))
+                .padding(crate::helpers::adaptive_bar_padding(categories.len()));
+            let linear = ScaleLinear::new((effective_min, effective_max), (0.0, inner_width));
+            let bar_render_height = band.bandwidth().min(40.0);
+            let y_inset = (band.bandwidth() - bar_render_height) / 2.0;
 
-        for point in &stacked_points {
-            let x = match band.map(&point.key) {
-                Some(x) => x,
-                None => continue,
-            };
-            let y_top = linear.map(point.y1);
-            let y_bottom = linear.map(point.y0);
-            let bar_height = (y_bottom - y_top).abs();
+            for point in &stacked_points {
+                let y = match band.map(&point.key) {
+                    Some(y) => y,
+                    None => continue,
+                };
+                let x_left = linear.map(point.y0);
+                let x_right = linear.map(point.y1);
+                let bar_width = (x_right - x_left).abs();
 
-            let series_idx = series_names.iter().position(|s| s == &point.series).unwrap_or(0);
-            let fill = config
-                .colors
-                .get(series_idx)
-                .cloned()
-                .unwrap_or_else(|| "#2E7D9A".to_string());
+                let series_idx = series_names.iter().position(|s| s == &point.series).unwrap_or(0);
+                let fill = config
+                    .colors
+                    .get(series_idx)
+                    .cloned()
+                    .unwrap_or_else(|| "#2E7D9A".to_string());
 
-            elements.push(ChartElement::Rect {
-                x: x + x_inset,
-                y: y_top,
-                width: bar_render_width,
-                height: bar_height,
-                fill,
-                stroke: None,
-                class: "bar".to_string(),
-                data: Some(
-                    ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
-                        .with_series(&point.series),
-                ),
-            });
+                elements.push(ChartElement::Rect {
+                    x: x_left.min(x_right),
+                    y: y + y_inset,
+                    width: bar_width,
+                    height: bar_render_height,
+                    fill,
+                    stroke: None,
+                    class: "bar".to_string(),
+                    data: Some(
+                        ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
+                            .with_series(&point.series),
+                    ),
+                });
+            }
+        } else {
+            // Vertical stacked: band on x-axis (width), linear on y-axis (height)
+            let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
+                .padding(crate::helpers::adaptive_bar_padding(categories.len()));
+            let linear = ScaleLinear::new((effective_min, effective_max), (inner_height, 0.0));
+            // Match JS: barWidth = min(bandwidth, chartWidth * 0.2), centered in band
+            let max_bar_width = inner_width * 0.2;
+            let bar_render_width = band.bandwidth().min(max_bar_width);
+            let x_inset = (band.bandwidth() - bar_render_width) / 2.0;
+
+            for point in &stacked_points {
+                let x = match band.map(&point.key) {
+                    Some(x) => x,
+                    None => continue,
+                };
+                let y_top = linear.map(point.y1);
+                let y_bottom = linear.map(point.y0);
+                let bar_height = (y_bottom - y_top).abs();
+
+                let series_idx = series_names.iter().position(|s| s == &point.series).unwrap_or(0);
+                let fill = config
+                    .colors
+                    .get(series_idx)
+                    .cloned()
+                    .unwrap_or_else(|| "#2E7D9A".to_string());
+
+                elements.push(ChartElement::Rect {
+                    x: x + x_inset,
+                    y: y_top,
+                    width: bar_render_width,
+                    height: bar_height,
+                    fill,
+                    stroke: None,
+                    class: "bar".to_string(),
+                    data: Some(
+                        ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
+                            .with_series(&point.series),
+                    ),
+                });
+            }
         }
 
         Ok((effective_max, elements))
@@ -617,53 +662,104 @@ fn render_multi_series_bars(
         let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
         let effective_max = if domain_max < f64::MAX { domain_max } else { value_max };
 
-        let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
-            .padding(0.05);
-        let linear = ScaleLinear::new((domain_min, effective_max), (inner_height, 0.0));
-
         let num_series = series_names.len().max(1);
-        let sub_band_width = band.bandwidth() / num_series as f64;
 
-        for i in 0..data.num_rows() {
-            let cat = match data.get_string(i, category_field) {
-                Some(c) => c,
-                None => continue,
-            };
-            let series = match data.get_string(i, color_field) {
-                Some(s) => s,
-                None => continue,
-            };
-            let val = data.get_f64(i, value_field).unwrap_or(0.0);
+        if is_horizontal {
+            // Horizontal grouped: band on y-axis (height), linear on x-axis (width)
+            let band = ScaleBand::new(categories.to_vec(), (0.0, inner_height))
+                .padding(0.05);
+            let linear = ScaleLinear::new((domain_min, effective_max), (0.0, inner_width));
+            let sub_band_height = band.bandwidth() / num_series as f64;
 
-            let x_base = match band.map(&cat) {
-                Some(x) => x,
-                None => continue,
-            };
-            let series_idx = series_names.iter().position(|s| s == &series).unwrap_or(0);
-            let x = x_base + series_idx as f64 * sub_band_width;
+            for i in 0..data.num_rows() {
+                let cat = match data.get_string(i, category_field) {
+                    Some(c) => c,
+                    None => continue,
+                };
+                let series = match data.get_string(i, color_field) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let val = data.get_f64(i, value_field).unwrap_or(0.0);
 
-            let bar_top = linear.map(val);
-            let bar_bottom = linear.map(0.0);
-            let bar_height = (bar_bottom - bar_top).abs();
+                let y_base = match band.map(&cat) {
+                    Some(y) => y,
+                    None => continue,
+                };
+                let series_idx = series_names.iter().position(|s| s == &series).unwrap_or(0);
+                let y = y_base + series_idx as f64 * sub_band_height;
 
-            let fill = config
-                .colors
-                .get(series_idx)
-                .cloned()
-                .unwrap_or_else(|| "#2E7D9A".to_string());
+                let bar_left = linear.map(0.0);
+                let bar_right = linear.map(val);
+                let bar_width = (bar_right - bar_left).abs();
 
-            elements.push(ChartElement::Rect {
-                x,
-                y: bar_top,
-                width: sub_band_width,
-                height: bar_height,
-                fill,
-                stroke: None,
-                class: "bar".to_string(),
-                data: Some(
-                    ElementData::new(&cat, format_value(val, y_fmt_ref)).with_series(&series),
-                ),
-            });
+                let fill = config
+                    .colors
+                    .get(series_idx)
+                    .cloned()
+                    .unwrap_or_else(|| "#2E7D9A".to_string());
+
+                elements.push(ChartElement::Rect {
+                    x: bar_left.min(bar_right),
+                    y,
+                    width: bar_width,
+                    height: sub_band_height,
+                    fill,
+                    stroke: None,
+                    class: "bar".to_string(),
+                    data: Some(
+                        ElementData::new(&cat, format_value(val, y_fmt_ref)).with_series(&series),
+                    ),
+                });
+            }
+        } else {
+            // Vertical grouped: band on x-axis (width), linear on y-axis (height)
+            let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
+                .padding(0.05);
+            let linear = ScaleLinear::new((domain_min, effective_max), (inner_height, 0.0));
+            let sub_band_width = band.bandwidth() / num_series as f64;
+
+            for i in 0..data.num_rows() {
+                let cat = match data.get_string(i, category_field) {
+                    Some(c) => c,
+                    None => continue,
+                };
+                let series = match data.get_string(i, color_field) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let val = data.get_f64(i, value_field).unwrap_or(0.0);
+
+                let x_base = match band.map(&cat) {
+                    Some(x) => x,
+                    None => continue,
+                };
+                let series_idx = series_names.iter().position(|s| s == &series).unwrap_or(0);
+                let x = x_base + series_idx as f64 * sub_band_width;
+
+                let bar_top = linear.map(val);
+                let bar_bottom = linear.map(0.0);
+                let bar_height = (bar_bottom - bar_top).abs();
+
+                let fill = config
+                    .colors
+                    .get(series_idx)
+                    .cloned()
+                    .unwrap_or_else(|| "#2E7D9A".to_string());
+
+                elements.push(ChartElement::Rect {
+                    x,
+                    y: bar_top,
+                    width: sub_band_width,
+                    height: bar_height,
+                    fill,
+                    stroke: None,
+                    class: "bar".to_string(),
+                    data: Some(
+                        ElementData::new(&cat, format_value(val, y_fmt_ref)).with_series(&series),
+                    ),
+                });
+            }
         }
 
         Ok((value_max, elements))

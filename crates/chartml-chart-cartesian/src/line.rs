@@ -11,7 +11,7 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
 use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
 
-use crate::helpers::{GridConfig, LegendMark, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_legend_with_mark, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{GridConfig, LegendMark, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend_with_mark, get_color_field, get_field_name, get_x_format, get_y_format, nice_domain, offset_element};
 
 pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
@@ -54,10 +54,15 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         _ => 0.0,
     };
 
+    // Detect dual-axis: check if any multi-field spec has axis: "right"
+    let has_right = is_multi_field && multi_fields.iter().any(|f| f.axis.as_deref() == Some("right"));
+
     // Step 1b: Pre-compute domain for left margin estimation (matches JS two-pass approach).
+    // When dual-axis, only left-axis fields contribute to the left prelim domain.
     let all_value_fields_prelim: Vec<String> = if is_multi_field {
         let mut fields: Vec<String> = multi_fields.iter()
             .filter(|f| f.mark.as_deref() != Some("range"))
+            .filter(|f| !has_right || f.axis.as_deref() != Some("right"))
             .map(|f| f.field.clone())
             .collect();
         // Include upper/lower bound fields from range marks for domain calculation
@@ -83,13 +88,29 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     let prelim_value_min = all_values_prelim.iter().cloned().fold(f64::INFINITY, f64::min);
     let prelim_domain_min = if prelim_value_min >= 0.0 { 0.0 } else { prelim_value_min };
     let prelim_domain_max = if prelim_value_max <= 0.0 { 1.0 } else { prelim_value_max };
-    let (prelim_domain_min, prelim_domain_max) = crate::helpers::nice_domain(prelim_domain_min, prelim_domain_max, 5);
+    let (prelim_domain_min, prelim_domain_max) = nice_domain(prelim_domain_min, prelim_domain_max, 5);
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
     let prelim_labels = vec![
-        crate::helpers::format_value(prelim_domain_max, y_fmt_ref),
-        crate::helpers::format_value(prelim_domain_min, y_fmt_ref),
+        format_value(prelim_domain_max, y_fmt_ref),
+        format_value(prelim_domain_min, y_fmt_ref),
     ];
+
+    // Pre-compute right tick labels for margin estimation (mirrors bar.rs render_combo)
+    let right_fmt = config.visualize.axes.as_ref()
+        .and_then(|a| a.right.as_ref())
+        .and_then(|a| a.format.as_deref());
+    let right_tick_labels: Vec<String> = if has_right {
+        let right_max = multi_fields.iter()
+            .filter(|f| f.axis.as_deref() == Some("right"))
+            .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
+            .fold(0.0_f64, f64::max);
+        let right_domain_max = if right_max <= 0.0 { 1.0 } else { right_max };
+        let tmp_scale = ScaleLinear::new((0.0, right_domain_max), (0.0, 100.0));
+        tmp_scale.ticks(5).iter().map(|v| format_value(*v, right_fmt)).collect()
+    } else {
+        vec![]
+    };
 
     let has_y_axis_label = config.visualize.axes.as_ref()
         .and_then(|a| a.left.as_ref())
@@ -106,6 +127,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         has_x_axis_label,
         x_label_strategy_margin: x_extra_margin,
         y_tick_labels: prelim_labels,
+        has_right_axis: has_right,
+        right_tick_labels,
         ..Default::default()
     };
     let margins = calculate_margins(&margin_config);
@@ -113,35 +136,67 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     let inner_width = margins.inner_width(config.width);
     let inner_height = margins.inner_height(config.height);
 
-    // Find value extent across ALL fields
-    let all_value_fields: Vec<String> = if is_multi_field {
-        multi_fields.iter().map(|f| f.field.clone()).collect()
-    } else {
-        vec![value_field.clone()]
-    };
-
-    let mut all_values: Vec<f64> = Vec::new();
-    for field in &all_value_fields {
-        for i in 0..data.num_rows() {
-            if let Some(v) = data.get_f64(i, field) {
-                all_values.push(v);
+    // Find value extent — when dual-axis, compute separate domains for left and right
+    let (domain_min, domain_max, right_domain): (f64, f64, Option<(f64, f64)>) = if has_right {
+        // Left-axis fields only
+        let left_fields: Vec<&str> = multi_fields.iter()
+            .filter(|f| f.axis.as_deref() != Some("right") && f.mark.as_deref() != Some("range"))
+            .map(|f| f.field.as_str())
+            .collect();
+        let mut left_vals: Vec<f64> = Vec::new();
+        for field in &left_fields {
+            for i in 0..data.num_rows() {
+                if let Some(v) = data.get_f64(i, field) { left_vals.push(v); }
             }
         }
-    }
-    let value_min = all_values.iter().cloned().fold(f64::INFINITY, f64::min);
-    let value_max = all_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let left_min = left_vals.iter().cloned().fold(f64::INFINITY, f64::min);
+        let left_max = left_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let left_domain_min = if left_min >= 0.0 { 0.0 } else { left_min };
+        let left_domain_max = if left_max <= 0.0 { 1.0 } else { left_max };
+        let (left_domain_min, left_domain_max) = nice_domain(left_domain_min, left_domain_max, 5);
 
-    // Compute domain from data values. JS ignores explicit axes.rows.min/max
-    // (yLeft.nice() overrides them), so we match that behavior.
-    let domain_min = if value_min >= 0.0 { 0.0 } else { value_min };
-    let domain_max = if value_max <= 0.0 { 1.0 } else { value_max };
+        // Right-axis fields only
+        let right_fields: Vec<&str> = multi_fields.iter()
+            .filter(|f| f.axis.as_deref() == Some("right"))
+            .map(|f| f.field.as_str())
+            .collect();
+        let mut right_vals: Vec<f64> = Vec::new();
+        for field in &right_fields {
+            for i in 0..data.num_rows() {
+                if let Some(v) = data.get_f64(i, field) { right_vals.push(v); }
+            }
+        }
+        let right_min = right_vals.iter().cloned().fold(f64::INFINITY, f64::min);
+        let right_max = right_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let right_domain_min = if right_min >= 0.0 { 0.0 } else { right_min };
+        let right_domain_max = if right_max <= 0.0 { 1.0 } else { right_max };
+        let (right_domain_min, right_domain_max) = nice_domain(right_domain_min, right_domain_max, 5);
 
-    // Apply D3-style nice domain rounding BEFORE creating the scale,
-    // so data points and axis ticks use the same domain.
-    let (domain_min, domain_max) = crate::helpers::nice_domain(domain_min, domain_max, 5);
+        (left_domain_min, left_domain_max, Some((right_domain_min, right_domain_max)))
+    } else {
+        // Single-axis: all fields share one domain
+        let all_value_fields: Vec<String> = if is_multi_field {
+            multi_fields.iter().map(|f| f.field.clone()).collect()
+        } else {
+            vec![value_field.clone()]
+        };
+        let mut all_values: Vec<f64> = Vec::new();
+        for field in &all_value_fields {
+            for i in 0..data.num_rows() {
+                if let Some(v) = data.get_f64(i, field) { all_values.push(v); }
+            }
+        }
+        let value_min = all_values.iter().cloned().fold(f64::INFINITY, f64::min);
+        let value_max = all_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let dm = if value_min >= 0.0 { 0.0 } else { value_min };
+        let dx = if value_max <= 0.0 { 1.0 } else { value_max };
+        let (dm, dx) = nice_domain(dm, dx, 5);
+        (dm, dx, None)
+    };
 
     let band = ScaleBand::new(categories.clone(), (0.0, inner_width));
     let linear = ScaleLinear::new((domain_min, domain_max), (inner_height, 0.0));
+    let right_scale = right_domain.map(|(rmin, rmax)| ScaleLinear::new((rmin, rmax), (inner_height, 0.0)));
 
     let mut children = Vec::new();
 
@@ -178,23 +233,52 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         axis_label: left_axis_label,
     });
 
+    let mut axis_elements = Vec::new();
+    axis_elements.extend(
+        x_axis_result.elements
+            .into_iter()
+            .map(|e| offset_element(e, margins.left, 0.0)),
+    );
+    axis_elements.extend(
+        y_axis_elements
+            .into_iter()
+            .map(|e| offset_element(e, 0.0, margins.top)),
+    );
+
+    // Right axis — ticks and labels on the right side
+    if let Some(ref rs) = right_scale {
+        let right_axis = generate_y_axis_numeric_right(
+            rs.domain(), (inner_height, 0.0), margins.left + inner_width,
+            right_fmt, adaptive_tick_count(inner_height),
+            None,
+        );
+        axis_elements.extend(right_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
+    }
+
+    // Right axis title label — rendered manually with absolute positioning
+    if has_right {
+        if let Some(label) = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()).and_then(|a| a.label.clone()) {
+            let rx = config.width - 12.0;
+            axis_elements.push(ChartElement::Text {
+                x: rx,
+                y: margins.top + inner_height / 2.0,
+                content: label,
+                anchor: TextAnchor::Middle,
+                dominant_baseline: None,
+                transform: Some(Transform::Rotate(90.0, rx, margins.top + inner_height / 2.0)),
+                font_size: Some("12px".to_string()),
+                font_weight: None,
+                fill: Some("#666".to_string()),
+                class: "axis-label".to_string(),
+                data: None,
+            });
+        }
+    }
+
     children.push(ChartElement::Group {
         class: "axes".to_string(),
         transform: None,
-        children: {
-            let mut axes = Vec::new();
-            axes.extend(
-                x_axis_result.elements
-                    .into_iter()
-                    .map(|e| offset_element(e, margins.left, 0.0)),
-            );
-            axes.extend(
-                y_axis_elements
-                    .into_iter()
-                    .map(|e| offset_element(e, 0.0, margins.top)),
-            );
-            axes
-        },
+        children: axis_elements,
     });
 
     // Annotations — rendered below the line (added before line elements)
@@ -302,6 +386,15 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 _ => None,
             };
 
+            // Select scale based on axis assignment
+            let is_right_axis = field_spec.axis.as_deref() == Some("right");
+            let scale_for_field = if is_right_axis {
+                right_scale.as_ref().unwrap_or(&linear)
+            } else {
+                &linear
+            };
+            let fmt_for_field: Option<&str> = if is_right_axis { right_fmt } else { y_fmt_ref };
+
             let mut points: Vec<(f64, f64)> = Vec::new();
             let mut point_data: Vec<(String, f64)> = Vec::new();
 
@@ -319,7 +412,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     Some(x) => x + bandwidth / 2.0,
                     None => continue,
                 };
-                let y = linear.map(val);
+                let y = scale_for_field.map(val);
                 points.push((x, y));
                 point_data.push((cat.clone(), val));
             }
@@ -353,7 +446,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     fill: color.clone(),
                     stroke: Some("#fff".to_string()),
                     class: "chartml-line-dot".to_string(),
-                    data: Some(ElementData::new(cat, format_value(val, y_fmt_ref)).with_series(&label)),
+                    data: Some(ElementData::new(cat, format_value(val, fmt_for_field)).with_series(&label)),
                 });
             }
 

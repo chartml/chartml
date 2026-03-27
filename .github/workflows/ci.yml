@@ -8,6 +8,20 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  review-signature:
+    name: Review Approval Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reject committed .review-approval file
+        run: |
+          if [ -f .review-approval ]; then
+            echo "::error::.review-approval file found in repository. This file must be gitignored and never committed."
+            exit 1
+          fi
+          echo "No .review-approval file in tree."
+
   lint-policy:
     name: Lint Suppression Policy
     runs-on: ubuntu-latest

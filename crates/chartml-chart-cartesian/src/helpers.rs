@@ -830,12 +830,13 @@ pub fn generate_y_axis_numeric_right(
     domain: (f64, f64),
     range: (f64, f64),
     x_position: f64,
-    _fmt: Option<&str>,
+    fmt: Option<&str>,
     tick_count: usize,
     axis_label: Option<&str>,
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
-    let ticks = scale.ticks(tick_count);
+    let _ = tick_count;
+    let ticks = d3_ticks(domain.0, domain.1, 5);
     let tick_step = compute_tick_step(&ticks, domain);
     let mut elements = Vec::new();
 
@@ -849,7 +850,10 @@ pub fn generate_y_axis_numeric_right(
 
     for val in &ticks {
         let y = scale.map(*val);
-        let label = format_tick_value(*val, tick_step);
+        let label = match fmt {
+            Some(f) => format_tick_value_si(*val, tick_step, f),
+            None => format_tick_value(*val, tick_step),
+        };
 
         // Tick mark (to the right)
         elements.push(ChartElement::Line {
