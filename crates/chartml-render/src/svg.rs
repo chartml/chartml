@@ -460,10 +460,9 @@ mod tests {
         };
 
         let svg = element_to_svg(&element, 100.0, 100.0);
-        // Should still render the rect, just without tooltip data
+        // Should render the rect with data attributes for tooltip support
         assert!(svg.contains(r#"<rect x="0" y="0""#));
-        // Should NOT contain any tooltip/data attributes
-        assert!(!svg.contains("Jan"));
-        assert!(!svg.contains("1234"));
+        assert!(svg.contains(r#"data-label="Jan""#));
+        assert!(svg.contains(r#"data-value="1234""#));
     }
 }
