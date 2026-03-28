@@ -1,0 +1,405 @@
+name: "Ten series dense — 10 product lines over 12 months"
+tags: [line, multi-series, legend, color-palette, ten-colors, dense]
+description: >
+  Monthly revenue for 10 distinct product lines across a full year.
+  Stress-tests the color palette (requires 10 distinguishable colors),
+  legend rendering with 10 entries, and visual clarity when many lines
+  overlap. A realistic scenario for enterprise dashboards with many
+  product categories or business units.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Revenue — 10 Product Lines"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        product: "Alpha"
+        revenue: 42000
+      - month: "Jan"
+        product: "Beta"
+        revenue: 38000
+      - month: "Jan"
+        product: "Gamma"
+        revenue: 55000
+      - month: "Jan"
+        product: "Delta"
+        revenue: 29000
+      - month: "Jan"
+        product: "Epsilon"
+        revenue: 61000
+      - month: "Jan"
+        product: "Zeta"
+        revenue: 33000
+      - month: "Jan"
+        product: "Eta"
+        revenue: 47000
+      - month: "Jan"
+        product: "Theta"
+        revenue: 21000
+      - month: "Jan"
+        product: "Iota"
+        revenue: 50000
+      - month: "Jan"
+        product: "Kappa"
+        revenue: 36000
+      - month: "Feb"
+        product: "Alpha"
+        revenue: 44000
+      - month: "Feb"
+        product: "Beta"
+        revenue: 40000
+      - month: "Feb"
+        product: "Gamma"
+        revenue: 57000
+      - month: "Feb"
+        product: "Delta"
+        revenue: 31000
+      - month: "Feb"
+        product: "Epsilon"
+        revenue: 63000
+      - month: "Feb"
+        product: "Zeta"
+        revenue: 35000
+      - month: "Feb"
+        product: "Eta"
+        revenue: 49000
+      - month: "Feb"
+        product: "Theta"
+        revenue: 23000
+      - month: "Feb"
+        product: "Iota"
+        revenue: 52000
+      - month: "Feb"
+        product: "Kappa"
+        revenue: 38000
+      - month: "Mar"
+        product: "Alpha"
+        revenue: 46000
+      - month: "Mar"
+        product: "Beta"
+        revenue: 42000
+      - month: "Mar"
+        product: "Gamma"
+        revenue: 59000
+      - month: "Mar"
+        product: "Delta"
+        revenue: 33000
+      - month: "Mar"
+        product: "Epsilon"
+        revenue: 65000
+      - month: "Mar"
+        product: "Zeta"
+        revenue: 37000
+      - month: "Mar"
+        product: "Eta"
+        revenue: 51000
+      - month: "Mar"
+        product: "Theta"
+        revenue: 25000
+      - month: "Mar"
+        product: "Iota"
+        revenue: 54000
+      - month: "Mar"
+        product: "Kappa"
+        revenue: 40000
+      - month: "Apr"
+        product: "Alpha"
+        revenue: 48000
+      - month: "Apr"
+        product: "Beta"
+        revenue: 44000
+      - month: "Apr"
+        product: "Gamma"
+        revenue: 61000
+      - month: "Apr"
+        product: "Delta"
+        revenue: 35000
+      - month: "Apr"
+        product: "Epsilon"
+        revenue: 67000
+      - month: "Apr"
+        product: "Zeta"
+        revenue: 39000
+      - month: "Apr"
+        product: "Eta"
+        revenue: 53000
+      - month: "Apr"
+        product: "Theta"
+        revenue: 27000
+      - month: "Apr"
+        product: "Iota"
+        revenue: 56000
+      - month: "Apr"
+        product: "Kappa"
+        revenue: 42000
+      - month: "May"
+        product: "Alpha"
+        revenue: 50000
+      - month: "May"
+        product: "Beta"
+        revenue: 46000
+      - month: "May"
+        product: "Gamma"
+        revenue: 63000
+      - month: "May"
+        product: "Delta"
+        revenue: 37000
+      - month: "May"
+        product: "Epsilon"
+        revenue: 69000
+      - month: "May"
+        product: "Zeta"
+        revenue: 41000
+      - month: "May"
+        product: "Eta"
+        revenue: 55000
+      - month: "May"
+        product: "Theta"
+        revenue: 29000
+      - month: "May"
+        product: "Iota"
+        revenue: 58000
+      - month: "May"
+        product: "Kappa"
+        revenue: 44000
+      - month: "Jun"
+        product: "Alpha"
+        revenue: 52000
+      - month: "Jun"
+        product: "Beta"
+        revenue: 48000
+      - month: "Jun"
+        product: "Gamma"
+        revenue: 65000
+      - month: "Jun"
+        product: "Delta"
+        revenue: 39000
+      - month: "Jun"
+        product: "Epsilon"
+        revenue: 71000
+      - month: "Jun"
+        product: "Zeta"
+        revenue: 43000
+      - month: "Jun"
+        product: "Eta"
+        revenue: 57000
+      - month: "Jun"
+        product: "Theta"
+        revenue: 31000
+      - month: "Jun"
+        product: "Iota"
+        revenue: 60000
+      - month: "Jun"
+        product: "Kappa"
+        revenue: 46000
+      - month: "Jul"
+        product: "Alpha"
+        revenue: 54000
+      - month: "Jul"
+        product: "Beta"
+        revenue: 50000
+      - month: "Jul"
+        product: "Gamma"
+        revenue: 67000
+      - month: "Jul"
+        product: "Delta"
+        revenue: 41000
+      - month: "Jul"
+        product: "Epsilon"
+        revenue: 73000
+      - month: "Jul"
+        product: "Zeta"
+        revenue: 45000
+      - month: "Jul"
+        product: "Eta"
+        revenue: 59000
+      - month: "Jul"
+        product: "Theta"
+        revenue: 33000
+      - month: "Jul"
+        product: "Iota"
+        revenue: 62000
+      - month: "Jul"
+        product: "Kappa"
+        revenue: 48000
+      - month: "Aug"
+        product: "Alpha"
+        revenue: 53000
+      - month: "Aug"
+        product: "Beta"
+        revenue: 49000
+      - month: "Aug"
+        product: "Gamma"
+        revenue: 64000
+      - month: "Aug"
+        product: "Delta"
+        revenue: 40000
+      - month: "Aug"
+        product: "Epsilon"
+        revenue: 70000
+      - month: "Aug"
+        product: "Zeta"
+        revenue: 44000
+      - month: "Aug"
+        product: "Eta"
+        revenue: 56000
+      - month: "Aug"
+        product: "Theta"
+        revenue: 32000
+      - month: "Aug"
+        product: "Iota"
+        revenue: 59000
+      - month: "Aug"
+        product: "Kappa"
+        revenue: 47000
+      - month: "Sep"
+        product: "Alpha"
+        revenue: 55000
+      - month: "Sep"
+        product: "Beta"
+        revenue: 51000
+      - month: "Sep"
+        product: "Gamma"
+        revenue: 68000
+      - month: "Sep"
+        product: "Delta"
+        revenue: 42000
+      - month: "Sep"
+        product: "Epsilon"
+        revenue: 74000
+      - month: "Sep"
+        product: "Zeta"
+        revenue: 46000
+      - month: "Sep"
+        product: "Eta"
+        revenue: 60000
+      - month: "Sep"
+        product: "Theta"
+        revenue: 34000
+      - month: "Sep"
+        product: "Iota"
+        revenue: 63000
+      - month: "Sep"
+        product: "Kappa"
+        revenue: 49000
+      - month: "Oct"
+        product: "Alpha"
+        revenue: 57000
+      - month: "Oct"
+        product: "Beta"
+        revenue: 53000
+      - month: "Oct"
+        product: "Gamma"
+        revenue: 70000
+      - month: "Oct"
+        product: "Delta"
+        revenue: 44000
+      - month: "Oct"
+        product: "Epsilon"
+        revenue: 76000
+      - month: "Oct"
+        product: "Zeta"
+        revenue: 48000
+      - month: "Oct"
+        product: "Eta"
+        revenue: 62000
+      - month: "Oct"
+        product: "Theta"
+        revenue: 36000
+      - month: "Oct"
+        product: "Iota"
+        revenue: 65000
+      - month: "Oct"
+        product: "Kappa"
+        revenue: 51000
+      - month: "Nov"
+        product: "Alpha"
+        revenue: 59000
+      - month: "Nov"
+        product: "Beta"
+        revenue: 55000
+      - month: "Nov"
+        product: "Gamma"
+        revenue: 72000
+      - month: "Nov"
+        product: "Delta"
+        revenue: 46000
+      - month: "Nov"
+        product: "Epsilon"
+        revenue: 78000
+      - month: "Nov"
+        product: "Zeta"
+        revenue: 50000
+      - month: "Nov"
+        product: "Eta"
+        revenue: 64000
+      - month: "Nov"
+        product: "Theta"
+        revenue: 38000
+      - month: "Nov"
+        product: "Iota"
+        revenue: 67000
+      - month: "Nov"
+        product: "Kappa"
+        revenue: 53000
+      - month: "Dec"
+        product: "Alpha"
+        revenue: 61000
+      - month: "Dec"
+        product: "Beta"
+        revenue: 57000
+      - month: "Dec"
+        product: "Gamma"
+        revenue: 74000
+      - month: "Dec"
+        product: "Delta"
+        revenue: 48000
+      - month: "Dec"
+        product: "Epsilon"
+        revenue: 80000
+      - month: "Dec"
+        product: "Zeta"
+        revenue: 52000
+      - month: "Dec"
+        product: "Eta"
+        revenue: 66000
+      - month: "Dec"
+        product: "Theta"
+        revenue: 40000
+      - month: "Dec"
+        product: "Iota"
+        revenue: 69000
+      - month: "Dec"
+        product: "Kappa"
+        revenue: 55000
+  visualize:
+    type: line
+    columns: month
+    rows: revenue
+    marks:
+      color: product
+
+assertions:
+  structure:
+    root: svg
+    lines: 10
+    title_in_svg: false
+    legend: true
+    legend_entries: 10
+
+  colors:
+    distinct: 10
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    y:
+      min: 0
+      format: numeric

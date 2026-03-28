@@ -1,0 +1,54 @@
+name: "Bar chart — labels with special XML characters"
+tags: [edge-case, special-chars, xml-escape, labels]
+description: >
+  Category labels contain ampersands, angle brackets, and quotes
+  that must be XML-escaped in the SVG output. Tests that the
+  renderer properly escapes these characters to produce valid SVG.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue by Product Line"
+  data:
+    provider: inline
+    rows:
+      - product: "R&D Services"
+        revenue: 280000
+      - product: "Sales <Direct>"
+        revenue: 420000
+      - product: 'O"Brien Corp'
+        revenue: 150000
+      - product: "Mix & Match"
+        revenue: 95000
+  visualize:
+    type: bar
+    columns: product
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 4
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "R&D Services"
+      value: 280000
+    - label: "Sales <Direct>"
+      value: 420000
+    - label: 'O"Brien Corp'
+      value: 150000
+    - label: "Mix & Match"
+      value: 95000
+
+  xml_safety:
+    labels_escaped: true
+    valid_svg: true
+
+  axes:
+    x:
+      labels_present: true
+    y:
+      min: 0
+      format: numeric

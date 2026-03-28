@@ -1,0 +1,63 @@
+name: "Line chart with both x and y grid lines"
+tags: [line, grid, style, single-series]
+description: >
+  Quarterly revenue with both horizontal (y) and vertical (x) grid lines
+  enabled. The grid provides a full reference mesh behind the data line,
+  useful when precise value reading is important. Tests that style.grid
+  with both x and y set to true produces grid line elements on both axes
+  in the rendered SVG.
+
+chart:
+  type: chart
+  version: 1
+  title: "Quarterly Revenue"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1 2024"
+        revenue: 245000
+      - quarter: "Q2 2024"
+        revenue: 268000
+      - quarter: "Q3 2024"
+        revenue: 291000
+      - quarter: "Q4 2024"
+        revenue: 312000
+      - quarter: "Q1 2025"
+        revenue: 335000
+      - quarter: "Q2 2025"
+        revenue: 358000
+      - quarter: "Q3 2025"
+        revenue: 382000
+      - quarter: "Q4 2025"
+        revenue: 410000
+  visualize:
+    type: line
+    columns: quarter
+    rows: revenue
+    style:
+      grid:
+        x: true
+        y: true
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  grid:
+    x: true
+    y: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Q1 2024", "Q2 2024", "Q3 2024", "Q4 2024", "Q1 2025", "Q2 2025", "Q3 2025", "Q4 2025"]
+    y:
+      min: 0
+      format: numeric

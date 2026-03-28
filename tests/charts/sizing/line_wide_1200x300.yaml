@@ -1,0 +1,57 @@
+name: "Wide line chart — 8 weeks at 1200x300 (wide thin panel)"
+tags: [line, sizing, wide, 1200x300]
+description: >
+  Line chart rendered at wide thin dashboard panel size (1200x300).
+  A common layout for full-width sparkline-style trend panels in
+  dashboards. Tests that the line stretches correctly across a
+  wide viewport with compressed height.
+
+chart:
+  type: chart
+  version: 1
+  title: "Daily Signups"
+  data:
+    provider: inline
+    rows:
+      - day: "Mon"
+        signups: 145
+      - day: "Tue"
+        signups: 168
+      - day: "Wed"
+        signups: 152
+      - day: "Thu"
+        signups: 189
+      - day: "Fri"
+        signups: 201
+      - day: "Sat"
+        signups: 98
+      - day: "Sun"
+        signups: 87
+  visualize:
+    type: line
+    columns: day
+    rows: signups
+    style:
+      width: 1200
+      height: 300
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 1200
+    svg_height: 300
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    y:
+      min: 0
+      format: numeric

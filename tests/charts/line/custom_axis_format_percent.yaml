@@ -1,0 +1,60 @@
+name: "Custom y-axis format — percentage values"
+tags: [line, axis-format, percent, single-series]
+description: >
+  Weekly conversion rate expressed as decimal values (0.032 = 3.2%)
+  with a y-axis format string of ".1%" to render labels as "3.2%".
+  Tests that the axes.left.format configuration propagates through
+  to y-axis tick label formatting. Common for rate/ratio metrics
+  in marketing and product analytics dashboards.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly Conversion Rate"
+  data:
+    provider: inline
+    rows:
+      - week: "Wk1"
+        rate: 0.032
+      - week: "Wk2"
+        rate: 0.035
+      - week: "Wk3"
+        rate: 0.031
+      - week: "Wk4"
+        rate: 0.038
+      - week: "Wk5"
+        rate: 0.041
+      - week: "Wk6"
+        rate: 0.039
+      - week: "Wk7"
+        rate: 0.044
+      - week: "Wk8"
+        rate: 0.046
+  visualize:
+    type: line
+    columns: week
+    rows: rate
+    axes:
+      left:
+        label: "Conversion Rate"
+        format: ".1%"
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  axes:
+    x:
+      labels: ["Wk1", "Wk2", "Wk3", "Wk4", "Wk5", "Wk6", "Wk7", "Wk8"]
+    y:
+      label: "Conversion Rate"
+      format: percent
+      min: 0
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true

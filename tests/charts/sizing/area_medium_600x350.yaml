@@ -1,0 +1,99 @@
+name: "Medium stacked area — 3 series at 600x350 (half-width panel)"
+tags: [area, sizing, medium, 600x350, stacked, multi-series]
+description: >
+  Stacked area chart rendered at half-width panel size (600x350).
+  Three cost categories over 5 months. Tests that stacked areas
+  render correctly at a medium viewport with legend.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Costs by Category"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        category: "Hosting"
+        cost: 12000
+      - month: "Jan"
+        category: "Support"
+        cost: 8500
+      - month: "Jan"
+        category: "Marketing"
+        cost: 15000
+      - month: "Feb"
+        category: "Hosting"
+        cost: 13000
+      - month: "Feb"
+        category: "Support"
+        cost: 9000
+      - month: "Feb"
+        category: "Marketing"
+        cost: 16500
+      - month: "Mar"
+        category: "Hosting"
+        cost: 14500
+      - month: "Mar"
+        category: "Support"
+        cost: 9200
+      - month: "Mar"
+        category: "Marketing"
+        cost: 18000
+      - month: "Apr"
+        category: "Hosting"
+        cost: 15000
+      - month: "Apr"
+        category: "Support"
+        cost: 9800
+      - month: "Apr"
+        category: "Marketing"
+        cost: 19500
+      - month: "May"
+        category: "Hosting"
+        cost: 16000
+      - month: "May"
+        category: "Support"
+        cost: 10200
+      - month: "May"
+        category: "Marketing"
+        cost: 21000
+  transform:
+    aggregate:
+      dimensions: [month, category]
+      measures:
+        - column: cost
+          aggregation: sum
+          name: total_cost
+  visualize:
+    type: area
+    mode: stacked
+    columns: month
+    rows: total_cost
+    marks:
+      color: category
+    style:
+      width: 600
+      height: 350
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 600
+    svg_height: 350
+    areas: 3
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

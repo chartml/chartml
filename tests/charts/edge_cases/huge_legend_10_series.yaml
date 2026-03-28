@@ -1,0 +1,134 @@
+name: "Line chart — 10 series with long names (legend stress test)"
+tags: [edge-case, line, legend, many-series, wrapping, stress]
+description: >
+  A line chart with 10 series, each having a long descriptive name
+  (25+ characters). Tests that the legend wraps correctly, that 10
+  distinct colors are assigned, and that the legend does not overflow
+  the chart or overlap the plot area.
+
+chart:
+  type: chart
+  version: 1
+  title: "Feature Usage by Department"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        department: "Enterprise Sales Division"
+        usage: 84
+      - month: "Jan"
+        department: "Customer Success Team"
+        usage: 72
+      - month: "Jan"
+        department: "Product Engineering Group"
+        usage: 91
+      - month: "Jan"
+        department: "Marketing & Communications"
+        usage: 65
+      - month: "Jan"
+        department: "Human Resources Department"
+        usage: 43
+      - month: "Jan"
+        department: "Finance & Accounting Dept"
+        usage: 38
+      - month: "Jan"
+        department: "Research & Development Lab"
+        usage: 88
+      - month: "Jan"
+        department: "Information Security Office"
+        usage: 56
+      - month: "Jan"
+        department: "Quality Assurance Division"
+        usage: 79
+      - month: "Jan"
+        department: "Business Intelligence Unit"
+        usage: 61
+      - month: "Feb"
+        department: "Enterprise Sales Division"
+        usage: 87
+      - month: "Feb"
+        department: "Customer Success Team"
+        usage: 75
+      - month: "Feb"
+        department: "Product Engineering Group"
+        usage: 93
+      - month: "Feb"
+        department: "Marketing & Communications"
+        usage: 68
+      - month: "Feb"
+        department: "Human Resources Department"
+        usage: 46
+      - month: "Feb"
+        department: "Finance & Accounting Dept"
+        usage: 41
+      - month: "Feb"
+        department: "Research & Development Lab"
+        usage: 90
+      - month: "Feb"
+        department: "Information Security Office"
+        usage: 59
+      - month: "Feb"
+        department: "Quality Assurance Division"
+        usage: 82
+      - month: "Feb"
+        department: "Business Intelligence Unit"
+        usage: 64
+      - month: "Mar"
+        department: "Enterprise Sales Division"
+        usage: 91
+      - month: "Mar"
+        department: "Customer Success Team"
+        usage: 78
+      - month: "Mar"
+        department: "Product Engineering Group"
+        usage: 95
+      - month: "Mar"
+        department: "Marketing & Communications"
+        usage: 71
+      - month: "Mar"
+        department: "Human Resources Department"
+        usage: 49
+      - month: "Mar"
+        department: "Finance & Accounting Dept"
+        usage: 44
+      - month: "Mar"
+        department: "Research & Development Lab"
+        usage: 92
+      - month: "Mar"
+        department: "Information Security Office"
+        usage: 62
+      - month: "Mar"
+        department: "Quality Assurance Division"
+        usage: 85
+      - month: "Mar"
+        department: "Business Intelligence Unit"
+        usage: 67
+  visualize:
+    type: line
+    columns: month
+    rows: usage
+    marks:
+      color: department
+
+assertions:
+  structure:
+    root: svg
+    lines: 10
+    title_in_svg: false
+    legend: true
+    legend_entries: 10
+
+  colors:
+    distinct: 10
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar"]
+    y:
+      min: 0
+      format: numeric

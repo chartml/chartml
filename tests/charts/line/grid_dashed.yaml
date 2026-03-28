@@ -1,0 +1,61 @@
+name: "Line chart with dashed grid lines"
+tags: [line, grid, style, dashed, single-series]
+description: >
+  Monthly page views with dashed grid lines on both axes. The grid
+  provides visual reference without dominating the data ink. Tests
+  that style.grid configuration propagates to the SVG, producing
+  line elements with stroke-dasharray attributes on grid lines.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Page Views"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        views: 84000
+      - month: "Feb"
+        views: 91000
+      - month: "Mar"
+        views: 102000
+      - month: "Apr"
+        views: 97000
+      - month: "May"
+        views: 115000
+      - month: "Jun"
+        views: 108000
+  visualize:
+    type: line
+    columns: month
+    rows: views
+    style:
+      grid:
+        x: true
+        y: true
+        dashArray: "4,4"
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  grid:
+    x: true
+    y: true
+    all_dashed: true
+    dash_array: "4,4"
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+    y:
+      min: 0
+      format: numeric

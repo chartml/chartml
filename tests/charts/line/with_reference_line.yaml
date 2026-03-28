@@ -1,0 +1,68 @@
+name: "Line chart with horizontal reference/SLA line"
+tags: [line, annotation, reference-line, single-series]
+description: >
+  Monthly response time with a horizontal SLA threshold at 200ms.
+  The annotation line should render as a dashed horizontal rule across
+  the chart area, visually separating acceptable from unacceptable
+  performance. Common in ops dashboards for SLAs, targets, and budgets.
+
+chart:
+  type: chart
+  version: 1
+  title: "API Response Time vs SLA"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        response_ms: 145
+      - month: "Feb"
+        response_ms: 162
+      - month: "Mar"
+        response_ms: 189
+      - month: "Apr"
+        response_ms: 210
+      - month: "May"
+        response_ms: 178
+      - month: "Jun"
+        response_ms: 155
+      - month: "Jul"
+        response_ms: 198
+      - month: "Aug"
+        response_ms: 225
+  visualize:
+    type: line
+    columns: month
+    rows: response_ms
+    annotations:
+      - type: line
+        axis: left
+        value: 200
+        label: "SLA Threshold"
+        color: "#e74c3c"
+        dashArray: "6,3"
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+    annotation_lines: 1
+
+  annotations:
+    - type: line
+      value: 200
+      label: "SLA Threshold"
+      dashed: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"]
+    y:
+      min: 0
+      format: numeric

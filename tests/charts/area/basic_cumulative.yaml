@@ -1,0 +1,60 @@
+name: "Basic area — cumulative revenue over 8 weeks"
+tags: [area, basic, single-series, cumulative]
+description: >
+  Simplest area chart: a single series showing cumulative revenue
+  building week over week. The filled region below the line
+  emphasizes the growing total. Tests that the area path fills
+  down to the x-axis baseline.
+
+chart:
+  type: chart
+  version: 1
+  title: "Cumulative Revenue"
+  data:
+    provider: inline
+    rows:
+      - week: "W1"
+        revenue: 42000
+      - week: "W2"
+        revenue: 89000
+      - week: "W3"
+        revenue: 143000
+      - week: "W4"
+        revenue: 201000
+      - week: "W5"
+        revenue: 268000
+      - week: "W6"
+        revenue: 332000
+      - week: "W7"
+        revenue: 410000
+      - week: "W8"
+        revenue: 497000
+  visualize:
+    type: area
+    columns: week
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    areas: 1
+    title_in_svg: false
+    legend: false
+
+  area_paths:
+    - series: "revenue"
+      has_fill: true
+      fills_to_baseline: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

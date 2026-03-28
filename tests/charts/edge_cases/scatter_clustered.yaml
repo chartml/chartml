@@ -1,0 +1,117 @@
+name: "Scatter — 20 points clustered in a tiny range"
+tags: [edge-case, scatter, clustered, tight-range, axis-scale]
+description: >
+  All 20 scatter points fall within a very narrow range (x: 49-51,
+  y: 99-101). Tests that the axis scale zooms in to make the cluster
+  visible rather than showing a massive empty chart with all points
+  piled on a single pixel. Tick resolution must be fine enough to
+  distinguish the points.
+
+chart:
+  type: chart
+  version: 1
+  title: "Sensor Readings — Calibration Check"
+  data:
+    provider: inline
+    rows:
+      - temperature: 49.2
+        pressure: 99.8
+      - temperature: 50.1
+        pressure: 100.3
+      - temperature: 49.8
+        pressure: 100.1
+      - temperature: 50.5
+        pressure: 99.5
+      - temperature: 49.5
+        pressure: 100.7
+      - temperature: 50.3
+        pressure: 99.9
+      - temperature: 49.9
+        pressure: 100.5
+      - temperature: 50.8
+        pressure: 99.3
+      - temperature: 49.1
+        pressure: 100.9
+      - temperature: 50.6
+        pressure: 99.7
+      - temperature: 49.7
+        pressure: 100.2
+      - temperature: 50.2
+        pressure: 100.0
+      - temperature: 49.4
+        pressure: 99.6
+      - temperature: 50.9
+        pressure: 100.8
+      - temperature: 49.3
+        pressure: 99.4
+      - temperature: 50.4
+        pressure: 100.4
+      - temperature: 51.0
+        pressure: 99.2
+      - temperature: 49.6
+        pressure: 100.6
+      - temperature: 50.7
+        pressure: 99.1
+      - temperature: 50.0
+        pressure: 101.0
+  visualize:
+    type: scatter
+    columns: temperature
+    rows: pressure
+
+assertions:
+  structure:
+    root: svg
+    circles: 20
+    title_in_svg: false
+    legend: false
+
+  points:
+    - x: 49.2
+      y: 99.8
+    - x: 50.1
+      y: 100.3
+    - x: 49.8
+      y: 100.1
+    - x: 50.5
+      y: 99.5
+    - x: 49.5
+      y: 100.7
+    - x: 50.3
+      y: 99.9
+    - x: 49.9
+      y: 100.5
+    - x: 50.8
+      y: 99.3
+    - x: 49.1
+      y: 100.9
+    - x: 50.6
+      y: 99.7
+    - x: 49.7
+      y: 100.2
+    - x: 50.2
+      y: 100.0
+    - x: 49.4
+      y: 99.6
+    - x: 50.9
+      y: 100.8
+    - x: 49.3
+      y: 99.4
+    - x: 50.4
+      y: 100.4
+    - x: 51.0
+      y: 99.2
+    - x: 49.6
+      y: 100.6
+    - x: 50.7
+      y: 99.1
+    - x: 50.0
+      y: 101.0
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

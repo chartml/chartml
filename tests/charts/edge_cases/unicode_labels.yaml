@@ -1,0 +1,50 @@
+name: "Bar chart — Unicode labels (Japanese and emoji)"
+tags: [edge-case, unicode, labels, i18n]
+description: >
+  Category labels use Japanese characters and emoji. Tests that the
+  renderer handles multibyte UTF-8 text without crashing and that
+  labels are present in the SVG output.
+
+chart:
+  type: chart
+  version: 1
+  title: "Regional Sales"
+  data:
+    provider: inline
+    rows:
+      - region: "東京"
+        sales: 450000
+      - region: "大阪"
+        sales: 320000
+      - region: "名古屋"
+        sales: 180000
+      - region: "福岡"
+        sales: 95000
+  visualize:
+    type: bar
+    columns: region
+    rows: sales
+
+assertions:
+  structure:
+    root: svg
+    bars: 4
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "東京"
+      value: 450000
+    - label: "大阪"
+      value: 320000
+    - label: "名古屋"
+      value: 180000
+    - label: "福岡"
+      value: 95000
+
+  axes:
+    x:
+      labels: ["東京", "大阪", "名古屋", "福岡"]
+    y:
+      min: 0
+      format: numeric

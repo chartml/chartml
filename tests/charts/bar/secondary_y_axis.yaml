@@ -1,0 +1,92 @@
+name: "Dual y-axis — revenue (left) and margin % (right)"
+tags: [bar, dual-axis, secondary-axis, multi-field]
+description: >
+  Revenue shown as bars on the left axis, with gross margin
+  percentage on the right axis. Two fields with vastly different
+  scales (dollars vs percent) require a secondary y-axis.
+  Common in finance dashboards that pair volume with efficiency.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue & Gross Margin by Quarter"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1"
+        revenue: 376000
+        margin_pct: 62.4
+      - quarter: "Q2"
+        revenue: 412000
+        margin_pct: 64.1
+      - quarter: "Q3"
+        revenue: 389000
+        margin_pct: 59.8
+      - quarter: "Q4"
+        revenue: 496000
+        margin_pct: 66.7
+  visualize:
+    type: bar
+    columns: quarter
+    rows:
+      - field: revenue
+        axis: left
+        label: "Revenue"
+      - field: margin_pct
+        mark: line
+        axis: right
+        label: "Gross Margin %"
+    axes:
+      left:
+        label: "Revenue ($)"
+        format: "$,.0f"
+      right:
+        label: "Gross Margin (%)"
+        format: ".1f"
+        min: 50
+        max: 80
+
+assertions:
+  structure:
+    root: svg
+    bars: 4
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+    y_axes: 2
+
+  bars:
+    - label: "Q1"
+      value: 376000
+    - label: "Q2"
+      value: 412000
+    - label: "Q3"
+      value: 389000
+    - label: "Q4"
+      value: 496000
+
+  dual_axis:
+    left_axis_present: true
+    right_axis_present: true
+    left_label: "Revenue ($)"
+    right_label: "Gross Margin (%)"
+
+  scale:
+    left:
+      y_min: 0
+      y_nice: true
+    right:
+      y_min: 50
+      y_max: 80
+
+  axes:
+    x:
+      labels: ["Q1", "Q2", "Q3", "Q4"]
+      orientation: horizontal
+    y_left:
+      min: 0
+      format: currency
+    y_right:
+      min: 50
+      max: 80
+      format: decimal

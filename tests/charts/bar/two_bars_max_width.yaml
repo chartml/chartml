@@ -1,0 +1,53 @@
+name: "Two bars only — max bar width clamping"
+tags: [bar, edge-case, bar-width, single-series]
+description: >
+  Only 2 categories on a standard-width chart. Without width
+  clamping, bars would stretch absurdly wide. This tests that
+  the renderer caps bar width at a reasonable maximum so the
+  chart still looks proportional.
+
+chart:
+  type: chart
+  version: 1
+  title: "Online vs In-Store Revenue"
+  data:
+    provider: inline
+    rows:
+      - channel: "Online"
+        revenue: 847000
+      - channel: "In-Store"
+        revenue: 623000
+  visualize:
+    type: bar
+    columns: channel
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 2
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Online"
+      value: 847000
+    - label: "In-Store"
+      value: 623000
+
+  bar_width:
+    clamped: true
+    max_width_ratio: 0.4
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Online", "In-Store"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

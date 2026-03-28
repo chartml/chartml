@@ -1,0 +1,45 @@
+type: chart
+version: 1
+title: "Revenue Efficiency Analysis"
+data:
+  provider: inline
+  rows:
+    - product: "Widget A"
+      revenue: 125000
+      profit: 45000
+      units: 2400
+      category: "Hardware"
+    - product: "Widget B"
+      revenue: 98000
+      profit: 38000
+      units: 1800
+      category: "Hardware"
+    - product: "Software X"
+      revenue: 156000
+      profit: 92000
+      units: 450
+      category: "Software"
+    - product: "Software Y"
+      revenue: 134000
+      profit: 78000
+      units: 380
+      category: "Software"
+    - product: "Service A"
+      revenue: 67000
+      profit: 28000
+      units: 120
+      category: "Services"
+    - product: "Service B"
+      revenue: 89000
+      profit: 35000
+      units: 150
+      category: "Services"
+visualize:
+  type: scatter
+  columns: revenue
+  rows: profit
+  marks:
+    color: category
+    size: units
+  style:
+    height: 400

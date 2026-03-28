@@ -1,0 +1,20 @@
+type: chart
+version: 1
+title: "Monthly Revenue"
+data:
+  provider: inline
+  rows:
+    - month: "Jan"
+      revenue: 125000
+    - month: "Feb"
+      revenue: 138000
+    - month: "Mar"
+      revenue: 152000
+visualize:
+  type: bar
+  columns: month
+  rows: revenue
+  axes:
+    rows:
+      label: "Revenue ($)"
+      format: "$,.0f"

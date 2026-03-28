@@ -1,0 +1,118 @@
+name: "Combo — stacked bars (2 series via color field)"
+tags: [bar, combo, stacked]
+description: >
+  Stacked bars with two series (online and in-store revenue) on the
+  left axis, using marks.color to split by channel.
+  Tests combining stacked bar mode with a color field in the combo
+  (multi-field rows) renderer path.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue by Channel"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1"
+        channel: "Online"
+        revenue: 184000
+      - quarter: "Q1"
+        channel: "In-Store"
+        revenue: 96000
+      - quarter: "Q2"
+        channel: "Online"
+        revenue: 212000
+      - quarter: "Q2"
+        channel: "In-Store"
+        revenue: 88000
+      - quarter: "Q3"
+        channel: "Online"
+        revenue: 238000
+      - quarter: "Q3"
+        channel: "In-Store"
+        revenue: 79000
+      - quarter: "Q4"
+        channel: "Online"
+        revenue: 271000
+      - quarter: "Q4"
+        channel: "In-Store"
+        revenue: 103000
+  transform:
+    aggregate:
+      dimensions: [quarter, channel]
+      measures:
+        - column: revenue
+          aggregation: sum
+          name: total_revenue
+  visualize:
+    type: bar
+    mode: stacked
+    columns: quarter
+    rows:
+      - field: total_revenue
+        axis: left
+        label: "Revenue"
+    marks:
+      color: channel
+    axes:
+      left:
+        label: "Revenue ($)"
+        format: "$,.0f"
+
+assertions:
+  structure:
+    root: svg
+    bars: 8
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  bars:
+    - label: "Q1"
+      series: "Online"
+      value: 184000
+    - label: "Q1"
+      series: "In-Store"
+      value: 96000
+    - label: "Q2"
+      series: "Online"
+      value: 212000
+    - label: "Q2"
+      series: "In-Store"
+      value: 88000
+    - label: "Q3"
+      series: "Online"
+      value: 238000
+    - label: "Q3"
+      series: "In-Store"
+      value: 79000
+    - label: "Q4"
+      series: "Online"
+      value: 271000
+    - label: "Q4"
+      series: "In-Store"
+      value: 103000
+
+  stacked:
+    totals:
+      - label: "Q1"
+        total: 280000
+      - label: "Q2"
+        total: 300000
+      - label: "Q3"
+        total: 317000
+      - label: "Q4"
+        total: 374000
+
+  scale:
+    left:
+      y_min: 0
+      y_nice: true
+
+  axes:
+    x:
+      labels: ["Q1", "Q2", "Q3", "Q4"]
+      orientation: horizontal
+    y_left:
+      min: 0
+      format: currency

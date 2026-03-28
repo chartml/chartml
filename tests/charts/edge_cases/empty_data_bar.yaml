@@ -1,0 +1,22 @@
+name: "Bar chart with empty data rows — should error"
+tags: [edge-case, empty-data, bar, expect-error]
+description: >
+  A bar chart spec with an empty rows array. The renderer should
+  produce an error rather than rendering an empty or broken chart.
+  This tests the empty-data guard path.
+
+chart:
+  type: chart
+  version: 1
+  title: "Empty Dataset"
+  data:
+    provider: inline
+    rows: []
+  visualize:
+    type: bar
+    columns: month
+    rows: revenue
+
+assertions:
+  expect_error: true
+  error_type: data_error

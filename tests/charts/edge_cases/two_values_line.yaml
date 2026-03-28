@@ -1,0 +1,40 @@
+name: "Line chart — only 2 data points"
+tags: [edge-case, line, minimal, two-points]
+description: >
+  A line chart with the absolute minimum for a visible line: two data
+  points. Tests that the renderer draws a single line segment without
+  errors and that axes still produce sensible ticks.
+
+chart:
+  type: chart
+  version: 1
+  title: "Year-over-Year Revenue Growth"
+  data:
+    provider: inline
+    rows:
+      - year: "2024"
+        revenue: 3400000
+      - year: "2025"
+        revenue: 4100000
+  visualize:
+    type: line
+    columns: year
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["2024", "2025"]
+    y:
+      min: 0
+      format: numeric

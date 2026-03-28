@@ -1,0 +1,89 @@
+name: "Horizontal bars with legend — NPS by department and segment"
+tags: [bar, horizontal, multi-series, legend, grouped]
+description: >
+  Net Promoter Score for 5 departments split by customer segment
+  (Enterprise vs SMB), rendered as horizontal grouped bars with a
+  legend. Tests the combination of horizontal orientation with
+  color-encoded series. Bars extend rightward with category labels
+  on the y-axis.
+
+chart:
+  type: chart
+  version: 1
+  title: "NPS by Department and Customer Segment"
+  data:
+    provider: inline
+    rows:
+      - department: "Onboarding"
+        segment: "Enterprise"
+        nps: 72
+      - department: "Onboarding"
+        segment: "SMB"
+        nps: 58
+      - department: "Support"
+        segment: "Enterprise"
+        nps: 65
+      - department: "Support"
+        segment: "SMB"
+        nps: 41
+      - department: "Account Mgmt"
+        segment: "Enterprise"
+        nps: 81
+      - department: "Account Mgmt"
+        segment: "SMB"
+        nps: 63
+      - department: "Billing"
+        segment: "Enterprise"
+        nps: 54
+      - department: "Billing"
+        segment: "SMB"
+        nps: 37
+      - department: "Product"
+        segment: "Enterprise"
+        nps: 78
+      - department: "Product"
+        segment: "SMB"
+        nps: 69
+  transform:
+    aggregate:
+      dimensions: [department, segment]
+      measures:
+        - column: nps
+          aggregation: sum
+          name: nps_score
+  visualize:
+    type: bar
+    mode: grouped
+    orientation: horizontal
+    columns: department
+    rows: nps_score
+    marks:
+      color: segment
+
+assertions:
+  structure:
+    root: svg
+    bars: 10
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  orientation:
+    horizontal: true
+    bars_extend_right: true
+
+  grouped:
+    series_per_group: 2
+    bars_side_by_side: true
+
+  scale:
+    proportional: true
+    x_min: 0
+    x_nice: true
+
+  axes:
+    y:
+      labels: ["Onboarding", "Support", "Account Mgmt", "Billing", "Product"]
+    x:
+      min: 0
+      format: numeric

@@ -1,0 +1,53 @@
+name: "Pie chart — 5 SaaS revenue segments"
+tags: [pie, 5-segments, realistic-data, legend]
+description: >
+  Five SaaS revenue streams with realistic proportions: Subscriptions
+  dominates, followed by Professional Services, Usage Fees, Support
+  Contracts, and Training. Tests that 5 arcs render with distinct
+  colors and correct proportional sizing.
+
+chart:
+  type: chart
+  version: 1
+  title: "Annual Revenue by Stream — FY2026"
+  data:
+    provider: inline
+    rows:
+      - stream: "Subscriptions"
+        revenue: 8400000
+      - stream: "Professional Services"
+        revenue: 2100000
+      - stream: "Usage Fees"
+        revenue: 1500000
+      - stream: "Support Contracts"
+        revenue: 900000
+      - stream: "Training"
+        revenue: 350000
+  visualize:
+    type: pie
+    columns: stream
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    slices: 5
+    title_in_svg: false
+    legend: true
+    legend_entries: 5
+
+  slices:
+    - label: "Subscriptions"
+      value: 8400000
+    - label: "Professional Services"
+      value: 2100000
+    - label: "Usage Fees"
+      value: 1500000
+    - label: "Support Contracts"
+      value: 900000
+    - label: "Training"
+      value: 350000
+
+  geometry:
+    arcs_sum_to_360: true
+    largest_slice: "Subscriptions"

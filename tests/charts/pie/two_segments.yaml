@@ -1,0 +1,39 @@
+name: "Pie chart — binary split (Active vs Churned)"
+tags: [pie, two-segments, binary-split]
+description: >
+  The simplest non-trivial pie chart: two segments representing
+  active and churned customers. Tests clean rendering of a two-arc
+  pie with a clear visual split.
+
+chart:
+  type: chart
+  version: 1
+  title: "Customer Status — Q4 2025"
+  data:
+    provider: inline
+    rows:
+      - status: "Active"
+        count: 8420
+      - status: "Churned"
+        count: 1580
+  visualize:
+    type: pie
+    columns: status
+    rows: count
+
+assertions:
+  structure:
+    root: svg
+    slices: 2
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  slices:
+    - label: "Active"
+      value: 8420
+    - label: "Churned"
+      value: 1580
+
+  geometry:
+    arcs_sum_to_360: true

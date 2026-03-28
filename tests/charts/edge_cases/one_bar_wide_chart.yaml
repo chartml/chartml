@@ -1,0 +1,50 @@
+name: "Single bar on a very wide chart — 1200px"
+tags: [edge-case, bar, sizing, wide, bar-width-clamp]
+description: >
+  A single bar rendered on a 1200px wide chart. Tests that bar width
+  is clamped to a reasonable maximum rather than stretching across
+  the entire plot area. Without clamping, the single bar would fill
+  the full width and look absurd.
+
+chart:
+  type: chart
+  version: 1
+  title: "Q1 Total Revenue"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1 2026"
+        revenue: 487000
+  visualize:
+    type: bar
+    columns: quarter
+    rows: revenue
+    style:
+      width: 1200
+      height: 400
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 1200
+    svg_height: 400
+    bars: 1
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Q1 2026"
+      value: 487000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Q1 2026"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

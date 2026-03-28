@@ -1,0 +1,78 @@
+name: "6-month revenue with monthly goal annotation line"
+tags: [bar, basic, annotation, single-series]
+description: >
+  Half-year revenue view with a horizontal annotation line marking
+  the $150k monthly target. Common SaaS dashboard pattern where
+  leadership tracks whether each month clears a sales goal.
+
+chart:
+  type: chart
+  version: 1
+  title: "H1 2025 Monthly Revenue vs Target"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 132000
+      - month: "Feb"
+        revenue: 141000
+      - month: "Mar"
+        revenue: 158000
+      - month: "Apr"
+        revenue: 147000
+      - month: "May"
+        revenue: 163000
+      - month: "Jun"
+        revenue: 171000
+  visualize:
+    type: bar
+    columns: month
+    rows: revenue
+    annotations:
+      - type: line
+        axis: left
+        value: 150000
+        label: "Monthly Goal"
+        color: "#e74c3c"
+        strokeWidth: 2
+        dashArray: "6,4"
+
+assertions:
+  structure:
+    root: svg
+    bars: 6
+    title_in_svg: false
+    legend: false
+    annotation_lines: 1
+
+  bars:
+    - label: "Jan"
+      value: 132000
+    - label: "Feb"
+      value: 141000
+    - label: "Mar"
+      value: 158000
+    - label: "Apr"
+      value: 147000
+    - label: "May"
+      value: 163000
+    - label: "Jun"
+      value: 171000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric
+
+  annotations:
+    - type: line
+      value: 150000
+      label: "Monthly Goal"

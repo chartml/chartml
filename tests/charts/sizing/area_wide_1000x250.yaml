@@ -1,0 +1,60 @@
+name: "Wide area chart — 6 weeks at 1000x250 (thin wide strip)"
+tags: [area, sizing, wide, 1000x250]
+description: >
+  Area chart rendered at thin wide strip size (1000x250). Tests that
+  the filled area renders correctly in a very wide but short viewport,
+  commonly used for bandwidth or traffic monitoring strips.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly Page Views"
+  data:
+    provider: inline
+    rows:
+      - week: "W1"
+        views: 42000
+      - week: "W2"
+        views: 48500
+      - week: "W3"
+        views: 45000
+      - week: "W4"
+        views: 52000
+      - week: "W5"
+        views: 58000
+      - week: "W6"
+        views: 55500
+  visualize:
+    type: area
+    columns: week
+    rows: views
+    style:
+      width: 1000
+      height: 250
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 1000
+    svg_height: 250
+    areas: 1
+    title_in_svg: false
+    legend: false
+
+  area_paths:
+    - series: "views"
+      has_fill: true
+      fills_to_baseline: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["W1", "W2", "W3", "W4", "W5", "W6"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

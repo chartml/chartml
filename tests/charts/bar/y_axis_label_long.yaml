@@ -1,0 +1,68 @@
+name: "Long y-axis label — tests label layout and tick overlap"
+tags: [bar, axis-label, long-label, layout, single-series]
+description: >
+  Y-axis label "Total Revenue (USD, Thousands)" is intentionally
+  long to test that the rotated axis label does not overlap with
+  tick labels or get clipped by the SVG boundary. The chart area
+  should shrink to accommodate the label width.
+
+chart:
+  type: chart
+  version: 1
+  title: "Departmental Spending"
+  data:
+    provider: inline
+    rows:
+      - department: "Engineering"
+        spend: 820
+      - department: "Marketing"
+        spend: 540
+      - department: "Sales"
+        spend: 670
+      - department: "Operations"
+        spend: 390
+      - department: "HR"
+        spend: 210
+  visualize:
+    type: bar
+    columns: department
+    rows: spend
+    axes:
+      left:
+        label: "Total Revenue (USD, Thousands)"
+        format: ",.0f"
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Engineering"
+      value: 820
+    - label: "Marketing"
+      value: 540
+    - label: "Sales"
+      value: 670
+    - label: "Operations"
+      value: 390
+    - label: "HR"
+      value: 210
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Engineering", "Marketing", "Sales", "Operations", "HR"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric
+      label: "Total Revenue (USD, Thousands)"
+      label_not_clipped: true
+      label_not_overlapping_ticks: true

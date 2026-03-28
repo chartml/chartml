@@ -1,0 +1,39 @@
+{
+  "name": "@chartml/datafusion",
+  "version": "3.0.0",
+  "description": "ChartML DataFusion transform plugin — SQL/aggregate/forecast",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./wasm": {
+      "node": "./pkg/node/chartml_wasm_datafusion.js",
+      "default": "./pkg/web/chartml_wasm_datafusion.js"
+    }
+  },
+  "files": ["dist/", "pkg/"],
+  "scripts": {
+    "build:wasm": "bash build.sh",
+    "build:ts": "tsc",
+    "build": "bash build.sh"
+  },
+  "peerDependencies": {
+    "@chartml/core": "^3.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chartml/chartml.git",
+    "directory": "packages/datafusion"
+  },
+  "homepage": "https://chartml.org",
+  "author": "Kyomi.ai",
+  "keywords": ["chartml", "chart", "visualization", "wasm", "svg", "datafusion", "sql", "transform"],
+  "license": "MIT"
+}

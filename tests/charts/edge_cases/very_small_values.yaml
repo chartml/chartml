@@ -1,0 +1,62 @@
+name: "Bar chart — very small floating-point values"
+tags: [edge-case, small-values, bar, precision]
+description: >
+  Values in the range 0.001 to 0.01 to test that the y-axis ticks
+  are computed at an appropriate scale (e.g., 0.002, 0.004, etc.)
+  rather than showing all zeros. Tests numeric precision handling
+  in the scale and tick formatting.
+
+chart:
+  type: chart
+  version: 1
+  title: "Conversion Rates by Funnel Step"
+  data:
+    provider: inline
+    rows:
+      - step: "Awareness"
+        rate: 0.010
+      - step: "Interest"
+        rate: 0.007
+      - step: "Consideration"
+        rate: 0.005
+      - step: "Intent"
+        rate: 0.003
+      - step: "Purchase"
+        rate: 0.001
+  visualize:
+    type: bar
+    columns: step
+    rows: rate
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Awareness"
+      value: 0.010
+    - label: "Interest"
+      value: 0.007
+    - label: "Consideration"
+      value: 0.005
+    - label: "Intent"
+      value: 0.003
+    - label: "Purchase"
+      value: 0.001
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+    small_values: true
+
+  axes:
+    x:
+      labels: ["Awareness", "Interest", "Consideration", "Intent", "Purchase"]
+    y:
+      min: 0
+      format: numeric
+      ticks_not_all_zero: true

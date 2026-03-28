@@ -1,0 +1,96 @@
+name: "Combo — cost bars (left, $) + efficiency % line (right)"
+tags: [bar, dual-axis, combo, line, operations]
+description: >
+  Operations dashboard pairing department cost as bars on the left
+  axis with operational efficiency percentage as a line on the right
+  axis. Tests dual axis with dollar costs vs percentage efficiency.
+
+chart:
+  type: chart
+  version: 1
+  title: "Department Cost & Efficiency"
+  data:
+    provider: inline
+    rows:
+      - department: "Engineering"
+        cost: 890000
+        efficiency: 87.3
+      - department: "Sales"
+        cost: 620000
+        efficiency: 72.1
+      - department: "Marketing"
+        cost: 415000
+        efficiency: 68.5
+      - department: "Support"
+        cost: 310000
+        efficiency: 91.2
+      - department: "Operations"
+        cost: 275000
+        efficiency: 83.7
+  visualize:
+    type: bar
+    columns: department
+    rows:
+      - field: cost
+        axis: left
+        label: "Cost"
+      - field: efficiency
+        mark: line
+        axis: right
+        label: "Efficiency %"
+    axes:
+      left:
+        label: "Cost ($)"
+        format: "$,.0f"
+      right:
+        label: "Efficiency (%)"
+        format: ".1f"
+        min: 50
+        max: 100
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+    y_axes: 2
+
+  bars:
+    - label: "Engineering"
+      value: 890000
+    - label: "Sales"
+      value: 620000
+    - label: "Marketing"
+      value: 415000
+    - label: "Support"
+      value: 310000
+    - label: "Operations"
+      value: 275000
+
+  dual_axis:
+    left_axis_present: true
+    right_axis_present: true
+    left_label: "Cost ($)"
+    right_label: "Efficiency (%)"
+
+  scale:
+    left:
+      y_min: 0
+      y_nice: true
+    right:
+      y_min: 50
+      y_max: 100
+
+  axes:
+    x:
+      labels: ["Engineering", "Sales", "Marketing", "Support", "Operations"]
+      orientation: horizontal
+    y_left:
+      min: 0
+      format: currency
+    y_right:
+      min: 50
+      max: 100
+      format: decimal

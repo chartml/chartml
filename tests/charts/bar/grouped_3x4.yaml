@@ -1,0 +1,128 @@
+name: "Grouped bar — 3 regions across 4 quarters"
+tags: [bar, grouped, multi-series, many-bars, legend]
+description: >
+  Quarterly ARR for 3 sales regions side by side. Tests grouped
+  layout with 3 bars per group across 4 categories, producing 12
+  total bars. Verifies correct grouping, bar spacing, and legend
+  with 3 entries.
+
+chart:
+  type: chart
+  version: 1
+  title: "Quarterly ARR by Region"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1"
+        region: "Americas"
+        arr: 4200000
+      - quarter: "Q1"
+        region: "EMEA"
+        arr: 2850000
+      - quarter: "Q1"
+        region: "APAC"
+        arr: 1620000
+      - quarter: "Q2"
+        region: "Americas"
+        arr: 4510000
+      - quarter: "Q2"
+        region: "EMEA"
+        arr: 3020000
+      - quarter: "Q2"
+        region: "APAC"
+        arr: 1780000
+      - quarter: "Q3"
+        region: "Americas"
+        arr: 4830000
+      - quarter: "Q3"
+        region: "EMEA"
+        arr: 3190000
+      - quarter: "Q3"
+        region: "APAC"
+        arr: 1950000
+      - quarter: "Q4"
+        region: "Americas"
+        arr: 5240000
+      - quarter: "Q4"
+        region: "EMEA"
+        arr: 3410000
+      - quarter: "Q4"
+        region: "APAC"
+        arr: 2140000
+  transform:
+    aggregate:
+      dimensions: [quarter, region]
+      measures:
+        - column: arr
+          aggregation: sum
+          name: total_arr
+  visualize:
+    type: bar
+    mode: grouped
+    columns: quarter
+    rows: total_arr
+    marks:
+      color: region
+
+assertions:
+  structure:
+    root: svg
+    bars: 12
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  bars:
+    - label: "Q1"
+      series: "Americas"
+      value: 4200000
+    - label: "Q1"
+      series: "EMEA"
+      value: 2850000
+    - label: "Q1"
+      series: "APAC"
+      value: 1620000
+    - label: "Q2"
+      series: "Americas"
+      value: 4510000
+    - label: "Q2"
+      series: "EMEA"
+      value: 3020000
+    - label: "Q2"
+      series: "APAC"
+      value: 1780000
+    - label: "Q3"
+      series: "Americas"
+      value: 4830000
+    - label: "Q3"
+      series: "EMEA"
+      value: 3190000
+    - label: "Q3"
+      series: "APAC"
+      value: 1950000
+    - label: "Q4"
+      series: "Americas"
+      value: 5240000
+    - label: "Q4"
+      series: "EMEA"
+      value: 3410000
+    - label: "Q4"
+      series: "APAC"
+      value: 2140000
+
+  grouped:
+    series_per_group: 3
+    bars_side_by_side: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Q1", "Q2", "Q3", "Q4"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

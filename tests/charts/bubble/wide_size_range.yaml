@@ -1,0 +1,57 @@
+name: "Bubble chart — wide size range from 10 to 10000"
+tags: [bubble, size-encoding, wide-range, edge-case]
+description: >
+  Size values span 3 orders of magnitude (10 to 10000). Tests that
+  the size scale handles extreme ratios gracefully: the smallest
+  bubble should still be visible and the largest should not overwhelm
+  the chart area.
+
+chart:
+  type: chart
+  version: 1
+  title: "Company Comparison — Revenue vs Growth Rate"
+  data:
+    provider: inline
+    rows:
+      - revenue: 50000
+        growth: 120
+        headcount: 10
+      - revenue: 200000
+        growth: 85
+        headcount: 50
+      - revenue: 800000
+        growth: 45
+        headcount: 500
+      - revenue: 3000000
+        growth: 22
+        headcount: 2500
+      - revenue: 12000000
+        growth: 8
+        headcount: 10000
+  visualize:
+    type: bubble
+    columns: revenue
+    rows: growth
+    marks:
+      size: headcount
+
+assertions:
+  structure:
+    root: svg
+    circles: 5
+    title_in_svg: false
+    legend: false
+
+  size_encoding:
+    field: headcount
+    varying_radii: true
+    smallest_visible: true
+    largest_not_overwhelming: true
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

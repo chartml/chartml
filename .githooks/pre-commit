@@ -1,0 +1,108 @@
+#!/bin/bash
+# Pre-commit hook: blocks lint suppressions, clippy warnings, unreviewed commits, and unsigned charts.
+# Order: fast checks first (lints, clippy, chart sigs), expensive check last (review signature).
+# This avoids wasting an LLM review cycle on code that fails basic linting.
+
+set -e
+
+# --- Check 1: Reject new lint suppressions in staged files ---
+echo "🔍 Checking for new lint suppressions..."
+
+rs_violations=$(git diff --cached -- '*.rs' | grep '^+' | grep -v '^+++' | grep '#\[allow(' || true)
+toml_violations=$(git diff --cached -- '*/Cargo.toml' 'Cargo.toml' | grep '^+' | grep -v '^+++' | grep '= "allow"' || true)
+
+violations="${rs_violations}${toml_violations}"
+
+if [ -n "$violations" ]; then
+    echo ""
+    echo "❌ New lint suppressions detected — commit blocked."
+    echo ""
+    [ -n "$rs_violations" ] && echo "In .rs files:" && echo "$rs_violations" && echo ""
+    [ -n "$toml_violations" ] && echo "In Cargo.toml:" && echo "$toml_violations" && echo ""
+    echo "Fix the lint warning instead of suppressing it."
+    exit 1
+fi
+
+echo "✅ No new lint suppressions."
+
+# --- Check 2: Cargo clippy ---
+echo "🔍 Running cargo clippy..."
+
+warnings=$(cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion 2>&1 \
+    | grep "^warning:" \
+    | grep -v "cargo:warning\|generated\|Model file\|Downloaded\|Downloading" \
+    || true)
+
+if [ -n "$warnings" ]; then
+    echo ""
+    echo "❌ Clippy warnings found — commit blocked."
+    echo ""
+    echo "$warnings"
+    echo ""
+    echo "Fix warnings and try again."
+    exit 1
+fi
+
+echo "✅ Clippy clean."
+
+# --- Check 3: Verify golden chart signatures (if golden SVGs are staged) ---
+staged_golden=$(git diff --cached --name-only -- 'test-output/golden/*.svg' 'test-output/golden/**/*.svg' || true)
+
+if [ -n "$staged_golden" ]; then
+    echo "🔍 Verifying chart evaluator signatures..."
+
+    if [ -f scripts/verify-charts.sh ]; then
+        if ! bash scripts/verify-charts.sh; then
+            exit 1
+        fi
+    else
+        echo "⚠️  scripts/verify-charts.sh not found — skipping chart verification."
+    fi
+fi
+
+# --- Check 4: Verify code review signature ---
+echo "🔍 Verifying code review approval..."
+
+REVIEW_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEApRtsZODQxaUNP383HB/iqLHSlrf92Fe3UB43Bc2TaG0=
+-----END PUBLIC KEY-----"
+
+DIFF_HASH=$(git diff --cached | sha256sum | awk '{print $1}')
+
+if [ ! -f .review-approval ]; then
+    echo ""
+    echo "❌ No code review approval found — commit blocked."
+    echo "   Run the code-review-architect agent to review and sign off on changes."
+    exit 1
+fi
+
+APPROVED_HASH=$(sed -n '1p' .review-approval)
+SIGNATURE=$(sed -n '2p' .review-approval)
+
+if [ "$DIFF_HASH" != "$APPROVED_HASH" ]; then
+    echo ""
+    echo "❌ Code review approval is stale — staged diff has changed since review."
+    echo "   Expected: $APPROVED_HASH"
+    echo "   Got:      $DIFF_HASH"
+    echo "   Re-run the code-review-architect agent to review current changes."
+    exit 1
+fi
+
+PUB_FILE=$(mktemp)
+SIG_FILE=$(mktemp)
+HASH_FILE=$(mktemp)
+trap 'rm -f "$PUB_FILE" "$SIG_FILE" "$HASH_FILE"' EXIT
+
+echo "$REVIEW_PUBLIC_KEY" > "$PUB_FILE"
+echo -n "$DIFF_HASH" > "$HASH_FILE"
+echo "$SIGNATURE" | base64 -d > "$SIG_FILE"
+
+if ! openssl pkeyutl -verify -pubin -inkey "$PUB_FILE" -in "$HASH_FILE" -sigfile "$SIG_FILE" >/dev/null 2>&1; then
+    echo ""
+    echo "❌ Code review signature is INVALID — commit blocked."
+    echo "   The approval file may have been tampered with."
+    echo "   Only the code-review-architect agent can produce valid signatures."
+    exit 1
+fi
+
+echo "✅ Code review signature verified."

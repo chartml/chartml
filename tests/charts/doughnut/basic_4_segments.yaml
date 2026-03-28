@@ -1,0 +1,48 @@
+name: "Basic doughnut chart — 4 revenue segments"
+tags: [doughnut, basic, 4-segments, legend, inner-radius]
+description: >
+  Revenue distribution rendered as a doughnut chart (pie with a hole
+  in the center). Tests that arcs have an inner radius creating
+  the doughnut shape, and that the legend is present with 4 entries.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue Distribution — FY2025"
+  data:
+    provider: inline
+    rows:
+      - channel: "Direct Sales"
+        revenue: 3800000
+      - channel: "Partner Channel"
+        revenue: 2200000
+      - channel: "Online Self-Serve"
+        revenue: 1600000
+      - channel: "Enterprise Deals"
+        revenue: 2900000
+  visualize:
+    type: doughnut
+    columns: channel
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    slices: 4
+    title_in_svg: false
+    legend: true
+    legend_entries: 4
+
+  slices:
+    - label: "Direct Sales"
+      value: 3800000
+    - label: "Partner Channel"
+      value: 2200000
+    - label: "Online Self-Serve"
+      value: 1600000
+    - label: "Enterprise Deals"
+      value: 2900000
+
+  geometry:
+    arcs_sum_to_360: true
+    has_inner_radius: true

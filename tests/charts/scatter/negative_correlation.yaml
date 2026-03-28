@@ -1,0 +1,75 @@
+name: "Scatter — negative correlation pattern"
+tags: [scatter, negative-correlation, no-color, two-axes]
+description: >
+  As hours of screen time increase, sleep quality decreases. Tests that
+  the renderer correctly plots a negative relationship where x goes up
+  and y goes down. No color encoding — all points use the default fill.
+
+chart:
+  type: chart
+  version: 1
+  title: "Screen Time vs Sleep Quality"
+  data:
+    provider: inline
+    rows:
+      - screen_hours: 1.0
+        sleep_quality: 92
+      - screen_hours: 2.0
+        sleep_quality: 87
+      - screen_hours: 2.5
+        sleep_quality: 83
+      - screen_hours: 3.5
+        sleep_quality: 78
+      - screen_hours: 4.0
+        sleep_quality: 71
+      - screen_hours: 5.0
+        sleep_quality: 65
+      - screen_hours: 6.0
+        sleep_quality: 58
+      - screen_hours: 7.5
+        sleep_quality: 49
+      - screen_hours: 8.5
+        sleep_quality: 42
+      - screen_hours: 10.0
+        sleep_quality: 35
+  visualize:
+    type: scatter
+    columns: screen_hours
+    rows: sleep_quality
+
+assertions:
+  structure:
+    root: svg
+    circles: 10
+    title_in_svg: false
+    legend: false
+
+  points:
+    - x: 1.0
+      y: 92
+    - x: 2.0
+      y: 87
+    - x: 2.5
+      y: 83
+    - x: 3.5
+      y: 78
+    - x: 4.0
+      y: 71
+    - x: 5.0
+      y: 65
+    - x: 6.0
+      y: 58
+    - x: 7.5
+      y: 49
+    - x: 8.5
+      y: 42
+    - x: 10.0
+      y: 35
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

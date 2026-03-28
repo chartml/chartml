@@ -1,0 +1,56 @@
+name: "Large square pie chart — 5 segments at 600x600"
+tags: [pie, sizing, square, 600x600, large]
+description: >
+  Pie chart rendered as a large square (600x600). A generous square
+  viewport that gives ample room for the pie radius and legend.
+  Tests that the pie fills the available space appropriately.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue by Channel — 2025"
+  data:
+    provider: inline
+    rows:
+      - channel: "Direct Sales"
+        revenue: 3200000
+      - channel: "Online"
+        revenue: 2500000
+      - channel: "Partner"
+        revenue: 1800000
+      - channel: "Referral"
+        revenue: 950000
+      - channel: "Events"
+        revenue: 550000
+  visualize:
+    type: pie
+    columns: channel
+    rows: revenue
+    style:
+      width: 600
+      height: 600
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 600
+    svg_height: 600
+    slices: 5
+    title_in_svg: false
+    legend: true
+    legend_entries: 5
+
+  slices:
+    - label: "Direct Sales"
+      value: 3200000
+    - label: "Online"
+      value: 2500000
+    - label: "Partner"
+      value: 1800000
+    - label: "Referral"
+      value: 950000
+    - label: "Events"
+      value: 550000
+
+  geometry:
+    arcs_sum_to_360: true

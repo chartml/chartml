@@ -1,0 +1,32 @@
+name: "Metric card — standalone value with no comparison"
+tags: [metric, no-trend, standalone]
+description: >
+  A simple metric card showing just a formatted value with no
+  compareWith field. No trend indicator should appear. Tests
+  the minimal metric card rendering path.
+
+chart:
+  type: chart
+  version: 1
+  title: "Active Subscriptions"
+  data:
+    provider: inline
+    rows:
+      - subscriptions: 4827
+  visualize:
+    type: metric
+    value: subscriptions
+    label: "Active Subscriptions"
+    format: ",.0f"
+
+assertions:
+  structure:
+    root: div
+    is_metric_card: true
+
+  value:
+    raw: 4827
+    formatted: "4,827"
+
+  trend:
+    present: false

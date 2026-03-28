@@ -1,0 +1,73 @@
+name: "Decimal-only axis — all values between 0 and 1"
+tags: [edge-case, axis-format, decimals, zero-to-one, single-series]
+description: >
+  All values fall between 0 and 1 (0.1, 0.4, 0.7, 0.9). Tests that
+  y-axis ticks are computed at sensible intervals within the 0-1 range
+  (e.g. 0.0, 0.2, 0.4, 0.6, 0.8, 1.0) rather than collapsing to
+  just "0" and "1". Important for probability, ratio, and normalized
+  score visualizations.
+
+chart:
+  type: chart
+  version: 1
+  title: "Model Confidence Scores"
+  data:
+    provider: inline
+    rows:
+      - model: "Alpha"
+        score: 0.1
+      - model: "Beta"
+        score: 0.4
+      - model: "Gamma"
+        score: 0.7
+      - model: "Delta"
+        score: 0.9
+      - model: "Epsilon"
+        score: 0.3
+      - model: "Zeta"
+        score: 0.6
+  visualize:
+    type: bar
+    columns: model
+    rows: score
+    axes:
+      left:
+        label: "Confidence Score"
+
+assertions:
+  structure:
+    root: svg
+    bars: 6
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Alpha"
+      value: 0.1
+    - label: "Beta"
+      value: 0.4
+    - label: "Gamma"
+      value: 0.7
+    - label: "Delta"
+      value: 0.9
+    - label: "Epsilon"
+      value: 0.3
+    - label: "Zeta"
+      value: 0.6
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta"]
+      orientation: horizontal
+    y:
+      min: 0
+      max_lte: 1.0
+      format: numeric
+      label: "Confidence Score"
+      ticks_not_all_zero: true
+      min_tick_count: 3

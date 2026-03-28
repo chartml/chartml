@@ -1,0 +1,113 @@
+name: "Multi-series line — revenue by 3 regions over 8 weeks"
+tags: [line, multi-series, legend, color-encoding]
+description: >
+  Revenue tracked across North, South, and East regions over 8 weeks.
+  A common sales dashboard chart where each region is a separate line
+  distinguished by color. Tests marks.color grouping, legend rendering
+  with 3 entries, and correct assignment of distinct colors per series.
+
+chart:
+  type: chart
+  version: 1
+  title: "Regional Weekly Revenue"
+  data:
+    provider: inline
+    rows:
+      - week: "Wk1"
+        region: "North"
+        revenue: 38000
+      - week: "Wk1"
+        region: "South"
+        revenue: 29000
+      - week: "Wk1"
+        region: "East"
+        revenue: 22000
+      - week: "Wk2"
+        region: "North"
+        revenue: 41000
+      - week: "Wk2"
+        region: "South"
+        revenue: 31500
+      - week: "Wk2"
+        region: "East"
+        revenue: 24000
+      - week: "Wk3"
+        region: "North"
+        revenue: 39500
+      - week: "Wk3"
+        region: "South"
+        revenue: 33000
+      - week: "Wk3"
+        region: "East"
+        revenue: 25500
+      - week: "Wk4"
+        region: "North"
+        revenue: 44000
+      - week: "Wk4"
+        region: "South"
+        revenue: 32000
+      - week: "Wk4"
+        region: "East"
+        revenue: 27000
+      - week: "Wk5"
+        region: "North"
+        revenue: 46500
+      - week: "Wk5"
+        region: "South"
+        revenue: 35000
+      - week: "Wk5"
+        region: "East"
+        revenue: 28500
+      - week: "Wk6"
+        region: "North"
+        revenue: 43000
+      - week: "Wk6"
+        region: "South"
+        revenue: 36500
+      - week: "Wk6"
+        region: "East"
+        revenue: 30000
+      - week: "Wk7"
+        region: "North"
+        revenue: 48000
+      - week: "Wk7"
+        region: "South"
+        revenue: 37000
+      - week: "Wk7"
+        region: "East"
+        revenue: 31500
+      - week: "Wk8"
+        region: "North"
+        revenue: 51000
+      - week: "Wk8"
+        region: "South"
+        revenue: 39000
+      - week: "Wk8"
+        region: "East"
+        revenue: 33000
+  visualize:
+    type: line
+    columns: week
+    rows: revenue
+    marks:
+      color: region
+
+assertions:
+  structure:
+    root: svg
+    lines: 3
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Wk1", "Wk2", "Wk3", "Wk4", "Wk5", "Wk6", "Wk7", "Wk8"]
+    y:
+      min: 0
+      format: numeric

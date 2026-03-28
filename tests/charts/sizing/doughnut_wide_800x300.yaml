@@ -1,0 +1,58 @@
+name: "Wide doughnut chart — 5 segments at 800x300"
+tags: [doughnut, sizing, wide, 800x300, unusual-aspect]
+description: >
+  Doughnut chart rendered in a wide aspect ratio (800x300). The
+  doughnut must fit within the shorter dimension, leaving extra
+  horizontal space for the legend. Tests that the chart adapts
+  its layout to a landscape-oriented viewport.
+
+chart:
+  type: chart
+  version: 1
+  title: "Budget Allocation"
+  data:
+    provider: inline
+    rows:
+      - category: "Engineering"
+        budget: 450000
+      - category: "Marketing"
+        budget: 280000
+      - category: "Sales"
+        budget: 320000
+      - category: "Operations"
+        budget: 150000
+      - category: "HR"
+        budget: 95000
+  visualize:
+    type: doughnut
+    columns: category
+    rows: budget
+    style:
+      width: 800
+      height: 300
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 800
+    svg_height: 300
+    slices: 5
+    title_in_svg: false
+    legend: true
+    legend_entries: 5
+
+  slices:
+    - label: "Engineering"
+      value: 450000
+    - label: "Marketing"
+      value: 280000
+    - label: "Sales"
+      value: 320000
+    - label: "Operations"
+      value: 150000
+    - label: "HR"
+      value: 95000
+
+  geometry:
+    arcs_sum_to_360: true
+    has_inner_radius: true

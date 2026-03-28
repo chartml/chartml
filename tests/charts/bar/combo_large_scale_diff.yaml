@@ -1,0 +1,102 @@
+name: "Combo — revenue $50M-$200M (left) + NPS score 30-80 (right)"
+tags: [bar, dual-axis, combo, line, large-scale-difference]
+description: >
+  Tests dual axis with vastly different scale ranges. Revenue spans
+  $50M to $200M on the left while NPS scores range from 30 to 80
+  on the right. Ensures both axes render legible tick marks and the
+  line is not crushed or stretched relative to the bars.
+
+chart:
+  type: chart
+  version: 1
+  title: "Annual Revenue & NPS Score"
+  data:
+    provider: inline
+    rows:
+      - year: "2019"
+        revenue: 54000000
+        nps: 42
+      - year: "2020"
+        revenue: 68000000
+        nps: 38
+      - year: "2021"
+        revenue: 97000000
+        nps: 51
+      - year: "2022"
+        revenue: 134000000
+        nps: 58
+      - year: "2023"
+        revenue: 167000000
+        nps: 64
+      - year: "2024"
+        revenue: 198000000
+        nps: 72
+  visualize:
+    type: bar
+    columns: year
+    rows:
+      - field: revenue
+        axis: left
+        label: "Revenue"
+      - field: nps
+        mark: line
+        axis: right
+        label: "NPS Score"
+    axes:
+      left:
+        label: "Revenue ($)"
+        format: "$,.0f"
+      right:
+        label: "NPS Score"
+        format: ".0f"
+        min: 20
+        max: 90
+
+assertions:
+  structure:
+    root: svg
+    bars: 6
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+    y_axes: 2
+
+  bars:
+    - label: "2019"
+      value: 54000000
+    - label: "2020"
+      value: 68000000
+    - label: "2021"
+      value: 97000000
+    - label: "2022"
+      value: 134000000
+    - label: "2023"
+      value: 167000000
+    - label: "2024"
+      value: 198000000
+
+  dual_axis:
+    left_axis_present: true
+    right_axis_present: true
+    left_label: "Revenue ($)"
+    right_label: "NPS Score"
+
+  scale:
+    left:
+      y_min: 0
+      y_nice: true
+    right:
+      y_min: 20
+      y_max: 90
+
+  axes:
+    x:
+      labels: ["2019", "2020", "2021", "2022", "2023", "2024"]
+      orientation: horizontal
+    y_left:
+      min: 0
+      format: currency
+    y_right:
+      min: 20
+      max: 90
+      format: numeric

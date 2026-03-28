@@ -1,0 +1,74 @@
+name: "Explicit x-axis label — bottom axis label rendering"
+tags: [bar, axis-label, x-axis, layout, single-series]
+description: >
+  Bar chart with an explicit x-axis label "Product Category".
+  Tests that the bottom axis label renders below the tick labels
+  without overlapping them, and that the chart area accounts for
+  the extra vertical space needed by the x-axis label.
+
+chart:
+  type: chart
+  version: 1
+  title: "Units Sold by Product Category"
+  data:
+    provider: inline
+    rows:
+      - category: "Electronics"
+        units: 1240
+      - category: "Clothing"
+        units: 890
+      - category: "Home & Garden"
+        units: 670
+      - category: "Books"
+        units: 420
+      - category: "Toys"
+        units: 310
+      - category: "Sports"
+        units: 560
+  visualize:
+    type: bar
+    columns: category
+    rows: units
+    axes:
+      left:
+        label: "Units Sold"
+        format: ",.0f"
+      bottom:
+        label: "Product Category"
+
+assertions:
+  structure:
+    root: svg
+    bars: 6
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Electronics"
+      value: 1240
+    - label: "Clothing"
+      value: 890
+    - label: "Home & Garden"
+      value: 670
+    - label: "Books"
+      value: 420
+    - label: "Toys"
+      value: 310
+    - label: "Sports"
+      value: 560
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Electronics", "Clothing", "Home & Garden", "Books", "Toys", "Sports"]
+      orientation: horizontal
+      label: "Product Category"
+      label_not_clipped: true
+    y:
+      min: 0
+      format: numeric
+      label: "Units Sold"

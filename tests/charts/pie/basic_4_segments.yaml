@@ -1,0 +1,47 @@
+name: "Basic pie chart — 4 regional revenue segments"
+tags: [pie, basic, 4-segments, legend]
+description: >
+  The most common pie chart: revenue split across 4 geographic regions.
+  Tests that arcs render for each segment, the legend has 4 entries,
+  and all arc angles sum to a full circle (360 degrees).
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue by Region — 2025"
+  data:
+    provider: inline
+    rows:
+      - region: "United States"
+        revenue: 4200000
+      - region: "Europe"
+        revenue: 2800000
+      - region: "Asia Pacific"
+        revenue: 1900000
+      - region: "Latin America"
+        revenue: 600000
+  visualize:
+    type: pie
+    columns: region
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    slices: 4
+    title_in_svg: false
+    legend: true
+    legend_entries: 4
+
+  slices:
+    - label: "United States"
+      value: 4200000
+    - label: "Europe"
+      value: 2800000
+    - label: "Asia Pacific"
+      value: 1900000
+    - label: "Latin America"
+      value: 600000
+
+  geometry:
+    arcs_sum_to_360: true

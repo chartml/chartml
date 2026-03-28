@@ -1,0 +1,35 @@
+name: "Tiny metric card — compact KPI at 200x100"
+tags: [metric, sizing, tiny, 200x100]
+description: >
+  Metric card rendered at compact KPI size (200x100). Tests that the
+  value and label render in a very tight space typical of dashboard
+  KPI strips. Labels may be cramped or truncated at this size.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Revenue"
+  data:
+    provider: inline
+    rows:
+      - revenue: 247500
+  visualize:
+    type: metric
+    value: revenue
+    label: "Monthly Revenue"
+    format: "$,.0f"
+    style:
+      width: 200
+      height: 100
+
+assertions:
+  structure:
+    root: div
+    is_metric_card: true
+
+  value:
+    raw: 247500
+    formatted: "$247,500"
+
+  trend:
+    present: false

@@ -1,0 +1,49 @@
+type: chart
+version: 1
+title: "Revenue Composition by Month"
+data:
+  provider: inline
+  rows:
+    - month: "Jan"
+      product_line: "Hardware"
+      revenue: 65000
+    - month: "Jan"
+      product_line: "Software"
+      revenue: 40000
+    - month: "Jan"
+      product_line: "Services"
+      revenue: 20000
+    - month: "Feb"
+      product_line: "Hardware"
+      revenue: 72000
+    - month: "Feb"
+      product_line: "Software"
+      revenue: 45000
+    - month: "Feb"
+      product_line: "Services"
+      revenue: 21000
+    - month: "Mar"
+      product_line: "Hardware"
+      revenue: 78000
+    - month: "Mar"
+      product_line: "Software"
+      revenue: 52000
+    - month: "Mar"
+      product_line: "Services"
+      revenue: 22000
+transform:
+  aggregate:
+    dimensions: [month, product_line]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+visualize:
+  type: bar
+  mode: stacked
+  columns: month
+  rows: total_revenue
+  marks:
+    color: product_line
+  style:
+    height: 350

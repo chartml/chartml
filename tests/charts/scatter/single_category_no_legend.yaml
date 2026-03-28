@@ -1,0 +1,79 @@
+name: "Scatter — single category with color field, no legend needed"
+tags: [scatter, single-category, no-legend, color-encoding]
+description: >
+  All data points belong to the same category ("Organic"). Even though
+  marks.color is set, only one category exists so no legend should be
+  rendered. Tests that the renderer suppresses the legend when all
+  points share the same series value.
+
+chart:
+  type: chart
+  version: 1
+  title: "Page Views vs Bounce Rate — Organic Traffic"
+  data:
+    provider: inline
+    rows:
+      - page_views: 1200
+        bounce_rate: 45
+        source: "Organic"
+      - page_views: 3400
+        bounce_rate: 38
+        source: "Organic"
+      - page_views: 5600
+        bounce_rate: 32
+        source: "Organic"
+      - page_views: 7800
+        bounce_rate: 28
+        source: "Organic"
+      - page_views: 9200
+        bounce_rate: 25
+        source: "Organic"
+      - page_views: 2100
+        bounce_rate: 42
+        source: "Organic"
+  visualize:
+    type: scatter
+    columns: page_views
+    rows: bounce_rate
+    marks:
+      color: source
+
+assertions:
+  structure:
+    root: svg
+    circles: 6
+    title_in_svg: false
+    legend: false
+
+  points:
+    - x: 1200
+      y: 45
+      series: "Organic"
+    - x: 3400
+      y: 38
+      series: "Organic"
+    - x: 5600
+      y: 32
+      series: "Organic"
+    - x: 7800
+      y: 28
+      series: "Organic"
+    - x: 9200
+      y: 25
+      series: "Organic"
+    - x: 2100
+      y: 42
+      series: "Organic"
+
+  color_encoding:
+    field: source
+    categories: ["Organic"]
+    distinct_fills: 1
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

@@ -1,0 +1,72 @@
+name: "Large scatter plot — 8 points at 2000x1000 (large dataset display)"
+tags: [scatter, sizing, large, 2000x1000]
+description: >
+  Scatter plot rendered at large display size (2000x1000). Tests that
+  circle elements render with correct positioning in a very large
+  viewport, typical of data exploration dashboards on large monitors.
+
+chart:
+  type: chart
+  version: 1
+  title: "Employee Count vs Annual Revenue"
+  data:
+    provider: inline
+    rows:
+      - employees: 50
+        revenue: 2400000
+      - employees: 120
+        revenue: 5800000
+      - employees: 200
+        revenue: 12000000
+      - employees: 35
+        revenue: 1600000
+      - employees: 85
+        revenue: 4100000
+      - employees: 310
+        revenue: 18500000
+      - employees: 150
+        revenue: 8200000
+      - employees: 420
+        revenue: 25000000
+  visualize:
+    type: scatter
+    columns: employees
+    rows: revenue
+    style:
+      width: 2000
+      height: 1000
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 2000
+    svg_height: 1000
+    circles: 8
+    title_in_svg: false
+    legend: false
+
+  points:
+    - x: 50
+      y: 2400000
+    - x: 120
+      y: 5800000
+    - x: 200
+      y: 12000000
+    - x: 35
+      y: 1600000
+    - x: 85
+      y: 4100000
+    - x: 310
+      y: 18500000
+    - x: 150
+      y: 8200000
+    - x: 420
+      y: 25000000
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

@@ -1,0 +1,31 @@
+[package]
+name = "chartml-datafusion"
+version = "3.0.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/chartml/chartml"
+homepage = "https://chartml.org"
+readme = "README.md"
+keywords = ["chartml", "datafusion", "sql", "transform"]
+categories = ["database"]
+
+[dependencies]
+chartml-core = { path = "../chartml-core", version = "3.0.0" }
+chartml-forecast = { path = "../chartml-forecast", version = "3.0.0" }
+datafusion = { version = "52", default-features = false, features = ["sql"] }
+arrow = { version = "57", default-features = false, features = ["ipc"] }
+async-trait = "0.1"
+serde_json = "1"
+thiserror = "2"
+
+# WASM compatibility patches
+getrandom03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+getrandom02 = { package = "getrandom", version = "0.2", features = ["js"] }
+uuid = { version = "1", features = ["js"] }
+chrono = { version = "0.4", features = ["wasmbind"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[lints]
+workspace = true

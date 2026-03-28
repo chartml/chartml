@@ -1,0 +1,58 @@
+name: "Tall narrow bar chart — 5 bars at 300x600 (sidebar)"
+tags: [bar, sizing, tall, 300x600, portrait, unusual-aspect]
+description: >
+  Bar chart rendered in a tall narrow viewport (300x600), simulating
+  a sidebar widget. The portrait aspect ratio is unusual for bar
+  charts and tests that bars remain readable when height is double
+  the width. Labels may be cramped horizontally.
+
+chart:
+  type: chart
+  version: 1
+  title: "Top 5 Products"
+  data:
+    provider: inline
+    rows:
+      - product: "Alpha"
+        units: 4200
+      - product: "Beta"
+        units: 3800
+      - product: "Gamma"
+        units: 2900
+      - product: "Delta"
+        units: 2100
+      - product: "Epsilon"
+        units: 1500
+  visualize:
+    type: bar
+    columns: product
+    rows: units
+    style:
+      width: 300
+      height: 600
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 300
+    svg_height: 600
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Alpha"
+      value: 4200
+    - label: "Beta"
+      value: 3800
+    - label: "Gamma"
+      value: 2900
+    - label: "Delta"
+      value: 2100
+    - label: "Epsilon"
+      value: 1500
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true

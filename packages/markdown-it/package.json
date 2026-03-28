@@ -1,51 +1,27 @@
 {
   "name": "@chartml/markdown-it",
-  "version": "1.2.0",
-  "description": "markdown-it plugin for rendering ChartML code blocks",
+  "version": "3.0.0",
+  "description": "markdown-it plugin for rendering ChartML charts in markdown",
   "type": "module",
-  "main": "src/index.js",
-  "exports": {
-    ".": {
-      "import": "./src/index.js",
-      "require": "./src/index.js"
-    },
-    "./client": {
-      "import": "./src/client.js",
-      "require": "./src/client.js"
-    },
-    "./styles.css": {
-      "import": "./src/styles.css",
-      "require": "./src/styles.css",
-      "default": "./src/styles.css"
-    }
-  },
-  "files": [
-    "src",
-    "README.md",
-    "LICENSE"
-  ],
-  "keywords": [
-    "chartml",
-    "markdown-it",
-    "markdown",
-    "charts",
-    "visualization"
-  ],
-  "author": "Jason Adams",
-  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist/"],
+  "scripts": { "build": "tsc" },
   "peerDependencies": {
-    "markdown-it": "^14.0.0",
-    "@chartml/core": "^2.0.0",
-    "@chartml/markdown-common": "^1.0.0",
-    "@chartml/chart-pie": "^1.0.0",
-    "@chartml/chart-scatter": "^1.0.0",
-    "@chartml/chart-metric": "^1.0.0"
+    "markdown-it": "^13.0.0 || ^14.0.0",
+    "@chartml/core": "^3.0.0"
   },
-  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/markdown-it": "^14.0.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/chartml/chartml.git",
     "directory": "packages/markdown-it"
   },
-  "homepage": "https://chartml.org"
+  "homepage": "https://chartml.org",
+  "author": "Kyomi.ai",
+  "keywords": ["chartml", "chart", "visualization", "wasm", "svg"],
+  "license": "MIT"
 }

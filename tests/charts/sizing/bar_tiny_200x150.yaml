@@ -1,0 +1,49 @@
+name: "Tiny bar chart — 3 bars at 200x150 (sparkline widget)"
+tags: [bar, sizing, tiny, 200x150]
+description: >
+  Bar chart rendered at sparkline/widget size (200x150). Tests that
+  bars still render correctly in very tight space. Labels may be
+  cramped or overlap at this size.
+
+chart:
+  type: chart
+  version: 1
+  title: "Q1 Revenue"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 85000
+      - month: "Feb"
+        revenue: 92000
+      - month: "Mar"
+        revenue: 103000
+  visualize:
+    type: bar
+    columns: month
+    rows: revenue
+    style:
+      width: 200
+      height: 150
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 200
+    svg_height: 150
+    bars: 3
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Jan"
+      value: 85000
+    - label: "Feb"
+      value: 92000
+    - label: "Mar"
+      value: 103000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true

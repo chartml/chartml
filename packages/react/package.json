@@ -1,49 +1,30 @@
 {
   "name": "@chartml/react",
-  "version": "1.1.0",
-  "description": "React wrapper component for ChartML",
+  "version": "3.0.0",
+  "description": "React component for ChartML — Rust/WASM powered chart rendering",
   "type": "module",
   "main": "dist/index.js",
-  "module": "dist/index.js",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
+  "types": "dist/index.d.ts",
+  "files": ["dist/"],
   "scripts": {
-    "build": "vite build",
-    "dev": "vite build --watch"
+    "build": "tsc"
   },
-  "keywords": [
-    "chartml",
-    "react",
-    "chart",
-    "visualization",
-    "wrapper"
-  ],
-  "author": "Jason Adams",
-  "license": "MIT",
-  "dependencies": {},
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
-    "@chartml/core": "^2.0.0",
-    "@chartml/chart-pie": "^1.0.0",
-    "@chartml/chart-scatter": "^1.0.0",
-    "@chartml/chart-metric": "^1.0.0"
+    "@chartml/core": "^3.0.0"
   },
   "devDependencies": {
-    "vite": "^5.0.0"
+    "typescript": "^5.0.0",
+    "@types/react": "^18.0.0"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/chartml/chartml.git",
     "directory": "packages/react"
   },
-  "homepage": "https://chartml.org"
+  "homepage": "https://chartml.org",
+  "author": "Kyomi.ai",
+  "keywords": ["chartml", "chart", "visualization", "wasm", "svg"],
+  "license": "MIT"
 }

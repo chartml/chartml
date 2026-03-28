@@ -1,0 +1,119 @@
+name: "Grouped bar — 5 categories x 4 series (20 bars label density)"
+tags: [bar, grouped, label-density, multi-series, many-bars, legend]
+description: >
+  5 regional categories each with 4 quarterly series, producing 20 total
+  bars in grouped mode. Tests that grouped labels remain readable when
+  the category count and series count combine to create dense clusters.
+  The category labels must stay centered under each group without overlap.
+
+chart:
+  type: chart
+  version: 1
+  title: "Quarterly Revenue by Region"
+  data:
+    provider: inline
+    rows:
+      - region: "North America"
+        quarter: "Q1"
+        revenue: 2450000
+      - region: "North America"
+        quarter: "Q2"
+        revenue: 2680000
+      - region: "North America"
+        quarter: "Q3"
+        revenue: 2520000
+      - region: "North America"
+        quarter: "Q4"
+        revenue: 2910000
+      - region: "Europe"
+        quarter: "Q1"
+        revenue: 1870000
+      - region: "Europe"
+        quarter: "Q2"
+        revenue: 2050000
+      - region: "Europe"
+        quarter: "Q3"
+        revenue: 1940000
+      - region: "Europe"
+        quarter: "Q4"
+        revenue: 2230000
+      - region: "Asia Pacific"
+        quarter: "Q1"
+        revenue: 1340000
+      - region: "Asia Pacific"
+        quarter: "Q2"
+        revenue: 1520000
+      - region: "Asia Pacific"
+        quarter: "Q3"
+        revenue: 1680000
+      - region: "Asia Pacific"
+        quarter: "Q4"
+        revenue: 1850000
+      - region: "Latin America"
+        quarter: "Q1"
+        revenue: 680000
+      - region: "Latin America"
+        quarter: "Q2"
+        revenue: 745000
+      - region: "Latin America"
+        quarter: "Q3"
+        revenue: 812000
+      - region: "Latin America"
+        quarter: "Q4"
+        revenue: 890000
+      - region: "Middle East"
+        quarter: "Q1"
+        revenue: 420000
+      - region: "Middle East"
+        quarter: "Q2"
+        revenue: 485000
+      - region: "Middle East"
+        quarter: "Q3"
+        revenue: 540000
+      - region: "Middle East"
+        quarter: "Q4"
+        revenue: 615000
+  transform:
+    aggregate:
+      dimensions: [region, quarter]
+      measures:
+        - column: revenue
+          aggregation: sum
+          name: total_revenue
+  visualize:
+    type: bar
+    mode: grouped
+    columns: region
+    rows: total_revenue
+    marks:
+      color: quarter
+
+assertions:
+  structure:
+    root: svg
+    bars: 20
+    title_in_svg: false
+    legend: true
+    legend_entries: 4
+
+  grouped:
+    series_per_group: 4
+    bars_side_by_side: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "North America"
+        - "Europe"
+        - "Asia Pacific"
+        - "Latin America"
+        - "Middle East"
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

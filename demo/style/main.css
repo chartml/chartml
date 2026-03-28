@@ -1,0 +1,572 @@
+/* Reset */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f5f5f5;
+    color: #333;
+    line-height: 1.5;
+}
+
+.app {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px 40px;
+}
+
+.app-header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding: 20px 0;
+    border-bottom: 2px solid #e0e0e0;
+    margin-bottom: 20px;
+}
+
+.app-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #2E7D9A;
+}
+
+.app-subtitle {
+    font-size: 14px;
+    color: #888;
+}
+
+.app-main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.panel-header {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #888;
+    padding: 10px 0;
+}
+
+.editor-panel, .preview-panel {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.yaml-editor {
+    width: 100%;
+    min-height: 400px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    resize: vertical;
+    tab-size: 2;
+    background: #fafafa;
+    color: #333;
+}
+
+.yaml-editor:focus {
+    outline: none;
+    border-color: #2E7D9A;
+    box-shadow: 0 0 0 2px rgba(46,125,154,0.15);
+}
+
+.preview-content {
+    min-height: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.preview-content .chartml-container {
+    width: 100%;
+}
+
+/* Gallery */
+.gallery-section {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.gallery {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.gallery-button {
+    padding: 8px 16px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: white;
+    color: #333;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+
+.gallery-button:hover {
+    background: #2E7D9A;
+    color: white;
+    border-color: #2E7D9A;
+}
+
+/*
+ * ══════════════════════════════════════════════════════════════
+ * CHART ANIMATIONS & INTERACTIONS — ALL CSS, NO JAVASCRIPT
+ *
+ * Design principle: the Rust/WASM renderer outputs static SVG
+ * with semantic class names. ALL visual animation, hover effects,
+ * and transitions are handled purely via CSS below.
+ *
+ * The Leptos adapter only manages:
+ * - Tooltip data (which element is hovered, via signals)
+ * - Tooltip positioning (fixed div near cursor)
+ *
+ * Every entrance animation, hover effect, and transition is CSS.
+ * To customize: override these classes in your own stylesheet.
+ * ══════════════════════════════════════════════════════════════
+ */
+
+/*
+ * Bar entrance: each bar grows from its own baseline via scaleY.
+ * transform-origin is set inline per rect by the Leptos renderer
+ * to (center-x, bottom-y), so scaleY(0→1) grows upward from baseline.
+ * All bars take the same 400ms — taller bars grow faster (matches D3).
+ */
+.bars rect,
+.bar {
+    animation: chartml-bar-grow 400ms ease-out both;
+    opacity: 0.9;
+    transition: opacity 200ms ease, stroke 200ms ease;
+}
+
+@keyframes chartml-bar-grow {
+    from { transform: scaleY(0); }
+    to   { transform: scaleY(1); }
+}
+
+/* Bar hover: opacity 0.9 → 1 + darker stroke border (matches D3 exactly).
+   stroke color uses brightness filter on a separate outline. */
+.bars rect,
+.bar {
+    stroke: transparent;
+    stroke-width: 2;
+}
+
+.bars rect:hover,
+.bar:hover {
+    opacity: 1;
+    stroke: rgba(0, 0, 0, 0.3);
+}
+
+/* Line drawing animation via stroke-dasharray */
+.chartml-line-path {
+    stroke-dasharray: 2000;
+    stroke-dashoffset: 2000;
+    animation: chartml-line-draw 800ms ease-out forwards;
+}
+
+@keyframes chartml-line-draw {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+/* Area fade-in */
+.chartml-area-path {
+    animation: chartml-fade-in 500ms ease-out both;
+}
+
+/* Pie/doughnut slices — entrance + hover matching D3.
+   D3 behavior: hovered slice opacity 1, others dim to 0.7.
+   Uses :has() so dimming only triggers when a SLICE is hovered,
+   not when hovering empty space in the pie group. */
+.chartml-pie-slice {
+    animation: chartml-pie-enter 400ms ease-out;
+    opacity: 0.9;
+    transition: opacity 200ms ease;
+    cursor: pointer;
+}
+
+@keyframes chartml-pie-enter {
+    from { opacity: 0; }
+    to   { opacity: 0.9; }
+}
+
+/* Only when a slice is actually hovered: dim all slices to 0.7 */
+.chartml-pie:has(.chartml-pie-slice:hover) .chartml-pie-slice {
+    opacity: 0.7;
+}
+
+/* The hovered slice itself stays full brightness */
+.chartml-pie:has(.chartml-pie-slice:hover) .chartml-pie-slice:hover {
+    opacity: 1;
+}
+
+/* Line/area data point dots — matches D3 chartml:
+   Solid dots, same color as line, white stroke border that visually
+   "breaks" the line at each point. Subtle grow on hover. */
+.chartml-line-dot,
+.chartml-area-dot {
+    r: 5;
+    stroke-width: 2;
+    transition: r 200ms ease;
+    cursor: pointer;
+}
+
+.chartml-line-dot:hover,
+.chartml-area-dot:hover {
+    r: 7;
+}
+
+/* Scatter point entrance + hover matching D3:
+   Default: opacity 0.8, stroke white, stroke-width 1.5
+   Hover: scale 1.3x from center, opacity 1, stroke-width 2
+   Entrance: fade in (opacity), staggered feel via animation-delay */
+.chartml-scatter-point {
+    animation: chartml-fade-in-scatter 400ms ease-out;
+    opacity: 0.8;
+    stroke-width: 1.5;
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: transform 200ms ease, opacity 200ms ease, stroke-width 200ms ease;
+    cursor: pointer;
+}
+
+@keyframes chartml-fade-in-scatter {
+    from { opacity: 0; }
+    to   { opacity: 0.8; }
+}
+
+.chartml-interactive:hover .chartml-scatter-point {
+    transform: scale(1.3);
+    opacity: 1;
+    stroke-width: 2;
+}
+
+@keyframes chartml-scale-in {
+    from {
+        r: 0;
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Generic fade-in */
+@keyframes chartml-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Metric card entrance */
+.chartml-metric-value {
+    animation: chartml-fade-in 300ms ease-out both;
+}
+
+.chartml-metric-trend {
+    animation: chartml-fade-in 500ms ease-out 200ms both;
+}
+
+/*
+ * ── Hover Effects ──
+ * All hover/interaction animations are CSS-only.
+ * The Leptos renderer adds class="chartml-interactive" wrappers
+ * and sets tooltip data via signals — but visual feedback is
+ * entirely CSS. No inline style opacity changes.
+ */
+
+/* Bars: interactive cursor (visual hover handled by .bars rect:hover above) */
+.chartml-interactive rect {
+    cursor: pointer;
+}
+
+/* Paths (line/area series): subtle highlight on hover */
+.chartml-interactive path {
+    cursor: pointer;
+    transition: opacity 200ms ease;
+}
+
+.chartml-interactive path:hover {
+    opacity: 0.7;
+}
+
+/* ─── Tooltip ─── */
+.chartml-tooltip {
+    pointer-events: none;
+    background: #333;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    white-space: nowrap;
+    transition: opacity 150ms ease;
+}
+
+.chartml-tooltip-label {
+    font-weight: 600;
+    opacity: 0.8;
+    font-size: 11px;
+}
+
+.chartml-tooltip-value {
+    font-weight: 700;
+}
+
+/* Grid lines — opacity is now set per-spec via the grid config.
+   Default fallback if no inline style is set. */
+.grid-line {
+    opacity: 0.5;
+}
+
+.grid-line-x,
+.grid-line-y {
+    pointer-events: none;
+}
+
+/* ─── Params Controls ─── */
+.chartml-params {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 8px 0;
+}
+
+.chartml-param-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.chartml-param-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+}
+
+.chartml-param-control {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    background: white;
+}
+
+.chartml-param-control:focus {
+    outline: none;
+    border-color: #2E7D9A;
+    box-shadow: 0 0 0 2px rgba(46,125,154,0.15);
+}
+
+select.chartml-param-control {
+    min-width: 120px;
+    cursor: pointer;
+}
+
+input[type="number"].chartml-param-control {
+    width: 100px;
+}
+
+input[type="text"].chartml-param-control {
+    min-width: 150px;
+}
+
+.chartml-param-multiselect-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0;
+    border: none;
+}
+
+.chartml-param-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 4px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    transition: background 150ms ease, border-color 150ms ease;
+}
+
+.chartml-param-checkbox:hover {
+    background: #f5f5f5;
+    border-color: #bbb;
+}
+
+.chartml-param-checkbox:has(input:checked) {
+    background: #e8f4f8;
+    border-color: #2E7D9A;
+}
+
+.chartml-param-daterange-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    padding: 0;
+}
+
+.chartml-param-daterange-separator {
+    color: #999;
+    font-size: 14px;
+}
+
+.examples-params {
+    background: #fafafa;
+    border: 1px dashed #ddd;
+}
+
+/* Metric card styling */
+.chartml-metric-card {
+    min-height: 120px;
+}
+
+/* Error display */
+.chartml-error {
+    width: 100%;
+}
+
+/* ─── Navigation ─── */
+.app-nav {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+}
+
+.nav-btn {
+    padding: 6px 16px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: white;
+    color: #666;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+
+.nav-btn:hover {
+    border-color: #2E7D9A;
+    color: #2E7D9A;
+}
+
+.nav-btn.active {
+    background: #2E7D9A;
+    color: white;
+    border-color: #2E7D9A;
+}
+
+/* ─── Examples Page (mirrors VitePress docs layout) ─── */
+.examples-page {
+    max-width: 672px;
+    margin: 0 auto;
+    padding-bottom: 60px;
+}
+
+.examples-h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0 0 8px;
+    line-height: 1.3;
+}
+
+.examples-h2 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 32px 0 8px;
+    padding-top: 24px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.examples-h3 {
+    font-size: 17px;
+    font-weight: 600;
+    color: #333;
+    margin: 20px 0 4px;
+}
+
+.examples-p {
+    font-size: 14px;
+    color: #666;
+    line-height: 1.6;
+    margin: 4px 0 12px;
+}
+
+.examples-hr {
+    border: none;
+    border-top: 1px solid #e0e0e0;
+    margin: 32px 0;
+}
+
+.examples-chart {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 12px 0 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.examples-chart .chartml-container {
+    width: 100%;
+}
+
+.chart-number {
+    font-size: 11px;
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.examples-code {
+    background: #f8f8f8;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #555;
+    overflow-x: auto;
+    margin: 8px 0 16px;
+    white-space: pre;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+    .app-main {
+        grid-template-columns: 1fr;
+    }
+    .examples-grid.two-col {
+        grid-template-columns: 1fr;
+    }
+    .metric-row {
+        grid-template-columns: 1fr 1fr;
+    }
+}

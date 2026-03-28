@@ -1,0 +1,132 @@
+name: "Combo — 12 months of revenue bars + satisfaction line"
+tags: [bar, dual-axis, combo, line, 12-months, label-density]
+description: >
+  Full year of monthly data with revenue bars on the left axis and
+  customer satisfaction score as a line on the right axis. Tests
+  label density and spacing when 12 categories share the x-axis
+  in a combo chart layout.
+
+chart:
+  type: chart
+  version: 1
+  title: "2024 Monthly Revenue & Customer Satisfaction"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 182000
+        csat: 78.2
+      - month: "Feb"
+        revenue: 176000
+        csat: 76.8
+      - month: "Mar"
+        revenue: 203000
+        csat: 79.5
+      - month: "Apr"
+        revenue: 215000
+        csat: 81.3
+      - month: "May"
+        revenue: 228000
+        csat: 82.1
+      - month: "Jun"
+        revenue: 241000
+        csat: 80.6
+      - month: "Jul"
+        revenue: 219000
+        csat: 77.4
+      - month: "Aug"
+        revenue: 234000
+        csat: 79.8
+      - month: "Sep"
+        revenue: 256000
+        csat: 83.2
+      - month: "Oct"
+        revenue: 271000
+        csat: 84.5
+      - month: "Nov"
+        revenue: 289000
+        csat: 85.1
+      - month: "Dec"
+        revenue: 312000
+        csat: 86.7
+  visualize:
+    type: bar
+    columns: month
+    rows:
+      - field: revenue
+        axis: left
+        label: "Revenue"
+      - field: csat
+        mark: line
+        axis: right
+        label: "CSAT Score"
+    axes:
+      left:
+        label: "Revenue ($)"
+        format: "$,.0f"
+      right:
+        label: "CSAT Score"
+        format: ".1f"
+        min: 70
+        max: 95
+
+assertions:
+  structure:
+    root: svg
+    bars: 12
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+    y_axes: 2
+
+  bars:
+    - label: "Jan"
+      value: 182000
+    - label: "Feb"
+      value: 176000
+    - label: "Mar"
+      value: 203000
+    - label: "Apr"
+      value: 215000
+    - label: "May"
+      value: 228000
+    - label: "Jun"
+      value: 241000
+    - label: "Jul"
+      value: 219000
+    - label: "Aug"
+      value: 234000
+    - label: "Sep"
+      value: 256000
+    - label: "Oct"
+      value: 271000
+    - label: "Nov"
+      value: 289000
+    - label: "Dec"
+      value: 312000
+
+  dual_axis:
+    left_axis_present: true
+    right_axis_present: true
+    left_label: "Revenue ($)"
+    right_label: "CSAT Score"
+
+  scale:
+    left:
+      y_min: 0
+      y_nice: true
+    right:
+      y_min: 70
+      y_max: 95
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+      orientation: horizontal
+    y_left:
+      min: 0
+      format: currency
+    y_right:
+      min: 70
+      max: 95
+      format: decimal

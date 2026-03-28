@@ -1,0 +1,86 @@
+name: "Horizontal bar — top 8 products ranked by revenue"
+tags: [bar, horizontal, ranking, single-series]
+description: >
+  Top 8 SaaS products ranked by annual revenue, rendered as
+  horizontal bars. A standard leaderboard/ranking chart where
+  long product names sit on the y-axis and bars extend rightward.
+
+chart:
+  type: chart
+  version: 1
+  title: "Top Products by Annual Revenue"
+  data:
+    provider: inline
+    rows:
+      - product: "Enterprise Suite"
+        revenue: 2840000
+      - product: "Cloud Platform"
+        revenue: 2150000
+      - product: "Analytics Pro"
+        revenue: 1780000
+      - product: "Security Shield"
+        revenue: 1520000
+      - product: "DevOps Pipeline"
+        revenue: 1340000
+      - product: "Data Warehouse"
+        revenue: 1180000
+      - product: "API Gateway"
+        revenue: 890000
+      - product: "Identity Manager"
+        revenue: 720000
+  transform:
+    aggregate:
+      dimensions: [product]
+      measures:
+        - column: revenue
+          aggregation: sum
+          name: total_revenue
+      sort:
+        - field: total_revenue
+          direction: desc
+  visualize:
+    type: bar
+    orientation: horizontal
+    columns: product
+    rows: total_revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 8
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Enterprise Suite"
+      value: 2840000
+    - label: "Cloud Platform"
+      value: 2150000
+    - label: "Analytics Pro"
+      value: 1780000
+    - label: "Security Shield"
+      value: 1520000
+    - label: "DevOps Pipeline"
+      value: 1340000
+    - label: "Data Warehouse"
+      value: 1180000
+    - label: "API Gateway"
+      value: 890000
+    - label: "Identity Manager"
+      value: 720000
+
+  orientation:
+    horizontal: true
+    bars_extend_right: true
+
+  scale:
+    proportional: true
+    x_min: 0
+    x_nice: true
+
+  axes:
+    y:
+      labels: ["Enterprise Suite", "Cloud Platform", "Analytics Pro", "Security Shield", "DevOps Pipeline", "Data Warehouse", "API Gateway", "Identity Manager"]
+    x:
+      min: 0
+      format: numeric

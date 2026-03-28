@@ -1,0 +1,30 @@
+type: chart
+version: 1
+title: "Price vs Sales Volume"
+data:
+  provider: inline
+  rows:
+    - price: 29.99
+      units: 450
+      category: "Electronics"
+    - price: 39.99
+      units: 380
+      category: "Electronics"
+    - price: 49.99
+      units: 320
+      category: "Electronics"
+    - price: 19.99
+      units: 520
+      category: "Clothing"
+    - price: 24.99
+      units: 480
+      category: "Clothing"
+    - price: 34.99
+      units: 410
+      category: "Clothing"
+visualize:
+  type: scatter
+  columns: price
+  rows: units
+  marks:
+    color: category

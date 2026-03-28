@@ -1,0 +1,116 @@
+name: "Combo — dual axis with reference line annotation"
+tags: [bar, dual-axis, combo, line, annotation, reference-line]
+description: >
+  Combo chart with revenue bars on the left axis, margin % line on
+  the right axis, plus a horizontal reference line annotation marking
+  a revenue target on the left axis. Tests that annotations render
+  correctly on a dual-axis chart.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue vs Target & Margin %"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1 2024"
+        revenue: 340000
+        margin_pct: 58.2
+      - quarter: "Q2 2024"
+        revenue: 385000
+        margin_pct: 61.7
+      - quarter: "Q3 2024"
+        revenue: 362000
+        margin_pct: 56.9
+      - quarter: "Q4 2024"
+        revenue: 428000
+        margin_pct: 64.3
+      - quarter: "Q1 2025"
+        revenue: 451000
+        margin_pct: 66.1
+      - quarter: "Q2 2025"
+        revenue: 473000
+        margin_pct: 67.8
+  visualize:
+    type: bar
+    columns: quarter
+    rows:
+      - field: revenue
+        axis: left
+        label: "Revenue"
+      - field: margin_pct
+        mark: line
+        axis: right
+        label: "Margin %"
+    axes:
+      left:
+        label: "Revenue ($)"
+        format: "$,.0f"
+      right:
+        label: "Margin (%)"
+        format: ".1f"
+        min: 50
+        max: 80
+    annotations:
+      - type: line
+        axis: left
+        value: 400000
+        label: "Revenue Target ($400K)"
+        color: "#e74c3c"
+        style: dashed
+
+assertions:
+  structure:
+    root: svg
+    bars: 6
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+    y_axes: 2
+    annotation_lines: 1
+
+  bars:
+    - label: "Q1 2024"
+      value: 340000
+    - label: "Q2 2024"
+      value: 385000
+    - label: "Q3 2024"
+      value: 362000
+    - label: "Q4 2024"
+      value: 428000
+    - label: "Q1 2025"
+      value: 451000
+    - label: "Q2 2025"
+      value: 473000
+
+  dual_axis:
+    left_axis_present: true
+    right_axis_present: true
+    left_label: "Revenue ($)"
+    right_label: "Margin (%)"
+
+  annotations:
+    - type: line
+      value: 400000
+      label: "Revenue Target ($400K)"
+      line_visible: true
+
+  scale:
+    left:
+      y_min: 0
+      y_nice: true
+    right:
+      y_min: 50
+      y_max: 80
+
+  axes:
+    x:
+      labels: ["Q1 2024", "Q2 2024", "Q3 2024", "Q4 2024", "Q1 2025", "Q2 2025"]
+      orientation: horizontal
+    y_left:
+      min: 0
+      format: currency
+    y_right:
+      min: 50
+      max: 80
+      format: decimal

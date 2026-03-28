@@ -1,0 +1,86 @@
+name: "Bar chart — 8 bars mixing 2-char and 70-char labels"
+tags: [edge-case, bar, long-labels, mixed-lengths, label-density, truncation]
+description: >
+  8 bars with wildly varying label lengths from 2 characters ("IT") to 70
+  characters. This tests the renderer's ability to handle extreme variance
+  in label widths within the same chart. Short labels should not waste space,
+  and long labels should not overflow into neighboring bars or clip the chart.
+
+chart:
+  type: chart
+  version: 1
+  title: "Department Headcount"
+  data:
+    provider: inline
+    rows:
+      - department: "IT"
+        headcount: 42
+      - department: "Sales"
+        headcount: 87
+      - department: "International Business Development and Strategic Partnerships Division"
+        headcount: 23
+      - department: "HR"
+        headcount: 31
+      - department: "Global Customer Success and Professional Services Organization"
+        headcount: 56
+      - department: "Ops"
+        headcount: 64
+      - department: "Research and Development Innovation Lab"
+        headcount: 38
+      - department: "Corporate Finance and Treasury Management"
+        headcount: 29
+  visualize:
+    type: bar
+    columns: department
+    rows: headcount
+
+assertions:
+  structure:
+    root: svg
+    bars: 8
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "IT"
+      value: 42
+    - label: "Sales"
+      value: 87
+    - label: "International Business Development and Strategic Partnerships Division"
+      value: 23
+    - label: "HR"
+      value: 31
+    - label: "Global Customer Success and Professional Services Organization"
+      value: 56
+    - label: "Ops"
+      value: 64
+    - label: "Research and Development Innovation Lab"
+      value: 38
+    - label: "Corporate Finance and Treasury Management"
+      value: 29
+
+  label_rotation:
+    x_labels_rotated: true
+    transform_exists: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "IT"
+        - "Sales"
+        - "International Business Development and Strategic Partnerships Division"
+        - "HR"
+        - "Global Customer Success and Professional Services Organization"
+        - "Ops"
+        - "Research and Development Innovation Lab"
+        - "Corporate Finance and Treasury Management"
+      orientation: horizontal
+      rotation: true
+    y:
+      min: 0
+      format: numeric

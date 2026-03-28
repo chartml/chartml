@@ -1,0 +1,220 @@
+name: "Line chart — 90 daily ISO dates (extreme temporal density)"
+tags: [line, label-density, temporal-x, many-categories, single-series, stress]
+description: >
+  90 daily ISO dates spanning Q1 2026 (Jan 1 through Mar 31). This forces
+  the x-axis to heavily sample or thin labels since showing all 90 dates
+  is impossible without overlap. Tests that the renderer selects sensible
+  intervals (e.g. weekly or biweekly labels) while still plotting all
+  90 data points on the line.
+
+chart:
+  type: chart
+  version: 1
+  title: "Daily Signups — Q1 2026"
+  data:
+    provider: inline
+    rows:
+      - date: "2026-01-01"
+        signups: 142
+      - date: "2026-01-02"
+        signups: 158
+      - date: "2026-01-03"
+        signups: 137
+      - date: "2026-01-04"
+        signups: 89
+      - date: "2026-01-05"
+        signups: 76
+      - date: "2026-01-06"
+        signups: 165
+      - date: "2026-01-07"
+        signups: 173
+      - date: "2026-01-08"
+        signups: 151
+      - date: "2026-01-09"
+        signups: 168
+      - date: "2026-01-10"
+        signups: 145
+      - date: "2026-01-11"
+        signups: 92
+      - date: "2026-01-12"
+        signups: 81
+      - date: "2026-01-13"
+        signups: 178
+      - date: "2026-01-14"
+        signups: 182
+      - date: "2026-01-15"
+        signups: 159
+      - date: "2026-01-16"
+        signups: 174
+      - date: "2026-01-17"
+        signups: 153
+      - date: "2026-01-18"
+        signups: 98
+      - date: "2026-01-19"
+        signups: 85
+      - date: "2026-01-20"
+        signups: 189
+      - date: "2026-01-21"
+        signups: 195
+      - date: "2026-01-22"
+        signups: 167
+      - date: "2026-01-23"
+        signups: 181
+      - date: "2026-01-24"
+        signups: 162
+      - date: "2026-01-25"
+        signups: 104
+      - date: "2026-01-26"
+        signups: 91
+      - date: "2026-01-27"
+        signups: 198
+      - date: "2026-01-28"
+        signups: 203
+      - date: "2026-01-29"
+        signups: 175
+      - date: "2026-01-30"
+        signups: 192
+      - date: "2026-01-31"
+        signups: 170
+      - date: "2026-02-01"
+        signups: 108
+      - date: "2026-02-02"
+        signups: 95
+      - date: "2026-02-03"
+        signups: 210
+      - date: "2026-02-04"
+        signups: 218
+      - date: "2026-02-05"
+        signups: 184
+      - date: "2026-02-06"
+        signups: 201
+      - date: "2026-02-07"
+        signups: 178
+      - date: "2026-02-08"
+        signups: 112
+      - date: "2026-02-09"
+        signups: 99
+      - date: "2026-02-10"
+        signups: 224
+      - date: "2026-02-11"
+        signups: 231
+      - date: "2026-02-12"
+        signups: 196
+      - date: "2026-02-13"
+        signups: 213
+      - date: "2026-02-14"
+        signups: 245
+      - date: "2026-02-15"
+        signups: 118
+      - date: "2026-02-16"
+        signups: 103
+      - date: "2026-02-17"
+        signups: 237
+      - date: "2026-02-18"
+        signups: 242
+      - date: "2026-02-19"
+        signups: 208
+      - date: "2026-02-20"
+        signups: 225
+      - date: "2026-02-21"
+        signups: 194
+      - date: "2026-02-22"
+        signups: 124
+      - date: "2026-02-23"
+        signups: 107
+      - date: "2026-02-24"
+        signups: 248
+      - date: "2026-02-25"
+        signups: 255
+      - date: "2026-02-26"
+        signups: 219
+      - date: "2026-02-27"
+        signups: 236
+      - date: "2026-02-28"
+        signups: 205
+      - date: "2026-03-01"
+        signups: 130
+      - date: "2026-03-02"
+        signups: 115
+      - date: "2026-03-03"
+        signups: 261
+      - date: "2026-03-04"
+        signups: 268
+      - date: "2026-03-05"
+        signups: 232
+      - date: "2026-03-06"
+        signups: 249
+      - date: "2026-03-07"
+        signups: 217
+      - date: "2026-03-08"
+        signups: 136
+      - date: "2026-03-09"
+        signups: 121
+      - date: "2026-03-10"
+        signups: 274
+      - date: "2026-03-11"
+        signups: 281
+      - date: "2026-03-12"
+        signups: 245
+      - date: "2026-03-13"
+        signups: 262
+      - date: "2026-03-14"
+        signups: 230
+      - date: "2026-03-15"
+        signups: 142
+      - date: "2026-03-16"
+        signups: 127
+      - date: "2026-03-17"
+        signups: 287
+      - date: "2026-03-18"
+        signups: 294
+      - date: "2026-03-19"
+        signups: 258
+      - date: "2026-03-20"
+        signups: 275
+      - date: "2026-03-21"
+        signups: 243
+      - date: "2026-03-22"
+        signups: 148
+      - date: "2026-03-23"
+        signups: 133
+      - date: "2026-03-24"
+        signups: 301
+      - date: "2026-03-25"
+        signups: 308
+      - date: "2026-03-26"
+        signups: 271
+      - date: "2026-03-27"
+        signups: 289
+      - date: "2026-03-28"
+        signups: 256
+      - date: "2026-03-29"
+        signups: 154
+      - date: "2026-03-30"
+        signups: 139
+      - date: "2026-03-31"
+        signups: 315
+  visualize:
+    type: line
+    columns: date
+    rows: signups
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      label_count: 90
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

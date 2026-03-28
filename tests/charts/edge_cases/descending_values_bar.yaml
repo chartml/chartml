@@ -1,0 +1,74 @@
+name: "Bar chart — strictly descending values (visual sorting)"
+tags: [edge-case, bar, descending, sorted, ordering]
+description: >
+  All bars are in strictly descending order by value. Tests that
+  the renderer preserves the data order (does not auto-sort) and
+  that the visual height of each bar is strictly less than the
+  previous one, creating a staircase pattern.
+
+chart:
+  type: chart
+  version: 1
+  title: "Top 8 Product Lines by Revenue"
+  data:
+    provider: inline
+    rows:
+      - product: "Enterprise SaaS"
+        revenue: 4800000
+      - product: "Pro Tier"
+        revenue: 3200000
+      - product: "Team Plan"
+        revenue: 2100000
+      - product: "Starter Plan"
+        revenue: 1400000
+      - product: "API Access"
+        revenue: 890000
+      - product: "Add-ons"
+        revenue: 560000
+      - product: "Training"
+        revenue: 320000
+      - product: "Support Contracts"
+        revenue: 180000
+  visualize:
+    type: bar
+    columns: product
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 8
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Enterprise SaaS"
+      value: 4800000
+    - label: "Pro Tier"
+      value: 3200000
+    - label: "Team Plan"
+      value: 2100000
+    - label: "Starter Plan"
+      value: 1400000
+    - label: "API Access"
+      value: 890000
+    - label: "Add-ons"
+      value: 560000
+    - label: "Training"
+      value: 320000
+    - label: "Support Contracts"
+      value: 180000
+
+  scale:
+    proportional: true
+    descending_order: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Enterprise SaaS", "Pro Tier", "Team Plan", "Starter Plan", "API Access", "Add-ons", "Training", "Support Contracts"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

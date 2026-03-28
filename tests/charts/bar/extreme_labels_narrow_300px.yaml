@@ -1,0 +1,70 @@
+name: "Bar chart — 4 bars with 40+ char labels on a 300px wide chart"
+tags: [bar, long-labels, sizing, narrow, truncation, stress-test]
+description: >
+  The absolute worst case for label layout: 4 bars with labels exceeding
+  40 characters rendered in a chart only 300 pixels wide. There is simply
+  not enough horizontal space for the labels, so the renderer must either
+  aggressively truncate, rotate, or omit labels to avoid overlap. This is
+  the stress test for minimal-width rendering with verbose category names.
+
+chart:
+  type: chart
+  version: 1
+  title: "SaaS KPIs"
+  data:
+    provider: inline
+    rows:
+      - metric: "Customer Acquisition Cost Analysis"
+        value: 342
+      - metric: "Monthly Recurring Revenue Growth"
+        value: 187
+      - metric: "Net Revenue Retention Percentage"
+        value: 112
+      - metric: "Annual Contract Value Pipeline"
+        value: 256
+  visualize:
+    type: bar
+    columns: metric
+    rows: value
+    style:
+      width: 300
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 300
+    bars: 4
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Customer Acquisition Cost Analysis"
+      value: 342
+    - label: "Monthly Recurring Revenue Growth"
+      value: 187
+    - label: "Net Revenue Retention Percentage"
+      value: 112
+    - label: "Annual Contract Value Pipeline"
+      value: 256
+
+  label_rotation:
+    x_labels_rotated: true
+    transform_exists: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "Customer Acquisition Cost Analysis"
+        - "Monthly Recurring Revenue Growth"
+        - "Net Revenue Retention Percentage"
+        - "Annual Contract Value Pipeline"
+      orientation: horizontal
+      rotation: true
+    y:
+      min: 0
+      format: numeric

@@ -1,0 +1,64 @@
+name: "Date formatting — year-only labels over a decade"
+tags: [line, temporal, yearly, date-axis, date-formatting, single-series]
+description: >
+  Annual data points using year-only strings from 2015 to 2025.
+  Tests the renderer's ability to parse year-only values, treat them
+  as temporal data, and display clean year labels on the x-axis.
+
+chart:
+  type: chart
+  version: 1
+  title: "Annual Revenue (millions)"
+  data:
+    provider: inline
+    rows:
+      - year: "2015"
+        revenue: 2.1
+      - year: "2016"
+        revenue: 3.4
+      - year: "2017"
+        revenue: 4.8
+      - year: "2018"
+        revenue: 6.2
+      - year: "2019"
+        revenue: 7.9
+      - year: "2020"
+        revenue: 5.5
+      - year: "2021"
+        revenue: 9.1
+      - year: "2022"
+        revenue: 12.3
+      - year: "2023"
+        revenue: 15.8
+      - year: "2024"
+        revenue: 19.2
+      - year: "2025"
+        revenue: 23.5
+  visualize:
+    type: line
+    columns: year
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  temporal:
+    date_reformatted: true
+    expected_format: "YYYY"
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      label_count: 11
+      temporal: true
+    y:
+      min: 0
+      format: numeric

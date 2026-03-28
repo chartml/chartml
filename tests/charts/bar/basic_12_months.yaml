@@ -1,0 +1,93 @@
+name: "Full-year monthly revenue with currency formatting"
+tags: [bar, basic, currency-format, many-labels, single-series]
+description: >
+  12 months of SaaS revenue with realistic seasonal dip in summer
+  and a strong Q4 finish. Tests that 12 x-axis labels render
+  (potentially rotated) and that the y-axis uses currency formatting.
+
+chart:
+  type: chart
+  version: 1
+  title: "2025 Monthly Revenue"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 142000
+      - month: "Feb"
+        revenue: 138000
+      - month: "Mar"
+        revenue: 156000
+      - month: "Apr"
+        revenue: 161000
+      - month: "May"
+        revenue: 154000
+      - month: "Jun"
+        revenue: 143000
+      - month: "Jul"
+        revenue: 129000
+      - month: "Aug"
+        revenue: 134000
+      - month: "Sep"
+        revenue: 158000
+      - month: "Oct"
+        revenue: 172000
+      - month: "Nov"
+        revenue: 189000
+      - month: "Dec"
+        revenue: 201000
+
+  visualize:
+    type: bar
+    columns: month
+    rows: revenue
+    axes:
+      left:
+        format: "$,.0f"
+
+assertions:
+  structure:
+    root: svg
+    bars: 12
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Jan"
+      value: 142000
+    - label: "Feb"
+      value: 138000
+    - label: "Mar"
+      value: 156000
+    - label: "Apr"
+      value: 161000
+    - label: "May"
+      value: 154000
+    - label: "Jun"
+      value: 143000
+    - label: "Jul"
+      value: 129000
+    - label: "Aug"
+      value: 134000
+    - label: "Sep"
+      value: 158000
+    - label: "Oct"
+      value: 172000
+    - label: "Nov"
+      value: 189000
+    - label: "Dec"
+      value: 201000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+      orientation: horizontal
+      label_rotation_expected: true
+    y:
+      min: 0
+      format: currency

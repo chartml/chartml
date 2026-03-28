@@ -1,0 +1,37 @@
+name: "Metric card — revenue with upward trend"
+tags: [metric, trend, comparison, currency-format]
+description: >
+  $1.2M revenue, up from $1.1M in the previous period. Tests the
+  metric card with dollar formatting, comparison with a previous
+  value, and an upward trend arrow rendered in green.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Revenue"
+  data:
+    provider: inline
+    rows:
+      - current: 1200000
+        previous: 1100000
+  visualize:
+    type: metric
+    value: current
+    label: "Monthly Revenue"
+    format: "$,.0f"
+    compareWith: previous
+
+assertions:
+  structure:
+    root: div
+    is_metric_card: true
+
+  value:
+    raw: 1200000
+    formatted: "$1,200,000"
+
+  trend:
+    direction: up
+    arrow: true
+    positive: true
+    compare_value: 1100000

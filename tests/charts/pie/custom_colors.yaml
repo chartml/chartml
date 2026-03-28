@@ -1,0 +1,54 @@
+name: "Pie chart with explicit custom color palette"
+tags: [pie, custom-colors, style]
+description: >
+  Pie chart where the color palette is explicitly provided via
+  style.colors. Tests that each arc uses the specified color rather
+  than the default palette, and that the legend swatches match.
+
+chart:
+  type: chart
+  version: 1
+  title: "Q4 Revenue by Division"
+  data:
+    provider: inline
+    rows:
+      - division: "Engineering"
+        revenue: 2100000
+      - division: "Sales"
+        revenue: 1600000
+      - division: "Marketing"
+        revenue: 950000
+      - division: "Operations"
+        revenue: 720000
+  visualize:
+    type: pie
+    columns: division
+    rows: revenue
+    style:
+      colors: ["#4285f4", "#ea4335", "#fbbc04", "#34a853"]
+
+assertions:
+  structure:
+    root: svg
+    slices: 4
+    title_in_svg: false
+    legend: true
+    legend_entries: 4
+
+  slices:
+    - label: "Engineering"
+      value: 2100000
+      color: "#4285f4"
+    - label: "Sales"
+      value: 1600000
+      color: "#ea4335"
+    - label: "Marketing"
+      value: 950000
+      color: "#fbbc04"
+    - label: "Operations"
+      value: 720000
+      color: "#34a853"
+
+  colors:
+    explicit: true
+    palette: ["#4285f4", "#ea4335", "#fbbc04", "#34a853"]

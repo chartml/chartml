@@ -1,0 +1,76 @@
+name: "Line chart — 12 data points with full date-time string labels (25+ chars)"
+tags: [line, long-labels, temporal, label-density, truncation]
+description: >
+  12 data points where the category labels are full human-readable date
+  strings like "Monday, January 6th, 2025" — each 25+ characters long.
+  These are NOT ISO date formats, so the renderer cannot parse them as
+  dates. Tests how the line chart handles dense, long categorical labels
+  on the x-axis without overlap or clipping.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly Active Users"
+  data:
+    provider: inline
+    rows:
+      - week: "Monday, January 6th, 2025"
+        users: 14200
+      - week: "Monday, January 13th, 2025"
+        users: 15800
+      - week: "Monday, January 20th, 2025"
+        users: 14900
+      - week: "Monday, January 27th, 2025"
+        users: 16500
+      - week: "Monday, February 3rd, 2025"
+        users: 17200
+      - week: "Monday, February 10th, 2025"
+        users: 16800
+      - week: "Monday, February 17th, 2025"
+        users: 18400
+      - week: "Monday, February 24th, 2025"
+        users: 19100
+      - week: "Monday, March 3rd, 2025"
+        users: 18700
+      - week: "Monday, March 10th, 2025"
+        users: 20500
+      - week: "Monday, March 17th, 2025"
+        users: 21200
+      - week: "Monday, March 24th, 2025"
+        users: 22800
+  visualize:
+    type: line
+    columns: week
+    rows: users
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "Monday, January 6th, 2025"
+        - "Monday, January 13th, 2025"
+        - "Monday, January 20th, 2025"
+        - "Monday, January 27th, 2025"
+        - "Monday, February 3rd, 2025"
+        - "Monday, February 10th, 2025"
+        - "Monday, February 17th, 2025"
+        - "Monday, February 24th, 2025"
+        - "Monday, March 3rd, 2025"
+        - "Monday, March 10th, 2025"
+        - "Monday, March 17th, 2025"
+        - "Monday, March 24th, 2025"
+      rotation: true
+    y:
+      min: 0
+      format: numeric

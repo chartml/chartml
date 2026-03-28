@@ -1,0 +1,131 @@
+name: "Stacked bar — 8 series (tests legend wrapping)"
+tags: [edge-case, bar, stacked, many-series, legend, stress]
+description: >
+  A stacked bar chart with 8 distinct series, pushing the legend to
+  its limits. Tests that legend entries wrap correctly, that 8 distinct
+  colors are assigned, and that stacked segments remain visible even
+  when there are many thin slices per bar.
+
+chart:
+  type: chart
+  version: 1
+  title: "Cloud Spend by Service — Q1 2026"
+  data:
+    provider: inline
+    rows:
+      - month: "January"
+        service: "Compute"
+        spend: 42000
+      - month: "January"
+        service: "Storage"
+        spend: 18500
+      - month: "January"
+        service: "Database"
+        spend: 15200
+      - month: "January"
+        service: "Networking"
+        spend: 9800
+      - month: "January"
+        service: "Analytics"
+        spend: 12300
+      - month: "January"
+        service: "ML/AI"
+        spend: 21000
+      - month: "January"
+        service: "Security"
+        spend: 7600
+      - month: "January"
+        service: "Monitoring"
+        spend: 4100
+      - month: "February"
+        service: "Compute"
+        spend: 44500
+      - month: "February"
+        service: "Storage"
+        spend: 19200
+      - month: "February"
+        service: "Database"
+        spend: 16100
+      - month: "February"
+        service: "Networking"
+        spend: 10300
+      - month: "February"
+        service: "Analytics"
+        spend: 13800
+      - month: "February"
+        service: "ML/AI"
+        spend: 24500
+      - month: "February"
+        service: "Security"
+        spend: 8200
+      - month: "February"
+        service: "Monitoring"
+        spend: 4500
+      - month: "March"
+        service: "Compute"
+        spend: 47200
+      - month: "March"
+        service: "Storage"
+        spend: 20100
+      - month: "March"
+        service: "Database"
+        spend: 17400
+      - month: "March"
+        service: "Networking"
+        spend: 11200
+      - month: "March"
+        service: "Analytics"
+        spend: 15600
+      - month: "March"
+        service: "ML/AI"
+        spend: 28300
+      - month: "March"
+        service: "Security"
+        spend: 9100
+      - month: "March"
+        service: "Monitoring"
+        spend: 5200
+  transform:
+    aggregate:
+      dimensions: [month, service]
+      measures:
+        - column: spend
+          aggregation: sum
+          name: total_spend
+  visualize:
+    type: bar
+    mode: stacked
+    columns: month
+    rows: total_spend
+    marks:
+      color: service
+
+assertions:
+  structure:
+    root: svg
+    bars: 24
+    title_in_svg: false
+    legend: true
+    legend_entries: 8
+
+  stacked:
+    totals:
+      - label: "January"
+        total: 130500
+      - label: "February"
+        total: 141100
+      - label: "March"
+        total: 154100
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["January", "February", "March"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

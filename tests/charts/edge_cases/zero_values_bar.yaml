@@ -1,0 +1,64 @@
+name: "Bar chart — some bars have value 0"
+tags: [edge-case, zero-values, bar]
+description: >
+  Mixed data where two bars are zero and three have positive values.
+  Tests that zero-value bars render as zero-height (touching the
+  baseline) without breaking the layout, and that non-zero bars
+  render normally.
+
+chart:
+  type: chart
+  version: 1
+  title: "Support Tickets by Severity"
+  data:
+    provider: inline
+    rows:
+      - severity: "Critical"
+        count: 3
+      - severity: "High"
+        count: 12
+      - severity: "Medium"
+        count: 0
+      - severity: "Low"
+        count: 28
+      - severity: "Info"
+        count: 0
+  visualize:
+    type: bar
+    columns: severity
+    rows: count
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Critical"
+      value: 3
+      above_zero: true
+    - label: "High"
+      value: 12
+      above_zero: true
+    - label: "Medium"
+      value: 0
+      above_zero: false
+    - label: "Low"
+      value: 28
+      above_zero: true
+    - label: "Info"
+      value: 0
+      above_zero: false
+
+  scale:
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Critical", "High", "Medium", "Low", "Info"]
+    y:
+      min: 0
+      format: numeric

@@ -1,0 +1,60 @@
+name: "Simple scatter — budget vs sales with no color encoding"
+tags: [scatter, basic, no-color, two-axes]
+description: >
+  The simplest scatter plot: marketing budget on x-axis vs monthly
+  sales on y-axis. No color encoding, all points use the default
+  fill. Tests that circle elements render for each data point and
+  that both x and y axes are present.
+
+chart:
+  type: chart
+  version: 1
+  title: "Marketing Budget vs Monthly Sales"
+  data:
+    provider: inline
+    rows:
+      - budget: 5000
+        sales: 42000
+      - budget: 12000
+        sales: 68000
+      - budget: 8000
+        sales: 55000
+      - budget: 20000
+        sales: 95000
+      - budget: 15000
+        sales: 78000
+      - budget: 3000
+        sales: 31000
+  visualize:
+    type: scatter
+    columns: budget
+    rows: sales
+
+assertions:
+  structure:
+    root: svg
+    circles: 6
+    title_in_svg: false
+    legend: false
+
+  points:
+    - x: 5000
+      y: 42000
+    - x: 12000
+      y: 68000
+    - x: 8000
+      y: 55000
+    - x: 20000
+      y: 95000
+    - x: 15000
+      y: 78000
+    - x: 3000
+      y: 31000
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

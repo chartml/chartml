@@ -1,0 +1,42 @@
+name: "Doughnut chart — classic 80/20 split"
+tags: [doughnut, 2-segments, pareto, inner-radius, legend]
+description: >
+  Classic Pareto 80/20 distribution shown as a doughnut with two
+  segments. The dominant segment (80%) should occupy most of the
+  ring while the smaller (20%) is clearly visible. Tests rendering
+  with only two arcs and extreme size disparity.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue Concentration — 80/20 Rule"
+  data:
+    provider: inline
+    rows:
+      - segment: "Top 20% Customers"
+        revenue: 4000000
+      - segment: "Remaining 80%"
+        revenue: 1000000
+  visualize:
+    type: doughnut
+    columns: segment
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    slices: 2
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  slices:
+    - label: "Top 20% Customers"
+      value: 4000000
+    - label: "Remaining 80%"
+      value: 1000000
+
+  geometry:
+    arcs_sum_to_360: true
+    has_inner_radius: true
+    largest_slice: "Top 20% Customers"

@@ -1,0 +1,134 @@
+name: "Five series — product line comparison over 6 months"
+tags: [line, multi-series, legend, color-palette, five-colors]
+description: >
+  Revenue for 5 product lines (Core, Pro, Enterprise, API, Support)
+  tracked monthly over 6 months. Tests color palette depth beyond the
+  typical 3-color default, legend rendering with 5 entries, and visual
+  distinguishability of multiple overlapping lines.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue by Product Line"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        product: "Core"
+        revenue: 82000
+      - month: "Jan"
+        product: "Pro"
+        revenue: 64000
+      - month: "Jan"
+        product: "Enterprise"
+        revenue: 120000
+      - month: "Jan"
+        product: "API"
+        revenue: 31000
+      - month: "Jan"
+        product: "Support"
+        revenue: 18000
+      - month: "Feb"
+        product: "Core"
+        revenue: 85000
+      - month: "Feb"
+        product: "Pro"
+        revenue: 68000
+      - month: "Feb"
+        product: "Enterprise"
+        revenue: 125000
+      - month: "Feb"
+        product: "API"
+        revenue: 34000
+      - month: "Feb"
+        product: "Support"
+        revenue: 19500
+      - month: "Mar"
+        product: "Core"
+        revenue: 88000
+      - month: "Mar"
+        product: "Pro"
+        revenue: 72000
+      - month: "Mar"
+        product: "Enterprise"
+        revenue: 131000
+      - month: "Mar"
+        product: "API"
+        revenue: 37000
+      - month: "Mar"
+        product: "Support"
+        revenue: 20000
+      - month: "Apr"
+        product: "Core"
+        revenue: 91000
+      - month: "Apr"
+        product: "Pro"
+        revenue: 70000
+      - month: "Apr"
+        product: "Enterprise"
+        revenue: 138000
+      - month: "Apr"
+        product: "API"
+        revenue: 40000
+      - month: "Apr"
+        product: "Support"
+        revenue: 21500
+      - month: "May"
+        product: "Core"
+        revenue: 94000
+      - month: "May"
+        product: "Pro"
+        revenue: 75000
+      - month: "May"
+        product: "Enterprise"
+        revenue: 142000
+      - month: "May"
+        product: "API"
+        revenue: 43000
+      - month: "May"
+        product: "Support"
+        revenue: 22000
+      - month: "Jun"
+        product: "Core"
+        revenue: 97000
+      - month: "Jun"
+        product: "Pro"
+        revenue: 79000
+      - month: "Jun"
+        product: "Enterprise"
+        revenue: 148000
+      - month: "Jun"
+        product: "API"
+        revenue: 46000
+      - month: "Jun"
+        product: "Support"
+        revenue: 23500
+  visualize:
+    type: line
+    columns: month
+    rows: revenue
+    marks:
+      color: product
+
+assertions:
+  structure:
+    root: svg
+    lines: 5
+    title_in_svg: false
+    legend: true
+    legend_entries: 5
+
+  colors:
+    distinct: 5
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+    y:
+      min: 0
+      format: numeric

@@ -1,0 +1,40 @@
+name: "Metric card — error rate with inverted trend"
+tags: [metric, trend, inverted, percentage-format]
+description: >
+  Error rate is 2.3%, down from 3.1%. With invertTrend: true, the
+  decrease should display as positive (green) because a lower error
+  rate is desirable. Tests the invertTrend logic and percentage
+  formatting.
+
+chart:
+  type: chart
+  version: 1
+  title: "Error Rate"
+  data:
+    provider: inline
+    rows:
+      - current: 0.023
+        previous: 0.031
+  visualize:
+    type: metric
+    value: current
+    label: "Error Rate"
+    format: ".1%"
+    compareWith: previous
+    invertTrend: true
+
+assertions:
+  structure:
+    root: div
+    is_metric_card: true
+
+  value:
+    raw: 0.023
+    formatted_contains: "2.3%"
+
+  trend:
+    direction: down
+    arrow: true
+    positive: true
+    inverted: true
+    compare_value: 0.031

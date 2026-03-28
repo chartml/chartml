@@ -1,0 +1,111 @@
+name: "Combo — sales volume bars (left) + conversion rate line (right, %)"
+tags: [bar, dual-axis, combo, line, ecommerce]
+description: >
+  E-commerce dashboard pairing total sales volume as bars on the left
+  axis with conversion rate as a line on the right axis. Tests dual
+  axis with a unit-less count on the left and a percentage on the right.
+
+chart:
+  type: chart
+  version: 1
+  title: "Sales Volume & Conversion Rate by Month"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        sales: 4820
+        conversion: 3.2
+      - month: "Feb"
+        sales: 5130
+        conversion: 3.5
+      - month: "Mar"
+        sales: 5670
+        conversion: 3.8
+      - month: "Apr"
+        sales: 4980
+        conversion: 3.1
+      - month: "May"
+        sales: 6240
+        conversion: 4.1
+      - month: "Jun"
+        sales: 7100
+        conversion: 4.6
+      - month: "Jul"
+        sales: 6890
+        conversion: 4.3
+      - month: "Aug"
+        sales: 7450
+        conversion: 4.8
+  visualize:
+    type: bar
+    columns: month
+    rows:
+      - field: sales
+        axis: left
+        label: "Sales Volume"
+      - field: conversion
+        mark: line
+        axis: right
+        label: "Conversion Rate %"
+    axes:
+      left:
+        label: "Sales (units)"
+        format: ",.0f"
+      right:
+        label: "Conversion Rate (%)"
+        format: ".1f"
+        min: 0
+        max: 6
+
+assertions:
+  structure:
+    root: svg
+    bars: 8
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+    y_axes: 2
+
+  bars:
+    - label: "Jan"
+      value: 4820
+    - label: "Feb"
+      value: 5130
+    - label: "Mar"
+      value: 5670
+    - label: "Apr"
+      value: 4980
+    - label: "May"
+      value: 6240
+    - label: "Jun"
+      value: 7100
+    - label: "Jul"
+      value: 6890
+    - label: "Aug"
+      value: 7450
+
+  dual_axis:
+    left_axis_present: true
+    right_axis_present: true
+    left_label: "Sales (units)"
+    right_label: "Conversion Rate (%)"
+
+  scale:
+    left:
+      y_min: 0
+      y_nice: true
+    right:
+      y_min: 0
+      y_max: 6
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"]
+      orientation: horizontal
+    y_left:
+      min: 0
+      format: numeric
+    y_right:
+      min: 0
+      max: 6
+      format: decimal

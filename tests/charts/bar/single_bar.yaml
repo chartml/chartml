@@ -1,0 +1,49 @@
+name: "Single bar — edge case with one data point"
+tags: [bar, edge-case, single-point, single-series]
+description: >
+  Only one data point. The bar should render at a reasonable width
+  (not spanning the entire chart width) and the chart should still
+  have proper axes and padding. Edge case that catches divide-by-zero
+  or unbounded-width bugs.
+
+chart:
+  type: chart
+  version: 1
+  title: "Total Annual Revenue"
+  data:
+    provider: inline
+    rows:
+      - year: "2025"
+        revenue: 1876000
+  visualize:
+    type: bar
+    columns: year
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 1
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "2025"
+      value: 1876000
+
+  bar_width:
+    clamped: true
+    not_full_width: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["2025"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

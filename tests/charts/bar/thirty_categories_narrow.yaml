@@ -1,0 +1,104 @@
+name: "Bar chart — 30 categories on 500px wide chart (extreme density)"
+tags: [bar, label-density, many-categories, narrow, stress, single-series]
+description: >
+  30 department codes rendered on a 500px wide chart. This creates extreme
+  label density where the renderer must aggressively thin labels or rotate
+  them to avoid total overlap. Tests label handling under severe space
+  constraints.
+
+chart:
+  type: chart
+  version: 1
+  title: "Budget by Department"
+  data:
+    provider: inline
+    rows:
+      - dept: "Accounting"
+        budget: 245000
+      - dept: "Admin"
+        budget: 128000
+      - dept: "Analytics"
+        budget: 310000
+      - dept: "Compliance"
+        budget: 189000
+      - dept: "Creative"
+        budget: 276000
+      - dept: "Customer Svc"
+        budget: 342000
+      - dept: "Data Ops"
+        budget: 198000
+      - dept: "DevOps"
+        budget: 415000
+      - dept: "Engineering"
+        budget: 520000
+      - dept: "Facilities"
+        budget: 156000
+      - dept: "Finance"
+        budget: 287000
+      - dept: "Growth"
+        budget: 234000
+      - dept: "HR"
+        budget: 178000
+      - dept: "InfoSec"
+        budget: 365000
+      - dept: "IT Support"
+        budget: 298000
+      - dept: "Legal"
+        budget: 267000
+      - dept: "Logistics"
+        budget: 213000
+      - dept: "Marketing"
+        budget: 389000
+      - dept: "Operations"
+        budget: 312000
+      - dept: "Partnerships"
+        budget: 176000
+      - dept: "Procurement"
+        budget: 145000
+      - dept: "Product"
+        budget: 456000
+      - dept: "QA"
+        budget: 198000
+      - dept: "R&D"
+        budget: 478000
+      - dept: "Recruiting"
+        budget: 167000
+      - dept: "Sales"
+        budget: 534000
+      - dept: "Strategy"
+        budget: 223000
+      - dept: "Tax"
+        budget: 134000
+      - dept: "Training"
+        budget: 112000
+      - dept: "UX Design"
+        budget: 267000
+  visualize:
+    type: bar
+    columns: dept
+    rows: budget
+    style:
+      width: 500
+      height: 300
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 500
+    svg_height: 300
+    bars: 30
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels_sampled: true
+      orientation: rotated
+    y:
+      min: 0
+      format: numeric
