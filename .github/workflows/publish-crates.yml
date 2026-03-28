@@ -1,0 +1,52 @@
+name: Publish to crates.io
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (--dry-run flag)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Publish crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            FLAGS="--dry-run"
+            echo "DRY RUN MODE"
+          fi
+
+          echo "=== Group 1: core crates ==="
+          cargo publish -p chartml-core --no-verify $FLAGS
+          cargo publish -p chartml-forecast --no-verify $FLAGS
+          sleep 60
+
+          echo "=== Group 2: chart renderers ==="
+          cargo publish -p chartml-chart-cartesian $FLAGS
+          cargo publish -p chartml-chart-pie $FLAGS
+          cargo publish -p chartml-chart-scatter $FLAGS
+          cargo publish -p chartml-chart-metric $FLAGS
+          sleep 60
+
+          echo "=== Group 3: higher-level crates ==="
+          cargo publish -p chartml-datafusion $FLAGS
+          cargo publish -p chartml-render $FLAGS

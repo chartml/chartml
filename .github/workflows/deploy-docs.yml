@@ -17,15 +17,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
-      - name: Install and build packages
+      - name: Build WASM and npm packages
         run: |
+          bash packages/core/build.sh
+          bash packages/datafusion/build.sh
           npm ci
-          npm run build:packages
+          npm run build --workspaces --if-present
 
       - name: Build docs
         working-directory: docs
@@ -35,6 +47,7 @@ jobs:
 
       - name: Deploy
         run: |
+          [ -d docs/docs/.vitepress/dist ] || { echo "Build output missing"; exit 1; }
           rm -rf /www/chartml.org/*
           cp -r docs/docs/.vitepress/dist/* /www/chartml.org/
           echo "Docs deployed to /www/chartml.org"

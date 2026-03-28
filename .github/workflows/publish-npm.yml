@@ -40,6 +40,21 @@ jobs:
           echo "npm version: $(npm --version)"
           # npm v11.5.1+ required for Trusted Publishing OIDC
 
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build WASM packages
+        run: |
+          bash packages/core/build.sh
+          bash packages/datafusion/build.sh
+
       - name: Install dependencies
         run: npm ci
 
@@ -72,8 +87,8 @@ jobs:
           echo "Validating built packages..."
           for pkg in $(cat changed-packages.json | jq -r '.[].name'); do
             PKG_DIR=$(find packages -name package.json -exec grep -l "\"name\": \"$pkg\"" {} \; | head -1 | xargs dirname)
-            if [ ! -d "$PKG_DIR/dist" ] && [ ! -f "$PKG_DIR/src/index.js" ]; then
-              echo "ERROR: Package $pkg is missing dist/ directory and src/ files"
+            if [ ! -d "$PKG_DIR/dist" ] && [ ! -d "$PKG_DIR/pkg" ] && [ ! -f "$PKG_DIR/src/index.js" ]; then
+              echo "ERROR: Package $pkg is missing dist/, pkg/, and src/ files"
               exit 1
             fi
             echo "✓ $pkg validated"
