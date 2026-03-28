@@ -77,6 +77,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
       - run: bash packages/core/build.sh
       - run: bash packages/datafusion/build.sh
 

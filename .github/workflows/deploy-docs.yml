@@ -34,9 +34,9 @@ jobs:
 
       - name: Build WASM and npm packages
         run: |
+          npm ci
           bash packages/core/build.sh
           bash packages/datafusion/build.sh
-          npm ci
           npm run build --workspaces --if-present
 
       - name: Build docs
