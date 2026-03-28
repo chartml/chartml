@@ -17,7 +17,7 @@ GOLDEN_DIR="test-output/golden"
 
 # Chart evaluator public key
 PUBLIC_KEY="-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAFBoUllCvCjUKbZy+ZVDwpC6GVGBMHU43nlaIeS8zus0=
+MCowBQYDK2VwAyEA9+py+eA+gdXCxchd6IM+bA0ygA7OtOfk8/cHCnZ1lAo=
 -----END PUBLIC KEY-----"
 
 PUB_FILE=$(mktemp)

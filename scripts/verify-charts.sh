@@ -15,7 +15,7 @@ GOLDEN_DIR="${1:-test-output/golden}"
 
 # Chart evaluator public key (Ed25519)
 PUBLIC_KEY="-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAFBoUllCvCjUKbZy+ZVDwpC6GVGBMHU43nlaIeS8zus0=
+MCowBQYDK2VwAyEA9+py+eA+gdXCxchd6IM+bA0ygA7OtOfk8/cHCnZ1lAo=
 -----END PUBLIC KEY-----"
 
 if [ ! -d "$GOLDEN_DIR" ]; then
