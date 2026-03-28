@@ -13,6 +13,7 @@ members = [
     "crates/chartml-render",
     "crates/chartml-test-runner",
     "crates/chartml-wasm",
+    "crates/chartml-wasm-datafusion",
     "demo",
 ]
 

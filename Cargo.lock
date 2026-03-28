@@ -674,6 +674,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "chartml-wasm-datafusion"
+version = "2.0.0"
+dependencies = [
+ "chartml-core",
+ "chartml-datafusion",
+ "getrandom 0.2.17",
+ "js-sys",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"

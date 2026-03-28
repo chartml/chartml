@@ -25,7 +25,8 @@ use std::sync::Arc;
 /// 3. **Forecast stage** — time series forecasting via chartml-forecast
 pub struct DataFusionTransform;
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl TransformMiddleware for DataFusionTransform {
     async fn transform(
         &self,

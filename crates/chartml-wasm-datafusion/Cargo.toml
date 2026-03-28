@@ -1,28 +1,22 @@
 [package]
-name = "chartml-wasm"
+name = "chartml-wasm-datafusion"
 version = "2.0.0"
 edition = "2021"
 license = "MIT"
-description = "ChartML WASM bindings for npm — chart rendering engine for JavaScript"
+description = "ChartML DataFusion transform plugin — SQL/aggregate/forecast for WASM"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 chartml-core = { path = "../chartml-core" }
-chartml-chart-cartesian = { path = "../chartml-chart-cartesian" }
-chartml-chart-pie = { path = "../chartml-chart-pie" }
-chartml-chart-scatter = { path = "../chartml-chart-scatter" }
-chartml-chart-metric = { path = "../chartml-chart-metric" }
-chartml-render = { path = "../chartml-render", default-features = false }
+chartml-datafusion = { path = "../chartml-datafusion" }
 wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 serde-wasm-bindgen = "0.6"
 js-sys = "0.3"
-wasm-bindgen-futures = "0.4"
-async-trait = "0.1"
-serde_json = "1"
-web-sys = { version = "0.3", features = ["Request", "RequestInit", "Response", "Window"] }
 getrandom = { version = "0.2", features = ["js"] }
 
 # Cannot use workspace lints because wasm_bindgen emits #[allow(dead_code)]
