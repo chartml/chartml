@@ -1,4 +1,0 @@
-# Ensure golden SVGs and signatures have consistent line endings across platforms.
-# The sha256 hash in .sig files must match the exact bytes on disk.
-test-output/golden/**/*.svg binary
-test-output/golden/**/*.sig binary
