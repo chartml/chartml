@@ -7,6 +7,9 @@
 //! Kyomi dashboard viewer and the MCP chart app.
 
 use leptos::prelude::*;
+use send_wrapper::SendWrapper;
+use std::cell::RefCell;
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -134,15 +137,16 @@ fn format_relative_time(timestamp_ms: f64) -> String {
     format!("{days}d ago")
 }
 
-/// Set a timeout via web_sys.
-fn set_timeout(ms: i32, f: impl FnOnce() + 'static) {
+/// Set a timeout via web_sys. Returns the timeout ID for cancellation.
+fn set_timeout(ms: i32, f: impl FnOnce() + 'static) -> i32 {
     let cb = Closure::once_into_js(f);
-    let _ = web_sys::window()
+    web_sys::window()
         .unwrap()
         .set_timeout_with_callback_and_timeout_and_arguments_0(
             cb.unchecked_ref(),
             ms,
-        );
+        )
+        .unwrap_or(0)
 }
 
 // ---------------------------------------------------------------------------
@@ -159,39 +163,66 @@ fn ChartTypeSelector(
     let menu_ref = NodeRef::<leptos::html::Div>::new();
     let current = StoredValue::new(current_type);
 
-    // Close on Escape
-    Effect::new(move || {
-        if !open.get() { return; }
-        let handler = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |e: web_sys::KeyboardEvent| {
-            if e.key() == "Escape" {
-                set_open.set(false);
+    // Close on Escape / click-outside — listeners added when open, removed when closed or disposed.
+    // SendWrapper is safe: WASM is single-threaded, these closures never cross threads.
+    type KeyHandler = SendWrapper<Rc<RefCell<Option<(Closure<dyn Fn(web_sys::KeyboardEvent)>, web_sys::Window)>>>>;
+    type ClickHandler = SendWrapper<Rc<RefCell<Option<(Closure<dyn Fn(web_sys::MouseEvent)>, web_sys::Window)>>>>;
+    let esc_handler: KeyHandler = SendWrapper::new(Rc::new(RefCell::new(None)));
+    let click_handler: ClickHandler = SendWrapper::new(Rc::new(RefCell::new(None)));
+    let click_timeout: SendWrapper<Rc<RefCell<Option<i32>>>> = SendWrapper::new(Rc::new(RefCell::new(None)));
+
+    let remove_esc = {
+        let h = esc_handler.clone();
+        move || { if let Some((cb, win)) = h.borrow_mut().take() {
+            let _ = win.remove_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref());
+        }}
+    };
+    let remove_click = {
+        let h = click_handler.clone();
+        let t = click_timeout.clone();
+        move || {
+            if let Some(tid) = t.borrow_mut().take() {
+                web_sys::window().unwrap().clear_timeout_with_handle(tid);
             }
-        });
+            if let Some((cb, win)) = h.borrow_mut().take() {
+                let _ = win.remove_event_listener_with_callback("click", cb.as_ref().unchecked_ref());
+            }
+        }
+    };
+
+    let remove_esc_e = remove_esc.clone();
+    let remove_click_e = remove_click.clone();
+    let esc_h = esc_handler.clone();
+    let click_h = click_handler.clone();
+    let click_t = click_timeout.clone();
+    Effect::new(move || {
+        if !open.get() { remove_esc_e(); remove_click_e(); return; }
         let window = web_sys::window().unwrap();
-        let _ = window.add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
-        handler.forget();
+
+        remove_esc_e();
+        let esc_cb = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |e: web_sys::KeyboardEvent| {
+            if e.key() == "Escape" { set_open.set(false); }
+        });
+        let _ = window.add_event_listener_with_callback("keydown", esc_cb.as_ref().unchecked_ref());
+        *esc_h.borrow_mut() = Some((esc_cb, window.clone()));
+
+        remove_click_e();
+        let click_h2 = click_h.clone();
+        let win2 = window.clone();
+        let tid = set_timeout(0, move || {
+            let click_cb = Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |e: web_sys::MouseEvent| {
+                if let Some(menu) = menu_ref.get() {
+                    let target = e.target().and_then(|t| t.dyn_into::<web_sys::Node>().ok());
+                    if let Some(t) = target { if !menu.contains(Some(&t)) { set_open.set(false); } }
+                }
+            });
+            let _ = win2.add_event_listener_with_callback("click", click_cb.as_ref().unchecked_ref());
+            *click_h2.borrow_mut() = Some((click_cb, win2));
+        });
+        *click_t.borrow_mut() = Some(tid);
     });
 
-    // Close on click outside
-    Effect::new(move || {
-        if !open.get() { return; }
-        let handler = Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |e: web_sys::MouseEvent| {
-            if let Some(menu) = menu_ref.get() {
-                let target = e.target().and_then(|t| t.dyn_into::<web_sys::Node>().ok());
-                if let Some(target) = target {
-                    if !menu.contains(Some(&target)) {
-                        set_open.set(false);
-                    }
-                }
-            }
-        });
-        let window = web_sys::window().unwrap();
-        // Use setTimeout to avoid closing on the same click that opened it
-        set_timeout(0, move || {
-            let _ = window.add_event_listener_with_callback("click", handler.as_ref().unchecked_ref());
-            handler.forget();
-        });
-    });
+    on_cleanup(move || { remove_esc(); remove_click(); });
 
     let current_label = CHART_TYPES.iter()
         .find(|(t, _)| *t == current.get_value())
@@ -339,38 +370,65 @@ pub fn ChartHeaderBar(
     // Any menu items to show?
     let has_menu_items = show_edit || show_delete || show_save_to_dashboard || show_info || show_ask_about;
 
-    // Close menu on click outside
-    Effect::new(move || {
-        if !menu_open.get() { return; }
-        let handler = Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |e: web_sys::MouseEvent| {
-            if let Some(menu) = menu_ref.get() {
-                let target = e.target().and_then(|t| t.dyn_into::<web_sys::Node>().ok());
-                if let Some(target) = target {
-                    if !menu.contains(Some(&target)) {
-                        set_menu_open.set(false);
-                    }
-                }
+    // Close menu on Escape / click-outside
+    type MKeyHandler = SendWrapper<Rc<RefCell<Option<(Closure<dyn Fn(web_sys::KeyboardEvent)>, web_sys::Window)>>>>;
+    type MClickHandler = SendWrapper<Rc<RefCell<Option<(Closure<dyn Fn(web_sys::MouseEvent)>, web_sys::Window)>>>>;
+    let menu_esc_handler: MKeyHandler = SendWrapper::new(Rc::new(RefCell::new(None)));
+    let menu_click_handler: MClickHandler = SendWrapper::new(Rc::new(RefCell::new(None)));
+
+    let remove_menu_esc = {
+        let h = menu_esc_handler.clone();
+        move || { if let Some((cb, win)) = h.borrow_mut().take() {
+            let _ = win.remove_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref());
+        }}
+    };
+    let menu_click_timeout: SendWrapper<Rc<RefCell<Option<i32>>>> = SendWrapper::new(Rc::new(RefCell::new(None)));
+    let remove_menu_click = {
+        let h = menu_click_handler.clone();
+        let t = menu_click_timeout.clone();
+        move || {
+            if let Some(tid) = t.borrow_mut().take() {
+                web_sys::window().unwrap().clear_timeout_with_handle(tid);
             }
+            if let Some((cb, win)) = h.borrow_mut().take() {
+                let _ = win.remove_event_listener_with_callback("click", cb.as_ref().unchecked_ref());
+            }
+        }
+    };
+
+    let remove_menu_esc_e = remove_menu_esc.clone();
+    let remove_menu_click_e = remove_menu_click.clone();
+    let menu_esc_h = menu_esc_handler.clone();
+    let menu_click_h = menu_click_handler.clone();
+    let menu_click_t = menu_click_timeout.clone();
+    Effect::new(move || {
+        if !menu_open.get() { remove_menu_esc_e(); remove_menu_click_e(); return; }
+        let window = web_sys::window().unwrap();
+
+        remove_menu_esc_e();
+        let esc_cb = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |e: web_sys::KeyboardEvent| {
+            if e.key() == "Escape" { set_menu_open.set(false); }
         });
-        set_timeout(0, move || {
-            let window = web_sys::window().unwrap();
-            let _ = window.add_event_listener_with_callback("click", handler.as_ref().unchecked_ref());
-            handler.forget();
+        let _ = window.add_event_listener_with_callback("keydown", esc_cb.as_ref().unchecked_ref());
+        *menu_esc_h.borrow_mut() = Some((esc_cb, window.clone()));
+
+        remove_menu_click_e();
+        let click_h2 = menu_click_h.clone();
+        let win2 = window.clone();
+        let tid = set_timeout(0, move || {
+            let click_cb = Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |e: web_sys::MouseEvent| {
+                if let Some(menu) = menu_ref.get() {
+                    let target = e.target().and_then(|t| t.dyn_into::<web_sys::Node>().ok());
+                    if let Some(t) = target { if !menu.contains(Some(&t)) { set_menu_open.set(false); } }
+                }
+            });
+            let _ = win2.add_event_listener_with_callback("click", click_cb.as_ref().unchecked_ref());
+            *click_h2.borrow_mut() = Some((click_cb, win2));
         });
+        *menu_click_t.borrow_mut() = Some(tid);
     });
 
-    // Close menu on Escape
-    Effect::new(move || {
-        if !menu_open.get() { return; }
-        let handler = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |e: web_sys::KeyboardEvent| {
-            if e.key() == "Escape" {
-                set_menu_open.set(false);
-            }
-        });
-        let window = web_sys::window().unwrap();
-        let _ = window.add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
-        handler.forget();
-    });
+    on_cleanup(move || { remove_menu_esc(); remove_menu_click(); });
 
     view! {
         <div class="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-border">
