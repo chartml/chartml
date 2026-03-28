@@ -1,0 +1,54 @@
+name: "Bubble chart — all bubbles have equal size"
+tags: [bubble, size-encoding, uniform-radius, edge-case]
+description: >
+  All bubbles have the same size value (100). Tests that the renderer
+  handles uniform size data gracefully — all circles should render with
+  identical radii without scale errors or zero-radius issues.
+
+chart:
+  type: chart
+  version: 1
+  title: "Feature Complexity vs User Satisfaction"
+  data:
+    provider: inline
+    rows:
+      - complexity: 3
+        satisfaction: 85
+        usage: 100
+      - complexity: 5
+        satisfaction: 72
+        usage: 100
+      - complexity: 7
+        satisfaction: 65
+        usage: 100
+      - complexity: 2
+        satisfaction: 91
+        usage: 100
+      - complexity: 9
+        satisfaction: 55
+        usage: 100
+  visualize:
+    type: bubble
+    columns: complexity
+    rows: satisfaction
+    marks:
+      size: usage
+
+assertions:
+  structure:
+    root: svg
+    circles: 5
+    title_in_svg: false
+    legend: false
+
+  size_encoding:
+    field: usage
+    varying_radii: false
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

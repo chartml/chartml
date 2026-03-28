@@ -1,0 +1,67 @@
+name: "Temporal quarterly — ISO date quarters over 3 years"
+tags: [line, temporal, quarterly, date-axis, single-series]
+description: >
+  Quarterly ARR (Annual Recurring Revenue) from Q1 2023 through Q4 2025
+  using ISO date strings (first day of each quarter) as the x-axis.
+  Tests temporal axis detection and formatting with quarterly granularity
+  across a 3-year span (12 data points). The renderer should detect the
+  date format and display human-readable quarter labels.
+
+chart:
+  type: chart
+  version: 1
+  title: "Quarterly ARR — 2023 to 2025"
+  data:
+    provider: inline
+    rows:
+      - date: "2023-01-01"
+        arr: 1200000
+      - date: "2023-04-01"
+        arr: 1350000
+      - date: "2023-07-01"
+        arr: 1480000
+      - date: "2023-10-01"
+        arr: 1620000
+      - date: "2024-01-01"
+        arr: 1780000
+      - date: "2024-04-01"
+        arr: 1950000
+      - date: "2024-07-01"
+        arr: 2140000
+      - date: "2024-10-01"
+        arr: 2350000
+      - date: "2025-01-01"
+        arr: 2580000
+      - date: "2025-04-01"
+        arr: 2830000
+      - date: "2025-07-01"
+        arr: 3100000
+      - date: "2025-10-01"
+        arr: 3400000
+  visualize:
+    type: line
+    columns: date
+    rows: arr
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  temporal:
+    date_reformatted: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      label_count: 12
+      temporal: true
+    y:
+      min: 0
+      format: numeric

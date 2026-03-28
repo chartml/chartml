@@ -1,0 +1,52 @@
+name: "Single area — verify fill path and stroke line"
+tags: [area, basic, fill-and-stroke, single-series]
+description: >
+  Quarterly support ticket volume as a single area chart. This test
+  verifies that the area rendering produces both a filled path
+  (the shaded region) and a stroked line (the top edge). Both
+  elements are essential for a well-formed area chart.
+
+chart:
+  type: chart
+  version: 1
+  title: "Support Ticket Volume"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1"
+        tickets: 2340
+      - quarter: "Q2"
+        tickets: 2780
+      - quarter: "Q3"
+        tickets: 3120
+      - quarter: "Q4"
+        tickets: 2890
+  visualize:
+    type: area
+    columns: quarter
+    rows: tickets
+
+assertions:
+  structure:
+    root: svg
+    areas: 1
+    title_in_svg: false
+    legend: false
+
+  area_paths:
+    - series: "tickets"
+      has_fill: true
+      has_stroke_line: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Q1", "Q2", "Q3", "Q4"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

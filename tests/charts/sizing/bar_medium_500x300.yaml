@@ -1,0 +1,69 @@
+name: "Medium bar chart — 6 bars at 500x300 (half-width panel)"
+tags: [bar, sizing, medium, 500x300]
+description: >
+  Bar chart rendered at half-width dashboard panel size (500x300).
+  A common size for side-by-side chart layouts. Tests that 6 bars
+  distribute evenly in this moderately sized viewport.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue by Product"
+  data:
+    provider: inline
+    rows:
+      - product: "Basic"
+        revenue: 120000
+      - product: "Pro"
+        revenue: 285000
+      - product: "Team"
+        revenue: 195000
+      - product: "Enterprise"
+        revenue: 410000
+      - product: "Custom"
+        revenue: 78000
+      - product: "Education"
+        revenue: 53000
+  visualize:
+    type: bar
+    columns: product
+    rows: revenue
+    style:
+      width: 500
+      height: 300
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 500
+    svg_height: 300
+    bars: 6
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Basic"
+      value: 120000
+    - label: "Pro"
+      value: 285000
+    - label: "Team"
+      value: 195000
+    - label: "Enterprise"
+      value: 410000
+    - label: "Custom"
+      value: 78000
+    - label: "Education"
+      value: 53000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Basic", "Pro", "Team", "Enterprise", "Custom", "Education"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

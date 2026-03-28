@@ -1,0 +1,61 @@
+name: "Area chart with grid lines enabled"
+tags: [area, grid, style, single-series]
+description: >
+  Monthly active users with both x and y grid lines enabled.
+  Grid lines should render behind the area fill so the data
+  remains visually prominent. Tests grid rendering in combination
+  with area fills.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Active Users"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        mau: 12400
+      - month: "Feb"
+        mau: 13800
+      - month: "Mar"
+        mau: 15200
+      - month: "Apr"
+        mau: 16900
+      - month: "May"
+        mau: 18100
+      - month: "Jun"
+        mau: 20500
+  visualize:
+    type: area
+    columns: month
+    rows: mau
+    style:
+      grid:
+        x: true
+        y: true
+
+assertions:
+  structure:
+    root: svg
+    areas: 1
+    title_in_svg: false
+    legend: false
+    grid_lines_present: true
+
+  grid:
+    x_grid: true
+    y_grid: true
+    rendered_behind_areas: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

@@ -1,0 +1,21 @@
+type: chart
+version: 1
+title: "Revenue Distribution"
+data:
+  provider: inline
+  rows:
+    - region: "North America"
+      revenue: 520000
+    - region: "Europe"
+      revenue: 380000
+    - region: "Asia Pacific"
+      revenue: 450000
+    - region: "Latin America"
+      revenue: 125000
+visualize:
+  type: doughnut
+  columns: region
+  rows: revenue
+  style:
+    height: 400
+    colors: ["#4285f4", "#ea4335", "#fbbc04", "#34a853"]

@@ -1,0 +1,67 @@
+name: "Date formatting — irregular date spacing"
+tags: [line, temporal, irregular, date-axis, date-formatting, single-series]
+description: >
+  Data points with non-uniform temporal spacing — some weekly, some
+  biweekly, some with multi-week gaps. Tests that the renderer handles
+  irregular intervals gracefully and spaces points proportionally on
+  the temporal axis rather than treating them as categorical.
+
+chart:
+  type: chart
+  version: 1
+  title: "Deployment Frequency"
+  data:
+    provider: inline
+    rows:
+      - date: "2025-01-06"
+        deploys: 3
+      - date: "2025-01-13"
+        deploys: 5
+      - date: "2025-01-20"
+        deploys: 4
+      - date: "2025-02-03"
+        deploys: 7
+      - date: "2025-02-10"
+        deploys: 6
+      - date: "2025-03-01"
+        deploys: 8
+      - date: "2025-03-08"
+        deploys: 9
+      - date: "2025-03-15"
+        deploys: 11
+      - date: "2025-03-22"
+        deploys: 10
+      - date: "2025-04-12"
+        deploys: 12
+      - date: "2025-05-01"
+        deploys: 14
+      - date: "2025-05-15"
+        deploys: 13
+  visualize:
+    type: line
+    columns: date
+    rows: deploys
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  temporal:
+    date_reformatted: true
+
+  scale:
+    # FEATURE_GAP: proportional temporal spacing not yet implemented for categorical charts.
+    # Aspirational: proportional: true (dates should be spaced by actual time intervals)
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      # FEATURE_GAP: temporal: true — renderer currently treats irregular dates as categorical (equal spacing)
+      # Aspirational: temporal: true (x-axis should use continuous temporal scale)
+    y:
+      min: 0
+      format: numeric

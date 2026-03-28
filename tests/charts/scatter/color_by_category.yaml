@@ -1,0 +1,79 @@
+name: "Scatter with 3 categories color-encoded"
+tags: [scatter, color-encoding, 3-categories, legend]
+description: >
+  Scatter plot of price vs satisfaction score, colored by product
+  tier (Basic, Pro, Enterprise). Tests that circles have different
+  fill colors per category and that the legend shows 3 entries.
+
+chart:
+  type: chart
+  version: 1
+  title: "Price vs Customer Satisfaction by Tier"
+  data:
+    provider: inline
+    rows:
+      - price: 29
+        satisfaction: 72
+        tier: "Basic"
+      - price: 49
+        satisfaction: 81
+        tier: "Basic"
+      - price: 99
+        satisfaction: 85
+        tier: "Pro"
+      - price: 149
+        satisfaction: 88
+        tier: "Pro"
+      - price: 299
+        satisfaction: 91
+        tier: "Enterprise"
+      - price: 499
+        satisfaction: 94
+        tier: "Enterprise"
+  visualize:
+    type: scatter
+    columns: price
+    rows: satisfaction
+    marks:
+      color: tier
+
+assertions:
+  structure:
+    root: svg
+    circles: 6
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  points:
+    - x: 29
+      y: 72
+      series: "Basic"
+    - x: 49
+      y: 81
+      series: "Basic"
+    - x: 99
+      y: 85
+      series: "Pro"
+    - x: 149
+      y: 88
+      series: "Pro"
+    - x: 299
+      y: 91
+      series: "Enterprise"
+    - x: 499
+      y: 94
+      series: "Enterprise"
+
+  color_encoding:
+    field: tier
+    categories: ["Basic", "Pro", "Enterprise"]
+    distinct_fills: 3
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

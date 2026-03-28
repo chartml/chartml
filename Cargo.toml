@@ -1,0 +1,50 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "crates/chartml-core",
+    "crates/chartml-chart-cartesian",
+    "crates/chartml-chart-pie",
+    "crates/chartml-chart-scatter",
+    "crates/chartml-chart-metric",
+    "crates/chartml-forecast",
+    "crates/chartml-datafusion",
+    "crates/chartml-leptos",
+    "crates/chartml-render",
+    "crates/chartml-test-runner",
+    "crates/chartml-wasm",
+    "crates/chartml-wasm-datafusion",
+    "demo",
+]
+
+default-members = [
+    "crates/chartml-core",
+    "crates/chartml-chart-cartesian",
+    "crates/chartml-chart-pie",
+    "crates/chartml-chart-scatter",
+    "crates/chartml-chart-metric",
+    "crates/chartml-forecast",
+    "crates/chartml-datafusion",
+    "crates/chartml-render",
+    "crates/chartml-test-runner",
+]
+
+# Workspace-wide lint policy — forbid = cannot be overridden by #[allow(...)].
+# unused_variables uses "deny" because thiserror macros internally emit #[allow(unused_variables)].
+[workspace.lints.rust]
+dead_code = "forbid"
+unused_imports = "forbid"
+unused_variables = "deny"
+unused_mut = "forbid"
+
+[workspace.lints.clippy]
+too_many_arguments = "forbid"
+large_enum_variant = "forbid"
+wrong_self_convention = "forbid"
+
+# Optimize WASM release builds for size
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
+strip = true

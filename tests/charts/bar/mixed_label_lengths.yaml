@@ -1,0 +1,96 @@
+name: "Bar chart — 10 bars with mixed label lengths (2 to 35 chars)"
+tags: [bar, label-density, mixed-lengths, variable-width, single-series]
+description: >
+  10 bars where label lengths vary dramatically from 2 characters ("IT")
+  to 35 characters. Tests that the renderer handles variable-width labels
+  gracefully — short labels should not create excessive whitespace while
+  long labels should not overflow or collide.
+
+chart:
+  type: chart
+  version: 1
+  title: "Department Headcount"
+  data:
+    provider: inline
+    rows:
+      - dept: "IT"
+        headcount: 45
+      - dept: "HR"
+        headcount: 22
+      - dept: "Sales"
+        headcount: 67
+      - dept: "Engineering"
+        headcount: 134
+      - dept: "Ops"
+        headcount: 38
+      - dept: "Customer Success & Retention Team"
+        headcount: 52
+      - dept: "QA"
+        headcount: 28
+      - dept: "International Business Development"
+        headcount: 41
+      - dept: "Marketing & Brand Communications"
+        headcount: 89
+      - dept: "Finance"
+        headcount: 31
+  visualize:
+    type: bar
+    columns: dept
+    rows: headcount
+
+assertions:
+  structure:
+    root: svg
+    bars: 10
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "IT"
+      value: 45
+    - label: "HR"
+      value: 22
+    - label: "Sales"
+      value: 67
+    - label: "Engineering"
+      value: 134
+    - label: "Ops"
+      value: 38
+    - label: "Customer Success & Retention Team"
+      value: 52
+    - label: "QA"
+      value: 28
+    - label: "International Business Development"
+      value: 41
+    - label: "Marketing & Brand Communications"
+      value: 89
+    - label: "Finance"
+      value: 31
+
+  label_rotation:
+    x_labels_rotated: true
+    transform_exists: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "IT"
+        - "HR"
+        - "Sales"
+        - "Engineering"
+        - "Ops"
+        - "Customer Success & Retention Team"
+        - "QA"
+        - "International Business Development"
+        - "Marketing & Brand Communications"
+        - "Finance"
+      orientation: horizontal
+      rotation: true
+    y:
+      min: 0
+      format: numeric

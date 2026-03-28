@@ -1,0 +1,31 @@
+type: chart
+version: 1
+title: "Revenue by Region (Ranked)"
+data:
+  provider: inline
+  rows:
+    - region: "North America"
+      revenue: 520000
+    - region: "Europe"
+      revenue: 380000
+    - region: "Asia Pacific"
+      revenue: 450000
+    - region: "Latin America"
+      revenue: 125000
+transform:
+  aggregate:
+    dimensions: [region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+    sort:
+      - field: total_revenue
+        direction: desc
+visualize:
+  type: bar
+  orientation: horizontal
+  columns: region
+  rows: total_revenue
+  style:
+    height: 250

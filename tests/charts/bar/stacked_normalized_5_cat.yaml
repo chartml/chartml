@@ -1,0 +1,114 @@
+name: "Normalized stacked bar — 5 traffic source categories"
+tags: [bar, normalized, multi-series, percentage, many-series, legend]
+description: >
+  Website traffic sources shown as 100% stacked bars across 4 quarters
+  with 5 categories. Tests normalized mode with more series than the
+  existing 4-region market share spec. All stacks should reach exactly
+  100% regardless of absolute values.
+
+chart:
+  type: chart
+  version: 1
+  title: "Traffic Source Mix by Quarter"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1"
+        source: "Organic Search"
+        sessions: 84200
+      - quarter: "Q1"
+        source: "Paid Search"
+        sessions: 31500
+      - quarter: "Q1"
+        source: "Direct"
+        sessions: 22800
+      - quarter: "Q1"
+        source: "Social Media"
+        sessions: 18400
+      - quarter: "Q1"
+        source: "Referral"
+        sessions: 12100
+      - quarter: "Q2"
+        source: "Organic Search"
+        sessions: 91600
+      - quarter: "Q2"
+        source: "Paid Search"
+        sessions: 38200
+      - quarter: "Q2"
+        source: "Direct"
+        sessions: 25100
+      - quarter: "Q2"
+        source: "Social Media"
+        sessions: 21700
+      - quarter: "Q2"
+        source: "Referral"
+        sessions: 14400
+      - quarter: "Q3"
+        source: "Organic Search"
+        sessions: 97300
+      - quarter: "Q3"
+        source: "Paid Search"
+        sessions: 42100
+      - quarter: "Q3"
+        source: "Direct"
+        sessions: 27600
+      - quarter: "Q3"
+        source: "Social Media"
+        sessions: 24500
+      - quarter: "Q3"
+        source: "Referral"
+        sessions: 15800
+      - quarter: "Q4"
+        source: "Organic Search"
+        sessions: 105800
+      - quarter: "Q4"
+        source: "Paid Search"
+        sessions: 45600
+      - quarter: "Q4"
+        source: "Direct"
+        sessions: 29200
+      - quarter: "Q4"
+        source: "Social Media"
+        sessions: 27100
+      - quarter: "Q4"
+        source: "Referral"
+        sessions: 17300
+  transform:
+    aggregate:
+      dimensions: [quarter, source]
+      measures:
+        - column: sessions
+          aggregation: sum
+          name: total_sessions
+  visualize:
+    type: bar
+    mode: normalized
+    columns: quarter
+    rows: total_sessions
+    marks:
+      color: source
+
+assertions:
+  structure:
+    root: svg
+    bars: 20
+    title_in_svg: false
+    legend: true
+    legend_entries: 5
+
+  normalized:
+    all_stacks_reach_100: true
+
+  scale:
+    y_min: 0
+    y_max: 100
+    y_unit: percent
+
+  axes:
+    x:
+      labels: ["Q1", "Q2", "Q3", "Q4"]
+      orientation: horizontal
+    y:
+      min: 0
+      max: 100
+      format: percent

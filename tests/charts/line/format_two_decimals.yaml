@@ -1,0 +1,56 @@
+name: "Fixed two-decimal precision on y-axis"
+tags: [line, axis-format, decimals, precision, single-series]
+description: >
+  Values ranging from 1.23 to 4.56 with format ".2f". Tests that
+  y-axis tick labels consistently show exactly two decimal places
+  (e.g. "1.00", "2.00", "3.00") regardless of the tick value.
+  Common for GPA, pH, or other fixed-precision scientific metrics.
+
+chart:
+  type: chart
+  version: 1
+  title: "Average pH by Sample"
+  data:
+    provider: inline
+    rows:
+      - sample: "A"
+        ph: 1.23
+      - sample: "B"
+        ph: 2.67
+      - sample: "C"
+        ph: 3.14
+      - sample: "D"
+        ph: 4.56
+      - sample: "E"
+        ph: 3.89
+      - sample: "F"
+        ph: 2.01
+  visualize:
+    type: line
+    columns: sample
+    rows: ph
+    axes:
+      left:
+        label: "pH Level"
+        format: ".2f"
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  axes:
+    x:
+      labels: ["A", "B", "C", "D", "E", "F"]
+    y:
+      label: "pH Level"
+      min: 0
+      format: decimal
+      fixed_decimals: 2
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true

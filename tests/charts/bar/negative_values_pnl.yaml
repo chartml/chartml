@@ -1,0 +1,76 @@
+name: "Positive and negative bars — department P&L"
+tags: [bar, negative-values, diverging, single-series]
+description: >
+  Profit/loss by department where some departments are profitable
+  and others are running at a loss. Bars must extend both above
+  and below the zero baseline. Common in finance dashboards.
+
+chart:
+  type: chart
+  version: 1
+  title: "Department Profit & Loss — Q4 2025"
+  data:
+    provider: inline
+    rows:
+      - department: "SaaS Products"
+        profit: 425000
+      - department: "Consulting"
+        profit: 182000
+      - department: "Cloud Hosting"
+        profit: -89000
+      - department: "Support"
+        profit: -214000
+      - department: "Training"
+        profit: 47000
+      - department: "R&D"
+        profit: -156000
+      - department: "Licensing"
+        profit: 310000
+  visualize:
+    type: bar
+    columns: department
+    rows: profit
+
+assertions:
+  structure:
+    root: svg
+    bars: 7
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "SaaS Products"
+      value: 425000
+      above_zero: true
+    - label: "Consulting"
+      value: 182000
+      above_zero: true
+    - label: "Cloud Hosting"
+      value: -89000
+      above_zero: false
+    - label: "Support"
+      value: -214000
+      above_zero: false
+    - label: "Training"
+      value: 47000
+      above_zero: true
+    - label: "R&D"
+      value: -156000
+      above_zero: false
+    - label: "Licensing"
+      value: 310000
+      above_zero: true
+
+  scale:
+    has_negative: true
+    zero_line_visible: true
+    y_min_below_zero: true
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["SaaS Products", "Consulting", "Cloud Hosting", "Support", "Training", "R&D", "Licensing"]
+      orientation: horizontal
+    y:
+      crosses_zero: true
+      format: numeric

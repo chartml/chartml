@@ -1,0 +1,61 @@
+name: "Bar chart — duplicate category names"
+tags: [edge-case, bar, duplicate-labels, ambiguous]
+description: >
+  A bar chart where two categories share the exact same name ("Widget A").
+  Tests that the renderer handles duplicate x-axis labels without
+  crashing, merging, or dropping bars. Both bars must render separately
+  even though their labels collide.
+
+chart:
+  type: chart
+  version: 1
+  title: "Sales by Product SKU"
+  data:
+    provider: inline
+    rows:
+      - product: "Widget A"
+        sales: 340
+      - product: "Widget B"
+        sales: 520
+      - product: "Widget A"
+        sales: 180
+      - product: "Widget C"
+        sales: 410
+      - product: "Widget D"
+        sales: 290
+  visualize:
+    type: bar
+    columns: product
+    rows: sales
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Widget A"
+      value: 340
+    - label: "Widget B"
+      value: 520
+    - label: "Widget A"
+      value: 180
+    - label: "Widget C"
+      value: 410
+    - label: "Widget D"
+      value: 290
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Widget A", "Widget B", "Widget A", "Widget C", "Widget D"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

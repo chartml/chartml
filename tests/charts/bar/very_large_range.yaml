@@ -1,0 +1,66 @@
+name: "Extreme value range — 50 to 5 million in same chart"
+tags: [bar, scale-compression, large-range, single-series]
+description: >
+  Customer lifetime value by tier where values span from $50
+  (free trial) to $5,000,000 (enterprise). Tests how the renderer
+  handles extreme scale compression — small bars should still be
+  visible or the axis should adapt appropriately. A common real-world
+  scenario when visualizing revenue across wildly different segments.
+
+chart:
+  type: chart
+  version: 1
+  title: "Customer Lifetime Value by Tier"
+  data:
+    provider: inline
+    rows:
+      - tier: "Free Trial"
+        clv: 50
+      - tier: "Starter"
+        clv: 2400
+      - tier: "Professional"
+        clv: 18000
+      - tier: "Business"
+        clv: 96000
+      - tier: "Enterprise"
+        clv: 540000
+      - tier: "Strategic"
+        clv: 5000000
+  visualize:
+    type: bar
+    columns: tier
+    rows: clv
+
+assertions:
+  structure:
+    root: svg
+    bars: 6
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Free Trial"
+      value: 50
+    - label: "Starter"
+      value: 2400
+    - label: "Professional"
+      value: 18000
+    - label: "Business"
+      value: 96000
+    - label: "Enterprise"
+      value: 540000
+    - label: "Strategic"
+      value: 5000000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Free Trial", "Starter", "Professional", "Business", "Enterprise", "Strategic"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

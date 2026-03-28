@@ -1,0 +1,79 @@
+name: "Temporal x-axis — monthly data over 18 months"
+tags: [line, temporal, monthly, date-axis, label-sampling, single-series]
+description: >
+  Monthly active users over 18 months with ISO date strings as x-axis.
+  With 18 labels, the renderer must apply label sampling or rotation
+  to avoid overlapping text. Tests temporal axis formatting combined
+  with the adaptive label strategy on a longer time horizon.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Active Users"
+  data:
+    provider: inline
+    rows:
+      - month: "2024-01-01"
+        mau: 12400
+      - month: "2024-02-01"
+        mau: 13100
+      - month: "2024-03-01"
+        mau: 14200
+      - month: "2024-04-01"
+        mau: 13800
+      - month: "2024-05-01"
+        mau: 15100
+      - month: "2024-06-01"
+        mau: 16500
+      - month: "2024-07-01"
+        mau: 15900
+      - month: "2024-08-01"
+        mau: 17200
+      - month: "2024-09-01"
+        mau: 18800
+      - month: "2024-10-01"
+        mau: 19500
+      - month: "2024-11-01"
+        mau: 20100
+      - month: "2024-12-01"
+        mau: 21800
+      - month: "2025-01-01"
+        mau: 22500
+      - month: "2025-02-01"
+        mau: 24000
+      - month: "2025-03-01"
+        mau: 25200
+      - month: "2025-04-01"
+        mau: 26800
+      - month: "2025-05-01"
+        mau: 28100
+      - month: "2025-06-01"
+        mau: 30500
+  visualize:
+    type: line
+    columns: month
+    rows: mau
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  temporal:
+    date_reformatted: true
+    label_sampling: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      temporal: true
+      labels_fewer_than: 18
+    y:
+      min: 0
+      format: numeric

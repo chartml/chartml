@@ -1,0 +1,174 @@
+name: "Stacked area — 12 months, 3 series (date label density)"
+tags: [area, stacked, label-density, multi-series, legend, twelve-months]
+description: >
+  12 monthly data points (Jan 2024 through Dec 2024) with 3 stacked
+  series representing revenue channels. Tests date label density on
+  x-axis with "Mon YYYY" formatted labels. The renderer should space
+  labels evenly without overlap.
+
+chart:
+  type: chart
+  version: 1
+  title: "2024 Revenue by Channel"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan 2024"
+        channel: "Direct Sales"
+        revenue: 185000
+      - month: "Jan 2024"
+        channel: "Online Store"
+        revenue: 92000
+      - month: "Jan 2024"
+        channel: "Partner Network"
+        revenue: 64000
+      - month: "Feb 2024"
+        channel: "Direct Sales"
+        revenue: 198000
+      - month: "Feb 2024"
+        channel: "Online Store"
+        revenue: 105000
+      - month: "Feb 2024"
+        channel: "Partner Network"
+        revenue: 78000
+      - month: "Mar 2024"
+        channel: "Direct Sales"
+        revenue: 215000
+      - month: "Mar 2024"
+        channel: "Online Store"
+        revenue: 118000
+      - month: "Mar 2024"
+        channel: "Partner Network"
+        revenue: 91000
+      - month: "Apr 2024"
+        channel: "Direct Sales"
+        revenue: 224000
+      - month: "Apr 2024"
+        channel: "Online Store"
+        revenue: 127000
+      - month: "Apr 2024"
+        channel: "Partner Network"
+        revenue: 102000
+      - month: "May 2024"
+        channel: "Direct Sales"
+        revenue: 237000
+      - month: "May 2024"
+        channel: "Online Store"
+        revenue: 134000
+      - month: "May 2024"
+        channel: "Partner Network"
+        revenue: 119000
+      - month: "Jun 2024"
+        channel: "Direct Sales"
+        revenue: 251000
+      - month: "Jun 2024"
+        channel: "Online Store"
+        revenue: 142000
+      - month: "Jun 2024"
+        channel: "Partner Network"
+        revenue: 138000
+      - month: "Jul 2024"
+        channel: "Direct Sales"
+        revenue: 243000
+      - month: "Jul 2024"
+        channel: "Online Store"
+        revenue: 148000
+      - month: "Jul 2024"
+        channel: "Partner Network"
+        revenue: 145000
+      - month: "Aug 2024"
+        channel: "Direct Sales"
+        revenue: 238000
+      - month: "Aug 2024"
+        channel: "Online Store"
+        revenue: 151000
+      - month: "Aug 2024"
+        channel: "Partner Network"
+        revenue: 139000
+      - month: "Sep 2024"
+        channel: "Direct Sales"
+        revenue: 262000
+      - month: "Sep 2024"
+        channel: "Online Store"
+        revenue: 158000
+      - month: "Sep 2024"
+        channel: "Partner Network"
+        revenue: 152000
+      - month: "Oct 2024"
+        channel: "Direct Sales"
+        revenue: 278000
+      - month: "Oct 2024"
+        channel: "Online Store"
+        revenue: 165000
+      - month: "Oct 2024"
+        channel: "Partner Network"
+        revenue: 161000
+      - month: "Nov 2024"
+        channel: "Direct Sales"
+        revenue: 295000
+      - month: "Nov 2024"
+        channel: "Online Store"
+        revenue: 178000
+      - month: "Nov 2024"
+        channel: "Partner Network"
+        revenue: 174000
+      - month: "Dec 2024"
+        channel: "Direct Sales"
+        revenue: 312000
+      - month: "Dec 2024"
+        channel: "Online Store"
+        revenue: 192000
+      - month: "Dec 2024"
+        channel: "Partner Network"
+        revenue: 186000
+  transform:
+    aggregate:
+      dimensions: [month, channel]
+      measures:
+        - column: revenue
+          aggregation: sum
+          name: total_revenue
+  visualize:
+    type: area
+    mode: stacked
+    columns: month
+    rows: total_revenue
+    marks:
+      color: channel
+
+assertions:
+  structure:
+    root: svg
+    areas: 3
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  stacked:
+    series_order: ["Direct Sales", "Online Store", "Partner Network"]
+    areas_stacked_on_each_other: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "Jan 2024"
+        - "Feb 2024"
+        - "Mar 2024"
+        - "Apr 2024"
+        - "May 2024"
+        - "Jun 2024"
+        - "Jul 2024"
+        - "Aug 2024"
+        - "Sep 2024"
+        - "Oct 2024"
+        - "Nov 2024"
+        - "Dec 2024"
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

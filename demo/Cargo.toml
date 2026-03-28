@@ -1,0 +1,18 @@
+[package]
+name = "chartml-demo"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+chartml-core = { path = "../crates/chartml-core" }
+chartml-chart-cartesian = { path = "../crates/chartml-chart-cartesian" }
+chartml-chart-pie = { path = "../crates/chartml-chart-pie" }
+chartml-chart-scatter = { path = "../crates/chartml-chart-scatter" }
+chartml-chart-metric = { path = "../crates/chartml-chart-metric" }
+chartml-leptos = { path = "../crates/chartml-leptos" }
+chartml-datafusion = { path = "../crates/chartml-datafusion" }
+leptos = { version = "0.8", features = ["csr"] }
+console_error_panic_hook = "0.1"
+serde_yaml = "0.9"
+wasm-bindgen-futures = "0.4"

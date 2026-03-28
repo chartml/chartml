@@ -1,0 +1,61 @@
+name: "Square bar chart — 4 bars at 400x400"
+tags: [bar, sizing, square, 400x400, unusual-aspect]
+description: >
+  Bar chart rendered as a perfect square (400x400). An unusual aspect
+  ratio for bar charts where height equals width. Tests that bars
+  render correctly when the chart area is square.
+
+chart:
+  type: chart
+  version: 1
+  title: "Quarterly Expenses"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1"
+        expenses: 245000
+      - quarter: "Q2"
+        expenses: 268000
+      - quarter: "Q3"
+        expenses: 232000
+      - quarter: "Q4"
+        expenses: 295000
+  visualize:
+    type: bar
+    columns: quarter
+    rows: expenses
+    style:
+      width: 400
+      height: 400
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 400
+    svg_height: 400
+    bars: 4
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Q1"
+      value: 245000
+    - label: "Q2"
+      value: 268000
+    - label: "Q3"
+      value: 232000
+    - label: "Q4"
+      value: 295000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Q1", "Q2", "Q3", "Q4"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

@@ -1,0 +1,61 @@
+type: chart
+version: 1
+title: "Regional Revenue Composition"
+data:
+  provider: inline
+  rows:
+    - week: "Week 1"
+      region: "North"
+      revenue: 42000
+    - week: "Week 1"
+      region: "South"
+      revenue: 38000
+    - week: "Week 1"
+      region: "East"
+      revenue: 35000
+    - week: "Week 2"
+      region: "North"
+      revenue: 45000
+    - week: "Week 2"
+      region: "South"
+      revenue: 40000
+    - week: "Week 2"
+      region: "East"
+      revenue: 37000
+    - week: "Week 3"
+      region: "North"
+      revenue: 48000
+    - week: "Week 3"
+      region: "South"
+      revenue: 42000
+    - week: "Week 3"
+      region: "East"
+      revenue: 40000
+    - week: "Week 4"
+      region: "North"
+      revenue: 52000
+    - week: "Week 4"
+      region: "South"
+      revenue: 45000
+    - week: "Week 4"
+      region: "East"
+      revenue: 43000
+transform:
+  aggregate:
+    dimensions: [week, region]
+    measures:
+      - column: revenue
+        aggregation: sum
+        name: total_revenue
+visualize:
+  type: area
+  mode: stacked
+  columns: week
+  rows: total_revenue
+  marks:
+    color: region
+  axes:
+    rows:
+      label: "Revenue ($)"
+  style:
+    height: 300

@@ -1,0 +1,37 @@
+name: "Scatter — edge case with a single data point"
+tags: [scatter, edge-case, single-point]
+description: >
+  Only one data point on the scatter plot. Tests that the renderer
+  handles the degenerate case without divide-by-zero or scale errors.
+  The chart should render one circle with valid axes.
+
+chart:
+  type: chart
+  version: 1
+  title: "Single Observation"
+  data:
+    provider: inline
+    rows:
+      - x_val: 42
+        y_val: 87
+  visualize:
+    type: scatter
+    columns: x_val
+    rows: y_val
+
+assertions:
+  structure:
+    root: svg
+    circles: 1
+    title_in_svg: false
+    legend: false
+
+  points:
+    - x: 42
+      y: 87
+
+  axes:
+    x:
+      present: true
+    y:
+      present: true

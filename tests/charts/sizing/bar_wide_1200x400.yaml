@@ -1,0 +1,93 @@
+name: "Wide bar chart — 12 months at 1200x400 (wide dashboard)"
+tags: [bar, sizing, wide, 1200x400]
+description: >
+  Bar chart with 12 bars rendered at wide dashboard size (1200x400).
+  Tests that many bars distribute evenly across a wide viewport,
+  typical of full-width dashboard panels showing monthly data.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Revenue — 2025"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 125000
+      - month: "Feb"
+        revenue: 138000
+      - month: "Mar"
+        revenue: 152000
+      - month: "Apr"
+        revenue: 148000
+      - month: "May"
+        revenue: 165000
+      - month: "Jun"
+        revenue: 172000
+      - month: "Jul"
+        revenue: 158000
+      - month: "Aug"
+        revenue: 169000
+      - month: "Sep"
+        revenue: 181000
+      - month: "Oct"
+        revenue: 195000
+      - month: "Nov"
+        revenue: 188000
+      - month: "Dec"
+        revenue: 210000
+  visualize:
+    type: bar
+    columns: month
+    rows: revenue
+    style:
+      width: 1200
+      height: 400
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 1200
+    svg_height: 400
+    bars: 12
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Jan"
+      value: 125000
+    - label: "Feb"
+      value: 138000
+    - label: "Mar"
+      value: 152000
+    - label: "Apr"
+      value: 148000
+    - label: "May"
+      value: 165000
+    - label: "Jun"
+      value: 172000
+    - label: "Jul"
+      value: 158000
+    - label: "Aug"
+      value: 169000
+    - label: "Sep"
+      value: 181000
+    - label: "Oct"
+      value: 195000
+    - label: "Nov"
+      value: 188000
+    - label: "Dec"
+      value: 210000
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

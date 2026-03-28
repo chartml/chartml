@@ -1,0 +1,105 @@
+name: "Combo — P&L bars with negatives (left) + cumulative line (right)"
+tags: [bar, dual-axis, combo, line, negative-values, pnl]
+description: >
+  Profit & loss bars with some negative months on the left axis,
+  paired with a cumulative running total line on the right axis.
+  Tests combo chart behavior when bars cross the zero baseline
+  while the line stays positive on the right axis.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly P&L & Cumulative Total"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        pnl: -42000
+        cumulative: -42000
+      - month: "Feb"
+        pnl: -18000
+        cumulative: -60000
+      - month: "Mar"
+        pnl: 31000
+        cumulative: -29000
+      - month: "Apr"
+        pnl: 56000
+        cumulative: 27000
+      - month: "May"
+        pnl: 72000
+        cumulative: 99000
+      - month: "Jun"
+        pnl: -15000
+        cumulative: 84000
+      - month: "Jul"
+        pnl: 89000
+        cumulative: 173000
+      - month: "Aug"
+        pnl: 104000
+        cumulative: 277000
+  visualize:
+    type: bar
+    columns: month
+    rows:
+      - field: pnl
+        axis: left
+        label: "Monthly P&L"
+      - field: cumulative
+        mark: line
+        axis: right
+        label: "Cumulative Total"
+    axes:
+      left:
+        label: "Monthly P&L ($)"
+        format: "$,.0f"
+      right:
+        label: "Cumulative ($)"
+        format: "$,.0f"
+
+assertions:
+  structure:
+    root: svg
+    bars: 8
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+    y_axes: 2
+
+  bars:
+    - label: "Jan"
+      value: -42000
+    - label: "Feb"
+      value: -18000
+    - label: "Mar"
+      value: 31000
+    - label: "Apr"
+      value: 56000
+    - label: "May"
+      value: 72000
+    - label: "Jun"
+      value: -15000
+    - label: "Jul"
+      value: 89000
+    - label: "Aug"
+      value: 104000
+
+  dual_axis:
+    left_axis_present: true
+    right_axis_present: true
+    left_label: "Monthly P&L ($)"
+    right_label: "Cumulative ($)"
+
+  scale:
+    left:
+      y_nice: true
+    right:
+      y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"]
+      orientation: horizontal
+    y_left:
+      format: currency
+    y_right:
+      format: currency

@@ -1,0 +1,86 @@
+name: "Bar chart — 8 bars with 30+ char labels (truncation test)"
+tags: [bar, label-density, long-labels, truncation, single-series]
+description: >
+  8 bars where every category name exceeds 30 characters. These extremely
+  long labels test the renderer's truncation or ellipsis behavior. Even
+  with rotation, labels this long may need to be clipped or shortened to
+  fit the available space.
+
+chart:
+  type: chart
+  version: 1
+  title: "Enterprise Software Spending"
+  data:
+    provider: inline
+    rows:
+      - category: "Enterprise Resource Planning Suite"
+        spend: 4200000
+      - category: "Customer Relationship Management Tool"
+        spend: 3800000
+      - category: "Supply Chain Optimization Platform"
+        spend: 2950000
+      - category: "Business Intelligence Analytics Hub"
+        spend: 2640000
+      - category: "Human Capital Management Solution"
+        spend: 2310000
+      - category: "Marketing Automation Control Center"
+        spend: 1980000
+      - category: "Infrastructure Monitoring Dashboard"
+        spend: 1750000
+      - category: "Compliance and Governance Framework"
+        spend: 1520000
+  visualize:
+    type: bar
+    columns: category
+    rows: spend
+
+assertions:
+  structure:
+    root: svg
+    bars: 8
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Enterprise Resource Planning Suite"
+      value: 4200000
+    - label: "Customer Relationship Management Tool"
+      value: 3800000
+    - label: "Supply Chain Optimization Platform"
+      value: 2950000
+    - label: "Business Intelligence Analytics Hub"
+      value: 2640000
+    - label: "Human Capital Management Solution"
+      value: 2310000
+    - label: "Marketing Automation Control Center"
+      value: 1980000
+    - label: "Infrastructure Monitoring Dashboard"
+      value: 1750000
+    - label: "Compliance and Governance Framework"
+      value: 1520000
+
+  label_rotation:
+    x_labels_rotated: true
+    transform_exists: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "Enterprise Resource Planning Suite"
+        - "Customer Relationship Management Tool"
+        - "Supply Chain Optimization Platform"
+        - "Business Intelligence Analytics Hub"
+        - "Human Capital Management Solution"
+        - "Marketing Automation Control Center"
+        - "Infrastructure Monitoring Dashboard"
+        - "Compliance and Governance Framework"
+      orientation: horizontal
+      rotation: true
+    y:
+      min: 0
+      format: numeric

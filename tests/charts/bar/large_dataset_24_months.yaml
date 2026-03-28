@@ -1,0 +1,87 @@
+name: "Dense bar chart — 24 months of MRR"
+tags: [bar, dense, label-rotation, single-series, many-bars]
+description: >
+  Two full years of monthly recurring revenue as 24 individual bars.
+  Tests dense axis label rendering — with this many categories the
+  renderer should rotate or skip x-axis labels to avoid overlap.
+  Also stress-tests layout with many bars in a standard chart width.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Recurring Revenue — 2024-2025"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan 24"
+        mrr: 142000
+      - month: "Feb 24"
+        mrr: 148000
+      - month: "Mar 24"
+        mrr: 155000
+      - month: "Apr 24"
+        mrr: 151000
+      - month: "May 24"
+        mrr: 159000
+      - month: "Jun 24"
+        mrr: 167000
+      - month: "Jul 24"
+        mrr: 163000
+      - month: "Aug 24"
+        mrr: 171000
+      - month: "Sep 24"
+        mrr: 178000
+      - month: "Oct 24"
+        mrr: 185000
+      - month: "Nov 24"
+        mrr: 192000
+      - month: "Dec 24"
+        mrr: 201000
+      - month: "Jan 25"
+        mrr: 208000
+      - month: "Feb 25"
+        mrr: 215000
+      - month: "Mar 25"
+        mrr: 223000
+      - month: "Apr 25"
+        mrr: 219000
+      - month: "May 25"
+        mrr: 228000
+      - month: "Jun 25"
+        mrr: 237000
+      - month: "Jul 25"
+        mrr: 234000
+      - month: "Aug 25"
+        mrr: 243000
+      - month: "Sep 25"
+        mrr: 251000
+      - month: "Oct 25"
+        mrr: 260000
+      - month: "Nov 25"
+        mrr: 269000
+      - month: "Dec 25"
+        mrr: 281000
+  visualize:
+    type: bar
+    columns: month
+    rows: mrr
+
+assertions:
+  structure:
+    root: svg
+    bars: 24
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan 24", "Feb 24", "Mar 24", "Apr 24", "May 24", "Jun 24", "Jul 24", "Aug 24", "Sep 24", "Oct 24", "Nov 24", "Dec 24", "Jan 25", "Feb 25", "Mar 25", "Apr 25", "May 25", "Jun 25", "Jul 25", "Aug 25", "Sep 25", "Oct 25", "Nov 25", "Dec 25"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

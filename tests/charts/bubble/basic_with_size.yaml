@@ -1,0 +1,65 @@
+name: "Bubble chart — revenue vs profit with employee count as size"
+tags: [bubble, size-encoding, color-encoding, legend]
+description: >
+  Revenue on x-axis, profit on y-axis, circle size mapped to employee
+  count, and color mapped to department. Tests the bubble chart variant
+  of scatter (type: bubble) with both color and size encodings active.
+  Circles should have varying radii and a color legend.
+
+chart:
+  type: chart
+  version: 1
+  title: "Department Performance — Revenue vs Profit"
+  data:
+    provider: inline
+    rows:
+      - revenue: 4200000
+        profit: 1100000
+        employees: 120
+        department: "Engineering"
+      - revenue: 3100000
+        profit: 850000
+        employees: 85
+        department: "Sales"
+      - revenue: 1800000
+        profit: 420000
+        employees: 45
+        department: "Marketing"
+      - revenue: 2500000
+        profit: 680000
+        employees: 65
+        department: "Product"
+      - revenue: 900000
+        profit: 310000
+        employees: 30
+        department: "Support"
+  visualize:
+    type: bubble
+    columns: revenue
+    rows: profit
+    marks:
+      color: department
+      size: employees
+
+assertions:
+  structure:
+    root: svg
+    circles: 5
+    title_in_svg: false
+    legend: true
+
+  size_encoding:
+    field: employees
+    varying_radii: true
+
+  color_encoding:
+    field: department
+    categories: ["Engineering", "Sales", "Marketing", "Product", "Support"]
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

@@ -1,0 +1,90 @@
+name: "Date formatting — 24 months spanning two years"
+tags: [area, temporal, monthly, two-year, date-axis, date-formatting, label-sampling, single-series]
+description: >
+  Monthly data for all 24 months of 2024-2025. Tests label sampling
+  behavior when there are many monthly date labels — the renderer
+  must reduce density to avoid overlap while preserving readability.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Subscriptions — 2024-2025"
+  data:
+    provider: inline
+    rows:
+      - month: "2024-01-01"
+        subs: 1200
+      - month: "2024-02-01"
+        subs: 1350
+      - month: "2024-03-01"
+        subs: 1480
+      - month: "2024-04-01"
+        subs: 1520
+      - month: "2024-05-01"
+        subs: 1610
+      - month: "2024-06-01"
+        subs: 1750
+      - month: "2024-07-01"
+        subs: 1690
+      - month: "2024-08-01"
+        subs: 1820
+      - month: "2024-09-01"
+        subs: 1960
+      - month: "2024-10-01"
+        subs: 2100
+      - month: "2024-11-01"
+        subs: 2250
+      - month: "2024-12-01"
+        subs: 2400
+      - month: "2025-01-01"
+        subs: 2580
+      - month: "2025-02-01"
+        subs: 2710
+      - month: "2025-03-01"
+        subs: 2890
+      - month: "2025-04-01"
+        subs: 3050
+      - month: "2025-05-01"
+        subs: 3200
+      - month: "2025-06-01"
+        subs: 3380
+      - month: "2025-07-01"
+        subs: 3290
+      - month: "2025-08-01"
+        subs: 3450
+      - month: "2025-09-01"
+        subs: 3610
+      - month: "2025-10-01"
+        subs: 3780
+      - month: "2025-11-01"
+        subs: 3950
+      - month: "2025-12-01"
+        subs: 4120
+  visualize:
+    type: area
+    columns: month
+    rows: subs
+
+assertions:
+  structure:
+    root: svg
+    areas: 1
+    title_in_svg: false
+    legend: false
+
+  temporal:
+    date_reformatted: true
+    label_sampling: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      temporal: true
+      labels_fewer_than: 24
+    y:
+      min: 0
+      format: numeric

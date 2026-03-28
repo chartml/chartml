@@ -1,0 +1,56 @@
+name: "Area with custom fill opacity"
+tags: [area, style, fill-opacity, single-series]
+description: >
+  Monthly signups shown as an area chart with fillOpacity set to 0.6
+  (higher than the typical default of ~0.3). Tests that the renderer
+  applies the custom fill opacity value to the area path element.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Signups"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        signups: 1240
+      - month: "Feb"
+        signups: 1380
+      - month: "Mar"
+        signups: 1560
+      - month: "Apr"
+        signups: 1720
+      - month: "May"
+        signups: 1890
+      - month: "Jun"
+        signups: 2150
+  visualize:
+    type: area
+    columns: month
+    rows: signups
+    style:
+      fillOpacity: 0.6
+
+assertions:
+  structure:
+    root: svg
+    areas: 1
+    title_in_svg: false
+    legend: false
+
+  style:
+    fill_opacity: 0.6
+    opacity_applied_to_area: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

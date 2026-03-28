@@ -1,0 +1,57 @@
+name: "Step curve — pricing tiers over time"
+tags: [line, curve, step, style, single-series]
+description: >
+  Subscription pricing changes shown as a step function. Pricing
+  does not interpolate between values — it jumps at discrete points.
+  Tests curveType: step rendering, where the SVG path should use
+  horizontal and vertical line segments rather than smooth curves.
+  This is the correct visual for any piecewise-constant metric like
+  pricing, staffing levels, or feature flags.
+
+chart:
+  type: chart
+  version: 1
+  title: "Subscription Price History"
+  data:
+    provider: inline
+    rows:
+      - date: "2024-Q1"
+        price: 29
+      - date: "2024-Q2"
+        price: 29
+      - date: "2024-Q3"
+        price: 35
+      - date: "2024-Q4"
+        price: 35
+      - date: "2025-Q1"
+        price: 39
+      - date: "2025-Q2"
+        price: 45
+  visualize:
+    type: line
+    columns: date
+    rows: price
+    style:
+      curveType: step
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  curve:
+    type: step
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["2024-Q1", "2024-Q2", "2024-Q3", "2024-Q4", "2025-Q1", "2025-Q2"]
+    y:
+      min: 0
+      format: numeric

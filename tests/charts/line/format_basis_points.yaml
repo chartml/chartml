@@ -1,0 +1,58 @@
+name: "Basis points — very small decimal values on y-axis"
+tags: [line, axis-format, basis-points, small-values, single-series]
+description: >
+  Values ranging from 0.0001 to 0.0015 representing basis points.
+  Tests that y-axis tick labels render with enough decimal precision
+  to distinguish values (e.g. 0.0005, 0.0010) rather than rounding
+  everything to 0. Critical for fixed-income and rate analytics.
+
+chart:
+  type: chart
+  version: 1
+  title: "Daily Spread Movement (bps)"
+  data:
+    provider: inline
+    rows:
+      - day: "Mon"
+        spread: 0.0003
+      - day: "Tue"
+        spread: 0.0007
+      - day: "Wed"
+        spread: 0.0012
+      - day: "Thu"
+        spread: 0.0015
+      - day: "Fri"
+        spread: 0.0010
+      - day: "Sat"
+        spread: 0.0005
+      - day: "Sun"
+        spread: 0.0001
+  visualize:
+    type: line
+    columns: day
+    rows: spread
+    axes:
+      left:
+        label: "Spread"
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  axes:
+    x:
+      labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    y:
+      label: "Spread"
+      min: 0
+      format: numeric
+      ticks_not_all_zero: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+    small_values: true

@@ -1,0 +1,82 @@
+name: "Line chart with both reference line and target band"
+tags: [line, annotation, reference-line, band, combined, single-series]
+description: >
+  Monthly error rate with a critical threshold reference line at 5% and
+  an acceptable target band between 1% and 3%. Tests that both annotation
+  types render simultaneously without interfering — the band as a shaded
+  rectangle and the reference line as a dashed horizontal rule, both
+  positioned correctly on the y-scale.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Error Rate"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        error_rate: 2.1
+      - month: "Feb"
+        error_rate: 1.8
+      - month: "Mar"
+        error_rate: 3.4
+      - month: "Apr"
+        error_rate: 4.7
+      - month: "May"
+        error_rate: 5.2
+      - month: "Jun"
+        error_rate: 3.1
+      - month: "Jul"
+        error_rate: 2.5
+      - month: "Aug"
+        error_rate: 1.9
+  visualize:
+    type: line
+    columns: month
+    rows: error_rate
+    annotations:
+      - type: line
+        axis: left
+        value: 5
+        label: "Critical Threshold"
+        color: "#e74c3c"
+        dashArray: "6,3"
+      - type: band
+        axis: left
+        from: 1
+        to: 3
+        label: "Acceptable Range"
+        color: "#27ae60"
+        opacity: 0.15
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+    annotation_lines: 1
+    annotation_bands: 1
+
+  annotations:
+    - type: line
+      value: 5
+      label: "Critical Threshold"
+      dashed: true
+    - type: band
+      from: 1
+      to: 3
+      label: "Acceptable Range"
+      band_visible: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"]
+    y:
+      min: 0
+      format: numeric

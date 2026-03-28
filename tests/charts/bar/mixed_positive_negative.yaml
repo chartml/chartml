@@ -1,0 +1,103 @@
+name: "Mixed positive/negative bars — monthly net cash flow"
+tags: [bar, negative-values, zero-crossing, single-series]
+description: >
+  Monthly net cash flow where some months are positive (cash inflow)
+  and others negative (cash outflow). Unlike the existing P&L spec
+  which groups by department, this tests an alternating pattern of
+  positive and negative values within a time series, verifying that
+  each bar correctly extends from the zero baseline.
+
+chart:
+  type: chart
+  version: 1
+  title: "Net Cash Flow by Month — 2025"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        net_cash_flow: -45000
+      - month: "Feb"
+        net_cash_flow: 12000
+      - month: "Mar"
+        net_cash_flow: 78000
+      - month: "Apr"
+        net_cash_flow: -23000
+      - month: "May"
+        net_cash_flow: -67000
+      - month: "Jun"
+        net_cash_flow: 145000
+      - month: "Jul"
+        net_cash_flow: 93000
+      - month: "Aug"
+        net_cash_flow: -31000
+      - month: "Sep"
+        net_cash_flow: 56000
+      - month: "Oct"
+        net_cash_flow: -8000
+      - month: "Nov"
+        net_cash_flow: 112000
+      - month: "Dec"
+        net_cash_flow: 189000
+  visualize:
+    type: bar
+    columns: month
+    rows: net_cash_flow
+
+assertions:
+  structure:
+    root: svg
+    bars: 12
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Jan"
+      value: -45000
+      above_zero: false
+    - label: "Feb"
+      value: 12000
+      above_zero: true
+    - label: "Mar"
+      value: 78000
+      above_zero: true
+    - label: "Apr"
+      value: -23000
+      above_zero: false
+    - label: "May"
+      value: -67000
+      above_zero: false
+    - label: "Jun"
+      value: 145000
+      above_zero: true
+    - label: "Jul"
+      value: 93000
+      above_zero: true
+    - label: "Aug"
+      value: -31000
+      above_zero: false
+    - label: "Sep"
+      value: 56000
+      above_zero: true
+    - label: "Oct"
+      value: -8000
+      above_zero: false
+    - label: "Nov"
+      value: 112000
+      above_zero: true
+    - label: "Dec"
+      value: 189000
+      above_zero: true
+
+  scale:
+    has_negative: true
+    zero_line_visible: true
+    y_min_below_zero: true
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+      orientation: horizontal
+    y:
+      crosses_zero: true
+      format: numeric

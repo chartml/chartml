@@ -1,0 +1,56 @@
+name: "Doughnut chart — 6 expense categories"
+tags: [doughnut, many-segments, 6-segments, legend, inner-radius]
+description: >
+  Six expense categories displayed as a doughnut chart. Tests that
+  6 arcs render with an inner radius, and that the legend remains
+  readable even with several entries.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Expenses by Category"
+  data:
+    provider: inline
+    rows:
+      - category: "Salaries"
+        amount: 185000
+      - category: "Cloud Infrastructure"
+        amount: 42000
+      - category: "Office Lease"
+        amount: 28000
+      - category: "Marketing"
+        amount: 35000
+      - category: "Travel"
+        amount: 12000
+      - category: "Software Licenses"
+        amount: 18000
+  visualize:
+    type: doughnut
+    columns: category
+    rows: amount
+
+assertions:
+  structure:
+    root: svg
+    slices: 6
+    title_in_svg: false
+    legend: true
+    legend_entries: 6
+
+  slices:
+    - label: "Salaries"
+      value: 185000
+    - label: "Cloud Infrastructure"
+      value: 42000
+    - label: "Office Lease"
+      value: 28000
+    - label: "Marketing"
+      value: 35000
+    - label: "Travel"
+      value: 12000
+    - label: "Software Licenses"
+      value: 18000
+
+  geometry:
+    arcs_sum_to_360: true
+    has_inner_radius: true

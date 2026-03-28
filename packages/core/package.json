@@ -1,47 +1,37 @@
 {
   "name": "@chartml/core",
-  "version": "2.3.0",
-  "description": "A declarative markup language for creating beautiful, interactive data visualizations",
+  "version": "3.0.0",
+  "description": "ChartML chart rendering engine — Rust/WASM powered",
   "type": "module",
   "main": "dist/index.js",
-  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
-    "./style.css": "./dist/style.css"
+    "./wasm": {
+      "node": "./pkg/node/chartml_wasm.js",
+      "default": "./pkg/web/chartml_wasm.js"
+    }
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
+  "files": ["dist/", "pkg/"],
   "scripts": {
-    "build": "vite build",
-    "dev": "vite build --watch",
-    "test": "vitest"
+    "build:wasm": "bash build.sh",
+    "build:ts": "tsc",
+    "build": "bash build.sh"
   },
-  "keywords": [
-    "chartml",
-    "visualization",
-    "charts",
-    "data",
-    "d3"
-  ],
-  "author": "Jason Adams",
-  "license": "MIT",
+  "peerDependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/chartml/chartml.git",
     "directory": "packages/core"
   },
   "homepage": "https://chartml.org",
-  "dependencies": {
-    "d3": "^7.9.0",
-    "js-yaml": "^4.1.0"
-  },
-  "devDependencies": {
-    "vite": "^5.4.11",
-    "vitest": "^2.1.8"
-  }
+  "author": "Kyomi.ai",
+  "keywords": ["chartml", "chart", "visualization", "wasm", "svg"],
+  "license": "MIT"
 }

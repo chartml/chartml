@@ -1,0 +1,134 @@
+name: "Scatter — 50 points across wide numeric x-axis (dense tick test)"
+tags: [scatter, label-density, numeric-x, many-points, tick-density]
+description: >
+  50 data points with x values ranging from 0 to 1000 and y values from
+  0 to 500k. The wide numeric range forces the x-axis tick generator to
+  select a sensible interval. Tests that numeric tick density stays
+  readable and ticks don't overlap at default chart width.
+
+chart:
+  type: chart
+  version: 1
+  title: "Ad Spend vs Revenue"
+  data:
+    provider: inline
+    rows:
+      - spend: 12
+        revenue: 8400
+      - spend: 35
+        revenue: 22100
+      - spend: 58
+        revenue: 31500
+      - spend: 82
+        revenue: 48200
+      - spend: 105
+        revenue: 55800
+      - spend: 128
+        revenue: 67400
+      - spend: 152
+        revenue: 79100
+      - spend: 175
+        revenue: 88500
+      - spend: 198
+        revenue: 102300
+      - spend: 221
+        revenue: 110800
+      - spend: 244
+        revenue: 125400
+      - spend: 268
+        revenue: 138900
+      - spend: 291
+        revenue: 147200
+      - spend: 314
+        revenue: 162800
+      - spend: 338
+        revenue: 171500
+      - spend: 361
+        revenue: 185100
+      - spend: 384
+        revenue: 198700
+      - spend: 407
+        revenue: 207400
+      - spend: 431
+        revenue: 221800
+      - spend: 454
+        revenue: 235200
+      - spend: 477
+        revenue: 243900
+      - spend: 500
+        revenue: 258500
+      - spend: 524
+        revenue: 267100
+      - spend: 547
+        revenue: 281800
+      - spend: 570
+        revenue: 295400
+      - spend: 593
+        revenue: 304100
+      - spend: 617
+        revenue: 318700
+      - spend: 640
+        revenue: 327400
+      - spend: 663
+        revenue: 341800
+      - spend: 686
+        revenue: 355200
+      - spend: 710
+        revenue: 363900
+      - spend: 733
+        revenue: 378500
+      - spend: 756
+        revenue: 387100
+      - spend: 780
+        revenue: 401800
+      - spend: 803
+        revenue: 415400
+      - spend: 826
+        revenue: 424100
+      - spend: 849
+        revenue: 438700
+      - spend: 873
+        revenue: 447400
+      - spend: 896
+        revenue: 461800
+      - spend: 919
+        revenue: 475200
+      - spend: 23
+        revenue: 14200
+      - spend: 147
+        revenue: 72800
+      - spend: 289
+        revenue: 145600
+      - spend: 412
+        revenue: 212300
+      - spend: 536
+        revenue: 271900
+      - spend: 658
+        revenue: 338500
+      - spend: 781
+        revenue: 405100
+      - spend: 904
+        revenue: 468700
+      - spend: 67
+        revenue: 38900
+      - spend: 445
+        revenue: 228400
+  visualize:
+    type: scatter
+    columns: spend
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    circles: 50
+    title_in_svg: false
+    legend: false
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

@@ -1,0 +1,67 @@
+name: "Bar chart — all values negative (no positive range)"
+tags: [edge-case, bar, negative-only, scale]
+description: >
+  Every bar has a negative value. Tests that the y-axis scale
+  correctly handles a range that is entirely below zero, that bars
+  extend downward from the zero line, and that the zero baseline
+  is still visible at the top of the chart area.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Budget Overruns — Q4 2025"
+  data:
+    provider: inline
+    rows:
+      - month: "October"
+        overrun: -42000
+      - month: "November"
+        overrun: -67000
+      - month: "December"
+        overrun: -31000
+      - month: "January"
+        overrun: -85000
+      - month: "February"
+        overrun: -19000
+  visualize:
+    type: bar
+    columns: month
+    rows: overrun
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "October"
+      value: -42000
+      above_zero: false
+    - label: "November"
+      value: -67000
+      above_zero: false
+    - label: "December"
+      value: -31000
+      above_zero: false
+    - label: "January"
+      value: -85000
+      above_zero: false
+    - label: "February"
+      value: -19000
+      above_zero: false
+
+  scale:
+    has_negative: true
+    all_negative: true
+    zero_line_visible: true
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["October", "November", "December", "January", "February"]
+      orientation: horizontal
+    y:
+      crosses_zero: true
+      format: numeric

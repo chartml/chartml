@@ -1,0 +1,105 @@
+name: "Date formatting — all 31 days of a single month"
+tags: [line, temporal, daily, single-month, date-axis, date-formatting, single-series]
+description: >
+  Every day of March 2025 (31 data points) with ISO date strings.
+  Tests day-of-month formatting and label density handling when
+  all dates share the same month and year — the renderer should
+  show concise day-level labels and apply sampling if needed.
+
+chart:
+  type: chart
+  version: 1
+  title: "Daily Steps — March 2025"
+  data:
+    provider: inline
+    rows:
+      - date: "2025-03-01"
+        steps: 8200
+      - date: "2025-03-02"
+        steps: 6100
+      - date: "2025-03-03"
+        steps: 9400
+      - date: "2025-03-04"
+        steps: 10200
+      - date: "2025-03-05"
+        steps: 11500
+      - date: "2025-03-06"
+        steps: 9800
+      - date: "2025-03-07"
+        steps: 7300
+      - date: "2025-03-08"
+        steps: 5400
+      - date: "2025-03-09"
+        steps: 4800
+      - date: "2025-03-10"
+        steps: 10100
+      - date: "2025-03-11"
+        steps: 11200
+      - date: "2025-03-12"
+        steps: 10800
+      - date: "2025-03-13"
+        steps: 9600
+      - date: "2025-03-14"
+        steps: 8900
+      - date: "2025-03-15"
+        steps: 6200
+      - date: "2025-03-16"
+        steps: 5100
+      - date: "2025-03-17"
+        steps: 10500
+      - date: "2025-03-18"
+        steps: 11800
+      - date: "2025-03-19"
+        steps: 12100
+      - date: "2025-03-20"
+        steps: 11400
+      - date: "2025-03-21"
+        steps: 10200
+      - date: "2025-03-22"
+        steps: 7100
+      - date: "2025-03-23"
+        steps: 5800
+      - date: "2025-03-24"
+        steps: 10900
+      - date: "2025-03-25"
+        steps: 11600
+      - date: "2025-03-26"
+        steps: 12300
+      - date: "2025-03-27"
+        steps: 11900
+      - date: "2025-03-28"
+        steps: 10500
+      - date: "2025-03-29"
+        steps: 6800
+      - date: "2025-03-30"
+        steps: 5500
+      - date: "2025-03-31"
+        steps: 10700
+  visualize:
+    type: line
+    columns: date
+    rows: steps
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  temporal:
+    date_reformatted: true
+    label_sampling: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      temporal: true
+      labels_fewer_than: 31
+    y:
+      min: 0
+      format: numeric

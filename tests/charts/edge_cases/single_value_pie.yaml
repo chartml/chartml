@@ -1,0 +1,36 @@
+name: "Pie chart — single data point (full circle)"
+tags: [edge-case, pie, single-value, minimal]
+description: >
+  A pie chart with only one data point. The renderer must draw a
+  complete circle (360-degree arc) rather than crashing or drawing
+  nothing. Tests the degenerate case where there is no "slice"
+  boundary to compute.
+
+chart:
+  type: chart
+  version: 1
+  title: "Market Share — Monopoly Scenario"
+  data:
+    provider: inline
+    rows:
+      - company: "Acme Corp"
+        share: 100
+  visualize:
+    type: pie
+    columns: company
+    rows: share
+
+assertions:
+  structure:
+    root: svg
+    slices: 1
+    title_in_svg: false
+    legend: true
+    legend_entries: 1
+
+  slices:
+    - label: "Acme Corp"
+      value: 100
+
+  geometry:
+    arcs_sum_to_360: true

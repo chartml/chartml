@@ -1,0 +1,36 @@
+name: "Pie chart — single slice at 100%"
+tags: [pie, single-slice, edge-case, geometry]
+description: >
+  Edge case: a single category occupying the entire pie (100%).
+  The renderer must draw a full circle arc without visual gaps or
+  missing segments. Tests the degenerate case of a 360-degree arc.
+
+chart:
+  type: chart
+  version: 1
+  title: "Market Share — Monopoly Scenario"
+  data:
+    provider: inline
+    rows:
+      - company: "Acme Corp"
+        share: 1000000
+  visualize:
+    type: pie
+    columns: company
+    rows: share
+
+assertions:
+  structure:
+    root: svg
+    slices: 1
+    title_in_svg: false
+    legend: true
+    legend_entries: 1
+
+  slices:
+    - label: "Acme Corp"
+      value: 1000000
+
+  geometry:
+    arcs_sum_to_360: true
+    full_circle_single_arc: true

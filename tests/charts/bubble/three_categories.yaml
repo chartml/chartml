@@ -1,0 +1,70 @@
+name: "Bubble chart — 3 departments sized by headcount"
+tags: [bubble, size-encoding, color-encoding, 3-categories, legend]
+description: >
+  Budget vs efficiency for 3 departments (Engineering, Marketing, Sales),
+  with bubble size mapped to headcount and color mapped to department.
+  Tests 3-color encoding with size variation and a 3-entry legend.
+
+chart:
+  type: chart
+  version: 1
+  title: "Department Budget vs Efficiency"
+  data:
+    provider: inline
+    rows:
+      - budget: 2500000
+        efficiency: 82
+        headcount: 150
+        department: "Engineering"
+      - budget: 1800000
+        efficiency: 78
+        headcount: 95
+        department: "Engineering"
+      - budget: 1200000
+        efficiency: 71
+        headcount: 40
+        department: "Marketing"
+      - budget: 900000
+        efficiency: 75
+        headcount: 35
+        department: "Marketing"
+      - budget: 2000000
+        efficiency: 88
+        headcount: 110
+        department: "Sales"
+      - budget: 1500000
+        efficiency: 84
+        headcount: 80
+        department: "Sales"
+  visualize:
+    type: bubble
+    columns: budget
+    rows: efficiency
+    marks:
+      color: department
+      size: headcount
+
+assertions:
+  structure:
+    root: svg
+    circles: 6
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  size_encoding:
+    field: headcount
+    varying_radii: true
+
+  color_encoding:
+    field: department
+    categories: ["Engineering", "Marketing", "Sales"]
+    distinct_fills: 3
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

@@ -1,0 +1,105 @@
+name: "Grouped bar — actual vs budget by quarter"
+tags: [bar, grouped, multi-series, comparison, legend]
+description: >
+  Side-by-side actual revenue vs budget for each quarter.
+  The most common exec-level variance chart. Tests grouped mode
+  where each category has two bars rendered next to each other.
+
+chart:
+  type: chart
+  version: 1
+  title: "2025 Actual vs Budget"
+  data:
+    provider: inline
+    rows:
+      - quarter: "Q1"
+        measure: "Actual"
+        revenue: 376000
+      - quarter: "Q1"
+        measure: "Budget"
+        revenue: 350000
+      - quarter: "Q2"
+        measure: "Actual"
+        revenue: 412000
+      - quarter: "Q2"
+        measure: "Budget"
+        revenue: 400000
+      - quarter: "Q3"
+        measure: "Actual"
+        revenue: 389000
+      - quarter: "Q3"
+        measure: "Budget"
+        revenue: 425000
+      - quarter: "Q4"
+        measure: "Actual"
+        revenue: 496000
+      - quarter: "Q4"
+        measure: "Budget"
+        revenue: 450000
+  transform:
+    aggregate:
+      dimensions: [quarter, measure]
+      measures:
+        - column: revenue
+          aggregation: sum
+          name: total_revenue
+  visualize:
+    type: bar
+    mode: grouped
+    columns: quarter
+    rows: total_revenue
+    marks:
+      color: measure
+    style:
+      colors: ["#2ecc71", "#95a5a6"]
+
+assertions:
+  structure:
+    root: svg
+    bars: 8
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  bars:
+    - label: "Q1"
+      series: "Actual"
+      value: 376000
+    - label: "Q1"
+      series: "Budget"
+      value: 350000
+    - label: "Q2"
+      series: "Actual"
+      value: 412000
+    - label: "Q2"
+      series: "Budget"
+      value: 400000
+    - label: "Q3"
+      series: "Actual"
+      value: 389000
+    - label: "Q3"
+      series: "Budget"
+      value: 425000
+    - label: "Q4"
+      series: "Actual"
+      value: 496000
+    - label: "Q4"
+      series: "Budget"
+      value: 450000
+
+  grouped:
+    series_per_group: 2
+    bars_side_by_side: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Q1", "Q2", "Q3", "Q4"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

@@ -1,0 +1,101 @@
+name: "Scatter with 20 data points across 4 categories"
+tags: [scatter, many-points, 4-categories, legend, overlap]
+description: >
+  Twenty data points across 4 department categories. Tests rendering
+  at higher density where points may overlap. The legend should show
+  4 entries and all 20 circles should be present in the SVG.
+
+chart:
+  type: chart
+  version: 1
+  title: "Employee Tenure vs Performance Score"
+  data:
+    provider: inline
+    rows:
+      - tenure: 1.2
+        score: 72
+        department: "Engineering"
+      - tenure: 3.5
+        score: 85
+        department: "Engineering"
+      - tenure: 5.1
+        score: 91
+        department: "Engineering"
+      - tenure: 7.8
+        score: 88
+        department: "Engineering"
+      - tenure: 2.0
+        score: 68
+        department: "Engineering"
+      - tenure: 0.8
+        score: 65
+        department: "Sales"
+      - tenure: 2.3
+        score: 78
+        department: "Sales"
+      - tenure: 4.6
+        score: 82
+        department: "Sales"
+      - tenure: 6.2
+        score: 90
+        department: "Sales"
+      - tenure: 1.5
+        score: 71
+        department: "Sales"
+      - tenure: 1.0
+        score: 70
+        department: "Marketing"
+      - tenure: 3.2
+        score: 76
+        department: "Marketing"
+      - tenure: 4.8
+        score: 84
+        department: "Marketing"
+      - tenure: 6.5
+        score: 87
+        department: "Marketing"
+      - tenure: 8.1
+        score: 93
+        department: "Marketing"
+      - tenure: 0.5
+        score: 60
+        department: "Support"
+      - tenure: 2.8
+        score: 74
+        department: "Support"
+      - tenure: 4.0
+        score: 79
+        department: "Support"
+      - tenure: 5.5
+        score: 83
+        department: "Support"
+      - tenure: 7.0
+        score: 86
+        department: "Support"
+  visualize:
+    type: scatter
+    columns: tenure
+    rows: score
+    marks:
+      color: department
+
+assertions:
+  structure:
+    root: svg
+    circles: 20
+    title_in_svg: false
+    legend: true
+    legend_entries: 4
+
+  color_encoding:
+    field: department
+    categories: ["Engineering", "Sales", "Marketing", "Support"]
+    distinct_fills: 4
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

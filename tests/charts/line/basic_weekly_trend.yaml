@@ -1,0 +1,50 @@
+name: "Basic line chart — 6-week revenue trend"
+tags: [line, basic, categorical-x, single-series]
+description: >
+  The simplest real-world line chart: weekly revenue over 6 weeks.
+  This is the most common trend chart a business user creates to
+  track a single KPI over time. Tests single-line rendering with
+  categorical x-axis and proper point placement at band midpoints.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly Revenue"
+  data:
+    provider: inline
+    rows:
+      - week: "Week 1"
+        revenue: 42000
+      - week: "Week 2"
+        revenue: 45500
+      - week: "Week 3"
+        revenue: 43800
+      - week: "Week 4"
+        revenue: 51200
+      - week: "Week 5"
+        revenue: 49700
+      - week: "Week 6"
+        revenue: 55300
+  visualize:
+    type: line
+    columns: week
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"]
+    y:
+      min: 0
+      format: numeric

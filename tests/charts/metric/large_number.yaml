@@ -1,0 +1,32 @@
+name: "Metric card — large number with comma formatting"
+tags: [metric, large-number, comma-format]
+description: >
+  Displays 1,234,567 active users with comma-separated formatting.
+  Tests that the number formatter inserts commas correctly at the
+  thousands boundaries for a 7-digit number.
+
+chart:
+  type: chart
+  version: 1
+  title: "Active Users"
+  data:
+    provider: inline
+    rows:
+      - users: 1234567
+  visualize:
+    type: metric
+    value: users
+    label: "Active Users"
+    format: ",.0f"
+
+assertions:
+  structure:
+    root: div
+    is_metric_card: true
+
+  value:
+    raw: 1234567
+    formatted: "1,234,567"
+
+  trend:
+    present: false

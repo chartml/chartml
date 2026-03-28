@@ -1,0 +1,89 @@
+name: "Date formatting — hourly timestamps for a single day"
+tags: [area, temporal, hourly, date-axis, date-formatting, single-series]
+description: >
+  24 hourly data points for a single day using ISO datetime strings.
+  Tests the renderer's ability to parse datetime values with time
+  components and format x-axis labels at hour-level granularity.
+
+chart:
+  type: chart
+  version: 1
+  title: "Server CPU Usage — March 15, 2025"
+  data:
+    provider: inline
+    rows:
+      - time: "2025-03-15T00:00:00"
+        cpu: 12
+      - time: "2025-03-15T01:00:00"
+        cpu: 9
+      - time: "2025-03-15T02:00:00"
+        cpu: 7
+      - time: "2025-03-15T03:00:00"
+        cpu: 5
+      - time: "2025-03-15T04:00:00"
+        cpu: 4
+      - time: "2025-03-15T05:00:00"
+        cpu: 6
+      - time: "2025-03-15T06:00:00"
+        cpu: 15
+      - time: "2025-03-15T07:00:00"
+        cpu: 28
+      - time: "2025-03-15T08:00:00"
+        cpu: 45
+      - time: "2025-03-15T09:00:00"
+        cpu: 62
+      - time: "2025-03-15T10:00:00"
+        cpu: 71
+      - time: "2025-03-15T11:00:00"
+        cpu: 78
+      - time: "2025-03-15T12:00:00"
+        cpu: 65
+      - time: "2025-03-15T13:00:00"
+        cpu: 72
+      - time: "2025-03-15T14:00:00"
+        cpu: 80
+      - time: "2025-03-15T15:00:00"
+        cpu: 85
+      - time: "2025-03-15T16:00:00"
+        cpu: 76
+      - time: "2025-03-15T17:00:00"
+        cpu: 58
+      - time: "2025-03-15T18:00:00"
+        cpu: 42
+      - time: "2025-03-15T19:00:00"
+        cpu: 35
+      - time: "2025-03-15T20:00:00"
+        cpu: 28
+      - time: "2025-03-15T21:00:00"
+        cpu: 22
+      - time: "2025-03-15T22:00:00"
+        cpu: 18
+      - time: "2025-03-15T23:00:00"
+        cpu: 14
+  visualize:
+    type: area
+    columns: time
+    rows: cpu
+
+assertions:
+  structure:
+    root: svg
+    areas: 1
+    title_in_svg: false
+    legend: false
+
+  temporal:
+    date_reformatted: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      temporal: true
+      labels_fewer_than: 24
+    y:
+      min: 0
+      format: numeric

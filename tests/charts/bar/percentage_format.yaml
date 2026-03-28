@@ -1,0 +1,66 @@
+name: "Percentage formatting — funnel conversion rates"
+tags: [bar, percentage, formatting, single-series]
+description: >
+  Marketing funnel conversion rates displayed as small decimal
+  values (0.032, 0.045, etc.) with percentage formatting on the
+  y-axis. Tests that the renderer can display values as percentages
+  with appropriate precision — a common SaaS metrics dashboard chart.
+
+chart:
+  type: chart
+  version: 1
+  title: "Funnel Conversion Rates — Q1 2026"
+  data:
+    provider: inline
+    rows:
+      - stage: "Visit to Signup"
+        rate: 0.032
+      - stage: "Signup to Trial"
+        rate: 0.045
+      - stage: "Trial to Paid"
+        rate: 0.128
+      - stage: "Paid to Expansion"
+        rate: 0.067
+      - stage: "Referral Rate"
+        rate: 0.021
+  visualize:
+    type: bar
+    columns: stage
+    rows: rate
+    axes:
+      left:
+        label: "Conversion Rate"
+        format: ".1%"
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Visit to Signup"
+      value: 0.032
+    - label: "Signup to Trial"
+      value: 0.045
+    - label: "Trial to Paid"
+      value: 0.128
+    - label: "Paid to Expansion"
+      value: 0.067
+    - label: "Referral Rate"
+      value: 0.021
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Visit to Signup", "Signup to Trial", "Trial to Paid", "Paid to Expansion", "Referral Rate"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: percent
+      label: "Conversion Rate"

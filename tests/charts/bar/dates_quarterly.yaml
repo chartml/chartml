@@ -1,0 +1,65 @@
+name: "Date formatting — quarterly dates over 3 years"
+tags: [bar, temporal, quarterly, date-axis, date-formatting, single-series]
+description: >
+  Quarterly data from Q1 2023 through Q4 2025 using first-of-quarter ISO
+  dates. Tests the renderer's ability to detect quarterly intervals and
+  format labels as quarter representations (e.g., "Q1 2023").
+
+chart:
+  type: chart
+  version: 1
+  title: "Quarterly Revenue"
+  data:
+    provider: inline
+    rows:
+      - quarter: "2023-01-01"
+        revenue: 245000
+      - quarter: "2023-04-01"
+        revenue: 312000
+      - quarter: "2023-07-01"
+        revenue: 289000
+      - quarter: "2023-10-01"
+        revenue: 356000
+      - quarter: "2024-01-01"
+        revenue: 378000
+      - quarter: "2024-04-01"
+        revenue: 421000
+      - quarter: "2024-07-01"
+        revenue: 398000
+      - quarter: "2024-10-01"
+        revenue: 467000
+      - quarter: "2025-01-01"
+        revenue: 489000
+      - quarter: "2025-04-01"
+        revenue: 534000
+      - quarter: "2025-07-01"
+        revenue: 512000
+      - quarter: "2025-10-01"
+        revenue: 578000
+  visualize:
+    type: bar
+    columns: quarter
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 12
+    title_in_svg: false
+    legend: false
+
+  temporal:
+    date_reformatted: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      label_count: 12
+      temporal: true
+    y:
+      min: 0
+      format: numeric

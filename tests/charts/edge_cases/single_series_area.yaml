@@ -1,0 +1,49 @@
+name: "Area chart — minimal 3 data points"
+tags: [edge-case, area, minimal, single-series]
+description: >
+  An area chart with the minimum meaningful number of points (3).
+  Tests that the filled region renders correctly even when there
+  are very few data points to interpolate between.
+
+chart:
+  type: chart
+  version: 1
+  title: "Sprint Velocity — Last 3 Sprints"
+  data:
+    provider: inline
+    rows:
+      - sprint: "Sprint 14"
+        velocity: 34
+      - sprint: "Sprint 15"
+        velocity: 41
+      - sprint: "Sprint 16"
+        velocity: 38
+  visualize:
+    type: area
+    columns: sprint
+    rows: velocity
+
+assertions:
+  structure:
+    root: svg
+    areas: 1
+    title_in_svg: false
+    legend: false
+
+  area_paths:
+    - series: "velocity"
+      has_fill: true
+      fills_to_baseline: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Sprint 14", "Sprint 15", "Sprint 16"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

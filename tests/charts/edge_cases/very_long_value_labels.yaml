@@ -1,0 +1,61 @@
+name: "Bar chart — very large values requiring wide y-axis labels"
+tags: [edge-case, bar, long-labels, margin, y-axis, formatting]
+description: >
+  A bar chart with values in the hundreds of millions (e.g. 123,456,789).
+  The formatted y-axis tick labels will be very wide strings. Tests that
+  the left margin automatically expands to accommodate long numeric labels
+  without them being clipped or overlapping the plot area.
+
+chart:
+  type: chart
+  version: 1
+  title: "Annual Revenue by Division"
+  data:
+    provider: inline
+    rows:
+      - division: "North America"
+        revenue: 234567890
+      - division: "Europe"
+        revenue: 189234567
+      - division: "Asia Pacific"
+        revenue: 156789012
+      - division: "Latin America"
+        revenue: 87654321
+      - division: "Middle East"
+        revenue: 45678901
+  visualize:
+    type: bar
+    columns: division
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "North America"
+      value: 234567890
+    - label: "Europe"
+      value: 189234567
+    - label: "Asia Pacific"
+      value: 156789012
+    - label: "Latin America"
+      value: 87654321
+    - label: "Middle East"
+      value: 45678901
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["North America", "Europe", "Asia Pacific", "Latin America", "Middle East"]
+      orientation: horizontal
+    y:
+      min: 0
+      format: numeric

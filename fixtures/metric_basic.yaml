@@ -1,0 +1,17 @@
+type: chart
+version: 1
+title: "Total Revenue"
+layout:
+  colSpan: 3
+data:
+  provider: inline
+  rows:
+    - current: 1234567
+      previous: 1100000
+visualize:
+  type: metric
+  value: current
+  label: "Current Revenue"
+  format: "$,.0f"
+  compareWith: previous
+  invertTrend: false

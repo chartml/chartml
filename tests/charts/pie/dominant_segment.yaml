@@ -1,0 +1,53 @@
+name: "Pie chart with one dominant segment at 85%"
+tags: [pie, dominant-segment, skewed-distribution]
+description: >
+  One segment dominates at roughly 85% of the total. Tests that the
+  dominant arc is visually the largest, while the small remaining
+  segments are still rendered as visible arcs rather than collapsed.
+
+chart:
+  type: chart
+  version: 1
+  title: "Market Share — Search Engines"
+  data:
+    provider: inline
+    rows:
+      - engine: "Google"
+        share: 85200
+      - engine: "Bing"
+        share: 8300
+      - engine: "Yahoo"
+        share: 3100
+      - engine: "DuckDuckGo"
+        share: 2400
+      - engine: "Other"
+        share: 1000
+  visualize:
+    type: pie
+    columns: engine
+    rows: share
+
+assertions:
+  structure:
+    root: svg
+    slices: 5
+    title_in_svg: false
+    legend: true
+    legend_entries: 5
+
+  slices:
+    - label: "Google"
+      value: 85200
+      dominant: true
+    - label: "Bing"
+      value: 8300
+    - label: "Yahoo"
+      value: 3100
+    - label: "DuckDuckGo"
+      value: 2400
+    - label: "Other"
+      value: 1000
+
+  geometry:
+    arcs_sum_to_360: true
+    small_slices_visible: true

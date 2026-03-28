@@ -1,0 +1,196 @@
+name: "Scatter — 50 data points across 5 categories (stress test)"
+tags: [scatter, stress-test, many-points, 5-categories, legend, overlap]
+description: >
+  Fifty data points across 5 region categories. Stress tests the scatter
+  renderer at higher density with significant point overlap. The legend
+  should show 5 entries and all 50 circles must be present in the SVG.
+
+chart:
+  type: chart
+  version: 1
+  title: "Ad Spend vs Conversions by Region"
+  data:
+    provider: inline
+    rows:
+      # North America (10 points)
+      - spend: 1200
+        conversions: 340
+        region: "North America"
+      - spend: 2400
+        conversions: 580
+        region: "North America"
+      - spend: 3600
+        conversions: 720
+        region: "North America"
+      - spend: 800
+        conversions: 210
+        region: "North America"
+      - spend: 5000
+        conversions: 890
+        region: "North America"
+      - spend: 1800
+        conversions: 450
+        region: "North America"
+      - spend: 4200
+        conversions: 810
+        region: "North America"
+      - spend: 3000
+        conversions: 650
+        region: "North America"
+      - spend: 600
+        conversions: 160
+        region: "North America"
+      - spend: 3800
+        conversions: 740
+        region: "North America"
+      # Europe (10 points)
+      - spend: 1100
+        conversions: 290
+        region: "Europe"
+      - spend: 2200
+        conversions: 520
+        region: "Europe"
+      - spend: 3300
+        conversions: 680
+        region: "Europe"
+      - spend: 900
+        conversions: 230
+        region: "Europe"
+      - spend: 4800
+        conversions: 850
+        region: "Europe"
+      - spend: 1600
+        conversions: 410
+        region: "Europe"
+      - spend: 4000
+        conversions: 770
+        region: "Europe"
+      - spend: 2800
+        conversions: 610
+        region: "Europe"
+      - spend: 700
+        conversions: 180
+        region: "Europe"
+      - spend: 3500
+        conversions: 700
+        region: "Europe"
+      # Asia Pacific (10 points)
+      - spend: 1400
+        conversions: 380
+        region: "Asia Pacific"
+      - spend: 2600
+        conversions: 600
+        region: "Asia Pacific"
+      - spend: 3900
+        conversions: 760
+        region: "Asia Pacific"
+      - spend: 1000
+        conversions: 260
+        region: "Asia Pacific"
+      - spend: 5200
+        conversions: 920
+        region: "Asia Pacific"
+      - spend: 2000
+        conversions: 490
+        region: "Asia Pacific"
+      - spend: 4400
+        conversions: 830
+        region: "Asia Pacific"
+      - spend: 3200
+        conversions: 670
+        region: "Asia Pacific"
+      - spend: 500
+        conversions: 130
+        region: "Asia Pacific"
+      - spend: 4600
+        conversions: 860
+        region: "Asia Pacific"
+      # Latin America (10 points)
+      - spend: 1300
+        conversions: 310
+        region: "Latin America"
+      - spend: 2100
+        conversions: 480
+        region: "Latin America"
+      - spend: 3100
+        conversions: 620
+        region: "Latin America"
+      - spend: 750
+        conversions: 190
+        region: "Latin America"
+      - spend: 4500
+        conversions: 800
+        region: "Latin America"
+      - spend: 1700
+        conversions: 420
+        region: "Latin America"
+      - spend: 3700
+        conversions: 730
+        region: "Latin America"
+      - spend: 2500
+        conversions: 560
+        region: "Latin America"
+      - spend: 550
+        conversions: 140
+        region: "Latin America"
+      - spend: 4100
+        conversions: 780
+        region: "Latin America"
+      # Middle East (10 points)
+      - spend: 1500
+        conversions: 350
+        region: "Middle East"
+      - spend: 2300
+        conversions: 530
+        region: "Middle East"
+      - spend: 3400
+        conversions: 690
+        region: "Middle East"
+      - spend: 850
+        conversions: 220
+        region: "Middle East"
+      - spend: 4900
+        conversions: 870
+        region: "Middle East"
+      - spend: 1900
+        conversions: 460
+        region: "Middle East"
+      - spend: 4300
+        conversions: 820
+        region: "Middle East"
+      - spend: 2900
+        conversions: 630
+        region: "Middle East"
+      - spend: 650
+        conversions: 170
+        region: "Middle East"
+      - spend: 3600
+        conversions: 710
+        region: "Middle East"
+  visualize:
+    type: scatter
+    columns: spend
+    rows: conversions
+    marks:
+      color: region
+
+assertions:
+  structure:
+    root: svg
+    circles: 50
+    title_in_svg: false
+    legend: true
+    legend_entries: 5
+
+  color_encoding:
+    field: region
+    categories: ["North America", "Europe", "Asia Pacific", "Latin America", "Middle East"]
+    distinct_fills: 5
+
+  axes:
+    x:
+      present: true
+      format: numeric
+    y:
+      present: true
+      format: numeric

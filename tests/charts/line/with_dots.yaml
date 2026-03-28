@@ -1,0 +1,58 @@
+name: "Line chart with visible dots at data points"
+tags: [line, dots, style, single-series]
+description: >
+  Weekly conversion rate with showDots enabled. Each data point should
+  have a visible circle element rendered on top of the line path. This
+  is the standard pattern for emphasizing individual data points on a
+  trend line, especially when the number of points is small enough that
+  dots are not cluttered.
+
+chart:
+  type: chart
+  version: 1
+  title: "Weekly Conversion Rate"
+  data:
+    provider: inline
+    rows:
+      - week: "Week 1"
+        rate: 3.2
+      - week: "Week 2"
+        rate: 3.5
+      - week: "Week 3"
+        rate: 3.1
+      - week: "Week 4"
+        rate: 3.8
+      - week: "Week 5"
+        rate: 4.1
+      - week: "Week 6"
+        rate: 3.9
+      - week: "Week 7"
+        rate: 4.4
+      - week: "Week 8"
+        rate: 4.6
+  visualize:
+    type: line
+    columns: week
+    rows: rate
+    style:
+      showDots: true
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+    dots: 8
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6", "Week 7", "Week 8"]
+    y:
+      min: 0
+      format: numeric
