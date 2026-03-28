@@ -359,11 +359,10 @@ mod tests {
             alignment: LegendAlignment::Left,
             ..Default::default()
         };
-        let result = calculate_legend_layout(&labels, &colors, 800.0, &config);
+        // Use a narrow width to force truncation (truncation is based on pixel width, not char count)
+        let result = calculate_legend_layout(&labels, &colors, 200.0, &config);
         assert!(result.items[0].label.ends_with('\u{2026}'),
             "Expected truncated label with ellipsis, got '{}'", result.items[0].label);
-        assert!(result.items[0].label.chars().count() <= config.max_label_chars,
-            "Truncated label should be at most {} chars", config.max_label_chars);
     }
 
     #[test]
