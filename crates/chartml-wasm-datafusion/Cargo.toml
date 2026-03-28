@@ -32,3 +32,9 @@ unused_mut = "forbid"
 too_many_arguments = "forbid"
 large_enum_variant = "forbid"
 wrong_self_convention = "forbid"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[package.metadata.wasm-pack.profile.dev]
+wasm-opt = false
