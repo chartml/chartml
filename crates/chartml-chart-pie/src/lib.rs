@@ -39,8 +39,12 @@ impl ChartRenderer for PieRenderer {
         let width = config.width;
         let height = config.height;
 
-        // Reserve space at the bottom for the legend (30px gap + ~20px legend row)
-        let legend_reserved = 50.0;
+        // Reserve space at the bottom for the legend + 5% bottom margin.
+        // The 50px is a conservative upper-bound for single-row legend height
+        // (30px gap + ~20px legend row); multi-row legends are accommodated by
+        // the actual legend_layout.total_height used for positioning below.
+        let bottom_margin = height * 0.05;
+        let legend_reserved = 50.0 + bottom_margin;
         let radius = (width.min(height - legend_reserved) / 2.0) - 40.0;
         let inner_radius = if is_doughnut { radius * 0.5 } else { 0.0 };
         let cx = width / 2.0;
@@ -96,8 +100,8 @@ impl ChartRenderer for PieRenderer {
             .map(|i| config.colors.get(i % config.colors.len()).cloned().unwrap_or_else(|| "#999".to_string()))
             .collect();
         let legend_layout = calculate_legend_layout(&labels, &legend_colors, width, &legend_config);
-        // Position legend so it fits within the SVG: bottom of legend = height - 8
-        let legend_y = height - legend_layout.total_height - 8.0;
+        // Position legend so the last text baseline sits at least 5% from the bottom edge
+        let legend_y = height - legend_layout.total_height - bottom_margin;
         for item in legend_layout.items.iter().filter(|i| i.visible) {
             // Colored swatch rect
             children.push(ChartElement::Rect {
@@ -113,7 +117,7 @@ impl ChartRenderer for PieRenderer {
             // Label text
             children.push(ChartElement::Text {
                 x: item.x + legend_config.symbol_size + legend_config.symbol_text_gap,
-                y: legend_y + item.y + 10.0,
+                y: legend_y + item.y + 10.0, // vertical center of 20px row_height
                 content: item.label.clone(),
                 anchor: TextAnchor::Start,
                 dominant_baseline: None,
@@ -224,6 +228,34 @@ mod tests {
         assert_eq!(swatch_count, 3, "Should have 3 legend swatches (one per slice)");
         let label_count = count_elements(&element, &|e| matches!(e, ChartElement::Text { class, .. } if class == "legend-label"));
         assert_eq!(label_count, 3, "Should have 3 legend labels (one per slice)");
+    }
+
+    #[test]
+    fn pie_legend_respects_5pct_bottom_margin() {
+        let renderer = PieRenderer::new();
+        let config = make_pie_config("pie");
+        let height = config.height;
+        let element = renderer.render(&make_pie_data(), &config).unwrap();
+        // Find the maximum y coordinate of any legend-label text element
+        let mut max_text_y: f64 = 0.0;
+        fn collect_max_y(el: &ChartElement, max_y: &mut f64) {
+            match el {
+                ChartElement::Text { y, class, .. } if class == "legend-label" => {
+                    if *y > *max_y { *max_y = *y; }
+                }
+                ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                    for child in children { collect_max_y(child, max_y); }
+                }
+                _ => {}
+            }
+        }
+        collect_max_y(&element, &mut max_text_y);
+        let bottom_gap = height - max_text_y;
+        assert!(
+            bottom_gap >= height * 0.05,
+            "Bottom gap {:.1}px ({:.1}%) is below 5% threshold on {:.0}px chart",
+            bottom_gap, bottom_gap / height * 100.0, height
+        );
     }
 
     #[test]

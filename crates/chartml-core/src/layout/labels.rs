@@ -14,21 +14,19 @@ pub enum LabelStrategy {
 
 /// Configuration for label strategy determination.
 pub struct LabelStrategyConfig {
-    pub min_label_spacing: f64,   // Default: 10.0 px
+    pub min_label_spacing: f64,   // Default: 4.0 px
     pub max_label_width: f64,     // Default: 120.0 px for truncation
-    pub max_rotation_margin: f64, // Default: 150.0 px (raised for long labels)
-    pub long_label_threshold: f64, // Avg width above which labels are "long" (default: 180.0 px)
+    pub max_rotation_margin: f64, // Default: 150.0 px
     pub rotation_angle_deg: f64,  // Default: 45.0 degrees
 }
 
 impl Default for LabelStrategyConfig {
     fn default() -> Self {
         Self {
-            min_label_spacing: 10.0,
+            min_label_spacing: 4.0,
             max_label_width: 120.0,
             max_rotation_margin: 150.0,
             rotation_angle_deg: 45.0,
-            long_label_threshold: 180.0,
         }
     }
 }
@@ -93,28 +91,11 @@ impl LabelStrategy {
             let spacing = 6.0;
             let overlap_width = (available_per_visible - spacing) / cos_a;
 
-            // For sentence-length labels (avg_width above threshold) with few
-            // labels, allow a wider floor so more text is visible even if it
-            // causes a small amount of controlled horizontal overlap.  The
-            // floor scales with available_per_visible so that charts with many
-            // labels are unaffected.
-            let long_label_boost = if avg_width >= config.long_label_threshold && visible_count <= 12 {
-                // Guarantee at least 70% of the average label width is shown.
-                // This keeps the most significant words visible in sentence-
-                // length labels while still fitting in the chart.
-                avg_width * 0.7
-            } else {
-                0.0
-            };
-            let max_full_width = if overlap_width > 0.0 {
-                overlap_width.max(long_label_boost)
-            } else {
-                long_label_boost.max(0.0)
-            };
-
-            // Effective width is the lesser of the widest label and the truncation cap
-            let effective_width = if max_full_width > 0.0 {
-                max_width.min(max_full_width)
+            // Effective width: cap each label at the overlap-free width
+            // derived from the per-label spacing. This scales naturally with
+            // chart width and label count — no special-case boost needed.
+            let effective_width = if overlap_width > 0.0 {
+                max_width.min(overlap_width)
             } else {
                 max_width
             };
@@ -122,17 +103,10 @@ impl LabelStrategy {
             // Rotated labels are placed at y_position + 10, so total space
             // needed below the axis line is 10 + vertical_descent + padding.
             // The base bottom margin (40px) already covers some of that.
-            // We preserve the same ~22px padding that horizontal labels get
-            // (base 40 - horizontal label offset 18 = 22px padding).
-            let total_needed = 10.0 + required_vertical + 22.0;
+            // Match the JS labelUtils.js padding of 15px.
+            let total_needed = 10.0 + required_vertical + 15.0;
             let base_bottom = 40.0;
-            // Raise the margin cap for long labels to accommodate the extra descent.
-            let effective_max_margin = if avg_width >= config.long_label_threshold {
-                config.max_rotation_margin + 50.0
-            } else {
-                config.max_rotation_margin
-            };
-            let margin = (total_needed - base_bottom).max(0.0).ceil().min(effective_max_margin);
+            let margin = (total_needed - base_bottom).max(0.0).ceil().min(config.max_rotation_margin);
             return LabelStrategy::Rotated { margin, skip_factor };
         }
 
@@ -239,9 +213,14 @@ mod si_tests {
 }
 
 /// After rotation, check if labels still overlap and compute skip factor.
-/// Since post-rotation truncation is applied in generate_x_axis, the skip
-/// factor only needs to engage when there are so many labels that even a
-/// minimal truncated label (~40px wide) would overlap after rotation.
+///
+/// Two-pronged approach:
+/// 1. **Physical overlap**: When rotated labels overlap, the renderer truncates
+///    them. Only skip when truncation would make labels too short to read
+///    (below `min_readable_width`).
+/// 2. **Readability thinning**: When there are many rotated labels (> 14) that
+///    fill most of their allotted horizontal space, thin for visual clarity
+///    even though there is no physical overlap.
 pub fn compute_skip_factor(
     labels: &[String],
     available_width: f64,
@@ -250,20 +229,44 @@ pub fn compute_skip_factor(
     if labels.len() <= 8 {
         return None;
     }
-    let available_per_label = available_width / labels.len() as f64;
+    let label_count = labels.len();
+    let available_per_label = available_width / label_count as f64;
     let cos_angle = rotation_angle_deg.to_radians().cos();
-    // Minimum useful label width: ~40px (about 5 chars + ellipsis).
-    // If even this minimal rotated width doesn't fit, we need to skip.
-    let min_label_width = 40.0;
-    let min_rotated_width = min_label_width * cos_angle;
-    let spacing = 6.0;
-    let overlap_ratio = (min_rotated_width + spacing) / available_per_label;
-    if overlap_ratio > 1.0 {
-        // Compute skip so that the remaining labels have enough room
-        Some((overlap_ratio.ceil() as usize).max(2))
-    } else {
-        None
+
+    // Use actual average label width for the overlap check (post-rotation
+    // horizontal projection) rather than a fixed minimum.
+    let widths: Vec<f64> = labels.iter().map(|l| approximate_text_width(l)).collect();
+    let avg_width = widths.iter().sum::<f64>() / widths.len() as f64;
+    let avg_rotated = avg_width * cos_angle;
+
+    // Check 1: Physical overlap after rotation.
+    // When the rotated projection exceeds the per-label slot, the renderer
+    // applies post-rotation truncation. Only skip if truncation would make
+    // labels unreadably short (< min_readable_width unrotated).
+    let min_gap = 2.0;
+    if avg_rotated + min_gap > available_per_label {
+        let max_unrotated = (available_per_label - min_gap).max(0.0) / cos_angle;
+        let min_readable_width = 30.0; // ~4 chars + ellipsis
+        if max_unrotated < min_readable_width {
+            let needed_per = min_readable_width * cos_angle + min_gap;
+            let skip = (needed_per / available_per_label).ceil() as usize;
+            return Some(skip.max(2));
+        }
+        // Truncation keeps labels readable; no skip needed.
+        return None;
     }
+
+    // Check 2: Readability thinning.
+    // Many rotated labels (> 14) look cluttered when there is meaningful gap
+    // between them (> 5px) but the density is still high. When the gap is tiny
+    // (< 5px), labels are in "barely fits" territory and truncation alone
+    // handles the layout — thinning would over-reduce.
+    let gap = available_per_label - avg_rotated;
+    if label_count > 14 && gap > 5.0 {
+        return Some(2);
+    }
+
+    None
 }
 
 /// Select strategic indices for sampled label display.

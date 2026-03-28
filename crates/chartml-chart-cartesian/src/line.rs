@@ -48,7 +48,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     // Step 1: Compute label strategy for margin estimation
     let estimated_width = config.width - 80.0;
     let x_format = get_x_format(config);
-    let x_strategy = LabelStrategy::determine(&categories, estimated_width, &LabelStrategyConfig::default());
+    let formatted_for_strategy = crate::helpers::format_display_labels(&categories, x_format.as_deref());
+    let x_strategy = LabelStrategy::determine(&formatted_for_strategy, estimated_width, &LabelStrategyConfig::default());
     let x_extra_margin = match &x_strategy {
         LabelStrategy::Rotated { margin, .. } => *margin,
         _ => 0.0,

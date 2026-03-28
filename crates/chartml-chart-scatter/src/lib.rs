@@ -65,13 +65,30 @@ impl ChartRenderer for ScatterRenderer {
         // fills the plot area instead of being crammed near a forced zero origin.
         let x_domain = (x_extent.0, x_extent.1);
         let y_domain = (y_extent.0, y_extent.1);
-        let x_scale = ScaleLinear::new(x_domain, (margins.left, margins.left + inner_width)).nice(5);
-        let y_scale = ScaleLinear::new(y_domain, (margins.top + inner_height, margins.top)).nice(5); // inverted for SVG
-
         // Size scale (if marks.size present)
         let size_scale = size_field.as_ref().and_then(|f| {
             data.extent(f).map(|ext| ScaleSqrt::new(ext, (3.0, 20.0))) // radius 3-20px
         });
+
+        // Compute maximum point radius to inset scale ranges, ensuring circles
+        // don't extend past the SVG edges. Use at least 5% of inner dimension.
+        let max_radius = match (&size_field, &size_scale) {
+            (Some(sf), Some(ss)) => {
+                let mut mr = 5.0_f64;
+                for i in 0..data.num_rows() {
+                    if let Some(v) = data.get_f64(i, sf) {
+                        mr = mr.max(ss.map(v));
+                    }
+                }
+                mr
+            }
+            _ => 5.0,
+        };
+        let x_inset = max_radius.max(inner_width * 0.05);
+        let y_inset = max_radius.max(inner_height * 0.05);
+
+        let x_scale = ScaleLinear::new(x_domain, (margins.left + x_inset, margins.left + inner_width - x_inset)).nice(5);
+        let y_scale = ScaleLinear::new(y_domain, (margins.top + inner_height - y_inset, margins.top + y_inset)).nice(5); // inverted for SVG
 
         // Generate scatter points
         let mut point_elements = Vec::new();
@@ -103,7 +120,12 @@ impl ChartRenderer for ScatterRenderer {
 
                 let label = data.get_string(i, &x_field).unwrap_or_default();
                 let value = format!("{}", y);
-                let el_data = ElementData::new(label, value);
+                let mut el_data = ElementData::new(label, value);
+                if let Some(ref cf) = color_field {
+                    if let Some(series_name) = data.get_string(i, cf) {
+                        el_data = el_data.with_series(series_name);
+                    }
+                }
 
                 point_elements.push(ChartElement::Circle {
                     cx,
@@ -434,6 +456,34 @@ mod tests {
         let element = result.unwrap();
         let circle_count = count_elements(&element, &|e| matches!(e, ChartElement::Circle { .. }));
         assert!(circle_count > 0);
+    }
+
+    #[test]
+    fn scatter_data_series_populated_with_color_encoding() {
+        let renderer = ScatterRenderer::new();
+        let element = renderer.render(&make_scatter_data(), &make_scatter_config()).unwrap();
+        // Collect series values from data circles (not legend circles)
+        let mut series_values = Vec::new();
+        fn collect_series(el: &ChartElement, out: &mut Vec<Option<String>>) {
+            match el {
+                ChartElement::Circle { data: Some(d), class, .. } if !class.contains("legend") => {
+                    out.push(d.series.clone());
+                }
+                ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                    for child in children { collect_series(child, out); }
+                }
+                _ => {}
+            }
+        }
+        collect_series(&element, &mut series_values);
+        assert_eq!(series_values.len(), 4, "Expected 4 data circles");
+        for (i, series) in series_values.iter().enumerate() {
+            assert!(series.is_some(), "Circle {} has null data.series", i);
+        }
+        // Verify actual category values are present
+        let series_strs: Vec<&str> = series_values.iter().map(|s| s.as_deref().unwrap()).collect();
+        assert!(series_strs.contains(&"A"));
+        assert!(series_strs.contains(&"B"));
     }
 
     #[test]

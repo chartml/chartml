@@ -35,7 +35,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     // Step 1: Compute label strategy for margin estimation
     let estimated_width = config.width - 80.0;
     let x_format = get_x_format(config);
-    let x_strategy = LabelStrategy::determine(&categories, estimated_width, &LabelStrategyConfig::default());
+    let formatted_for_strategy = crate::helpers::format_display_labels(&categories, x_format.as_deref());
+    let x_strategy = LabelStrategy::determine(&formatted_for_strategy, estimated_width, &LabelStrategyConfig::default());
     let x_extra_margin = match &x_strategy {
         LabelStrategy::Rotated { margin, .. } => *margin,
         _ => 0.0,
@@ -69,10 +70,15 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         .and_then(|a| a.x.as_ref())
         .and_then(|a| a.label.as_ref())
         .is_some();
+    let has_y_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.left.as_ref())
+        .and_then(|a| a.label.as_ref())
+        .is_some();
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         legend_height,
         has_x_axis_label,
+        has_y_axis_label,
         x_label_strategy_margin: x_extra_margin,
         y_tick_labels: area_prelim_labels,
         ..Default::default()

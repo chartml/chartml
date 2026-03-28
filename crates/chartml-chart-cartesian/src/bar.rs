@@ -108,11 +108,13 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     let y_fmt_ref = y_fmt.as_deref();
     let (axis_min, axis_max) = get_y_axis_bounds(config);
 
-    // Use display labels for width estimation (original text, not indexed keys)
-    let labels_for_strategy = display_labels.as_deref().unwrap_or(&categories);
+    // Format labels the same way generate_x_axis will — margin estimation must
+    // use the actual display strings, not raw data values.
+    let raw_for_strategy = display_labels.as_deref().unwrap_or(&categories);
+    let formatted_for_strategy = crate::helpers::format_display_labels(raw_for_strategy, x_format.as_deref());
     let x_extra_margin = if !is_horizontal {
         let estimated_width = config.width - 80.0;
-        let x_strategy = LabelStrategy::determine(labels_for_strategy, estimated_width, &LabelStrategyConfig::default());
+        let x_strategy = LabelStrategy::determine(&formatted_for_strategy, estimated_width, &LabelStrategyConfig::default());
         match &x_strategy {
             LabelStrategy::Rotated { margin, .. } => *margin,
             _ => 0.0,
@@ -194,10 +196,15 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         .and_then(|a| a.x.as_ref())
         .and_then(|a| a.label.as_ref())
         .is_some();
+    let has_y_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.left.as_ref())
+        .and_then(|a| a.label.as_ref())
+        .is_some();
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
         legend_height,
         has_x_axis_label,
+        has_y_axis_label,
         x_label_strategy_margin: x_extra_margin,
         y_tick_labels: y_tick_labels_for_margin,
         ..Default::default()

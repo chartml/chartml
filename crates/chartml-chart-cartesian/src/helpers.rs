@@ -253,20 +253,6 @@ pub fn format_tick_value(value: f64, tick_step: f64) -> String {
     }
 }
 
-/// Format a numeric tick value WITHOUT comma separators.
-///
-/// This matches JS's `d => d` (plain toString) used by horizontal bar charts.
-/// Produces the same precision as `format_tick_value` but omits comma grouping.
-pub fn format_tick_value_plain(value: f64, tick_step: f64) -> String {
-    let precision = if tick_step.abs() < 1e-15 {
-        0usize
-    } else {
-        let p = -(tick_step.abs().log10().floor()) as i64;
-        p.max(0) as usize
-    };
-    format!("{:.prec$}", value, prec = precision)
-}
-
 /// Insert commas into a string of digits (no sign).
 fn insert_commas_str(digits: &str) -> String {
     let len = digits.len();
@@ -353,6 +339,23 @@ fn insert_commas(n: u64) -> String {
     result
 }
 
+/// Format labels for display, applying the same date reformatting that
+/// `generate_x_axis` will use at render time. Call this before
+/// `LabelStrategy::determine()` so the margin estimation uses the same
+/// strings that will actually be rendered.
+pub fn format_display_labels(
+    raw_labels: &[String],
+    x_format: Option<&str>,
+) -> Vec<String> {
+    if let Some(fmt) = x_format {
+        raw_labels.iter().map(|l| reformat_date_label(l, fmt)).collect()
+    } else if let Some(detected_fmt) = detect_date_format(raw_labels) {
+        raw_labels.iter().map(|l| reformat_date_label(l, &detected_fmt)).collect()
+    } else {
+        raw_labels.to_vec()
+    }
+}
+
 /// Result of x-axis generation, including the computed label strategy.
 pub struct XAxisResult {
     pub elements: Vec<ChartElement>,
@@ -387,13 +390,7 @@ pub fn generate_x_axis_with_display(
     let raw_labels: &[String] = display_label_overrides.unwrap_or(band_keys);
 
     // Step 1: Format labels (date detection or explicit format)
-    let display_labels: Vec<String> = if let Some(fmt) = x_format {
-        raw_labels.iter().map(|l| reformat_date_label(l, fmt)).collect()
-    } else if let Some(detected_fmt) = detect_date_format(raw_labels) {
-        raw_labels.iter().map(|l| reformat_date_label(l, &detected_fmt)).collect()
-    } else {
-        raw_labels.to_vec()
-    };
+    let display_labels = format_display_labels(raw_labels, x_format);
 
     // Step 2: Determine label strategy
     let label_config = LabelStrategyConfig::default();
@@ -489,24 +486,12 @@ pub fn generate_x_axis_with_display(
             let spacing = 6.0;
             let overlap_width = (available_per_visible - spacing) / cos45;
 
-            // For sentence-length labels with few visible labels, boost the
-            // truncation threshold so that more of the label text is shown.
-            // This mirrors the long_label_boost in LabelStrategy::determine().
-            let avg_label_width: f64 = if display_labels.is_empty() {
-                0.0
-            } else {
-                display_labels.iter().map(|l| approximate_text_width(l)).sum::<f64>()
-                    / display_labels.len() as f64
-            };
-            let long_label_boost = if avg_label_width >= label_config.long_label_threshold && visible_count <= 12 {
-                avg_label_width * 0.7
-            } else {
-                0.0
-            };
+            // Cap label width at the overlap-free width. This mirrors
+            // LabelStrategy::determine() — no special-case boost needed.
             let max_full_width = if overlap_width > 0.0 {
-                overlap_width.max(long_label_boost)
+                overlap_width
             } else {
-                long_label_boost.max(0.0)
+                0.0
             };
 
             for (i, label) in display_labels.iter().enumerate() {
@@ -951,12 +936,13 @@ pub fn generate_x_axis_numeric(
 
     for val in &ticks {
         let x = scale.map(*val);
-        // JS horizontal bar uses `d => d` (plain toString) as default tick format,
-        // which does NOT add comma separators. Only use formatted output when an
-        // explicit format string is provided. Apply SI abbreviation for large values.
+        // When an explicit format string is provided (e.g. ".0%" for normalized
+        // stacked charts), use it with SI abbreviation for large values.
+        // Otherwise fall back to D3-style auto-formatting with comma separators,
+        // matching the vertical y-axis behavior.
         let label = match fmt {
             Some(f) => format_tick_value_si(*val, tick_step, f),
-            None => format_tick_value_plain(*val, tick_step),
+            None => format_tick_value(*val, tick_step),
         };
 
         // Vertical grid line

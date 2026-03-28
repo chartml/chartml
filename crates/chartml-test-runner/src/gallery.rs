@@ -261,7 +261,7 @@ section h2 .section-count{{color:#86868b;font-weight:400;font-size:16px}}
 .card-title{{font-size:13px;font-weight:600}}
 .card-size{{font-size:11px;color:#86868b;font-family:monospace}}
 .chart-frame{{display:flex;align-items:center;justify-content:center;padding:8px 12px;background:#fafafa;min-height:80px;overflow:hidden}}
-.chart-frame svg{{max-width:100%;height:auto}}
+.chart-frame svg{{width:100%;height:auto}}
 .chart-frame.no-render{{color:#86868b;font-size:13px}}
 .chart-frame.error{{color:#ff3b30;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-word;padding:12px;text-align:left}}
 .card-footer{{padding:8px 16px 12px}}
@@ -282,7 +282,7 @@ section h2 .section-count{{color:#86868b;font-weight:400;font-size:16px}}
 .hidden{{display:none!important}}
 .lightbox{{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1000;align-items:center;justify-content:center;padding:40px}}
 .lightbox.active{{display:flex}}
-.lightbox-content{{background:#fff;border-radius:16px;max-width:95vw;max-height:95vh;overflow:auto;padding:24px}}
+.lightbox-content{{background:#fff;border-radius:16px;width:90vw;max-width:1400px;max-height:95vh;overflow:auto;padding:24px}}
 .lightbox-content h3{{margin-bottom:12px}}
 .lightbox-close{{position:fixed;top:20px;right:24px;color:#fff;font-size:28px;cursor:pointer;z-index:1001;background:rgba(0,0,0,0.5);border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center}}
 .lightbox-close:hover{{background:rgba(0,0,0,0.8)}}
@@ -323,25 +323,49 @@ function updateCount() {{
   document.getElementById('rendered-count').textContent = renderedCount;
 }}
 
+// Cache fetched YAML so re-renders on resize don't re-fetch
+const yamlCache = new Map();
+
+async function getYaml(id) {{
+  if (yamlCache.has(id)) return yamlCache.get(id);
+  const res = await fetch('/chart-yaml/' + id);
+  if (!res.ok) throw new Error('YAML fetch failed: ' + res.status);
+  const yaml = await res.text();
+  yamlCache.set(id, yaml);
+  return yaml;
+}}
+
+function renderChartAtSize(frame, yaml, width, aspectRatio, chartml) {{
+  const w = Math.round(width);
+  const h = Math.round(w * aspectRatio);
+  if (w <= 0) return;
+  const svg = chartml.renderToSvg(yaml, {{ width: w, height: h }});
+  frame.innerHTML = svg;
+}}
+
 async function renderChart(card, chartml) {{
   const id = card.dataset.id;
-  const w = parseInt(card.dataset.width) || 800;
-  const h = parseInt(card.dataset.height) || 400;
+  const specW = parseInt(card.dataset.width) || 800;
+  const specH = parseInt(card.dataset.height) || 400;
+  const aspectRatio = specH / specW;
   const frameId = 'chart-' + id.replace('/', '-');
   const frame = document.getElementById(frameId);
   if (!frame) return;
 
   try {{
-    const res = await fetch('/chart-yaml/' + id);
-    if (!res.ok) throw new Error('YAML fetch failed: ' + res.status);
-    const yaml = await res.text();
+    const yaml = await getYaml(id);
 
-    const options = {{ width: w, height: h }};
-    const svg = chartml.renderToSvg(yaml, options);
-
-    frame.innerHTML = svg;
+    // Initial render at container width
+    const containerWidth = frame.clientWidth - 24; // subtract padding
+    const w = containerWidth > 0 ? containerWidth : specW;
+    renderChartAtSize(frame, yaml, w, aspectRatio, chartml);
     renderedCount++;
     updateCount();
+
+    // Store render info for ResizeObserver
+    frame._chartYaml = yaml;
+    frame._aspectRatio = aspectRatio;
+    frame._lastWidth = w;
   }} catch (err) {{
     frame.classList.add('error');
     frame.textContent = err.message || String(err);
@@ -359,6 +383,30 @@ async function main() {{
     const batch = cards.slice(i, i + BATCH);
     await Promise.all(batch.map(c => renderChart(c, chartml)));
   }}
+
+  // Re-render charts on container resize
+  let resizeTimeout;
+  const observer = new ResizeObserver(entries => {{
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {{
+      for (const entry of entries) {{
+        const frame = entry.target;
+        if (!frame._chartYaml) continue;
+        const newWidth = Math.round(entry.contentRect.width - 24);
+        if (newWidth > 0 && Math.abs(newWidth - frame._lastWidth) > 5) {{
+          try {{
+            renderChartAtSize(frame, frame._chartYaml, newWidth, frame._aspectRatio, chartml);
+            frame._lastWidth = newWidth;
+          }} catch (_) {{}}
+        }}
+      }}
+    }}, 200);
+  }});
+
+  document.querySelectorAll('.chart-frame').forEach(f => observer.observe(f));
+
+  // Expose chartml for lightbox re-rendering
+  window._chartml = chartml;
 }}
 
 main().catch(err => console.error('WASM init failed:', err));
@@ -377,21 +425,32 @@ search.addEventListener('input', () => {{
   }});
 }});
 
-// Lightbox — clone the card's inline SVG so animations replay
+// Lightbox — re-render chart at full lightbox width
 document.querySelectorAll('.card').forEach(c => {{
-  c.addEventListener('click', () => {{
+  c.addEventListener('click', async () => {{
     const id = c.dataset.id;
     const t = c.querySelector('.card-title').textContent;
     const s = c.querySelector('.card-size').textContent;
-    const svg = c.querySelector('svg');
+    const specW = parseInt(c.dataset.width) || 800;
+    const specH = parseInt(c.dataset.height) || 400;
+    const aspectRatio = specH / specW;
     const lbc = document.getElementById('lightbox-content');
     lbc.innerHTML = `<h3>${{t}} <span style="color:#86868b;font-size:14px">${{s}}</span></h3><div id="lb-chart"></div><p style="margin-top:12px;color:#86868b;font-size:13px"><code>${{id}}</code></p>`;
-    if (svg) {{
-      const clone = svg.cloneNode(true);
-      clone.style.width = '100%';
-      clone.style.maxWidth = clone.getAttribute('width') + 'px';
-      clone.style.height = 'auto';
-      document.getElementById('lb-chart').appendChild(clone);
+
+    const chartml = window._chartml;
+    if (chartml) {{
+      try {{
+        const yaml = await getYaml(id);
+        const lbChart = document.getElementById('lb-chart');
+        // Use the lightbox content width (90vw, max 800px from CSS)
+        const lbWidth = lbc.clientWidth - 48; // subtract padding
+        const w = Math.max(lbWidth, specW);
+        const h = Math.round(w * aspectRatio);
+        const svg = chartml.renderToSvg(yaml, {{ width: w, height: h }});
+        lbChart.innerHTML = svg;
+      }} catch (err) {{
+        document.getElementById('lb-chart').textContent = 'Render error: ' + err.message;
+      }}
     }}
     document.getElementById('lightbox').classList.add('active');
   }});
