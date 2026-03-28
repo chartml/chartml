@@ -64,6 +64,7 @@ const copied = ref(false);
 const renderTime = ref(null);
 let editorView = null;
 let debounceTimeout = null;
+let chartmlInstance = null;
 
 const copyCode = async () => {
   try {
@@ -105,7 +106,7 @@ function extractChartMLBlocks(markdown) {
 }
 
 /**
- * Render the ChartML preview
+ * Render the ChartML preview using the WASM engine
  */
 async function renderPreview() {
   if (!previewContainer.value || !editorView) return;
@@ -129,100 +130,27 @@ async function renderPreview() {
       return;
     }
 
-    // Import ChartML and plugins
-    const { ChartML } = await import('@chartml/core');
-    const yaml = await import('js-yaml');
-
-    // Import chart plugins
-    await import('@chartml/chart-pie');
-    await import('@chartml/chart-scatter');
-
-    // Create ChartML instance (it creates its own registry with paramChangeRegistry)
-    const chartml = new ChartML();
-
-    // PASS 1: Register source/style/config blocks
-    for (const block of chartMLBlocks) {
-      try {
-        const parsed = yaml.load(block);
-
-        if (parsed.type === 'source' || parsed.type === 'style' || parsed.type === 'config') {
-          const tempContainer = document.createElement('div');
-          await chartml.render(block, tempContainer);
-        }
-      } catch (err) {
-        // Ignore pass 1 errors
-      }
+    // Initialize ChartML WASM instance if needed
+    if (!chartmlInstance) {
+      const { ChartML } = await import('@chartml/core');
+      chartmlInstance = await ChartML.create();
     }
 
-    // Check if there are params blocks (they take vertical space)
-    const hasParams = chartMLBlocks.some(block => {
-      try {
-        const parsed = yaml.load(block);
-        return parsed.type === 'params';
-      } catch {
-        return false;
-      }
-    });
-
-    // Count chart blocks to adjust heights
-    const chartCount = chartMLBlocks.filter(block => {
-      try {
-        const parsed = yaml.load(block);
-        return parsed.type === 'chart';
-      } catch {
-        return false;
-      }
-    }).length;
-
-    // PASS 2: Render chart/params blocks
+    // Render each block to SVG
     for (const block of chartMLBlocks) {
+      const chartContainer = document.createElement('div');
+      chartContainer.className = 'chart-container';
+
       try {
-        const parsed = yaml.load(block);
-
-        // Skip source/style/config (already registered)
-        if (parsed.type === 'source' || parsed.type === 'style' || parsed.type === 'config') {
-          continue;
-        }
-
-        // For chart blocks, inject height to fill preview area
-        if (parsed.type === 'chart' && parsed.visualize) {
-          if (!parsed.visualize.style) {
-            parsed.visualize.style = {};
-          }
-          // Set height based on params and chart count
-          if (!parsed.visualize.style.height) {
-            let height;
-            if (chartCount >= 2) {
-              // Multiple charts: divide space equally (~210px per chart)
-              height = 210;
-            } else if (hasParams) {
-              // Single chart with params: account for param controls (~100px)
-              height = 330;
-            } else {
-              // Single chart, no params: fill most of the space
-              height = 450;
-            }
-            parsed.visualize.style.height = height;
-          }
-        }
-
-        // Create container for this chart
-        const chartContainer = document.createElement('div');
-        chartContainer.className = 'chart-container';
-
-        // Append to DOM BEFORE rendering so chart can measure container size
-        previewContainer.value.appendChild(chartContainer);
-
-        // Render the chart with modified spec
-        await chartml.render(parsed, chartContainer);
+        const svg = chartmlInstance.renderToSvg(block);
+        chartContainer.innerHTML = svg;
       } catch (err) {
         console.error('Error rendering ChartML block:', err);
-
-        const errorDiv = document.createElement('div');
-        errorDiv.style.cssText = 'padding: 1rem; background: #fef2f2; color: #991b1b; border-left: 4px solid #dc2626; border-radius: 4px; margin-bottom: 1rem;';
-        errorDiv.innerHTML = `<strong>ChartML Error:</strong> ${err.message}`;
-        previewContainer.value.appendChild(errorDiv);
+        chartContainer.style.cssText = 'padding: 1rem; background: #fef2f2; color: #991b1b; border-left: 4px solid #dc2626; border-radius: 4px; margin-bottom: 1rem;';
+        chartContainer.innerHTML = `<strong>ChartML Error:</strong> ${err.message}`;
       }
+
+      previewContainer.value.appendChild(chartContainer);
     }
 
     const endTime = performance.now();

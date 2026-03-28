@@ -31,7 +31,6 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import '@chartml/markdown-it/styles.css';
 
 const props = defineProps({
   source: {
@@ -47,6 +46,7 @@ const copied = ref(false);
 
 let editorView = null;
 let renderDebounce = null;
+let chartmlInstance = null;
 
 onMounted(async () => {
   // Initialize CodeMirror editor
@@ -95,33 +95,50 @@ async function renderPreview() {
     // Get current editor content
     const source = editorView.state.doc.toString();
 
-    // Import markdown-it and ChartML plugin
+    // Initialize ChartML WASM instance if needed (web target, async init)
+    if (!chartmlInstance) {
+      const { ChartML } = await import('@chartml/core');
+      chartmlInstance = await ChartML.create();
+    }
+
+    // Import markdown-it
     const markdownIt = (await import('markdown-it')).default;
-    const chartMLPlugin = (await import('@chartml/markdown-it')).default;
-    const { renderAllCharts } = await import('@chartml/markdown-it/client');
 
-    // Import chart plugins
-    await import('@chartml/chart-pie');
-    await import('@chartml/chart-scatter');
-    await import('@chartml/chart-metric');
-
-    // Create markdown-it instance and add ChartML plugin
+    // Create markdown-it instance with inline ChartML rendering via WASM
     const md = markdownIt({
       html: true,
       linkify: true,
       typographer: true
     });
 
-    md.use(chartMLPlugin);
+    // Override the fence rule to render chartml blocks as inline SVG
+    const defaultFence = md.renderer.rules.fence;
+    md.renderer.rules.fence = (tokens, idx, opts, env, self) => {
+      const token = tokens[idx];
+      const info = token.info.trim();
 
-    // Render markdown to HTML
+      if (info === 'chartml' || info === 'chartml-yaml') {
+        const yaml = token.content;
+        try {
+          const svg = chartmlInstance.renderToSvg(yaml);
+          return `<div class="chartml-chart">${svg}</div>`;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return `<div class="chartml-chart chartml-error" style="color: #dc3545; font-family: monospace; padding: 12px; background: #fff5f5; border: 1px solid #dc3545; border-radius: 4px;">Chart error: ${msg}</div>`;
+        }
+      }
+
+      if (defaultFence) {
+        return defaultFence(tokens, idx, opts, env, self);
+      }
+      return self.renderToken(tokens, idx, opts);
+    };
+
+    // Render markdown to HTML (charts are already inline SVG)
     const html = md.render(source);
 
-    // Insert HTML into preview
+    // Insert HTML into preview — no post-render step needed
     previewContainer.value.innerHTML = html;
-
-    // Render all ChartML blocks
-    await renderAllCharts();
 
   } catch (err) {
     console.error('[MarkdownEditor] Render error:', err);
@@ -275,7 +292,7 @@ async function copyCode() {
   color: var(--vp-c-text-2);
 }
 
-.preview-content :deep(.chartml-block) {
+.preview-content :deep(.chartml-chart) {
   margin: var(--margin-block) 0;
 }
 

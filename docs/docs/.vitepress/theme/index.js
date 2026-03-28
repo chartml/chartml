@@ -3,27 +3,18 @@ import ChartPreview from '../components/ChartPreview.vue';
 import SideBySideExample from '../components/SideBySideExample.vue';
 import MarkdownEditor from '../components/MarkdownEditor.vue';
 import FeatureCard from '../components/FeatureCard.vue';
-import { renderAllCharts } from '@chartml/markdown-it/client';
-import '@chartml/core/style.css';
 import './custom.css';
 
-// Import ChartML plugins for auto-registration
-import '@chartml/chart-pie';
-import '@chartml/chart-scatter';
-import '@chartml/chart-metric';
+// v3: Charts are pre-rendered as SVG at build time by the WASM engine.
+// No client-side renderAllCharts() needed. No D3 chart plugin imports needed.
 
 export default {
   extends: DefaultTheme,
-  enhanceApp({ app, router }) {
+  enhanceApp({ app }) {
     // Register Vue components
     app.component('ChartPreview', ChartPreview);
     app.component('SideBySideExample', SideBySideExample);
     app.component('MarkdownEditor', MarkdownEditor);
     app.component('FeatureCard', FeatureCard);
-
-    // Render ChartML blocks on route changes (VitePress SPA navigation)
-    if (typeof window !== 'undefined') {
-      router.onAfterRouteChanged = () => setTimeout(renderAllCharts, 100);
-    }
   }
 };

@@ -3,7 +3,7 @@
     <div v-if="error" class="error-message">
       <strong>Chart Error:</strong> {{ error }}
     </div>
-    <div v-else ref="chartContainer" class="chart-container"></div>
+    <div v-else ref="chartContainer" class="chart-container" v-html="svgContent"></div>
   </div>
 </template>
 
@@ -18,17 +18,15 @@ const props = defineProps({
 });
 
 const chartContainer = ref(null);
+const svgContent = ref('');
 const error = ref(null);
 
 onMounted(async () => {
   try {
-    if (!chartContainer.value) {
-      throw new Error('Chart container not found');
-    }
-
-    // Dynamically import @chartml/core only on client side
-    const { renderChart } = await import('@chartml/core');
-    await renderChart(props.spec, chartContainer.value);
+    // Dynamically import @chartml/core (web WASM target) on client side
+    const { ChartML } = await import('@chartml/core');
+    const chartml = await ChartML.create();
+    svgContent.value = chartml.renderToSvg(props.spec);
   } catch (err) {
     console.error('Chart rendering error:', err);
     error.value = err.message || 'Unknown error rendering chart';
