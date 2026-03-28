@@ -5,6 +5,7 @@ use chartml_core::error::ChartError;
 use chartml_core::scales::{ScaleLinear, ScaleSqrt};
 use chartml_core::spec::{VisualizeSpec, FieldRef, MarkEncoding};
 use chartml_core::layout::margins::Margins;
+use chartml_core::layout::labels::{approximate_text_width_at, format_tick_value_si};
 use chartml_core::layout::legend::{LegendMark, LegendConfig, calculate_legend_layout, generate_legend_elements};
 
 pub struct ScatterRenderer;
@@ -31,7 +32,14 @@ impl ChartRenderer for ScatterRenderer {
         let width = config.width;
         let height = config.height;
 
-        let has_legend = color_field.is_some();
+        // Color mapping — compute early so has_legend is accurate
+        let color_categories: Vec<String> = if let Some(ref cf) = color_field {
+            data.unique_values(cf)
+        } else {
+            vec![]
+        };
+
+        let has_legend = color_categories.len() > 1;
         let margins = if has_legend {
             // Add 30px bottom margin for the legend row
             Margins::new(30.0, 20.0, 70.0, 60.0)
@@ -58,13 +66,6 @@ impl ChartRenderer for ScatterRenderer {
         let size_scale = size_field.as_ref().and_then(|f| {
             data.extent(f).map(|ext| ScaleSqrt::new(ext, (3.0, 20.0))) // radius 3-20px
         });
-
-        // Color mapping
-        let color_categories: Vec<String> = if let Some(ref cf) = color_field {
-            data.unique_values(cf)
-        } else {
-            vec![]
-        };
 
         // Generate scatter points
         let mut point_elements = Vec::new();
@@ -122,59 +123,85 @@ impl ChartRenderer for ScatterRenderer {
         let y_tick_step = compute_tick_step(&y_ticks);
         let x_tick_step = compute_tick_step(&x_ticks);
 
+        // Y-axis label skip factor: skip labels that would overlap vertically
+        let y_label_height = 18.0; // 14px font + 4px spacing
+        let y_skip = if y_ticks.len() > 1 {
+            let px_per_tick = inner_height / (y_ticks.len() - 1) as f64;
+            (y_label_height / px_per_tick).ceil() as usize
+        } else {
+            1
+        }.max(1);
+
         // Horizontal grid lines + y-axis ticks
-        for &val in &y_ticks {
+        for (i, &val) in y_ticks.iter().enumerate() {
             let y = y_scale.map(val);
-            // Grid line
+            // Grid line — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: margins.left, y1: y, x2: margins.left + inner_width, y2: y,
                 stroke: "#e0e0e0".to_string(), stroke_width: Some(1.0),
                 stroke_dasharray: None, class: "grid-line".to_string(),
             });
-            // Tick
+            // Tick mark — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: margins.left - 5.0, y1: y, x2: margins.left, y2: y,
                 stroke: "#999".to_string(), stroke_width: Some(1.0),
                 stroke_dasharray: None, class: "tick".to_string(),
             });
-            // Label
-            let label = format_tick_value(val, y_tick_step);
-            axis_elements.push(ChartElement::Text {
-                x: margins.left - 8.0, y,
-                content: label, anchor: TextAnchor::End,
-                dominant_baseline: Some("middle".to_string()),
-                transform: None, font_size: Some("11px".to_string()),
-                font_weight: None,
-                fill: Some("#666".to_string()), class: "tick-label".to_string(), data: None,
-            });
+            // Label — only if not skipped
+            if i % y_skip == 0 {
+                let label = format_tick_value_si(val, y_tick_step);
+                axis_elements.push(ChartElement::Text {
+                    x: margins.left - 8.0, y,
+                    content: label, anchor: TextAnchor::End,
+                    dominant_baseline: Some("middle".to_string()),
+                    transform: None, font_size: Some("11px".to_string()),
+                    font_weight: None,
+                    fill: Some("#666".to_string()), class: "tick-label".to_string(), data: None,
+                });
+            }
         }
+
+        // X-axis label skip factor: skip labels that would overlap horizontally
+        let x_label_widths: Vec<f64> = x_ticks.iter()
+            .map(|&v| approximate_text_width_at(&format_tick_value_si(v, x_tick_step), 11.0))
+            .collect();
+        let x_widest = x_label_widths.iter().cloned().fold(0.0_f64, f64::max);
+        let x_skip = if x_ticks.len() > 1 {
+            let px_per_tick = inner_width / (x_ticks.len() - 1) as f64;
+            let needed = x_widest + 8.0; // label width + small gap
+            (needed / px_per_tick).ceil() as usize
+        } else {
+            1
+        }.max(1);
 
         // Vertical grid lines + x-axis ticks
         let x_axis_y = margins.top + inner_height;
-        for &val in &x_ticks {
+        for (i, &val) in x_ticks.iter().enumerate() {
             let x = x_scale.map(val);
-            // Grid line
+            // Grid line — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: x, y1: margins.top, x2: x, y2: x_axis_y,
                 stroke: "#e0e0e0".to_string(), stroke_width: Some(1.0),
                 stroke_dasharray: None, class: "grid-line".to_string(),
             });
-            // Tick
+            // Tick mark — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: x, y1: x_axis_y, x2: x, y2: x_axis_y + 5.0,
                 stroke: "#999".to_string(), stroke_width: Some(1.0),
                 stroke_dasharray: None, class: "tick".to_string(),
             });
-            // Label
-            let label = format_tick_value(val, x_tick_step);
-            axis_elements.push(ChartElement::Text {
-                x, y: x_axis_y + 18.0,
-                content: label, anchor: TextAnchor::Middle,
-                dominant_baseline: None, transform: None,
-                font_size: Some("11px".to_string()), font_weight: None,
-                fill: Some("#666".to_string()),
-                class: "tick-label".to_string(), data: None,
-            });
+            // Label — only if not skipped
+            if i % x_skip == 0 {
+                let label = format_tick_value_si(val, x_tick_step);
+                axis_elements.push(ChartElement::Text {
+                    x, y: x_axis_y + 18.0,
+                    content: label, anchor: TextAnchor::Middle,
+                    dominant_baseline: None, transform: None,
+                    font_size: Some("11px".to_string()), font_weight: None,
+                    fill: Some("#666".to_string()),
+                    class: "tick-label".to_string(), data: None,
+                });
+            }
         }
 
         // Axis lines
@@ -204,26 +231,23 @@ impl ChartRenderer for ScatterRenderer {
             children: point_elements,
         });
 
-        // Legend
-        if let Some(ref cf) = color_field {
-            let series_names = data.unique_values(cf);
-            if series_names.len() > 1 {
-                let legend_config = LegendConfig::default();
-                let legend_layout = calculate_legend_layout(&series_names, &config.colors, width, &legend_config);
-                let legend_y = height - legend_layout.total_height - 8.0;
-                let legend_elements = generate_legend_elements(
-                    &series_names,
-                    &config.colors,
-                    width,
-                    legend_y,
-                    LegendMark::Circle,
-                );
-                children.push(ChartElement::Group {
-                    class: "legend".to_string(),
-                    transform: None,
-                    children: legend_elements,
-                });
-            }
+        // Legend — reuse color_categories computed earlier
+        if color_categories.len() > 1 {
+            let legend_config = LegendConfig::default();
+            let legend_layout = calculate_legend_layout(&color_categories, &config.colors, width, &legend_config);
+            let legend_y = height - legend_layout.total_height - 8.0;
+            let legend_elements = generate_legend_elements(
+                &color_categories,
+                &config.colors,
+                width,
+                legend_y,
+                LegendMark::Circle,
+            );
+            children.push(ChartElement::Group {
+                class: "legend".to_string(),
+                transform: None,
+                children: legend_elements,
+            });
         }
 
         Ok(ChartElement::Svg {
@@ -284,59 +308,6 @@ fn compute_tick_step(ticks: &[f64]) -> f64 {
     } else {
         1.0
     }
-}
-
-/// Format a numeric value for use as an axis tick label, with comma separators.
-///
-/// Mirrors the D3-style `format_tick_value` from the cartesian helpers: computes
-/// decimal precision from the tick step and inserts commas into the integer part.
-fn format_tick_value(value: f64, tick_step: f64) -> String {
-    // D3's precisionFixed(step): max(0, -floor(log10(abs(step))))
-    let precision = if tick_step.abs() < 1e-15 {
-        0usize
-    } else {
-        let p = -(tick_step.abs().log10().floor()) as i64;
-        p.max(0) as usize
-    };
-
-    let formatted = format!("{:.prec$}", value, prec = precision);
-
-    // Split on decimal point
-    let (int_part, dec_part) = if let Some(dot_pos) = formatted.find('.') {
-        (&formatted[..dot_pos], Some(&formatted[dot_pos..]))
-    } else {
-        (formatted.as_str(), None)
-    };
-
-    // Handle negative sign
-    let (sign, digits) = if let Some(stripped) = int_part.strip_prefix('-') {
-        ("-", stripped)
-    } else {
-        ("", int_part)
-    };
-
-    let with_commas = insert_commas(digits);
-
-    match dec_part {
-        Some(dec) => format!("{}{}{}", sign, with_commas, dec),
-        None => format!("{}{}", sign, with_commas),
-    }
-}
-
-/// Insert comma separators into a string of digits.
-fn insert_commas(digits: &str) -> String {
-    let len = digits.len();
-    if len <= 3 {
-        return digits.to_string();
-    }
-    let mut result = String::with_capacity(len + len / 3);
-    for (i, ch) in digits.chars().enumerate() {
-        if i > 0 && (len - i).is_multiple_of(3) {
-            result.push(',');
-        }
-        result.push(ch);
-    }
-    result
 }
 
 #[cfg(test)]

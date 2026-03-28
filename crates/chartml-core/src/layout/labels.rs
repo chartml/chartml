@@ -106,6 +106,53 @@ pub fn approximate_text_width(text: &str) -> f64 {
     text.chars().map(char_width).sum()
 }
 
+/// Approximate text width at a given font size (scales from the 12px base).
+pub fn approximate_text_width_at(text: &str, font_size_px: f64) -> f64 {
+    approximate_text_width(text) * (font_size_px / 12.0)
+}
+
+/// Format a numeric tick value using SI suffixes (K, M, B) based on the tick step.
+///
+/// This keeps axis labels compact for large-valued axes.
+pub fn format_tick_value_si(value: f64, tick_step: f64) -> String {
+    let abs_step = tick_step.abs();
+
+    if abs_step >= 1_000_000_000.0 {
+        let v = value / 1_000_000_000.0;
+        return if (v - v.round()).abs() < 1e-9 {
+            format!("{}B", v as i64)
+        } else {
+            format!("{:.1}B", v)
+        };
+    }
+    if abs_step >= 1_000_000.0 {
+        let v = value / 1_000_000.0;
+        return if (v - v.round()).abs() < 1e-6 {
+            format!("{}M", v as i64)
+        } else {
+            format!("{:.1}M", v)
+        };
+    }
+    if abs_step >= 1_000.0 {
+        let v = value / 1_000.0;
+        return if (v - v.round()).abs() < 1e-3 {
+            format!("{}K", v as i64)
+        } else {
+            format!("{:.1}K", v)
+        };
+    }
+
+    // Standard precision formatting
+    if abs_step < 1e-15 {
+        return format!("{}", value);
+    }
+    let precision = {
+        let p = -(abs_step.log10().floor()) as i64;
+        p.max(0) as usize
+    };
+    format!("{:.prec$}", value, prec = precision)
+}
+
 /// After rotation, check if labels still overlap and compute skip factor.
 /// Since post-rotation truncation is applied in generate_x_axis, the skip
 /// factor only needs to engage when there are so many labels that even a
@@ -279,5 +326,42 @@ mod tests {
     fn approximate_text_width_basic() {
         let width = approximate_text_width("Hello");
         assert!(width > 0.0, "Width should be non-zero for non-empty string");
+    }
+
+    #[test]
+    fn format_tick_value_si_millions() {
+        assert_eq!(format_tick_value_si(5_000_000.0, 1_000_000.0), "5M");
+        assert_eq!(format_tick_value_si(2_500_000.0, 1_000_000.0), "2.5M");
+    }
+
+    #[test]
+    fn format_tick_value_si_thousands() {
+        assert_eq!(format_tick_value_si(10_000.0, 5_000.0), "10K");
+        assert_eq!(format_tick_value_si(1_500.0, 1_000.0), "1.5K");
+    }
+
+    #[test]
+    fn format_tick_value_si_billions() {
+        assert_eq!(format_tick_value_si(3_000_000_000.0, 1_000_000_000.0), "3B");
+        assert_eq!(format_tick_value_si(1_500_000_000.0, 1_000_000_000.0), "1.5B");
+    }
+
+    #[test]
+    fn format_tick_value_si_small_values() {
+        assert_eq!(format_tick_value_si(0.5, 0.1), "0.5");
+        assert_eq!(format_tick_value_si(42.0, 10.0), "42");
+    }
+
+    #[test]
+    fn format_tick_value_si_zero_tick_step() {
+        // Should not panic; falls through to the guard for near-zero step
+        let result = format_tick_value_si(123.0, 0.0);
+        assert_eq!(result, "123");
+    }
+
+    #[test]
+    fn format_tick_value_si_negative_values() {
+        assert_eq!(format_tick_value_si(-2_000_000.0, 1_000_000.0), "-2M");
+        assert_eq!(format_tick_value_si(-500.0, 100.0), "-500");
     }
 }
