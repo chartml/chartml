@@ -32,6 +32,9 @@ pub struct ChartML {
     sources: HashMap<String, DataTable>,
     /// Parameter default values, collected from type: params components.
     param_values: params::ParamValues,
+    /// Default color palette — used when the spec doesn't specify `style.colors`.
+    /// Mirrors the JS ChartML `setDefaultPalette()` API.
+    default_palette: Option<Vec<String>>,
 }
 
 impl ChartML {
@@ -41,6 +44,7 @@ impl ChartML {
             registry: ChartMLRegistry::new(),
             sources: HashMap::new(),
             param_values: params::ParamValues::new(),
+            default_palette: None,
         }
     }
 
@@ -66,6 +70,12 @@ impl ChartML {
 
     pub fn set_datasource_resolver(&mut self, resolver: impl DatasourceResolver + 'static) {
         self.registry.set_datasource_resolver(resolver);
+    }
+
+    /// Set the default color palette for charts that don't specify `style.colors`.
+    /// Matches the JS ChartML `setDefaultPalette()` API.
+    pub fn set_default_palette(&mut self, colors: Vec<String>) {
+        self.default_palette = Some(colors);
     }
 
     // --- Component registration (matches JS chartml.registerComponent()) ---
@@ -341,6 +351,7 @@ impl ChartML {
         let colors = chart_spec.visualize.style
             .as_ref()
             .and_then(|s| s.colors.clone())
+            .or_else(|| self.default_palette.clone())
             .unwrap_or_else(|| {
                 color::get_chart_colors(12, color::palettes::get_palette("autumn_forest"))
             });
@@ -756,6 +767,7 @@ impl ChartML {
 
         let colors = chart_spec.visualize.style.as_ref()
             .and_then(|s| s.colors.clone())
+            .or_else(|| self.default_palette.clone())
             .unwrap_or_else(|| {
                 color::get_chart_colors(12, color::palettes::get_palette("autumn_forest"))
             });
