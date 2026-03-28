@@ -25,6 +25,9 @@ serde_json = "1"
 web-sys = { version = "0.3", features = ["Request", "RequestInit", "Response", "Window"] }
 getrandom = { version = "0.2", features = ["js"] }
 
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
 # Cannot use workspace lints because wasm_bindgen emits #[allow(dead_code)]
 # which conflicts with workspace forbid. Mirror workspace lints with deny instead.
 [lints.rust]
