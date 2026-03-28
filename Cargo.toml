@@ -29,13 +29,14 @@ default-members = [
     "crates/chartml-test-runner",
 ]
 
-# Workspace-wide lint policy — forbid = cannot be overridden by #[allow(...)].
-# unused_variables uses "deny" because thiserror macros internally emit #[allow(unused_variables)].
+# Workspace-wide lint policy — deny level enforced by pre-commit hook.
+# Not using "forbid" because macro-generated code (tokio::test, thiserror, etc.)
+# emits #[allow(...)] attributes that conflict with forbid.
 [workspace.lints.rust]
-dead_code = "forbid"
-unused_imports = "forbid"
+dead_code = "deny"
+unused_imports = "deny"
 unused_variables = "deny"
-unused_mut = "forbid"
+unused_mut = "deny"
 
 [workspace.lints.clippy]
 too_many_arguments = "forbid"
