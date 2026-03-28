@@ -90,5 +90,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify golden SVG signatures
-        continue-on-error: true
         run: bash scripts/verify-charts.sh
