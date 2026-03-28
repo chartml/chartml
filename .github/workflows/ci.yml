@@ -89,5 +89,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Debug golden SVG hash
+        run: |
+          echo "File info:"
+          file test-output/golden/area/basic_cumulative.svg
+          echo "sha256:"
+          sha256sum test-output/golden/area/basic_cumulative.svg
+          echo "Expected from .sig:"
+          head -1 test-output/golden/area/basic_cumulative.svg.sig
+          echo "File size:"
+          wc -c < test-output/golden/area/basic_cumulative.svg
+          echo "Git config:"
+          git config --get core.autocrlf || echo "not set"
       - name: Verify golden SVG signatures
         run: bash scripts/verify-charts.sh
