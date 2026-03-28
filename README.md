@@ -1,12 +1,14 @@
 # ChartML
 
 <div align="center">
-  <h3>A declarative markup language for creating beautiful, interactive data visualizations</h3>
+  <h3>Declarative chart markup, powered by Rust/WASM</h3>
   <p>
     <a href="https://chartml.org">Website</a> •
     <a href="https://chartml.org/spec">Specification</a> •
     <a href="https://chartml.org/examples">Examples</a> •
-    <a href="https://chartml.org/quick-reference">Quick Reference</a>
+    <a href="https://www.npmjs.com/package/@chartml/core">npm</a> •
+    <a href="https://crates.io/crates/chartml-core">crates.io</a> •
+    <a href="https://github.com/AlyticInc/chartml">GitHub</a>
   </p>
 </div>
 
@@ -14,7 +16,7 @@
 
 ## What is ChartML?
 
-ChartML is a YAML-based markup language that lets you create charts and dashboards with simple, declarative syntax. No JavaScript required—just describe what you want, and ChartML handles the rest.
+ChartML is a YAML-based markup language for creating charts and dashboards with simple, declarative syntax. The spec is unchanged from v2 — all existing chart definitions work without modification. In v3, the rendering engine has been rewritten in Rust and compiled to WASM, replacing D3 with native-speed rendering.
 
 ```yaml
 data:
@@ -33,29 +35,27 @@ visualize:
     title: "Monthly Revenue"
 ```
 
-That's it! ChartML transforms this into a beautiful, interactive D3-powered chart.
-
 ## Features
 
-- ✅ **Built-in Chart Types**: Bar, line, and area charts included
-- ✅ **Plugin System**: Extend with pie charts, scatter plots, and custom renderers
-- ✅ **Built-in Aggregation**: GROUP BY, SUM, AVG, COUNT, MIN, MAX using d3-array
-- ✅ **Zero Extra Dependencies**: Only d3 and js-yaml
-- ✅ **Lightweight**: ~21 KB gzipped
-- ✅ **Framework Agnostic**: Works with React, Vue, vanilla JS, or as markdown
+- **All Chart Types Built In**: Bar, line, area, pie, doughnut, scatter, bubble, and metric charts — no separate packages needed
+- **Rust/WASM Engine**: Native-speed rendering compiled to WebAssembly (~487 KB gzipped, includes all chart types)
+- **Plugin System**: `registerRenderer()`, `registerDataSource()`, `registerTransform()`, `setDatasourceResolver()`
+- **Framework Support**: React, markdown-it, and Leptos (Rust) integrations
+- **Optional SQL Transforms**: `@chartml/datafusion` for SQL-based data transforms
+- **Same YAML Spec**: All v2 chart specs work without modification
 
 ## Quick Start
 
-### Installation
+### JavaScript / TypeScript
 
 ```bash
 npm install @chartml/core
 ```
 
-### Basic Usage
-
 ```javascript
 import { ChartML } from '@chartml/core';
+
+const chartml = await ChartML.create();
 
 const spec = `
 data:
@@ -70,40 +70,30 @@ visualize:
   rows: revenue
 `;
 
-const chartml = new ChartML();
-await chartml.render(spec, document.getElementById('chart'));
+const svg = chartml.renderToSvg(spec);
+document.getElementById('chart').innerHTML = svg;
 ```
 
-### With Plugins
+### Rust
 
-```javascript
-import { ChartML } from '@chartml/core';
-import '@chartml/chart-pie'; // Auto-registers pie chart renderer
-
-const chartml = new ChartML();
-// Now you can use type: pie in your specs
+```bash
+cargo add chartml-core chartml-chart-cartesian chartml-render
 ```
-
-## Packages
-
-This monorepo contains:
-
-### Core Library
-- **[@chartml/core](./packages/core)** - Core library with parser and built-in charts
-
-### Chart Plugins
-- **[@chartml/chart-pie](./packages/chart-pie)** - Pie and doughnut chart plugin
-- **[@chartml/chart-scatter](./packages/chart-scatter)** - Scatter plot and bubble chart plugin
-- **[@chartml/chart-metric](./packages/chart-metric)** - Metric card plugin for KPIs
 
 ### Framework Integrations
-- **[@chartml/react](./packages/react)** - React wrapper component
-- **[@chartml/markdown-react](./packages/markdown-react)** - React-markdown plugin
-- **[@chartml/markdown-it](./packages/markdown-it)** - Markdown-it plugin for static sites
-- **[@chartml/markdown-common](./packages/markdown-common)** - Shared utilities for markdown plugins
 
-### Documentation
-- **[docs](./docs)** - Documentation website (VitePress)
+- **[@chartml/react](https://www.npmjs.com/package/@chartml/react)** — React wrapper component
+- **[@chartml/markdown-it](https://www.npmjs.com/package/@chartml/markdown-it)** — Markdown-it plugin for static sites
+- **[@chartml/markdown-react](https://www.npmjs.com/package/@chartml/markdown-react)** — React markdown component
+- **[chartml-leptos](https://crates.io/crates/chartml-leptos)** — Leptos component for Rust web apps
+
+## Migration from v2
+
+- **Async init**: `const chartml = await ChartML.create()` replaces `new ChartML()`
+- **API rename**: `renderToSvg()` and `renderToElement()` replace `render()`
+- **No separate chart packages**: `@chartml/chart-pie`, `@chartml/chart-scatter`, `@chartml/chart-metric` are deprecated — all chart types are bundled in `@chartml/core`
+- **`@chartml/markdown-common` deprecated** — functionality merged into core
+- **YAML specs unchanged** — no changes to your chart definitions
 
 ## Documentation
 
@@ -111,65 +101,6 @@ This monorepo contains:
 - **Full Specification**: https://chartml.org/spec
 - **Examples**: https://chartml.org/examples
 - **Quick Reference**: https://chartml.org/quick-reference
-
-## Community Plugins
-
-ChartML has a growing ecosystem of community-created plugins:
-
-- Create your own chart renderers
-- Add custom data sources (PostgreSQL, GraphQL, CSV, etc.)
-- Build custom transform engines
-
-See the [Plugin Architecture Guide](./packages/core/PLUGIN_ARCHITECTURE.md) to learn how to create plugins.
-
-## Development
-
-This is a pnpm monorepo. To get started:
-
-```bash
-# Install dependencies
-pnpm install
-
-# Build all packages
-pnpm build
-
-# Run tests
-pnpm test
-
-# Start documentation site
-pnpm docs:dev
-```
-
-## Releasing
-
-To publish a new version to npm:
-
-1. **Update the version** in the package's `package.json`:
-   ```bash
-   # Example: bump @chartml/core from 1.4.1 to 1.4.2
-   cd packages/core
-   # Edit package.json version field
-   ```
-
-2. **Rebuild the package**:
-   ```bash
-   npm run build
-   ```
-
-3. **Commit, tag, and push**:
-   ```bash
-   git add .
-   git commit -m "Release @chartml/core v1.4.2"
-   git tag v1.4.2
-   git push origin main --tags
-   ```
-
-4. **GitHub Actions will automatically**:
-   - Detect packages with version changes
-   - Build and publish to npm
-   - Create GitHub releases
-
-The workflow triggers on any tag matching `v*`. You can also trigger it manually from the Actions tab with an optional dry-run mode.
 
 ## Contributing
 
