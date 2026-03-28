@@ -47,7 +47,7 @@ export class ChartML {
    */
   static async create(): Promise<ChartML> {
     if (!initPromise) {
-      initPromise = import('../pkg/chartml.js').then(async (m) => {
+      initPromise = import('../pkg/web/chartml_wasm.js').then(async (m) => {
         await m.default();
         return m;
       });

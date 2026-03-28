@@ -1,11 +1,16 @@
 [package]
 name = "chartml-chart-cartesian"
-version = "0.1.0"
+version = "3.0.0"
 edition = "2021"
 license = "MIT"
+repository = "https://github.com/chartml/chartml"
+homepage = "https://chartml.org"
+readme = "README.md"
+keywords = ["chartml", "chart", "bar", "line", "area"]
+categories = ["visualization"]
 
 [dependencies]
-chartml-core = { path = "../chartml-core" }
+chartml-core = { path = "../chartml-core", version = "3.0.0" }
 serde_json = "1"
 
 [dev-dependencies]

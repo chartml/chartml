@@ -4,17 +4,18 @@ version = "2.0.0"
 edition = "2021"
 license = "MIT"
 description = "ChartML WASM bindings for npm — chart rendering engine for JavaScript"
+publish = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-chartml-core = { path = "../chartml-core" }
-chartml-chart-cartesian = { path = "../chartml-chart-cartesian" }
-chartml-chart-pie = { path = "../chartml-chart-pie" }
-chartml-chart-scatter = { path = "../chartml-chart-scatter" }
-chartml-chart-metric = { path = "../chartml-chart-metric" }
-chartml-render = { path = "../chartml-render", default-features = false }
+chartml-core = { path = "../chartml-core", version = "3.0.0" }
+chartml-chart-cartesian = { path = "../chartml-chart-cartesian", version = "3.0.0" }
+chartml-chart-pie = { path = "../chartml-chart-pie", version = "3.0.0" }
+chartml-chart-scatter = { path = "../chartml-chart-scatter", version = "3.0.0" }
+chartml-chart-metric = { path = "../chartml-chart-metric", version = "3.0.0" }
+chartml-render = { path = "../chartml-render", version = "3.0.0", default-features = false }
 wasm-bindgen = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
@@ -40,3 +41,9 @@ unused_mut = "forbid"
 too_many_arguments = "forbid"
 large_enum_variant = "forbid"
 wrong_self_convention = "forbid"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[package.metadata.wasm-pack.profile.dev]
+wasm-opt = false

@@ -1,8 +1,13 @@
 [package]
 name = "chartml-core"
-version = "0.1.0"
+version = "3.0.0"
 edition = "2021"
 license = "MIT"
+repository = "https://github.com/chartml/chartml"
+homepage = "https://chartml.org"
+readme = "README.md"
+keywords = ["chartml", "chart", "visualization", "svg"]
+categories = ["visualization", "graphics"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

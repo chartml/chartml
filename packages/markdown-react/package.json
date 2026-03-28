@@ -1,6 +1,6 @@
 {
   "name": "@chartml/markdown-react",
-  "version": "2.0.0-alpha.1",
+  "version": "3.0.0",
   "description": "React component for rendering markdown with embedded ChartML charts",
   "type": "module",
   "main": "dist/index.js",
@@ -10,13 +10,21 @@
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
     "markdown-it": "^13.0.0 || ^14.0.0",
-    "@chartml/core": "^2.0.0-alpha.1",
-    "@chartml/markdown-it": "^2.0.0-alpha.1"
+    "@chartml/core": "^3.0.0",
+    "@chartml/markdown-it": "^3.0.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
     "@types/react": "^18.0.0",
     "@types/markdown-it": "^14.0.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chartml/chartml.git",
+    "directory": "packages/markdown-react"
+  },
+  "homepage": "https://chartml.org",
+  "author": "Kyomi.ai",
+  "keywords": ["chartml", "chart", "visualization", "wasm", "svg"],
   "license": "MIT"
 }

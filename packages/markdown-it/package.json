@@ -1,6 +1,6 @@
 {
   "name": "@chartml/markdown-it",
-  "version": "2.0.0-alpha.1",
+  "version": "3.0.0",
   "description": "markdown-it plugin for rendering ChartML charts in markdown",
   "type": "module",
   "main": "dist/index.js",
@@ -9,11 +9,19 @@
   "scripts": { "build": "tsc" },
   "peerDependencies": {
     "markdown-it": "^13.0.0 || ^14.0.0",
-    "@chartml/core": "^2.0.0-alpha.1"
+    "@chartml/core": "^3.0.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
     "@types/markdown-it": "^14.0.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chartml/chartml.git",
+    "directory": "packages/markdown-it"
+  },
+  "homepage": "https://chartml.org",
+  "author": "Kyomi.ai",
+  "keywords": ["chartml", "chart", "visualization", "wasm", "svg"],
   "license": "MIT"
 }

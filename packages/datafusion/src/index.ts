@@ -22,7 +22,7 @@ export async function createDataFusionTransform(): Promise<
   (rows: Record<string, unknown>[], spec: Record<string, unknown>, context: Record<string, unknown>) => Promise<{ data: Record<string, unknown>[]; metadata: Record<string, unknown> }>
 > {
   if (!initPromise) {
-    initPromise = import('../pkg/chartml-datafusion.js').then(async (m) => {
+    initPromise = import('../pkg/web/chartml_wasm_datafusion.js').then(async (m) => {
       await m.default();
       return m;
     });

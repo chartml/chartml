@@ -1,12 +1,17 @@
 [package]
 name = "chartml-datafusion"
-version = "0.1.0"
+version = "3.0.0"
 edition = "2021"
 license = "MIT"
+repository = "https://github.com/chartml/chartml"
+homepage = "https://chartml.org"
+readme = "README.md"
+keywords = ["chartml", "datafusion", "sql", "transform"]
+categories = ["database"]
 
 [dependencies]
-chartml-core = { path = "../chartml-core" }
-chartml-forecast = { path = "../chartml-forecast" }
+chartml-core = { path = "../chartml-core", version = "3.0.0" }
+chartml-forecast = { path = "../chartml-forecast", version = "3.0.0" }
 datafusion = { version = "52", default-features = false, features = ["sql"] }
 arrow = { version = "57", default-features = false, features = ["ipc"] }
 async-trait = "0.1"

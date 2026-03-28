@@ -21,7 +21,7 @@ pub struct ChartConfig {
 }
 
 /// Chart renderer plugin — converts data + config into a ChartElement tree.
-pub trait ChartRenderer: super::MaybeSend {
+pub trait ChartRenderer: Send + Sync {
     /// Render data with the given config into a ChartElement tree.
     fn render(&self, data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError>;
 

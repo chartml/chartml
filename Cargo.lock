@@ -496,6 +496,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e629a66d692cb9ff1a1c664e41771b3dcaf961985a9774c0eb0bd1b51cf60a48"
 
 [[package]]
+name = "cast"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
+
+[[package]]
 name = "cc"
 version = "1.2.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -513,7 +519,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "chartml-chart-cartesian"
-version = "0.1.0"
+version = "3.0.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -522,7 +528,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-metric"
-version = "0.1.0"
+version = "3.0.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -531,7 +537,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-pie"
-version = "0.1.0"
+version = "3.0.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -540,7 +546,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-scatter"
-version = "0.1.0"
+version = "3.0.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -548,7 +554,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-core"
-version = "0.1.0"
+version = "3.0.0"
 dependencies = [
  "arrow",
  "async-trait",
@@ -561,7 +567,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-datafusion"
-version = "0.1.0"
+version = "3.0.0"
 dependencies = [
  "arrow",
  "async-trait",
@@ -596,7 +602,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-forecast"
-version = "0.1.0"
+version = "3.0.0"
 dependencies = [
  "augurs-core",
  "augurs-ets",
@@ -626,7 +632,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-render"
-version = "0.1.0"
+version = "3.0.0"
 dependencies = [
  "chartml-core",
  "fontdb",
@@ -670,6 +676,7 @@ dependencies = [
  "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-bindgen-test",
  "web-sys",
 ]
 
@@ -2569,6 +2576,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "minicov"
+version = "0.3.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4869b6a491569605d66d3952bcdf03df789e5b536e5f0cf7758a7f08a55ae24d"
+dependencies = [
+ "cc",
+ "walkdir",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2612,6 +2629,15 @@ name = "next_tuple"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60993920e071b0c9b66f14e2b32740a4e27ffc82854dcd72035887f336a09a28"
+
+[[package]]
+name = "nu-ansi-term"
+version = "0.50.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
+dependencies = [
+ "windows-sys",
+]
 
 [[package]]
 name = "num-bigint"
@@ -2701,6 +2727,12 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "oorandom"
+version = "11.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
 name = "or_poisoned"
@@ -4134,6 +4166,45 @@ checksum = "a93e946af942b58934c604527337bad9ae33ba1d5c6900bbb41c2c07c2364a93"
 dependencies = [
  "unicode-ident",
 ]
+
+[[package]]
+name = "wasm-bindgen-test"
+version = "0.3.65"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1138411301a026d6662dc44e7076a74dbaa76a369312275eea5dee4d7dc68c7c"
+dependencies = [
+ "async-trait",
+ "cast",
+ "js-sys",
+ "libm",
+ "minicov",
+ "nu-ansi-term",
+ "num-traits",
+ "oorandom",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test-macro",
+ "wasm-bindgen-test-shared",
+]
+
+[[package]]
+name = "wasm-bindgen-test-macro"
+version = "0.3.65"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "186ddfe8383ba7ae7927bae3bb7343fd1f03ba2dbaf1474410f0d831131c269b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "wasm-bindgen-test-shared"
+version = "0.2.115"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f032e076ceb8d36d5921c6cef5bf447f2ca2bbd5439ce1683d68d1c99cc2be16"
 
 [[package]]
 name = "wasm-encoder"

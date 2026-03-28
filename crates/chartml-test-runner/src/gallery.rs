@@ -17,8 +17,6 @@ struct SpecInfo {
     title: String,
     svg_width: u32,
     svg_height: u32,
-    has_svg: bool,
-    svg_content: Option<String>,
 }
 
 fn specs_dir() -> PathBuf {
@@ -76,10 +74,10 @@ fn discover_specs() -> Vec<SpecInfo> {
             }
         }
 
-        // Read SVG and extract dimensions
+        // Read SVG dimensions from pre-rendered output (if available)
         let (mut svg_width, mut svg_height) = (800u32, 400u32);
-        let svg_content = if has_svg {
-            fs::read_to_string(&svg_path).ok().inspect(|svg_text| {
+        if has_svg {
+            if let Ok(svg_text) = fs::read_to_string(&svg_path) {
                 let head: String = svg_text.chars().take(500).collect();
                 if let Some(w) = extract_attr(&head, "width") {
                     svg_width = w;
@@ -87,10 +85,8 @@ fn discover_specs() -> Vec<SpecInfo> {
                 if let Some(h) = extract_attr(&head, "height") {
                     svg_height = h;
                 }
-            })
-        } else {
-            None
-        };
+            }
+        }
 
         specs.push(SpecInfo {
             id,
@@ -98,8 +94,6 @@ fn discover_specs() -> Vec<SpecInfo> {
             title,
             svg_width,
             svg_height,
-            has_svg,
-            svg_content,
         });
     }
     specs
@@ -115,6 +109,19 @@ fn extract_attr(svg_head: &str, attr: &str) -> Option<u32> {
         }
     }
     None
+}
+
+/// Extract the `chart:` sub-document from a test spec YAML.
+/// Test specs wrap the ChartML spec under `chart:` alongside `name:`, `assertions:`, etc.
+fn extract_chart_yaml(yaml_text: &str) -> String {
+    let spec: serde_yaml::Value = match serde_yaml::from_str(yaml_text) {
+        Ok(v) => v,
+        Err(_) => return yaml_text.to_string(),
+    };
+    match spec.get("chart") {
+        Some(chart_value) => serde_yaml::to_string(chart_value).unwrap_or_else(|_| yaml_text.to_string()),
+        None => yaml_text.to_string(), // no wrapper, return as-is
+    }
 }
 
 /// Read the chart animation/interaction CSS from the demo stylesheet.
@@ -133,8 +140,8 @@ fn chart_css() -> String {
     }
 }
 
-/// Build the full gallery HTML.
-fn build_html(specs: &[SpecInfo]) -> String {
+/// Build the gallery HTML — renders all charts client-side using WasmChartML.
+fn build_wasm_html(specs: &[SpecInfo]) -> String {
     // Group by type, preserving order
     let mut groups: BTreeMap<String, Vec<&SpecInfo>> = BTreeMap::new();
     for s in specs {
@@ -147,12 +154,10 @@ fn build_html(specs: &[SpecInfo]) -> String {
     ];
 
     let total = specs.len();
-    let rendered = specs.iter().filter(|s| s.has_svg).count();
 
     let mut nav_html = String::new();
     let mut sections_html = String::new();
 
-    // Ordered types first, then any extras
     let mut seen = std::collections::HashSet::new();
     let ordered: Vec<String> = type_order
         .iter()
@@ -167,7 +172,6 @@ fn build_html(specs: &[SpecInfo]) -> String {
             None => continue,
         };
         let label = t.replace('_', " ");
-        // Title-case
         let label: String = label
             .split_whitespace()
             .map(|w| {
@@ -182,37 +186,31 @@ fn build_html(specs: &[SpecInfo]) -> String {
 
         nav_html.push_str(&format!(
             "<a href=\"#{t}\" class=\"nav-item\">{label} <span class=\"count\">{count}</span></a>",
-            t = t,
-            label = label,
-            count = group.len(),
+            t = t, label = label, count = group.len(),
         ));
 
         let mut cards_html = String::new();
         for s in group {
-            let chart_embed = if let Some(ref svg) = s.svg_content {
-                // Inline the SVG so CSS animations and hover/tooltips work
-                format!(
-                    r#"<div class="chart-frame">{}</div>"#,
-                    svg,
-                )
-            } else {
-                r#"<div class="chart-frame no-render">Not rendered</div>"#.to_string()
-            };
-
-            let size_label = format!("{}x{}", s.svg_width, s.svg_height);
-            // Escape HTML in title
             let safe_title = s.title.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+            let size_label = format!("{}x{}", s.svg_width, s.svg_height);
 
             cards_html.push_str(&format!(
-                r#"<div class="card" data-id="{id}">
+                r#"<div class="card" data-id="{id}" data-width="{w}" data-height="{h}">
                     <div class="card-header">
                         <span class="card-title">{title}</span>
                         <span class="card-actions"><button class="info-btn" onclick="showYaml('{id}');event.stopPropagation()">YAML</button><span class="card-size">{size}</span></span>
                     </div>
-                    {chart}
+                    <div class="chart-frame" id="chart-{escaped_id}">
+                        <div class="loading-spinner"></div>
+                    </div>
                     <div class="card-footer"><code>{id}</code></div>
                 </div>"#,
-                id = s.id, title = safe_title, size = size_label, chart = chart_embed,
+                id = s.id,
+                escaped_id = s.id.replace('/', "-"),
+                title = safe_title,
+                size = size_label,
+                w = s.svg_width,
+                h = s.svg_height,
             ));
         }
 
@@ -264,13 +262,15 @@ section h2 .section-count{{color:#86868b;font-weight:400;font-size:16px}}
 .card-size{{font-size:11px;color:#86868b;font-family:monospace}}
 .chart-frame{{display:flex;align-items:center;justify-content:center;padding:8px 12px;background:#fafafa;min-height:80px;overflow:hidden}}
 .chart-frame svg{{max-width:100%;height:auto}}
-.chart-frame img{{max-width:100%;height:auto}}
 .chart-frame.no-render{{color:#86868b;font-size:13px}}
+.chart-frame.error{{color:#ff3b30;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-word;padding:12px;text-align:left}}
 .card-footer{{padding:8px 16px 12px}}
 .card-footer code{{font-size:11px;color:#86868b}}
 .card-actions{{display:flex;align-items:center;gap:8px}}
 .info-btn{{padding:2px 8px;border:1px solid #d2d2d7;border-radius:4px;background:#fff;cursor:pointer;font-size:10px;font-weight:600;color:#0071e3;transition:all .15s}}
 .info-btn:hover{{background:#0071e3;color:#fff}}
+.loading-spinner{{width:24px;height:24px;border:3px solid #e5e5e5;border-top-color:#0071e3;border-radius:50%;animation:spin 0.8s linear infinite}}
+@keyframes spin{{to{{transform:rotate(360deg)}}}}
 .yaml-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:2000;align-items:center;justify-content:center;padding:40px}}
 .yaml-modal.active{{display:flex}}
 .yaml-modal-content{{background:#1e1e1e;border-radius:12px;max-width:800px;width:90vw;max-height:90vh;overflow:auto;padding:0}}
@@ -284,7 +284,6 @@ section h2 .section-count{{color:#86868b;font-weight:400;font-size:16px}}
 .lightbox.active{{display:flex}}
 .lightbox-content{{background:#fff;border-radius:16px;max-width:95vw;max-height:95vh;overflow:auto;padding:24px}}
 .lightbox-content h3{{margin-bottom:12px}}
-.lightbox-content img{{max-width:100%;height:auto}}
 .lightbox-close{{position:fixed;top:20px;right:24px;color:#fff;font-size:28px;cursor:pointer;z-index:1001;background:rgba(0,0,0,0.5);border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center}}
 .lightbox-close:hover{{background:rgba(0,0,0,0.8)}}
 @media(max-width:600px){{.grid{{grid-template-columns:1fr}}main{{padding:16px}}}}
@@ -293,7 +292,7 @@ section h2 .section-count{{color:#86868b;font-weight:400;font-size:16px}}
 <body>
 <header>
 <h1>ChartML Test Gallery</h1>
-<div class="stats"><strong>{rendered}</strong> / {total} rendered</div>
+<div class="stats"><strong id="rendered-count">0</strong> / {total} rendered</div>
 </header>
 <div class="toolbar">
 <input type="text" id="search" placeholder="Search specs..." autofocus />
@@ -314,78 +313,128 @@ section h2 .section-count{{color:#86868b;font-weight:400;font-size:16px}}
   <div class="chartml-tooltip-label" id="tt-label"></div>
   <div class="chartml-tooltip-value" id="tt-value"></div>
 </div>
-<script>
+<script type="module">
+import init, {{ WasmChartML }} from '/pkg/web/chartml_wasm.js';
+
+let renderedCount = 0;
+const totalCount = {total};
+
+function updateCount() {{
+  document.getElementById('rendered-count').textContent = renderedCount;
+}}
+
+async function renderChart(card, chartml) {{
+  const id = card.dataset.id;
+  const w = parseInt(card.dataset.width) || 800;
+  const h = parseInt(card.dataset.height) || 400;
+  const frameId = 'chart-' + id.replace('/', '-');
+  const frame = document.getElementById(frameId);
+  if (!frame) return;
+
+  try {{
+    const res = await fetch('/chart-yaml/' + id);
+    if (!res.ok) throw new Error('YAML fetch failed: ' + res.status);
+    const yaml = await res.text();
+
+    const options = {{ width: w, height: h }};
+    const svg = chartml.renderToSvg(yaml, options);
+
+    frame.innerHTML = svg;
+    renderedCount++;
+    updateCount();
+  }} catch (err) {{
+    frame.classList.add('error');
+    frame.textContent = err.message || String(err);
+  }}
+}}
+
+async function main() {{
+  await init('/pkg/wasm/chartml_wasm_bg.wasm');
+  const chartml = new WasmChartML();
+
+  // Render charts in batches to avoid blocking the UI
+  const cards = Array.from(document.querySelectorAll('.card[data-id]'));
+  const BATCH = 8;
+  for (let i = 0; i < cards.length; i += BATCH) {{
+    const batch = cards.slice(i, i + BATCH);
+    await Promise.all(batch.map(c => renderChart(c, chartml)));
+  }}
+}}
+
+main().catch(err => console.error('WASM init failed:', err));
+
 // Search
-const search=document.getElementById('search');
-search.addEventListener('input',()=>{{
-  const q=search.value.toLowerCase();
-  document.querySelectorAll('.card').forEach(c=>{{
-    const id=c.dataset.id.toLowerCase();
-    const t=c.querySelector('.card-title').textContent.toLowerCase();
-    c.classList.toggle('hidden',!id.includes(q)&&!t.includes(q));
+const search = document.getElementById('search');
+search.addEventListener('input', () => {{
+  const q = search.value.toLowerCase();
+  document.querySelectorAll('.card').forEach(c => {{
+    const id = c.dataset.id.toLowerCase();
+    const t = c.querySelector('.card-title').textContent.toLowerCase();
+    c.classList.toggle('hidden', !id.includes(q) && !t.includes(q));
   }});
-  document.querySelectorAll('section').forEach(s=>{{
-    s.classList.toggle('hidden',s.querySelectorAll('.card:not(.hidden)').length===0);
+  document.querySelectorAll('section').forEach(s => {{
+    s.classList.toggle('hidden', s.querySelectorAll('.card:not(.hidden)').length === 0);
   }});
 }});
 
 // Lightbox — clone the card's inline SVG so animations replay
-document.querySelectorAll('.card').forEach(c=>{{
-  c.addEventListener('click',()=>{{
-    const id=c.dataset.id;
-    const t=c.querySelector('.card-title').textContent;
-    const s=c.querySelector('.card-size').textContent;
-    const svg=c.querySelector('svg');
-    const lbc=document.getElementById('lightbox-content');
-    lbc.innerHTML=`<h3>${{t}} <span style="color:#86868b;font-size:14px">${{s}}</span></h3><div id="lb-chart"></div><p style="margin-top:12px;color:#86868b;font-size:13px"><code>${{id}}</code></p>`;
-    if(svg){{
-      const clone=svg.cloneNode(true);
-      clone.style.width='100%';
-      clone.style.maxWidth=clone.getAttribute('width')+'px';
-      clone.style.height='auto';
+document.querySelectorAll('.card').forEach(c => {{
+  c.addEventListener('click', () => {{
+    const id = c.dataset.id;
+    const t = c.querySelector('.card-title').textContent;
+    const s = c.querySelector('.card-size').textContent;
+    const svg = c.querySelector('svg');
+    const lbc = document.getElementById('lightbox-content');
+    lbc.innerHTML = `<h3>${{t}} <span style="color:#86868b;font-size:14px">${{s}}</span></h3><div id="lb-chart"></div><p style="margin-top:12px;color:#86868b;font-size:13px"><code>${{id}}</code></p>`;
+    if (svg) {{
+      const clone = svg.cloneNode(true);
+      clone.style.width = '100%';
+      clone.style.maxWidth = clone.getAttribute('width') + 'px';
+      clone.style.height = 'auto';
       document.getElementById('lb-chart').appendChild(clone);
     }}
     document.getElementById('lightbox').classList.add('active');
   }});
 }});
-function closeLightbox(){{document.getElementById('lightbox').classList.remove('active')}}
-document.getElementById('lightbox').addEventListener('click',e=>{{if(e.target.id==='lightbox')closeLightbox()}});
-document.addEventListener('keydown',e=>{{if(e.key==='Escape'){{closeLightbox();closeYaml()}}}});
+function closeLightbox() {{ document.getElementById('lightbox').classList.remove('active') }}
+document.getElementById('lightbox').addEventListener('click', e => {{ if (e.target.id === 'lightbox') closeLightbox() }});
+document.addEventListener('keydown', e => {{ if (e.key === 'Escape') {{ closeLightbox(); closeYaml() }} }});
 
-// YAML modal — fetches and shows the spec YAML
-async function showYaml(id){{
-  const res=await fetch('/yaml/'+id);
-  const yaml=await res.text();
-  const m=document.getElementById('yaml-modal');
-  document.getElementById('yaml-title').textContent=id;
-  document.getElementById('yaml-pre').textContent=yaml;
-  m.classList.add('active');
+// YAML modal
+async function showYaml(id) {{
+  const res = await fetch('/yaml/' + id);
+  const yaml = await res.text();
+  document.getElementById('yaml-title').textContent = id;
+  document.getElementById('yaml-pre').textContent = yaml;
+  document.getElementById('yaml-modal').classList.add('active');
 }}
-function closeYaml(){{document.getElementById('yaml-modal').classList.remove('active')}}
+window.showYaml = showYaml;
+function closeYaml() {{ document.getElementById('yaml-modal').classList.remove('active') }}
+window.closeYaml = closeYaml;
 
-// Tooltip — reads data-label/data-value/data-series from SVG elements
-const tt=document.getElementById('chart-tooltip');
-const ttLabel=document.getElementById('tt-label');
-const ttValue=document.getElementById('tt-value');
-document.addEventListener('mouseover',e=>{{
-  const el=e.target.closest('[data-label]');
-  if(el){{
-    const series=el.getAttribute('data-series');
-    const label=el.getAttribute('data-label');
-    const value=el.getAttribute('data-value');
-    ttLabel.textContent=(series?series+': ':'')+label;
-    ttValue.textContent=value||'';
-    tt.style.display='block';
+// Tooltip
+const tt = document.getElementById('chart-tooltip');
+const ttLabel = document.getElementById('tt-label');
+const ttValue = document.getElementById('tt-value');
+document.addEventListener('mouseover', e => {{
+  const el = e.target.closest('[data-label]');
+  if (el) {{
+    const series = el.getAttribute('data-series');
+    const label = el.getAttribute('data-label');
+    const value = el.getAttribute('data-value');
+    ttLabel.textContent = (series ? series + ': ' : '') + label;
+    ttValue.textContent = value || '';
+    tt.style.display = 'block';
   }}
 }});
-document.addEventListener('mouseout',e=>{{
-  const el=e.target.closest('[data-label]');
-  if(el)tt.style.display='none';
+document.addEventListener('mouseout', e => {{
+  const el = e.target.closest('[data-label]');
+  if (el) tt.style.display = 'none';
 }});
-document.addEventListener('mousemove',e=>{{
-  if(tt.style.display==='block'){{
-    tt.style.left=(e.clientX+12)+'px';
-    tt.style.top=(e.clientY-12)+'px';
+document.addEventListener('mousemove', e => {{
+  if (tt.style.display === 'block') {{
+    tt.style.left = (e.clientX + 12) + 'px';
+    tt.style.top = (e.clientY - 12) + 'px';
   }}
 }});
 </script>
@@ -393,7 +442,6 @@ document.addEventListener('mousemove',e=>{{
 </html>"##,
         chart_styles = chart_styles,
         total = total,
-        rendered = rendered,
         nav = nav_html,
         sections = sections_html,
     )
@@ -420,7 +468,7 @@ fn handle_request(mut stream: TcpStream) {
 
     if path == "/" || path == "/index.html" {
         let specs = discover_specs();
-        let html = build_html(&specs);
+        let html = build_wasm_html(&specs);
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
             html.len()
@@ -451,6 +499,61 @@ fn handle_request(mut stream: TcpStream) {
         } else {
             let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\nSVG not found");
         }
+    } else if let Some(spec_id) = path.strip_prefix("/chart-yaml/") {
+        if spec_id.contains("..") {
+            let _ = stream.write_all(b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+            return;
+        }
+        // Return just the chart YAML (extracted from the test spec wrapper)
+        let yaml_path = specs_dir().join(format!("{}.yaml", spec_id));
+        match fs::read_to_string(&yaml_path) {
+            Ok(yaml_text) => {
+                let chart_yaml = extract_chart_yaml(&yaml_text);
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+                    chart_yaml.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.write_all(chart_yaml.as_bytes());
+            }
+            Err(_) => {
+                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\nYAML not found");
+            }
+        }
+    } else if path == "/specs" {
+        let specs = discover_specs();
+        let ids: Vec<&str> = specs.iter().map(|s| s.id.as_str()).collect();
+        let json = serde_json::to_string(&ids).unwrap_or_else(|_| "[]".to_string());
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+            json.len()
+        );
+        let _ = stream.write_all(response.as_bytes());
+        let _ = stream.write_all(json.as_bytes());
+    } else if let Some(file_name) = path.strip_prefix("/pkg/") {
+        let pkg_dir = PathBuf::from("packages/core/pkg");
+        // Sanitize: reject path traversal, allow known subdirs (web/, node/, wasm/)
+        if file_name.contains("..") {
+            let _ = stream.write_all(b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+        } else {
+            let file_path = pkg_dir.join(file_name);
+            if let Ok(data) = fs::read(&file_path) {
+                let content_type = match file_path.extension().and_then(|e| e.to_str()) {
+                    Some("js") => "application/javascript",
+                    Some("wasm") => "application/wasm",
+                    Some("json") => "application/json",
+                    _ => "application/octet-stream",
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+                    content_type, data.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.write_all(&data);
+            } else {
+                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\nPkg file not found");
+            }
+        }
     } else {
         let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\nNot found");
     }
@@ -465,13 +568,12 @@ pub fn serve(port: u16) {
     });
 
     let specs = discover_specs();
-    let svg_count = specs.iter().filter(|s| s.has_svg).count();
 
     // Get local IP for display
     let local_ip = get_local_ip().unwrap_or_else(|| "localhost".to_string());
 
-    println!("ChartML Test Gallery");
-    println!("  Specs: {}  |  SVGs: {}", specs.len(), svg_count);
+    println!("ChartML Test Gallery (WASM browser rendering)");
+    println!("  Specs: {}", specs.len());
     println!();
     println!("  Local:   http://localhost:{}", port);
     println!("  Network: http://{}:{}", local_ip, port);

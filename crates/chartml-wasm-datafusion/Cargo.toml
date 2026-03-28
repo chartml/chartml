@@ -4,13 +4,14 @@ version = "2.0.0"
 edition = "2021"
 license = "MIT"
 description = "ChartML DataFusion transform plugin — SQL/aggregate/forecast for WASM"
+publish = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-chartml-core = { path = "../chartml-core" }
-chartml-datafusion = { path = "../chartml-datafusion" }
+chartml-core = { path = "../chartml-core", version = "3.0.0" }
+chartml-datafusion = { path = "../chartml-datafusion", version = "3.0.0" }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 serde = { version = "1", features = ["derive"] }

@@ -13,6 +13,6 @@ pub struct ConnectionConfig {
 /// Datasource resolver — resolves a slug to connection config.
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
-pub trait DatasourceResolver: super::MaybeSend {
+pub trait DatasourceResolver: Send + Sync {
     async fn resolve(&self, slug: &str) -> Result<ConnectionConfig, ChartError>;
 }
