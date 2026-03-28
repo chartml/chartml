@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -25,9 +27,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Get crates.io publish token via OIDC
+        uses: rust-lang/crates-io-auth-action@v1
+        id: crates-io-auth
+
       - name: Publish crates
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
         run: |
           FLAGS=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then
@@ -35,18 +41,32 @@ jobs:
             echo "DRY RUN MODE"
           fi
 
+          publish_if_new() {
+            local crate="$1"
+            local version
+            version=$(cargo metadata --no-deps --format-version 1 \
+              | jq -r ".packages[] | select(.name == \"$crate\") | .version")
+
+            if curl -sf "https://crates.io/api/v1/crates/$crate/$version" > /dev/null 2>&1; then
+              echo "::notice::$crate@$version already published — skipping"
+            else
+              echo "Publishing $crate@$version..."
+              cargo publish -p "$crate" --no-verify $FLAGS
+              echo "Waiting for crates.io index update..."
+              sleep 60
+            fi
+          }
+
           echo "=== Group 1: core crates ==="
-          cargo publish -p chartml-core --no-verify $FLAGS
-          cargo publish -p chartml-forecast --no-verify $FLAGS
-          sleep 60
+          publish_if_new chartml-core
+          publish_if_new chartml-forecast
 
           echo "=== Group 2: chart renderers ==="
-          cargo publish -p chartml-chart-cartesian $FLAGS
-          cargo publish -p chartml-chart-pie $FLAGS
-          cargo publish -p chartml-chart-scatter $FLAGS
-          cargo publish -p chartml-chart-metric $FLAGS
-          sleep 60
+          publish_if_new chartml-chart-cartesian
+          publish_if_new chartml-chart-pie
+          publish_if_new chartml-chart-scatter
+          publish_if_new chartml-chart-metric
 
           echo "=== Group 3: higher-level crates ==="
-          cargo publish -p chartml-datafusion $FLAGS
-          cargo publish -p chartml-render $FLAGS
+          publish_if_new chartml-datafusion
+          publish_if_new chartml-render
