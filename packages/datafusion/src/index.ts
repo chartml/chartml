@@ -30,11 +30,11 @@ export async function createDataFusionTransform(): Promise<
   const mod = await initPromise;
 
   // Return a transform function that calls the WASM module.
-  // Note: context parameter is not currently forwarded to the WASM binding.
-  // The DataFusion transform uses TransformContext::default() internally.
-  // TODO: Forward context when the WASM binding is updated to accept it.
-  return async (rows, spec, _context) => {
-    const result = await mod.transform(rows, spec);
+  // Context is forwarded for interface consistency. For DataFusion specifically,
+  // param substitution happens upstream (in YAML before parsing), so context
+  // is typically empty. Custom JS transforms may use it for runtime params.
+  return async (rows, spec, context) => {
+    const result = await mod.transform(rows, spec, context);
     return result;
   };
 }
