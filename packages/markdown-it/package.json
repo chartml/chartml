@@ -1,0 +1,19 @@
+{
+  "name": "@chartml/markdown-it",
+  "version": "2.0.0-alpha.1",
+  "description": "markdown-it plugin for rendering ChartML charts in markdown",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist/"],
+  "scripts": { "build": "tsc" },
+  "peerDependencies": {
+    "markdown-it": "^13.0.0 || ^14.0.0",
+    "@chartml/core": "^2.0.0-alpha.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/markdown-it": "^14.0.0"
+  },
+  "license": "MIT"
+}
