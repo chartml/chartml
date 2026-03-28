@@ -28,6 +28,7 @@ fn collect_svgs(dir: &Path, root: &Path, out: &mut BTreeMap<String, PathBuf>) {
 }
 
 /// Copy current SVGs to golden directory.
+/// Preserves .sig files for SVGs whose content hasn't changed.
 pub fn accept() {
     let current = Path::new(CURRENT_DIR);
     let golden = Path::new(GOLDEN_DIR);
@@ -37,25 +38,66 @@ pub fn accept() {
         std::process::exit(1);
     }
 
-    // Wipe old golden
+    let mut current_svgs = BTreeMap::new();
+    collect_svgs(current, current, &mut current_svgs);
+
+    let mut accepted = 0u32;
+    let mut unchanged = 0u32;
+    let mut sigs_preserved = 0u32;
+    let mut sigs_invalidated = 0u32;
+
+    // Collect existing golden SVGs before modifying anything
+    let mut old_golden_svgs = BTreeMap::new();
     if golden.exists() {
-        fs::remove_dir_all(golden).expect("Failed to remove old golden dir");
+        collect_svgs(golden, golden, &mut old_golden_svgs);
     }
 
-    let mut count = 0;
-    let mut svgs = BTreeMap::new();
-    collect_svgs(current, current, &mut svgs);
+    // Remove golden SVGs (and their sigs) that no longer exist in current output
+    for (rel_path, golden_path) in &old_golden_svgs {
+        if !current_svgs.contains_key(rel_path) {
+            let _ = fs::remove_file(golden_path);
+            let sig_path = PathBuf::from(format!("{}.sig", golden_path.display()));
+            let _ = fs::remove_file(&sig_path);
+        }
+    }
 
-    for (rel_path, src_path) in &svgs {
+    for (rel_path, src_path) in &current_svgs {
         let dest = golden.join(rel_path);
+        let sig_path = PathBuf::from(format!("{}.sig", dest.display()));
+
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent).expect("Failed to create golden subdir");
         }
+
+        // Check if golden SVG already exists with identical content
+        if dest.exists() {
+            let current_bytes = fs::read(src_path).unwrap_or_default();
+            let golden_bytes = fs::read(&dest).unwrap_or_default();
+
+            if current_bytes == golden_bytes {
+                unchanged += 1;
+                if sig_path.exists() {
+                    sigs_preserved += 1;
+                }
+                continue;
+            }
+
+            // Content changed — remove stale .sig file
+            if sig_path.exists() {
+                fs::remove_file(&sig_path).ok();
+                sigs_invalidated += 1;
+            }
+        }
+
         fs::copy(src_path, &dest).expect("Failed to copy SVG to golden");
-        count += 1;
+        accepted += 1;
     }
 
-    println!("Accepted {} SVGs as golden baseline in {}", count, GOLDEN_DIR);
+    println!("Accepted golden baseline in {}", GOLDEN_DIR);
+    println!(
+        "  Updated: {}, Unchanged: {}, Sigs preserved: {}, Sigs invalidated: {}",
+        accepted, unchanged, sigs_preserved, sigs_invalidated
+    );
 }
 
 /// Compare current SVGs against golden baseline. Returns true if there are changes.
