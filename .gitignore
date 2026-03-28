@@ -61,3 +61,6 @@ changed-packages.json
 
 # Review approval (cryptographic signature file)
 .review-approval
+
+# Claude agent definitions (contain signing keys — local only)
+.claude/agents/
