@@ -396,7 +396,8 @@ pub fn generate_x_axis_with_display(
     };
 
     // Step 2: Determine label strategy
-    let strategy = LabelStrategy::determine(&display_labels, available_width, &LabelStrategyConfig::default());
+    let label_config = LabelStrategyConfig::default();
+    let strategy = LabelStrategy::determine(&display_labels, available_width, &label_config);
 
     let mut elements = Vec::new();
     // Margin for rotated labels is pre-computed via MarginConfig.x_label_strategy_margin
@@ -486,7 +487,27 @@ pub fn generate_x_axis_with_display(
             // max_full_width: maximum unrotated label width such that the rotated
             // horizontal projection fits: available_per_visible >= width * cos45 + spacing
             let spacing = 6.0;
-            let max_full_width = (available_per_visible - spacing) / cos45;
+            let overlap_width = (available_per_visible - spacing) / cos45;
+
+            // For sentence-length labels with few visible labels, boost the
+            // truncation threshold so that more of the label text is shown.
+            // This mirrors the long_label_boost in LabelStrategy::determine().
+            let avg_label_width: f64 = if display_labels.is_empty() {
+                0.0
+            } else {
+                display_labels.iter().map(|l| approximate_text_width(l)).sum::<f64>()
+                    / display_labels.len() as f64
+            };
+            let long_label_boost = if avg_label_width >= label_config.long_label_threshold && visible_count <= 12 {
+                avg_label_width * 0.7
+            } else {
+                0.0
+            };
+            let max_full_width = if overlap_width > 0.0 {
+                overlap_width.max(long_label_boost)
+            } else {
+                long_label_boost.max(0.0)
+            };
 
             for (i, label) in display_labels.iter().enumerate() {
                 let orig_label = &band_keys[i];

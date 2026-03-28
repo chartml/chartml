@@ -16,7 +16,8 @@ pub enum LabelStrategy {
 pub struct LabelStrategyConfig {
     pub min_label_spacing: f64,   // Default: 10.0 px
     pub max_label_width: f64,     // Default: 120.0 px for truncation
-    pub max_rotation_margin: f64, // Default: 150.0 px
+    pub max_rotation_margin: f64, // Default: 150.0 px (raised for long labels)
+    pub long_label_threshold: f64, // Avg width above which labels are "long" (default: 180.0 px)
     pub rotation_angle_deg: f64,  // Default: 45.0 degrees
 }
 
@@ -27,6 +28,7 @@ impl Default for LabelStrategyConfig {
             max_label_width: 120.0,
             max_rotation_margin: 150.0,
             rotation_angle_deg: 45.0,
+            long_label_threshold: 180.0,
         }
     }
 }
@@ -72,9 +74,65 @@ impl LabelStrategy {
         // rotated labels don't collide even when they are long.
         if label_count <= 40 {
             let angle_rad = config.rotation_angle_deg.to_radians();
-            let required_vertical = max_width * angle_rad.sin();
-            let margin = (required_vertical.ceil() + 15.0).min(config.max_rotation_margin);
             let skip_factor = compute_skip_factor(labels, available_width, config.rotation_angle_deg);
+
+            // Mirror the post-rotation truncation from generate_x_axis:
+            // visible labels are capped so their rotated horizontal projection
+            // fits the available space.  The effective label width after truncation
+            // determines the actual vertical descent used for the margin.
+            let visible_count = match skip_factor {
+                Some(f) if f > 1 => (0..label_count).filter(|i| i % f == 0).count(),
+                _ => label_count,
+            };
+            let cos_a = angle_rad.cos(); // ~0.707 for 45 deg
+            let available_per_visible = if visible_count > 0 {
+                available_width / visible_count as f64
+            } else {
+                available_width
+            };
+            let spacing = 6.0;
+            let overlap_width = (available_per_visible - spacing) / cos_a;
+
+            // For sentence-length labels (avg_width above threshold) with few
+            // labels, allow a wider floor so more text is visible even if it
+            // causes a small amount of controlled horizontal overlap.  The
+            // floor scales with available_per_visible so that charts with many
+            // labels are unaffected.
+            let long_label_boost = if avg_width >= config.long_label_threshold && visible_count <= 12 {
+                // Guarantee at least 70% of the average label width is shown.
+                // This keeps the most significant words visible in sentence-
+                // length labels while still fitting in the chart.
+                avg_width * 0.7
+            } else {
+                0.0
+            };
+            let max_full_width = if overlap_width > 0.0 {
+                overlap_width.max(long_label_boost)
+            } else {
+                long_label_boost.max(0.0)
+            };
+
+            // Effective width is the lesser of the widest label and the truncation cap
+            let effective_width = if max_full_width > 0.0 {
+                max_width.min(max_full_width)
+            } else {
+                max_width
+            };
+            let required_vertical = effective_width * angle_rad.sin();
+            // Rotated labels are placed at y_position + 10, so total space
+            // needed below the axis line is 10 + vertical_descent + padding.
+            // The base bottom margin (40px) already covers some of that.
+            // We preserve the same ~22px padding that horizontal labels get
+            // (base 40 - horizontal label offset 18 = 22px padding).
+            let total_needed = 10.0 + required_vertical + 22.0;
+            let base_bottom = 40.0;
+            // Raise the margin cap for long labels to accommodate the extra descent.
+            let effective_max_margin = if avg_width >= config.long_label_threshold {
+                config.max_rotation_margin + 50.0
+            } else {
+                config.max_rotation_margin
+            };
+            let margin = (total_needed - base_bottom).max(0.0).ceil().min(effective_max_margin);
             return LabelStrategy::Rotated { margin, skip_factor };
         }
 
@@ -102,55 +160,82 @@ fn char_width(ch: char) -> f64 {
 }
 
 /// Approximate text width in pixels using a character-width table.
+/// Calibrated for ~12px font. For other sizes, use `approximate_text_width_at`.
 pub fn approximate_text_width(text: &str) -> f64 {
     text.chars().map(char_width).sum()
 }
 
-/// Approximate text width at a given font size (scales from the 12px base).
+/// Approximate text width scaled for a specific font size.
 pub fn approximate_text_width_at(text: &str, font_size_px: f64) -> f64 {
     approximate_text_width(text) * (font_size_px / 12.0)
 }
 
-/// Format a numeric tick value using SI suffixes (K, M, B) based on the tick step.
-///
-/// This keeps axis labels compact for large-valued axes.
+/// Format a numeric tick value with SI suffixes for large magnitudes.
+/// Returns compact labels like "1.5M", "200K", "3B" based on the tick step.
 pub fn format_tick_value_si(value: f64, tick_step: f64) -> String {
-    let abs_step = tick_step.abs();
-
-    if abs_step >= 1_000_000_000.0 {
-        let v = value / 1_000_000_000.0;
-        return if (v - v.round()).abs() < 1e-9 {
-            format!("{}B", v as i64)
+    let (scaled, suffix) = if tick_step >= 1_000_000_000.0 {
+        (value / 1_000_000_000.0, "B")
+    } else if tick_step >= 1_000_000.0 {
+        (value / 1_000_000.0, "M")
+    } else if tick_step >= 1_000.0 {
+        (value / 1_000.0, "K")
+    } else {
+        // No SI suffix — use standard formatting
+        let precision = if tick_step.abs() < 1e-15 {
+            0usize
         } else {
-            format!("{:.1}B", v)
+            ((-tick_step.abs().log10().floor()) as i64).max(0) as usize
         };
-    }
-    if abs_step >= 1_000_000.0 {
-        let v = value / 1_000_000.0;
-        return if (v - v.round()).abs() < 1e-6 {
-            format!("{}M", v as i64)
-        } else {
-            format!("{:.1}M", v)
-        };
-    }
-    if abs_step >= 1_000.0 {
-        let v = value / 1_000.0;
-        return if (v - v.round()).abs() < 1e-3 {
-            format!("{}K", v as i64)
-        } else {
-            format!("{:.1}K", v)
-        };
-    }
-
-    // Standard precision formatting
-    if abs_step < 1e-15 {
-        return format!("{}", value);
-    }
-    let precision = {
-        let p = -(abs_step.log10().floor()) as i64;
-        p.max(0) as usize
+        return format!("{:.prec$}", value, prec = precision);
     };
-    format!("{:.prec$}", value, prec = precision)
+
+    // Use integer form if value is whole, otherwise one decimal
+    if (scaled - scaled.round()).abs() < 1e-9 {
+        format!("{}{}", scaled.round() as i64, suffix)
+    } else {
+        format!("{:.1}{}", scaled, suffix)
+    }
+}
+
+#[cfg(test)]
+mod si_tests {
+    use super::format_tick_value_si;
+
+    #[test]
+    fn si_millions() {
+        assert_eq!(format_tick_value_si(1_000_000.0, 1_000_000.0), "1M");
+        assert_eq!(format_tick_value_si(7_200_000.0, 1_000_000.0), "7.2M");
+        assert_eq!(format_tick_value_si(0.0, 1_000_000.0), "0M");
+    }
+
+    #[test]
+    fn si_thousands() {
+        assert_eq!(format_tick_value_si(1_000.0, 1_000.0), "1K");
+        assert_eq!(format_tick_value_si(200_000.0, 100_000.0), "200K");
+        assert_eq!(format_tick_value_si(1_500.0, 1_000.0), "1.5K");
+    }
+
+    #[test]
+    fn si_billions() {
+        assert_eq!(format_tick_value_si(2_000_000_000.0, 1_000_000_000.0), "2B");
+    }
+
+    #[test]
+    fn no_si_small_values() {
+        assert_eq!(format_tick_value_si(42.0, 10.0), "42");
+        assert_eq!(format_tick_value_si(3.5, 0.5), "3.5");
+    }
+
+    #[test]
+    fn zero_tick_step() {
+        // Should not panic or produce absurd output
+        assert_eq!(format_tick_value_si(5.0, 0.0), "5");
+    }
+
+    #[test]
+    fn negative_values() {
+        assert_eq!(format_tick_value_si(-2_000_000.0, 1_000_000.0), "-2M");
+    }
 }
 
 /// After rotation, check if labels still overlap and compute skip factor.
@@ -326,42 +411,5 @@ mod tests {
     fn approximate_text_width_basic() {
         let width = approximate_text_width("Hello");
         assert!(width > 0.0, "Width should be non-zero for non-empty string");
-    }
-
-    #[test]
-    fn format_tick_value_si_millions() {
-        assert_eq!(format_tick_value_si(5_000_000.0, 1_000_000.0), "5M");
-        assert_eq!(format_tick_value_si(2_500_000.0, 1_000_000.0), "2.5M");
-    }
-
-    #[test]
-    fn format_tick_value_si_thousands() {
-        assert_eq!(format_tick_value_si(10_000.0, 5_000.0), "10K");
-        assert_eq!(format_tick_value_si(1_500.0, 1_000.0), "1.5K");
-    }
-
-    #[test]
-    fn format_tick_value_si_billions() {
-        assert_eq!(format_tick_value_si(3_000_000_000.0, 1_000_000_000.0), "3B");
-        assert_eq!(format_tick_value_si(1_500_000_000.0, 1_000_000_000.0), "1.5B");
-    }
-
-    #[test]
-    fn format_tick_value_si_small_values() {
-        assert_eq!(format_tick_value_si(0.5, 0.1), "0.5");
-        assert_eq!(format_tick_value_si(42.0, 10.0), "42");
-    }
-
-    #[test]
-    fn format_tick_value_si_zero_tick_step() {
-        // Should not panic; falls through to the guard for near-zero step
-        let result = format_tick_value_si(123.0, 0.0);
-        assert_eq!(result, "123");
-    }
-
-    #[test]
-    fn format_tick_value_si_negative_values() {
-        assert_eq!(format_tick_value_si(-2_000_000.0, 1_000_000.0), "-2M");
-        assert_eq!(format_tick_value_si(-500.0, 100.0), "-500");
     }
 }
