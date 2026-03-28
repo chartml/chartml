@@ -252,17 +252,14 @@ pub fn compute_skip_factor(
             let skip = (needed_per / available_per_label).ceil() as usize;
             return Some(skip.max(2));
         }
-        // Truncation keeps labels readable; no skip needed.
-        return None;
+        // Truncation keeps labels readable — fall through to readability
+        // thinning check (many truncated labels are still cluttered).
     }
 
     // Check 2: Readability thinning.
-    // Many rotated labels (> 14) look cluttered when there is meaningful gap
-    // between them (> 5px) but the density is still high. When the gap is tiny
-    // (< 5px), labels are in "barely fits" territory and truncation alone
-    // handles the layout — thinning would over-reduce.
-    let gap = available_per_label - avg_rotated;
-    if label_count > 14 && gap > 5.0 {
+    // Many rotated labels (> 14) look cluttered regardless of overlap state.
+    // Thin by 2 to improve visual clarity.
+    if label_count > 14 {
         return Some(2);
     }
 
