@@ -1,4 +1,5 @@
 mod adapters;
+mod data_sources;
 
 use chartml_chart_cartesian::CartesianRenderer;
 use chartml_chart_metric::MetricRenderer;
@@ -33,6 +34,9 @@ impl WasmChartML {
         chartml.register_renderer("scatter", ScatterRenderer::new());
         chartml.register_renderer("bubble", ScatterRenderer::new());
         chartml.register_renderer("metric", MetricRenderer::new());
+        // Register built-in data sources (browser-only)
+        #[cfg(target_arch = "wasm32")]
+        chartml.register_data_source("http", data_sources::http::HttpDataSource::new());
         WasmChartML { inner: chartml }
     }
 

@@ -1,0 +1,19 @@
+{
+  "name": "@chartml/core",
+  "version": "2.0.0-alpha.1",
+  "description": "ChartML chart rendering engine — Rust/WASM powered",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist/", "pkg/"],
+  "scripts": {
+    "build:wasm": "wasm-pack build ../../crates/chartml-wasm --target web --out-dir ../../packages/core/pkg --out-name chartml",
+    "build:ts": "tsc",
+    "build": "npm run build:wasm && npm run build:ts"
+  },
+  "peerDependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "license": "MIT"
+}

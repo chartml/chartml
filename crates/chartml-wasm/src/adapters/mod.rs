@@ -1,6 +1,11 @@
-pub mod data_source;
 pub mod renderer;
+
+// Async adapters use JsFuture which is !Send — only compile on wasm32
+#[cfg(target_arch = "wasm32")]
+pub mod data_source;
+#[cfg(target_arch = "wasm32")]
 pub mod resolver;
+#[cfg(target_arch = "wasm32")]
 pub mod transform;
 
 /// Wrapper to satisfy Send+Sync bounds on wasm32 where js_sys::Function is !Send.
