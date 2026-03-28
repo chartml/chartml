@@ -94,9 +94,8 @@
    Component Styles
    ============================================ */
 
-/* ChartML Block - Used by markdown-it plugin */
-/* Use default ChartML styles - no custom container styling */
-.vp-doc .chartml-block {
+/* ChartML Chart - rendered by WASM at build time */
+.vp-doc .chartml-chart {
   margin: var(--margin-chart) 0;
 }
 

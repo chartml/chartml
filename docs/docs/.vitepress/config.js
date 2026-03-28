@@ -1,10 +1,7 @@
 import { defineConfig } from 'vitepress';
-import chartMLPlugin from '@chartml/markdown-it';
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
+import { createRequire } from 'module';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const require = createRequire(import.meta.url);
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
@@ -147,7 +144,38 @@ export default defineConfig({
     },
     lineNumbers: true,
     config: (md) => {
-      md.use(chartMLPlugin);
+      // Load the Node.js WASM target synchronously (uses readFileSync internally)
+      const wasm = require('@chartml/core/wasm');
+      const chartml = new wasm.WasmChartML();
+
+      const defaultFence = md.renderer.rules.fence;
+
+      md.renderer.rules.fence = (tokens, idx, opts, env, self) => {
+        const token = tokens[idx];
+        const info = token.info.trim();
+
+        if (info === 'chartml' || info === 'chartml-yaml') {
+          const yaml = token.content;
+          try {
+            const svg = chartml.renderToSvg(yaml, {});
+            return `<div class="chartml-chart">${svg}</div>`;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            const escaped = msg
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;');
+            return `<div class="chartml-chart chartml-error" style="color: #dc3545; font-family: monospace; padding: 12px; background: #fff5f5; border: 1px solid #dc3545; border-radius: 4px;">Chart error: ${escaped}</div>`;
+          }
+        }
+
+        // Fall back to default fence rendering for non-chartml blocks
+        if (defaultFence) {
+          return defaultFence(tokens, idx, opts, env, self);
+        }
+        return self.renderToken(tokens, idx, opts);
+      };
     }
   }
 })
