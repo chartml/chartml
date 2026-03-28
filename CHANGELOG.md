@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-03-28
+
+### Changed
+
+- Rendering engine rewritten in Rust, compiled to WASM — D3 dependency removed
+- Initialization is now async: `const chartml = await ChartML.create()` (was `new ChartML()`)
+- `render()` replaced by `renderToSvg()` and `renderToElement()`
+
+### Added
+
+- Rust/WASM rendering engine with native-speed performance
+- All chart types (bar, line, area, pie, doughnut, scatter, bubble, metric) built into core
+- Plugin system: `registerRenderer()`, `registerDataSource()`, `registerTransform()`, `setDatasourceResolver()`
+- `@chartml/datafusion` — optional SQL transform plugin (replaces DuckDB)
+- Rust crates published to crates.io for native Rust/Leptos usage
+- Node.js + browser dual-target WASM builds
+- Full backward compatibility with existing YAML chart specifications
+
+### Deprecated
+
+- `@chartml/chart-pie`, `@chartml/chart-scatter`, `@chartml/chart-metric` — all chart types bundled into `@chartml/core`
+- `@chartml/markdown-common` — functionality merged into core
+
 ## [2.0.0] - 2026-02-01
 
 ### BREAKING CHANGES
