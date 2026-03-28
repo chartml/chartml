@@ -37,7 +37,7 @@ rm -f "$OUT_DIR/node/package.json" "$OUT_DIR/node/.gitignore"
 
 # Build TypeScript wrapper
 echo "Building TypeScript..."
-npx tsc
+npx tsc -p packages/datafusion/tsconfig.json
 
 echo "Built @chartml/datafusion WASM package"
 echo "  Web:  $OUT_DIR/web/"
