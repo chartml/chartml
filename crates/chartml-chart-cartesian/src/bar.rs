@@ -180,6 +180,15 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         display.to_vec()
     };
 
+    // Pre-compute legend height so the bottom margin accounts for multi-row legends.
+    let legend_height = if let Some(ref color_f) = color_field {
+        let series_names = data.unique_values(color_f);
+        let legend_config = LegendConfig::default();
+        calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config).total_height
+    } else {
+        0.0
+    };
+
     // Step 2: Calculate margins including rotation
     let has_x_axis_label = config.visualize.axes.as_ref()
         .and_then(|a| a.x.as_ref())
@@ -187,7 +196,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         .is_some();
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
-        has_legend: color_field.is_some(),
+        legend_height,
         has_x_axis_label,
         x_label_strategy_margin: x_extra_margin,
         y_tick_labels: y_tick_labels_for_margin,
@@ -820,9 +829,19 @@ fn render_combo(
         .and_then(|a| a.x.as_ref())
         .and_then(|a| a.label.as_ref())
         .is_some();
+    // Pre-compute combo legend height from field labels
+    let combo_legend_labels: Vec<String> = fields.iter()
+        .map(|f| f.label.clone().unwrap_or_else(|| f.field.clone()))
+        .collect();
+    let combo_legend_height = if combo_legend_labels.len() > 1 || color_field.is_some() {
+        let legend_config = LegendConfig::default();
+        calculate_legend_layout(&combo_legend_labels, &config.colors, config.width, &legend_config).total_height
+    } else {
+        0.0
+    };
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
-        has_legend: fields.len() > 1 || color_field.is_some(),
+        legend_height: combo_legend_height,
         // Left Y-axis label is not rendered for combo charts (see comment below),
         // so do not reserve extra left-margin space for it.
         has_y_axis_label: false,
@@ -1234,7 +1253,7 @@ fn render_combo(
         }
     }
 
-    // Legend with mixed marks
+    // Legend with mixed marks — anchor using pre-computed legend height
     if series_names.len() > 1 {
         let mut legend_elements = Vec::new();
         let total_w: f64 = series_names.iter().map(|name| {
@@ -1242,11 +1261,12 @@ fn render_combo(
             12.0 + 6.0 + tw + 16.0
         }).sum();
         let mut x_offset = (config.width - total_w).max(0.0) / 2.0;
+        let legend_y = config.height - combo_legend_height - 8.0;
 
         for (i, name) in series_names.iter().enumerate() {
             let color = &series_colors[i];
             let mark = series_marks[i].as_str();
-            let y = config.height - 10.0;
+            let y = legend_y;
 
             match mark {
                 "line" => {

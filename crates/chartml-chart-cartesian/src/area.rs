@@ -55,6 +55,15 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         crate::helpers::format_value(prelim_nice_max, area_prelim_fmt),
     ];
 
+    // Pre-compute legend height so the bottom margin accounts for multi-row legends.
+    let legend_height = if let Some(ref color_f) = color_field {
+        let series_names = data.unique_values(color_f);
+        let legend_config = LegendConfig::default();
+        calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config).total_height
+    } else {
+        0.0
+    };
+
     // Step 2: Calculate margins including rotation
     let has_x_axis_label = config.visualize.axes.as_ref()
         .and_then(|a| a.x.as_ref())
@@ -62,7 +71,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         .is_some();
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
-        has_legend: color_field.is_some(),
+        legend_height,
         has_x_axis_label,
         x_label_strategy_margin: x_extra_margin,
         y_tick_labels: area_prelim_labels,

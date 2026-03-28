@@ -4,7 +4,7 @@ use chartml_core::element::*;
 use chartml_core::error::ChartError;
 use chartml_core::scales::{ScaleLinear, ScaleSqrt};
 use chartml_core::spec::{VisualizeSpec, FieldRef, MarkEncoding};
-use chartml_core::layout::margins::Margins;
+use chartml_core::layout::margins::{MarginConfig, calculate_margins};
 use chartml_core::layout::labels::{approximate_text_width_at, format_tick_value_si};
 use chartml_core::layout::legend::{LegendMark, LegendConfig, calculate_legend_layout, generate_legend_elements};
 
@@ -40,12 +40,18 @@ impl ChartRenderer for ScatterRenderer {
         };
 
         let has_legend = color_categories.len() > 1;
-        let margins = if has_legend {
-            // Add 30px bottom margin for the legend row
-            Margins::new(30.0, 20.0, 70.0, 60.0)
+        let legend_height = if has_legend {
+            let legend_config = LegendConfig::default();
+            calculate_legend_layout(&color_categories, &config.colors, width, &legend_config).total_height
         } else {
-            Margins::default()
+            0.0
         };
+        let margin_config = MarginConfig {
+            legend_height,
+            chart_height: height,
+            ..Default::default()
+        };
+        let margins = calculate_margins(&margin_config);
         let inner_width = margins.inner_width(width);
         let inner_height = margins.inner_height(height);
 

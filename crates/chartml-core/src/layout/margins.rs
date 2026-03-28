@@ -35,7 +35,10 @@ pub struct MarginConfig {
     pub has_x_axis_label: bool,
     pub has_y_axis_label: bool,
     pub has_right_axis: bool,
-    pub has_legend: bool,
+    /// Actual legend height in pixels (0.0 when no legend is present).
+    /// This should be pre-computed via `calculate_legend_layout().total_height`
+    /// so that multi-row legends get proper bottom margin space.
+    pub legend_height: f64,
     pub y_tick_labels: Vec<String>,
     pub right_tick_labels: Vec<String>,
     pub x_label_strategy_margin: f64,
@@ -52,7 +55,7 @@ impl Default for MarginConfig {
             has_x_axis_label: false,
             has_y_axis_label: false,
             has_right_axis: false,
-            has_legend: false,
+            legend_height: 0.0,
             y_tick_labels: Vec::new(),
             right_tick_labels: Vec::new(),
             x_label_strategy_margin: 0.0,
@@ -72,7 +75,7 @@ impl Default for MarginConfig {
 /// - Right: 20px base, or max(right-axis label widths) + 24px if right axis present,
 ///   capped at max_right_margin
 /// - Bottom: 40px base + x_label_strategy_margin (rotation) + 20px if x-axis label
-///   + 30px if legend present
+///   + legend_height + 8px gap when legend is present
 pub fn calculate_margins(config: &MarginConfig) -> Margins {
     use super::labels::approximate_text_width;
 
@@ -119,7 +122,7 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
     let bottom = base_bottom
         + config.x_label_strategy_margin
         + if config.has_x_axis_label { 20.0 } else { 0.0 }
-        + if config.has_legend { 30.0 } else { 0.0 };
+        + if config.legend_height > 0.0 { config.legend_height + 8.0 } else { 0.0 };
 
     Margins { top, right, bottom, left }
 }
@@ -169,13 +172,23 @@ mod tests {
     }
 
     #[test]
-    fn margins_with_legend() {
+    fn margins_with_single_row_legend() {
         let config = MarginConfig {
-            has_legend: true,
+            legend_height: 20.0, // single row
             ..Default::default()
         };
         let m = calculate_margins(&config);
-        assert_eq!(m.bottom, 70.0); // 40 + 30
+        assert_eq!(m.bottom, 68.0); // 40 + 20 + 8
+    }
+
+    #[test]
+    fn margins_with_multi_row_legend() {
+        let config = MarginConfig {
+            legend_height: 60.0, // 3 rows × 20px
+            ..Default::default()
+        };
+        let m = calculate_margins(&config);
+        assert_eq!(m.bottom, 108.0); // 40 + 60 + 8
     }
 
     #[test]

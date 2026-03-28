@@ -112,6 +112,23 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         vec![]
     };
 
+    // Pre-compute legend height so the bottom margin accounts for multi-row legends.
+    let legend_height = if has_series {
+        let legend_series_names: Vec<String> = if is_multi_field {
+            multi_fields.iter().map(|f| {
+                f.label.clone().unwrap_or_else(|| f.field.clone())
+            }).collect()
+        } else if let Some(ref color_f) = color_field {
+            data.unique_values(color_f)
+        } else {
+            vec![]
+        };
+        let legend_config = LegendConfig::default();
+        calculate_legend_layout(&legend_series_names, &config.colors, config.width, &legend_config).total_height
+    } else {
+        0.0
+    };
+
     let has_y_axis_label = config.visualize.axes.as_ref()
         .and_then(|a| a.left.as_ref())
         .and_then(|a| a.label.as_ref())
@@ -122,7 +139,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         .is_some();
     let margin_config = MarginConfig {
         has_title: config.title.is_some(),
-        has_legend: has_series,
+        legend_height,
         has_y_axis_label,
         has_x_axis_label,
         x_label_strategy_margin: x_extra_margin,
