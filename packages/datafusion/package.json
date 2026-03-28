@@ -1,0 +1,21 @@
+{
+  "name": "@chartml/datafusion",
+  "version": "2.0.0-alpha.1",
+  "description": "ChartML DataFusion transform plugin — SQL/aggregate/forecast",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist/", "pkg/"],
+  "scripts": {
+    "build:wasm": "wasm-pack build ../../crates/chartml-wasm-datafusion --target web --out-dir ../../packages/datafusion/pkg --out-name chartml-datafusion",
+    "build:ts": "tsc",
+    "build": "npm run build:wasm && npm run build:ts"
+  },
+  "peerDependencies": {
+    "@chartml/core": "^2.0.0-alpha.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "license": "MIT"
+}
