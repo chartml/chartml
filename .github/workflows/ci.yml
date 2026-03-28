@@ -89,27 +89,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Debug golden SVG verification
-        run: |
-          openssl version
-          SVG="test-output/golden/area/basic_cumulative.svg"
-          SIG="${SVG}.sig"
-          HASH=$(sha256sum "$SVG" | awk '{print $1}')
-          EXPECTED=$(head -1 "$SIG")
-          echo "Hash match: $HASH == $EXPECTED : $([ "$HASH" = "$EXPECTED" ] && echo YES || echo NO)"
-          # Try signature verification manually
-          PUB=$(mktemp)
-          HFILE=$(mktemp)
-          SFILE=$(mktemp)
-          cat > "$PUB" << 'PUBEOF'
-          -----BEGIN PUBLIC KEY-----
-          MCowBQYDK2VwAyEAFBoUllCvCjUKbZy+ZVDwpC6GVGBMHU43nlaIeS8zus0=
-          -----END PUBLIC KEY-----
-          PUBEOF
-          echo -n "$HASH" > "$HFILE"
-          sed -n '2p' "$SIG" | base64 -d > "$SFILE"
-          echo "Sig bytes: $(wc -c < "$SFILE")"
-          openssl pkeyutl -verify -pubin -inkey "$PUB" -in "$HFILE" -sigfile "$SFILE" 2>&1 || echo "VERIFY FAILED"
-          rm -f "$PUB" "$HFILE" "$SFILE"
       - name: Verify golden SVG signatures
         run: bash scripts/verify-charts.sh

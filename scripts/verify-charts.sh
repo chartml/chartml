@@ -70,7 +70,7 @@ for SVG in $SVG_FILES; do
     echo -n "$STORED_HASH" > "$HASH_FILE"
     echo "$STORED_SIG" | base64 -d > "$SIG_FILE"
 
-    if ! openssl pkeyutl -verify -pubin -inkey "$PUB_FILE" -in "$HASH_FILE" -sigfile "$SIG_FILE" >/dev/null 2>&1; then
+    if ! openssl pkeyutl -verify -pubin -inkey "$PUB_FILE" -rawin -in "$HASH_FILE" -sigfile "$SIG_FILE" >/dev/null 2>&1; then
         INVALID=$((INVALID + 1))
         ERRORS="${ERRORS}\n  INVALID SIGNATURE: $SVG"
         continue
