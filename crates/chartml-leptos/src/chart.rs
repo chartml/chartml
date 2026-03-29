@@ -15,8 +15,25 @@ use crate::tooltip::{provide_tooltip_context, DefaultTooltip};
 /// Custom tooltip renderer type.
 pub type TooltipRenderer = Arc<dyn Fn(&ElementData) -> AnyView + Send + Sync>;
 
-/// Extract the top-level `title:` field from a ChartML YAML string.
-/// Returns None if no title is present or it is empty.
+/// Inject chart CSS into the document head (idempotent — checks for existing style tag).
+/// CSS is embedded at compile time from style/chartml.css.
+fn inject_chartml_css() {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::JsCast;
+        const CSS: &str = include_str!("../style/chartml.css");
+        const CSS_ID: &str = "chartml-injected-styles";
+        let document = web_sys::window().unwrap().document().unwrap();
+        if document.get_element_by_id(CSS_ID).is_some() {
+            return; // Already injected
+        }
+        let style = document.create_element("style").unwrap();
+        style.set_attribute("id", CSS_ID).unwrap();
+        style.set_text_content(Some(CSS));
+        document.head().unwrap().append_child(&style).unwrap();
+    }
+}
+
 /// Extract width/height from a ChartElement for element_to_svg.
 fn extract_svg_dimensions(element: &ChartElement) -> (f64, f64) {
     match element {
@@ -78,6 +95,9 @@ pub fn ChartMLChart(
 ) -> impl IntoView {
     let chartml = chartml.clone();
     let tooltip_state = provide_tooltip_context();
+
+    // Inject chart CSS into document head on first mount (idempotent)
+    inject_chartml_css();
 
     // Track container width — updated by ResizeObserver
     let (container_width, set_container_width) = signal(0.0_f64);

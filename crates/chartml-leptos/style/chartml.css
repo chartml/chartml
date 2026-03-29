@@ -1,0 +1,181 @@
+/*
+ * ChartML Chart Styles — shipped with chartml-leptos
+ *
+ * Animations, hover effects, tooltips, and grid styles for ChartML charts.
+ * Injected automatically by the ChartMLChart component on first mount.
+ * Override any rule in your own stylesheet to customize.
+ */
+
+/* ── Bar entrance ── */
+.bars rect,
+.bar {
+    animation: chartml-bar-grow 400ms ease-out both;
+    opacity: 0.9;
+    transition: opacity 200ms ease, stroke 200ms ease;
+    stroke: transparent;
+    stroke-width: 2;
+}
+
+@keyframes chartml-bar-grow {
+    from { transform: scaleY(0); }
+    to   { transform: scaleY(1); }
+}
+
+/* Horizontal bars: grow left to right */
+.chartml-horizontal .bars rect,
+.chartml-horizontal .bar {
+    animation-name: chartml-bar-grow-x;
+}
+
+@keyframes chartml-bar-grow-x {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+}
+
+/* Bar hover */
+.bars rect:hover,
+.bar:hover {
+    opacity: 1;
+    stroke: rgba(0, 0, 0, 0.3);
+}
+
+/* ── Line drawing ── */
+.chartml-line-path {
+    stroke-dasharray: 2000;
+    stroke-dashoffset: 2000;
+    animation: chartml-line-draw 800ms ease-out forwards;
+}
+
+@keyframes chartml-line-draw {
+    to { stroke-dashoffset: 0; }
+}
+
+/* ── Area fade-in ── */
+.chartml-area-path {
+    animation: chartml-fade-in 500ms ease-out both;
+}
+
+/* ── Pie/doughnut slices ── */
+.chartml-pie-slice {
+    animation: chartml-pie-enter 400ms ease-out;
+    opacity: 0.9;
+    transition: opacity 200ms ease;
+    cursor: pointer;
+}
+
+@keyframes chartml-pie-enter {
+    from { opacity: 0; }
+    to   { opacity: 0.9; }
+}
+
+.chartml-pie:has(.chartml-pie-slice:hover) .chartml-pie-slice {
+    opacity: 0.7;
+}
+
+.chartml-pie:has(.chartml-pie-slice:hover) .chartml-pie-slice:hover {
+    opacity: 1;
+}
+
+/* ── Data point dots ── */
+.chartml-line-dot,
+.chartml-area-dot {
+    r: 5;
+    stroke-width: 2;
+    transition: r 200ms ease;
+    cursor: pointer;
+}
+
+.chartml-line-dot:hover,
+.chartml-area-dot:hover {
+    r: 7;
+}
+
+/* ── Scatter points ── */
+.chartml-scatter-point {
+    animation: chartml-fade-in-scatter 400ms ease-out;
+    opacity: 0.8;
+    stroke-width: 1.5;
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: transform 200ms ease, opacity 200ms ease, stroke-width 200ms ease;
+    cursor: pointer;
+}
+
+@keyframes chartml-fade-in-scatter {
+    from { opacity: 0; }
+    to   { opacity: 0.8; }
+}
+
+.chartml-interactive:hover .chartml-scatter-point {
+    transform: scale(1.3);
+    opacity: 1;
+    stroke-width: 2;
+}
+
+/* ── Metric card ── */
+.chartml-metric-value {
+    animation: chartml-fade-in 300ms ease-out both;
+}
+
+.chartml-metric-trend {
+    animation: chartml-fade-in 500ms ease-out 200ms both;
+}
+
+/* ── Generic keyframes ── */
+@keyframes chartml-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes chartml-scale-in {
+    from { r: 0; opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* ── Hover effects ── */
+.chartml-interactive rect {
+    cursor: pointer;
+}
+
+.chartml-interactive path {
+    cursor: pointer;
+    transition: opacity 200ms ease;
+}
+
+.chartml-interactive path:hover {
+    opacity: 0.7;
+}
+
+/* ── Tooltip ── */
+.chartml-tooltip {
+    pointer-events: none;
+    background: #333;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    white-space: nowrap;
+    transition: opacity 150ms ease;
+}
+
+.chartml-tooltip-label {
+    font-weight: 600;
+    opacity: 0.8;
+    font-size: 11px;
+}
+
+.chartml-tooltip-value {
+    font-weight: 700;
+}
+
+/* ── Grid lines ── */
+.grid-line {
+    opacity: 0.5;
+}
+
+.grid-line-x,
+.grid-line-y {
+    pointer-events: none;
+}

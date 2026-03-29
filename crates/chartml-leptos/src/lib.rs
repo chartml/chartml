@@ -8,6 +8,10 @@ pub mod tooltip;
 pub use chart::{ChartMLChart, TooltipRenderer};
 pub use element::render_element;
 pub use header_bar::ChartHeaderBar;
+
+/// Chart CSS for consumers who need it as a string (SSR, non-Leptos).
+/// The `ChartMLChart` component injects this automatically on mount.
+pub const CHARTML_CSS: &str = include_str!("../style/chartml.css");
 pub use hooks::{use_chartml, use_chartml_configured};
 pub use params_ui::ParamsControls;
 pub use tooltip::{TooltipState, provide_tooltip_context, use_tooltip};
