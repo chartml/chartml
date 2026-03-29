@@ -1,0 +1,50 @@
+name: "Horizontal grouped — revenue vs target by month (fields array)"
+tags: [bar, horizontal, grouped, multi-field, fields-array, legend]
+description: >
+  Horizontal grouped bar chart using the fields array syntax to plot
+  two measures (revenue and target) side by side per month. Tests that
+  orientation: horizontal works correctly with the fields array format,
+  which routes through the combo→standard bar delegation path.
+
+chart:
+  type: chart
+  version: 1
+  title: "Revenue vs Target"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 125000
+        target: 120000
+      - month: "Feb"
+        revenue: 138000
+        target: 130000
+      - month: "Mar"
+        revenue: 172000
+        target: 150000
+  visualize:
+    type: bar
+    orientation: horizontal
+    columns: month
+    rows:
+      - field: revenue
+        label: "Revenue"
+      - field: target
+        label: "Target"
+
+assertions:
+  structure:
+    root: svg
+    bars: 6
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  label_rotation:
+    x_labels_rotated: false
+
+  axes:
+    y:
+      labels: ["Jan", "Feb", "Mar"]
+    x:
+      format: numeric

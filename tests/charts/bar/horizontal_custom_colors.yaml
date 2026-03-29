@@ -1,0 +1,50 @@
+name: "Horizontal grouped — actual vs budget with custom colors"
+tags: [bar, horizontal, grouped, multi-field, custom-colors, legend]
+description: >
+  Horizontal grouped bar chart with explicit colors per field.
+  Tests that field-level color overrides are preserved through
+  the wide→long reshaping when delegating to the standard renderer.
+
+chart:
+  type: chart
+  version: 1
+  title: "Q4 Actual vs Budget"
+  data:
+    provider: inline
+    rows:
+      - region: "North America"
+        actual: 4200000
+        budget: 3800000
+      - region: "Europe"
+        actual: 2900000
+        budget: 3100000
+      - region: "Asia Pacific"
+        actual: 1850000
+        budget: 1500000
+      - region: "Latin America"
+        actual: 920000
+        budget: 1100000
+  visualize:
+    type: bar
+    orientation: horizontal
+    columns: region
+    rows:
+      - field: actual
+        label: "Actual"
+        color: "#2ecc71"
+      - field: budget
+        label: "Budget"
+        color: "#95a5a6"
+    style:
+      colors: ["#2ecc71", "#95a5a6"]
+
+assertions:
+  structure:
+    root: svg
+    bars: 8
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  colors:
+    distinct: 2

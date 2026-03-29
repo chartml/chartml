@@ -1,0 +1,55 @@
+name: "Horizontal grouped — three cost categories by department"
+tags: [bar, horizontal, grouped, multi-field, fields-array, three-series, legend]
+description: >
+  Horizontal grouped bar chart with three measures per category.
+  Tests that the fields array with 3+ fields renders correctly
+  in horizontal orientation with proper grouping and legend.
+
+chart:
+  type: chart
+  version: 1
+  title: "Department Costs Breakdown"
+  data:
+    provider: inline
+    rows:
+      - dept: "Engineering"
+        salaries: 450000
+        tools: 85000
+        travel: 32000
+      - dept: "Marketing"
+        salaries: 280000
+        tools: 120000
+        travel: 95000
+      - dept: "Sales"
+        salaries: 340000
+        tools: 45000
+        travel: 78000
+      - dept: "Support"
+        salaries: 190000
+        tools: 35000
+        travel: 12000
+  visualize:
+    type: bar
+    orientation: horizontal
+    columns: dept
+    rows:
+      - field: salaries
+        label: "Salaries"
+      - field: tools
+        label: "Tools & Software"
+      - field: travel
+        label: "Travel"
+
+assertions:
+  structure:
+    root: svg
+    bars: 12
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  axes:
+    y:
+      labels: ["Engineering", "Marketing", "Sales", "Support"]
+    x:
+      format: numeric

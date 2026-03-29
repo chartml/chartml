@@ -1,0 +1,45 @@
+name: "Horizontal — single field using fields array syntax"
+tags: [bar, horizontal, single-field, fields-array]
+description: >
+  Horizontal bar chart with a single measure expressed using the fields
+  array syntax (rows: [{field: value}]) rather than the simple string
+  (rows: value). Both should produce identical output. Tests that the
+  combo→standard delegation works for the single-field case.
+
+chart:
+  type: chart
+  version: 1
+  title: "Product Rankings"
+  data:
+    provider: inline
+    rows:
+      - product: "Enterprise Suite"
+        arr: 2840000
+      - product: "Pro Plan"
+        arr: 1920000
+      - product: "Starter"
+        arr: 680000
+      - product: "API Access"
+        arr: 1250000
+      - product: "Custom"
+        arr: 3100000
+  visualize:
+    type: bar
+    orientation: horizontal
+    columns: product
+    rows:
+      - field: arr
+        label: "Annual Revenue"
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  axes:
+    y:
+      labels: ["Enterprise Suite", "Pro Plan", "Starter", "API Access", "Custom"]
+    x:
+      format: numeric
