@@ -58,6 +58,59 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     };
 
     if !multi_fields.is_empty() {
+        let is_horizontal = matches!(config.visualize.orientation, Some(Orientation::Horizontal));
+        let has_line_fields = multi_fields.iter().any(|f| f.mark.as_deref() == Some("line"));
+        let has_right_axis = multi_fields.iter().any(|f| f.axis.as_deref() == Some("right"));
+
+        // When horizontal with only bar fields (no lines/right axis), delegate to the
+        // standard bar renderer which already supports horizontal layout. The combo path
+        // only handles vertical because swapping axes for lines doesn't make sense.
+        if is_horizontal && !has_line_fields && !has_right_axis {
+            // Build a grouped bar config: use color field to separate the bar fields.
+            // Reshape wide-format data (revenue+target columns) into long-format
+            // (field_name column + value column) so the standard grouped bar path handles it.
+            let category_field = get_field_name(&config.visualize.columns)?;
+            let mut long_rows: Vec<chartml_core::data::Row> = Vec::new();
+            for i in 0..data.num_rows() {
+                for field_spec in &multi_fields {
+                    let cat = data.get_string(i, &category_field).unwrap_or_default();
+                    let val = data.get_f64(i, &field_spec.field).unwrap_or(0.0);
+                    let label = field_spec.label.clone().unwrap_or_else(|| field_spec.field.clone());
+                    let mut row = std::collections::HashMap::new();
+                    row.insert(category_field.clone(), serde_json::json!(cat));
+                    row.insert("_value".to_string(), serde_json::json!(val));
+                    row.insert("_series".to_string(), serde_json::json!(label));
+                    long_rows.push(row);
+                }
+            }
+            let long_data = DataTable::from_rows(&long_rows)
+                .map_err(|e| ChartError::DataError(format!("Failed to reshape data: {}", e)))?;
+
+            // Build a config that uses the long-format columns
+            let mut viz = config.visualize.clone();
+            viz.rows = Some(FieldRef::Simple("_value".to_string()));
+            viz.marks = Some(chartml_core::spec::MarksSpec {
+                color: Some(chartml_core::spec::MarkEncoding::Simple("_series".to_string())),
+                size: None, shape: None, text: None,
+            });
+            viz.mode = Some(ChartMode::Grouped);
+            // Assign colors from field specs or config palette
+            let mut colors = Vec::new();
+            for (i, f) in multi_fields.iter().enumerate() {
+                colors.push(f.color.clone().unwrap_or_else(|| {
+                    config.colors.get(i).cloned().unwrap_or_else(|| "#2E7D9A".to_string())
+                }));
+            }
+            let long_config = ChartConfig {
+                visualize: viz,
+                title: config.title.clone(),
+                width: config.width,
+                height: config.height,
+                colors,
+            };
+            return render_bar(&long_data, &long_config);
+        }
+
         return render_combo(data, config, &multi_fields);
     }
 
