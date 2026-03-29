@@ -84,23 +84,41 @@ pub fn ChartMLChart(
     let container_ref = NodeRef::<leptos::html::Div>::new();
 
     // Set up ResizeObserver after mount; disconnect on disposal.
+    // Debounce: only update container_width after resize activity stops for 200ms.
+    // Matches the markdown-react plugin pattern (250ms debounce + initial grace).
     type RoEntry = SendWrapper<Rc<RefCell<Option<(web_sys::ResizeObserver, Closure<dyn Fn(js_sys::Array)>)>>>>;
     let resize_observer: RoEntry = SendWrapper::new(Rc::new(RefCell::new(None)));
+    let debounce_handle: SendWrapper<Rc<RefCell<Option<i32>>>> = SendWrapper::new(Rc::new(RefCell::new(None)));
 
     let ro_clone = resize_observer.clone();
+    let debounce_clone = debounce_handle.clone();
     Effect::new(move || {
         if let Some(el) = container_ref.get() {
+            // Set initial width immediately (no debounce for first measurement)
             let width = el.client_width() as f64;
             if width > 0.0 {
                 set_container_width.set(width);
             }
 
+            let dh = debounce_clone.clone();
             let cb = Closure::<dyn Fn(js_sys::Array)>::new(move |entries: js_sys::Array| {
                 if let Some(entry) = entries.get(0).dyn_ref::<web_sys::ResizeObserverEntry>() {
                     let rect = entry.content_rect();
                     let w = rect.width();
                     if w > 0.0 {
-                        set_container_width.set(w);
+                        // Cancel any pending debounce
+                        if let Some(tid) = dh.borrow_mut().take() {
+                            web_sys::window().unwrap().clear_timeout_with_handle(tid);
+                        }
+                        // Set new debounced timeout
+                        let cb_js = Closure::once_into_js(move || {
+                            set_container_width.set(w);
+                        });
+                        let tid = web_sys::window().unwrap()
+                            .set_timeout_with_callback_and_timeout_and_arguments_0(
+                                cb_js.unchecked_ref(), 200,
+                            ).unwrap_or(0);
+                        *dh.borrow_mut() = Some(tid);
                     }
                 }
             });
@@ -115,6 +133,9 @@ pub fn ChartMLChart(
     on_cleanup(move || {
         if let Some((observer, _cb)) = resize_observer.borrow_mut().take() {
             observer.disconnect();
+        }
+        if let Some(tid) = debounce_handle.borrow_mut().take() {
+            web_sys::window().unwrap().clear_timeout_with_handle(tid);
         }
     });
 

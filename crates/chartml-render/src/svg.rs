@@ -79,9 +79,15 @@ fn write_element(buf: &mut String, element: &ChartElement) {
         }
 
         ChartElement::Rect { x, y, width, height, fill, stroke, class, data } => {
-            // Bar animation: transform-origin at bottom center so scaleY grows upward
-            let origin_x = x + width / 2.0;
-            let origin_y = y + height;
+            // Bar animation: transform-origin depends on orientation.
+            // Vertical bars: bottom-center (scaleY grows upward from baseline).
+            // Horizontal bars: left-center (scaleX grows rightward from y-axis).
+            // Heuristic: bars wider than tall are horizontal.
+            let (origin_x, origin_y) = if width > height {
+                (*x, y + height / 2.0) // left-center for horizontal
+            } else {
+                (x + width / 2.0, y + height) // bottom-center for vertical
+            };
             write!(
                 buf,
                 r#"<rect x="{}" y="{}" width="{}" height="{}" fill="{}" style="transform-origin: {}px {}px;""#,

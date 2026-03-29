@@ -160,6 +160,17 @@ body {
     to   { transform: scaleY(1); }
 }
 
+/* Horizontal bars: grow from left to right via scaleX */
+.chartml-horizontal .bars rect,
+.chartml-horizontal .bar {
+    animation-name: chartml-bar-grow-x;
+}
+
+@keyframes chartml-bar-grow-x {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+}
+
 /* Bar hover: opacity 0.9 → 1 + darker stroke border (matches D3 exactly).
    stroke color uses brightness filter on a separate outline. */
 .bars rect,

@@ -382,11 +382,12 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         });
     }
 
+    let svg_class = if is_horizontal { "chartml-bar chartml-horizontal" } else { "chartml-bar" };
     Ok(ChartElement::Svg {
         viewbox: ViewBox::new(0.0, 0.0, config.width, config.height),
         width: Some(config.width),
         height: Some(config.height),
-        class: "chartml-bar".to_string(),
+        class: svg_class.to_string(),
         children,
     })
 }

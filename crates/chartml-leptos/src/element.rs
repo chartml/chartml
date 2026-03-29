@@ -46,9 +46,14 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             let fill = fill.clone();
             let stroke_str = stroke.clone().unwrap_or_default();
             let class = class.clone();
-            // Bar animation: transform-origin at bottom center
-            let origin_x = x + width / 2.0;
-            let origin_y = y + height;
+            // Bar animation: transform-origin depends on orientation.
+            // Horizontal bars (wider than tall): left-center for scaleX.
+            // Vertical bars: bottom-center for scaleY.
+            let (origin_x, origin_y) = if width > height {
+                (*x, y + height / 2.0)
+            } else {
+                (x + width / 2.0, y + height)
+            };
             let base_style = format!("transform-origin: {}px {}px;", origin_x, origin_y);
 
             if let Some(data) = data.clone() {
