@@ -124,134 +124,128 @@ pub fn ChartMLChart(
         format!("chartml-container {}", class)
     };
 
-    // Signal for async render results (transform charts rendered via DataFusion)
-    let (async_result, set_async_result) = signal(None::<Result<(Option<String>, ChartElement), String>>);
+    // Unified chart state: title, SVG HTML, error, loading.
+    // All view closures read from this single signal — no split-brain from
+    // multiple independent `spec.get()` subscriptions.
+    #[derive(Clone)]
+    struct ChartState {
+        title: Option<String>,
+        svg: String,
+        error: Option<String>,
+        loading: bool,
+    }
+    let (chart_state, set_chart_state) = signal(ChartState {
+        title: None, svg: String::new(), error: None, loading: false,
+    });
 
-    // Effect that watches spec/width/params and spawns async render when transforms are present.
-    // This is separate from the render closure to avoid the spawn-on-every-render infinite loop.
+    // Generation counter to prevent stale async results from overwriting newer ones
+    let render_gen: Rc<std::cell::Cell<u32>> = Rc::new(std::cell::Cell::new(0));
+
+    // Unified render effect: reads spec/width/params, produces ChartState.
+    // Sync charts are rendered inline; async charts spawn a task and set loading.
     let chartml_for_effect = chartml.clone();
+    let render_gen_for_effect = render_gen.clone();
     Effect::new(move || {
         let yaml = spec.get();
         let width = container_width.get();
         let params = param_values.map(|pv| pv.get());
 
-        if yaml.trim().is_empty() || width <= 0.0 || !has_transform_spec(&yaml) {
+        if yaml.trim().is_empty() {
+            set_chart_state.set(ChartState {
+                title: None,
+                svg: r#"<p style="color: #888; padding: 12px;">Enter a ChartML YAML spec</p>"#.to_string(),
+                error: None, loading: false,
+            });
+            return;
+        }
+        if width <= 0.0 {
             return;
         }
 
-        let chartml_async = chartml_for_effect.clone();
-        let yaml_owned = yaml.clone();
-        let params_owned = params.clone();
         let title = extract_yaml_title(&yaml);
 
-        wasm_bindgen_futures::spawn_local(async move {
-            let result = chartml_async.render_from_yaml_with_params_async(
-                &yaml_owned,
-                Some(width),
-                None,
-                params_owned.as_ref(),
-            ).await;
-            set_async_result.set(Some(
-                result
-                    .map(|el| (title, el))
-                    .map_err(|e| format!("{}", e))
-            ));
-        });
+        if has_transform_spec(&yaml) {
+            // Async path: set loading, bump generation, spawn task
+            set_chart_state.set(ChartState {
+                title: title.clone(), svg: String::new(), error: None, loading: true,
+            });
+            let my_gen = render_gen_for_effect.get() + 1;
+            render_gen_for_effect.set(my_gen);
+            let gen_ref = render_gen_for_effect.clone();
+
+            let chartml_async = chartml_for_effect.clone();
+            let yaml_owned = yaml.clone();
+            let params_owned = params.clone();
+
+            wasm_bindgen_futures::spawn_local(async move {
+                let result = chartml_async.render_from_yaml_with_params_async(
+                    &yaml_owned, Some(width), None, params_owned.as_ref(),
+                ).await;
+                // Only apply if no newer render has been started
+                if gen_ref.get() != my_gen { return; }
+                match result {
+                    Ok(el) => {
+                        let (ew, eh) = extract_svg_dimensions(&el);
+                        set_chart_state.set(ChartState {
+                            title, svg: element_to_svg(&el, ew, eh), error: None, loading: false,
+                        });
+                    }
+                    Err(e) => {
+                        set_chart_state.set(ChartState {
+                            title, svg: String::new(), error: Some(format!("{}", e)), loading: false,
+                        });
+                    }
+                }
+            });
+        } else {
+            // Sync path: render immediately
+            match chartml_for_effect.render_from_yaml_with_params(&yaml, Some(width), None, params.as_ref()) {
+                Ok(element) => {
+                    let (ew, eh) = extract_svg_dimensions(&element);
+                    set_chart_state.set(ChartState {
+                        title, svg: element_to_svg(&element, ew, eh), error: None, loading: false,
+                    });
+                }
+                Err(err) => {
+                    set_chart_state.set(ChartState {
+                        title, svg: String::new(), error: Some(format!("{}", err)), loading: false,
+                    });
+                }
+            }
+        }
     });
 
     view! {
         <div class=container_class style="position: relative;" node_ref=container_ref>
-            // Chart content — re-renders when spec, width, OR param_values change
+            // Chart title
             {move || {
-                let width = container_width.get();
-                let yaml = spec.get();
+                chart_state.get().title.map(|t| view! {
+                    <div class="chart-title" style="font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 8px;">
+                        {t}
+                    </div>
+                })
+            }}
 
-                // Read param_values signal (if provided) to establish reactive dependency
-                let params = param_values.map(|pv| pv.get());
+            // Chart SVG — reactive inner_html so Leptos updates the DOM on signal change.
+            // Safety: SVG is renderer-generated, not user input.
+            <div inner_html=move || chart_state.get().svg />
 
-                if yaml.trim().is_empty() {
-                    return view! {
-                        <div class="chartml-error">
-                            <p style="color: #888; padding: 12px;">"Enter a ChartML YAML spec"</p>
-                        </div>
-                    }.into_any();
-                }
+            // Error display
+            {move || {
+                chart_state.get().error.map(|msg| view! {
+                    <div class="chartml-error">
+                        <p style="color: #dc3545; font-family: monospace; padding: 12px; background: #fff5f5; border: 1px solid #dc3545; border-radius: 4px;">
+                            {msg}
+                        </p>
+                    </div>
+                })
+            }}
 
-                if width <= 0.0 {
-                    return view! { <div /> }.into_any();
-                }
-
-                if has_transform_spec(&yaml) {
-                    // Async path — read from the async_result signal (set by the Effect above)
-                    match async_result.get() {
-                        None => view! {
-                            <div style="padding: 12px; color: #888;">
-                                "Loading..."
-                            </div>
-                        }.into_any(),
-                        Some(Ok((chart_title, element))) => {
-                            let (ew, eh) = extract_svg_dimensions(&element);
-                            let svg_str = element_to_svg(&element, ew, eh);
-                            view! {
-                                <div>
-                                    {chart_title.map(|t| view! {
-                                        <div class="chart-title" style="font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 8px;">
-                                            {t}
-                                        </div>
-                                    })}
-                                    <div inner_html=svg_str />
-                                </div>
-                            }.into_any()
-                        }
-                        Some(Err(err)) => view! {
-                            <div class="chartml-error">
-                                <p style="color: #dc3545; font-family: monospace; padding: 12px; background: #fff5f5; border: 1px solid #dc3545; border-radius: 4px;">
-                                    {format!("Chart error: {}", err)}
-                                </p>
-                            </div>
-                        }.into_any(),
-                    }
-                } else {
-                    // Sync path — no transforms, render to SVG string and inject.
-                    // Using inner_html instead of render_element() because Leptos's
-                    // view diffing doesn't correctly patch SVG elements in-place when
-                    // the chart structure changes (e.g. vertical → horizontal).
-                    let chart_title = extract_yaml_title(&yaml);
-
-                    let result = chartml.render_from_yaml_with_params(
-                        &yaml,
-                        Some(width),
-                        None,
-                        params.as_ref(),
-                    );
-
-                    match result {
-                        Ok(element) => {
-                            let (ew, eh) = extract_svg_dimensions(&element);
-                            let svg_str = element_to_svg(&element, ew, eh);
-                            view! {
-                                <div>
-                                    {chart_title.map(|t| view! {
-                                        <div class="chart-title" style="font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 8px;">
-                                            {t}
-                                        </div>
-                                    })}
-                                    // Safety: SVG is generated by our renderer, not user input
-                                    <div inner_html=svg_str />
-                                </div>
-                            }.into_any()
-                        }
-                        Err(err) => {
-                            view! {
-                                <div class="chartml-error">
-                                    <p style="color: #dc3545; font-family: monospace; padding: 12px; background: #fff5f5; border: 1px solid #dc3545; border-radius: 4px;">
-                                        {format!("Chart error: {}", err)}
-                                    </p>
-                                </div>
-                            }.into_any()
-                        }
-                    }
-                }
+            // Loading state
+            {move || {
+                chart_state.get().loading.then(|| view! {
+                    <div style="padding: 12px; color: #888;">"Loading..."</div>
+                })
             }}
 
             // Tooltip overlay
