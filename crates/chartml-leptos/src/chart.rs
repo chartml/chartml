@@ -248,7 +248,7 @@ pub fn ChartMLChart(
             // Chart title
             {move || {
                 chart_state.get().title.map(|t| view! {
-                    <div class="chart-title" style="font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 8px;">
+                    <div class="chart-title" style="font-size: 16px; font-weight: 600; color: var(--chartml-text, #374151); margin-bottom: 8px;">
                         {t}
                     </div>
                 })
