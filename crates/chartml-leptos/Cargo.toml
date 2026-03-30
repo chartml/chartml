@@ -7,7 +7,6 @@ publish = false
 
 [dependencies]
 chartml-core = { path = "../chartml-core", version = "3.0.0" }
-chartml-render = { path = "../chartml-render", version = "3.0.0" }
 serde_json = "1"
 leptos = "0.8"
 web-sys = { version = "0.3", features = ["HtmlElement", "DomRect", "ResizeObserver", "ResizeObserverEntry", "ResizeObserverSize"] }

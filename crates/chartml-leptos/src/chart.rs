@@ -9,7 +9,7 @@ use chartml_core::ChartML;
 use chartml_core::element::ElementData;
 use chartml_core::element::ChartElement;
 use chartml_core::params::ParamValues;
-use chartml_render::element_to_svg;
+use crate::element::render_element;
 use crate::tooltip::{provide_tooltip_context, DefaultTooltip};
 
 /// Custom tooltip renderer type.
@@ -31,16 +31,6 @@ fn inject_chartml_css() {
         style.set_attribute("id", CSS_ID).unwrap();
         style.set_text_content(Some(CSS));
         document.head().unwrap().append_child(&style).unwrap();
-    }
-}
-
-/// Extract width/height from a ChartElement for element_to_svg.
-fn extract_svg_dimensions(element: &ChartElement) -> (f64, f64) {
-    match element {
-        ChartElement::Svg { width, height, viewbox, .. } => {
-            (width.unwrap_or(viewbox.width), height.unwrap_or(viewbox.height))
-        }
-        _ => (800.0, 400.0),
     }
 }
 
@@ -165,18 +155,18 @@ pub fn ChartMLChart(
         format!("chartml-container {}", class)
     };
 
-    // Unified chart state: title, SVG HTML, error, loading.
+    // Unified chart state: title, element tree, error, loading.
     // All view closures read from this single signal — no split-brain from
     // multiple independent `spec.get()` subscriptions.
     #[derive(Clone)]
     struct ChartState {
         title: Option<String>,
-        svg: String,
+        element: Option<ChartElement>,
         error: Option<String>,
         loading: bool,
     }
     let (chart_state, set_chart_state) = signal(ChartState {
-        title: None, svg: String::new(), error: None, loading: false,
+        title: None, element: None, error: None, loading: false,
     });
 
     // Generation counter to prevent stale async results from overwriting newer ones
@@ -193,9 +183,8 @@ pub fn ChartMLChart(
 
         if yaml.trim().is_empty() {
             set_chart_state.set(ChartState {
-                title: None,
-                svg: r#"<p style="color: #888; padding: 12px;">Enter a ChartML YAML spec</p>"#.to_string(),
-                error: None, loading: false,
+                title: None, element: None,
+                error: Some("Enter a ChartML YAML spec".to_string()), loading: false,
             });
             return;
         }
@@ -208,7 +197,7 @@ pub fn ChartMLChart(
         if has_transform_spec(&yaml) {
             // Async path: set loading, bump generation, spawn task
             set_chart_state.set(ChartState {
-                title: title.clone(), svg: String::new(), error: None, loading: true,
+                title: title.clone(), element: None, error: None, loading: true,
             });
             let my_gen = render_gen_for_effect.get() + 1;
             render_gen_for_effect.set(my_gen);
@@ -226,14 +215,13 @@ pub fn ChartMLChart(
                 if gen_ref.get() != my_gen { return; }
                 match result {
                     Ok(el) => {
-                        let (ew, eh) = extract_svg_dimensions(&el);
                         set_chart_state.set(ChartState {
-                            title, svg: element_to_svg(&el, ew, eh), error: None, loading: false,
+                            title, element: Some(el), error: None, loading: false,
                         });
                     }
                     Err(e) => {
                         set_chart_state.set(ChartState {
-                            title, svg: String::new(), error: Some(format!("{}", e)), loading: false,
+                            title, element: None, error: Some(format!("{}", e)), loading: false,
                         });
                     }
                 }
@@ -242,14 +230,13 @@ pub fn ChartMLChart(
             // Sync path: render immediately
             match chartml_for_effect.render_from_yaml_with_params(&yaml, Some(width), None, params.as_ref()) {
                 Ok(element) => {
-                    let (ew, eh) = extract_svg_dimensions(&element);
                     set_chart_state.set(ChartState {
-                        title, svg: element_to_svg(&element, ew, eh), error: None, loading: false,
+                        title, element: Some(element), error: None, loading: false,
                     });
                 }
                 Err(err) => {
                     set_chart_state.set(ChartState {
-                        title, svg: String::new(), error: Some(format!("{}", err)), loading: false,
+                        title, element: None, error: Some(format!("{}", err)), loading: false,
                     });
                 }
             }
@@ -267,9 +254,11 @@ pub fn ChartMLChart(
                 })
             }}
 
-            // Chart SVG — reactive inner_html so Leptos updates the DOM on signal change.
-            // Safety: SVG is renderer-generated, not user input.
-            <div inner_html=move || chart_state.get().svg />
+            // Chart content — render_element() produces Leptos views with
+            // interactive tooltip wrappers, preserving ElementData mouse handlers.
+            {move || {
+                chart_state.get().element.map(|el| render_element(&el))
+            }}
 
             // Error display
             {move || {
