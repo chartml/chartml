@@ -183,7 +183,7 @@ impl ChartRenderer for ScatterRenderer {
                     x: margins.left - 8.0, y,
                     content: label, anchor: TextAnchor::End,
                     dominant_baseline: Some("middle".to_string()),
-                    transform: None, font_size: Some("11px".to_string()),
+                    transform: None, font_size: Some("12px".to_string()),
                     font_weight: None,
                     fill: Some(theme::TEXT_SECONDARY.to_string()), class: "tick-label".to_string(), data: None,
                 });
@@ -226,7 +226,7 @@ impl ChartRenderer for ScatterRenderer {
                     x, y: x_axis_y + 18.0,
                     content: label, anchor: TextAnchor::Middle,
                     dominant_baseline: None, transform: None,
-                    font_size: Some("11px".to_string()), font_weight: None,
+                    font_size: Some("12px".to_string()), font_weight: None,
                     fill: Some(theme::TEXT_SECONDARY.to_string()),
                     class: "tick-label".to_string(), data: None,
                 });

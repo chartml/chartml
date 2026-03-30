@@ -253,7 +253,7 @@ pub fn generate_legend_elements(
             anchor: TextAnchor::Start,
             dominant_baseline: None,
             transform: None,
-            font_size: Some("11px".to_string()),
+            font_size: Some("12px".to_string()),
             font_weight: None,
             fill: Some("var(--chartml-text-secondary, #6b7280)".to_string()),
             class: "legend-label".to_string(),

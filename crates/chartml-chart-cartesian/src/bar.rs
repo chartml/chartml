@@ -563,9 +563,9 @@ fn render_single_series_bars(
                         anchor: TextAnchor::Middle,
                         dominant_baseline: None,
                         transform: None,
-                        font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "11px".to_string())),
+                        font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
                         font_weight: None,
-                        fill: Some(dl.color.clone().unwrap_or_else(|| "#333".to_string())),
+                        fill: Some(dl.color.clone().unwrap_or_else(|| "var(--chartml-text-secondary, #6b7280)".to_string())),
                         class: "data-label".to_string(),
                         data: None,
                     });
@@ -1213,9 +1213,9 @@ fn render_combo(
                                 content: format_value(val, dl_fmt),
                                 anchor: TextAnchor::Middle, dominant_baseline: None,
                                 transform: None,
-                                font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "11px".to_string())),
+                                font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
                                 font_weight: None,
-                                fill: Some(dl.color.clone().unwrap_or_else(|| "#333".to_string())),
+                                fill: Some(dl.color.clone().unwrap_or_else(|| "var(--chartml-text-secondary, #6b7280)".to_string())),
                                 class: "data-label".to_string(), data: None,
                             });
                         }
@@ -1242,7 +1242,7 @@ fn render_combo(
                         d: path_d, fill: None, stroke: Some(color.clone()),
                         stroke_width: Some(2.0), stroke_dasharray: None,
                         opacity: None,
-                        class: "line".to_string(),
+                        class: "chartml-line-path".to_string(),
                         data: Some(ElementData::new(&label, "").with_series(&label)),
                     });
 
@@ -1268,7 +1268,7 @@ fn render_combo(
                                     content: format_value(*val, dl_fmt),
                                     anchor: TextAnchor::Middle, dominant_baseline: None,
                                     transform: None,
-                                    font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "11px".to_string())),
+                                    font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
                                     font_weight: None,
                                     fill: Some(dl.color.clone().unwrap_or_else(|| color.clone())),
                                     class: "data-label".to_string(), data: None,
@@ -1349,9 +1349,9 @@ fn render_combo(
             legend_elements.push(ChartElement::Text {
                 x: x_offset + 18.0, y: y + 10.0, content: name.clone(),
                 anchor: TextAnchor::Start, dominant_baseline: None,
-                transform: None, font_size: Some("11px".to_string()),
+                transform: None, font_size: Some("12px".to_string()),
                 font_weight: None,
-                fill: Some("#333".to_string()), class: "legend-label".to_string(), data: None,
+                fill: Some("var(--chartml-text-secondary, #6b7280)".to_string()), class: "legend-label".to_string(), data: None,
             });
 
             let tw = chartml_core::layout::labels::approximate_text_width(name);

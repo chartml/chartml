@@ -484,7 +484,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                             anchor: TextAnchor::Middle,
                             dominant_baseline: None,
                             transform: None,
-                            font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "11px".to_string())),
+                            font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
                             font_weight: None,
                             fill: Some(dl.color.clone().unwrap_or_else(|| color.clone())),
                             class: "data-label".to_string(),
