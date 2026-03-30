@@ -1251,7 +1251,7 @@ fn render_combo(
                         let (ref cat, val) = point_data[i];
                         mark_elements.push(ChartElement::Circle {
                             cx: px, cy: py, r: 5.0,
-                            fill: color.clone(), stroke: Some("#fff".to_string()),
+                            fill: color.clone(), stroke: Some(chartml_core::theme::BG_STROKE.to_string()),
                             class: "chartml-line-dot".to_string(),
                             data: Some(ElementData::new(cat, format_value(val, fmt_ref)).with_series(&label)),
                         });

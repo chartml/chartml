@@ -15,3 +15,7 @@ pub const TICK: &str = "var(--chartml-axis-line, #374151)";
 
 /// Grid line color.
 pub const GRID: &str = "var(--chartml-grid, #e0e0e0)";
+
+/// Background-aware stroke for element separators (pie slice borders, dot outlines).
+/// Matches the chart background so borders blend rather than standing out.
+pub const BG_STROKE: &str = "var(--chartml-bg, #ffffff)";

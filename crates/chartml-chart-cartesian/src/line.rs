@@ -462,7 +462,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 line_elements.push(ChartElement::Circle {
                     cx: px, cy: py, r: 5.0,
                     fill: color.clone(),
-                    stroke: Some("#fff".to_string()),
+                    stroke: Some(chartml_core::theme::BG_STROKE.to_string()),
                     class: "chartml-line-dot".to_string(),
                     data: Some(ElementData::new(cat, format_value(val, fmt_for_field)).with_series(&label)),
                 });
@@ -573,7 +573,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     cy: py,
                     r: 5.0,
                     fill: color.clone(),
-                    stroke: Some("#fff".to_string()),
+                    stroke: Some(chartml_core::theme::BG_STROKE.to_string()),
                     class: "chartml-line-dot".to_string(),
                     data: Some(ElementData::new(cat, format_value(val, y_fmt_ref)).with_series(series_name)),
                 });
@@ -645,7 +645,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     cy: py,
                     r: 5.0,
                     fill: color.clone(),
-                    stroke: Some("#fff".to_string()),
+                    stroke: Some(chartml_core::theme::BG_STROKE.to_string()),
                     class: "chartml-line-dot".to_string(),
                     data: Some(ElementData::new(cat, format_value(val, y_fmt_ref))),
                 });

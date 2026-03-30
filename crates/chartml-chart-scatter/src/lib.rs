@@ -133,7 +133,7 @@ impl ChartRenderer for ScatterRenderer {
                     cy,
                     r,
                     fill,
-                    stroke: Some("#fff".to_string()),
+                    stroke: Some(chartml_core::theme::BG_STROKE.to_string()),
                     class: "chartml-scatter-point".to_string(),
                     data: Some(el_data),
                 });

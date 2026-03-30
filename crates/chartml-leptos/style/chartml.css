@@ -12,6 +12,7 @@
     --chartml-text-secondary: #6b7280;
     --chartml-grid: #e0e0e0;
     --chartml-axis-line: #374151;
+    --chartml-bg: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -20,6 +21,7 @@
         --chartml-text-secondary: #9ca3af;
         --chartml-grid: #374151;
         --chartml-axis-line: #9ca3af;
+        --chartml-bg: #1f2937;
     }
 }
 

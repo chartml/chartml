@@ -71,7 +71,7 @@ impl ChartRenderer for PieRenderer {
             slice_elements.push(ChartElement::Path {
                 d: path_d,
                 fill: Some(color),
-                stroke: Some("#fff".to_string()),
+                stroke: Some(chartml_core::theme::BG_STROKE.to_string()),
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
                 opacity: None,
