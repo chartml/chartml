@@ -28,9 +28,10 @@
 .bar {
     animation: chartml-bar-grow 400ms ease-out both;
     opacity: 0.9;
-    transition: opacity 200ms ease, stroke 200ms ease;
+    transition: opacity 200ms ease, stroke 200ms ease, stroke-width 200ms ease;
     stroke: transparent;
-    stroke-width: 2;
+    stroke-width: 0;
+    paint-order: stroke;
 }
 
 @keyframes chartml-bar-grow {
@@ -54,6 +55,7 @@
 .bar:hover {
     opacity: 1;
     stroke: rgba(0, 0, 0, 0.3);
+    stroke-width: 2;
 }
 
 /* ── Line drawing ── */
