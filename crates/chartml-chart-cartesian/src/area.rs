@@ -199,7 +199,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     stroke_width: None,
                     stroke_dasharray: None,
                     opacity: Some(0.6),
-                    class: "area".to_string(),
+                    class: "chartml-area-path".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
 
@@ -212,7 +212,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     stroke_width: Some(2.0),
                     stroke_dasharray: None,
                     opacity: None,
-                    class: "line".to_string(),
+                    class: "chartml-line-path".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
 
@@ -328,7 +328,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     stroke_width: None,
                     stroke_dasharray: None,
                     opacity: Some(0.6),
-                    class: "area".to_string(),
+                    class: "chartml-area-path".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
 
@@ -341,7 +341,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     stroke_width: Some(2.0),
                     stroke_dasharray: None,
                     opacity: None,
-                    class: "line".to_string(),
+                    class: "chartml-line-path".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
 
@@ -463,7 +463,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 stroke_width: None,
                 stroke_dasharray: None,
                 opacity: Some(0.6),
-                class: "area".to_string(),
+                class: "chartml-area-path".to_string(),
                 data: None,
             });
 
@@ -476,7 +476,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
                 opacity: None,
-                class: "line".to_string(),
+                class: "chartml-line-path".to_string(),
                 data: None,
             });
 

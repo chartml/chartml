@@ -124,7 +124,7 @@ impl ChartRenderer for PieRenderer {
                 transform: None,
                 font_size: Some("11px".to_string()),
                 font_weight: None,
-                fill: Some("#333".to_string()),
+                fill: Some("var(--chartml-text-secondary, #6b7280)".to_string()),
                 class: "legend-label".to_string(),
                 data: None,
             });

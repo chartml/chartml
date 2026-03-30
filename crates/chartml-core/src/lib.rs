@@ -470,7 +470,7 @@ impl ChartML {
                         ("border-radius".to_string(), "4px".to_string()),
                         ("padding".to_string(), "6px 10px".to_string()),
                         ("font-size".to_string(), "13px".to_string()),
-                        ("color".to_string(), "#333".to_string()),
+                        ("color".to_string(), "var(--chartml-text, #374151)".to_string()),
                         ("min-width".to_string(), "140px".to_string()),
                     ]),
                     children: vec![ChartElement::Span {
@@ -493,7 +493,7 @@ impl ChartML {
                         ("border-radius".to_string(), "4px".to_string()),
                         ("padding".to_string(), "6px 10px".to_string()),
                         ("font-size".to_string(), "13px".to_string()),
-                        ("color".to_string(), "#333".to_string()),
+                        ("color".to_string(), "var(--chartml-text, #374151)".to_string()),
                         ("min-width".to_string(), "120px".to_string()),
                     ]),
                     children: vec![ChartElement::Span {
@@ -519,7 +519,7 @@ impl ChartML {
                         ("border-radius".to_string(), "4px".to_string()),
                         ("padding".to_string(), "6px 10px".to_string()),
                         ("font-size".to_string(), "13px".to_string()),
-                        ("color".to_string(), "#333".to_string()),
+                        ("color".to_string(), "var(--chartml-text, #374151)".to_string()),
                     ]),
                     children: vec![ChartElement::Span {
                         class: "".to_string(),
@@ -540,7 +540,7 @@ impl ChartML {
                         ("border-radius".to_string(), "4px".to_string()),
                         ("padding".to_string(), "6px 10px".to_string()),
                         ("font-size".to_string(), "13px".to_string()),
-                        ("color".to_string(), "#333".to_string()),
+                        ("color".to_string(), "var(--chartml-text, #374151)".to_string()),
                         ("min-width".to_string(), "80px".to_string()),
                     ]),
                     children: vec![ChartElement::Span {
@@ -562,7 +562,7 @@ impl ChartML {
                         ("border-radius".to_string(), "4px".to_string()),
                         ("padding".to_string(), "6px 10px".to_string()),
                         ("font-size".to_string(), "13px".to_string()),
-                        ("color".to_string(), "#333".to_string()),
+                        ("color".to_string(), "var(--chartml-text, #374151)".to_string()),
                     ]),
                     children: vec![ChartElement::Span {
                         class: "".to_string(),
