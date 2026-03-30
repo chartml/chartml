@@ -403,7 +403,7 @@ mod tests {
             children: vec![
                 ChartElement::Line {
                     x1: 0.0, y1: 0.0, x2: 100.0, y2: 100.0,
-                    stroke: "#ccc".to_string(),
+                    stroke: "red".to_string(),
                     stroke_width: Some(1.0),
                     stroke_dasharray: None,
                     class: "grid".to_string(),
@@ -412,7 +412,7 @@ mod tests {
         };
 
         let svg = element_to_svg(&element, 100.0, 100.0);
-        assert!(svg.contains(r##"stroke="#ccc""##));
+        assert!(svg.contains(r##"stroke="red""##));
     }
 
     #[test]

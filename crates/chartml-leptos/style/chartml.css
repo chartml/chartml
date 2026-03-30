@@ -6,6 +6,23 @@
  * Override any rule in your own stylesheet to customize.
  */
 
+/* ── Theme colors ── */
+:root {
+    --chartml-text: #374151;
+    --chartml-text-secondary: #6b7280;
+    --chartml-grid: #e0e0e0;
+    --chartml-axis-line: #374151;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --chartml-text: #e5e7eb;
+        --chartml-text-secondary: #9ca3af;
+        --chartml-grid: #374151;
+        --chartml-axis-line: #9ca3af;
+    }
+}
+
 /* ── Bar entrance ── */
 .bars rect,
 .bar {

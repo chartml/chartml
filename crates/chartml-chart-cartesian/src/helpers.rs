@@ -6,6 +6,7 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, approxima
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::spec::{AnnotationSpec, FieldRef, FieldRefItem, MarkEncoding};
+use chartml_core::theme;
 
 /// Grid line configuration resolved from the spec.
 #[derive(Debug, Clone)]
@@ -22,7 +23,7 @@ impl Default for GridConfig {
         Self {
             show_x: false,
             show_y: true, // JS default: horizontal grid on
-            color: "#e0e0e0".to_string(),
+            color: theme::GRID.to_string(),
             opacity: 0.5,
             dash_array: None,
         }
@@ -405,7 +406,7 @@ pub fn generate_x_axis_with_display(
         y1: y_position,
         x2: range.1,
         y2: y_position,
-        stroke: "#ccc".to_string(),
+        stroke: theme::AXIS_LINE.to_string(),
         stroke_width: Some(1.0),
         stroke_dasharray: None,
         class: "axis-line".to_string(),
@@ -442,7 +443,7 @@ pub fn generate_x_axis_with_display(
                 // Tick mark
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
-                    stroke: "#999".to_string(), stroke_width: Some(1.0),
+                    stroke: theme::TICK.to_string(), stroke_width: Some(1.0),
                     stroke_dasharray: None, class: "tick".to_string(),
                 });
                 // Label
@@ -454,7 +455,7 @@ pub fn generate_x_axis_with_display(
                     transform: None,
                     font_size: Some("11px".to_string()),
                     font_weight: None,
-                    fill: Some("#666".to_string()),
+                    fill: Some(theme::TEXT_SECONDARY.to_string()),
                     class: "tick-label".to_string(),
                     data: None,
                 });
@@ -503,7 +504,7 @@ pub fn generate_x_axis_with_display(
                 // Tick mark (always shown)
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
-                    stroke: "#999".to_string(), stroke_width: Some(1.0),
+                    stroke: theme::TICK.to_string(), stroke_width: Some(1.0),
                     stroke_dasharray: None, class: "tick".to_string(),
                 });
                 // Label -- skip if skip_factor says so
@@ -527,7 +528,7 @@ pub fn generate_x_axis_with_display(
                         transform: Some(Transform::Rotate(-45.0, x, y_position + 10.0)),
                         font_size: Some("11px".to_string()),
                         font_weight: None,
-                        fill: Some("#666".to_string()),
+                        fill: Some(theme::TEXT_SECONDARY.to_string()),
                         class: "tick-label".to_string(),
                         data: if is_truncated {
                             Some(ElementData::new(label.clone(), ""))
@@ -549,7 +550,7 @@ pub fn generate_x_axis_with_display(
                 };
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
-                    stroke: "#999".to_string(), stroke_width: Some(1.0),
+                    stroke: theme::TICK.to_string(), stroke_width: Some(1.0),
                     stroke_dasharray: None, class: "tick".to_string(),
                 });
                 let truncated = truncate_label(label, *max_width);
@@ -562,7 +563,7 @@ pub fn generate_x_axis_with_display(
                     transform: None,
                     font_size: Some("11px".to_string()),
                     font_weight: None,
-                    fill: Some("#666".to_string()),
+                    fill: Some(theme::TEXT_SECONDARY.to_string()),
                     class: "tick-label".to_string(),
                     data: if is_truncated {
                         Some(ElementData::new(label.clone(), ""))
@@ -592,7 +593,7 @@ pub fn generate_x_axis_with_display(
                 // Tick mark for all
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
-                    stroke: "#999".to_string(), stroke_width: Some(1.0),
+                    stroke: theme::TICK.to_string(), stroke_width: Some(1.0),
                     stroke_dasharray: None, class: "tick".to_string(),
                 });
                 // Label only for sampled indices, with truncation if needed
@@ -611,7 +612,7 @@ pub fn generate_x_axis_with_display(
                         transform: None,
                         font_size: Some("11px".to_string()),
                         font_weight: None,
-                        fill: Some("#666".to_string()),
+                        fill: Some(theme::TEXT_SECONDARY.to_string()),
                         class: "tick-label".to_string(),
                         data: if is_truncated {
                             Some(ElementData::new(label.clone(), ""))
@@ -638,7 +639,7 @@ pub fn generate_x_axis_with_display(
             transform: None,
             font_size: Some("12px".to_string()),
             font_weight: None,
-            fill: Some("#666".to_string()),
+            fill: Some(theme::TEXT_SECONDARY.to_string()),
             class: "axis-label".to_string(),
             data: None,
         });
@@ -669,7 +670,7 @@ pub fn generate_y_axis_with_display(
         y1: range.0.min(range.1),
         x2: x_position,
         y2: range.0.max(range.1),
-        stroke: "#ccc".to_string(),
+        stroke: theme::AXIS_LINE.to_string(),
         stroke_width: Some(1.0),
         stroke_dasharray: None,
         class: "axis-line".to_string(),
@@ -687,7 +688,7 @@ pub fn generate_y_axis_with_display(
             y1: y,
             x2: x_position,
             y2: y,
-            stroke: "#999".to_string(),
+            stroke: theme::TICK.to_string(),
             stroke_width: Some(1.0),
             stroke_dasharray: None,
             class: "tick".to_string(),
@@ -703,7 +704,7 @@ pub fn generate_y_axis_with_display(
             transform: None,
             font_size: Some("11px".to_string()),
             font_weight: None,
-            fill: Some("#666".to_string()),
+            fill: Some(theme::TEXT_SECONDARY.to_string()),
             class: "tick-label".to_string(),
             data: None,
         });
@@ -740,7 +741,7 @@ pub fn generate_y_axis_numeric(
         y1: range.0.min(range.1),
         x2: x_position,
         y2: range.0.max(range.1),
-        stroke: "#ccc".to_string(),
+        stroke: theme::AXIS_LINE.to_string(),
         stroke_width: Some(1.0),
         stroke_dasharray: None,
         class: "axis-line".to_string(),
@@ -778,7 +779,7 @@ pub fn generate_y_axis_numeric(
             y1: y,
             x2: x_position,
             y2: y,
-            stroke: "#999".to_string(),
+            stroke: theme::TICK.to_string(),
             stroke_width: Some(1.0),
             stroke_dasharray: None,
             class: "tick".to_string(),
@@ -793,7 +794,7 @@ pub fn generate_y_axis_numeric(
             transform: None,
             font_size: Some("11px".to_string()),
             font_weight: None,
-            fill: Some("#666".to_string()),
+            fill: Some(theme::TEXT_SECONDARY.to_string()),
             class: "tick-label".to_string(),
             data: None,
         });
@@ -822,7 +823,7 @@ pub fn generate_y_axis_numeric(
             transform: Some(Transform::Rotate(-90.0, label_x, mid_y)),
             font_size: Some("12px".to_string()),
             font_weight: None,
-            fill: Some("#666".to_string()),
+            fill: Some(theme::TEXT_SECONDARY.to_string()),
             class: "axis-label".to_string(),
             data: None,
         });
@@ -850,7 +851,7 @@ pub fn generate_y_axis_numeric_right(
     elements.push(ChartElement::Line {
         x1: x_position, y1: range.0.min(range.1),
         x2: x_position, y2: range.0.max(range.1),
-        stroke: "#ccc".to_string(), stroke_width: Some(1.0),
+        stroke: theme::AXIS_LINE.to_string(), stroke_width: Some(1.0),
         stroke_dasharray: None, class: "axis-line".to_string(),
     });
 
@@ -865,7 +866,7 @@ pub fn generate_y_axis_numeric_right(
         elements.push(ChartElement::Line {
             x1: x_position, y1: y,
             x2: x_position + 5.0, y2: y,
-            stroke: "#999".to_string(), stroke_width: Some(1.0),
+            stroke: theme::TICK.to_string(), stroke_width: Some(1.0),
             stroke_dasharray: None, class: "tick".to_string(),
         });
 
@@ -878,7 +879,7 @@ pub fn generate_y_axis_numeric_right(
             transform: None,
             font_size: Some("11px".to_string()),
             font_weight: None,
-            fill: Some("#666".to_string()),
+            fill: Some(theme::TEXT_SECONDARY.to_string()),
             class: "tick-label".to_string(),
             data: None,
         });
@@ -897,7 +898,7 @@ pub fn generate_y_axis_numeric_right(
             transform: Some(Transform::Rotate(90.0, label_x, mid_y)),
             font_size: Some("12px".to_string()),
             font_weight: None,
-            fill: Some("#666".to_string()),
+            fill: Some(theme::TEXT_SECONDARY.to_string()),
             class: "axis-label".to_string(),
             data: None,
         });
@@ -928,7 +929,7 @@ pub fn generate_x_axis_numeric(
         y1: y_position,
         x2: range.1,
         y2: y_position,
-        stroke: "#ccc".to_string(),
+        stroke: theme::AXIS_LINE.to_string(),
         stroke_width: Some(1.0),
         stroke_dasharray: None,
         class: "axis-line".to_string(),
@@ -966,7 +967,7 @@ pub fn generate_x_axis_numeric(
             y1: y_position,
             x2: x,
             y2: y_position + 5.0,
-            stroke: "#999".to_string(),
+            stroke: theme::TICK.to_string(),
             stroke_width: Some(1.0),
             stroke_dasharray: None,
             class: "tick".to_string(),
@@ -981,7 +982,7 @@ pub fn generate_x_axis_numeric(
             transform: None,
             font_size: Some("11px".to_string()),
             font_weight: None,
-            fill: Some("#666".to_string()),
+            fill: Some(theme::TEXT_SECONDARY.to_string()),
             class: "tick-label".to_string(),
             data: None,
         });
@@ -1316,7 +1317,7 @@ pub fn generate_annotations(
             } else {
                 continue;
             };
-            let color = ann.color.as_deref().unwrap_or("#666").to_string();
+            let color = ann.color.as_deref().unwrap_or(theme::TEXT_SECONDARY).to_string();
             let stroke_width = ann.stroke_width;
             let dash_array = resolve_dash_array(ann);
 
@@ -1350,7 +1351,7 @@ pub fn generate_annotations(
                 None => continue,
             };
             let y_px = scale_y.map(value);
-            let color = ann.color.as_deref().unwrap_or("#666").to_string();
+            let color = ann.color.as_deref().unwrap_or(theme::TEXT_SECONDARY).to_string();
             let stroke_width = ann.stroke_width;
             let dash_array = resolve_dash_array(ann);
 
@@ -1402,7 +1403,7 @@ pub fn generate_annotations(
             let band_height = (y_from - y_to).abs();
             let band_width = x_end - x_start;
 
-            let color = ann.color.as_deref().unwrap_or("#666");
+            let color = ann.color.as_deref().unwrap_or(theme::TEXT_SECONDARY);
             let opacity = ann.opacity.unwrap_or(0.15);
             let fill_color = hex_to_rgba(color, opacity);
 
@@ -1427,7 +1428,7 @@ pub fn generate_annotations(
                     transform: None,
                     font_size: Some("11px".to_string()),
                     font_weight: None,
-                    fill: Some(ann.color.clone().unwrap_or_else(|| "#666".to_string())),
+                    fill: Some(ann.color.clone().unwrap_or_else(|| theme::TEXT_SECONDARY.to_string())),
                     class: "annotation-label".to_string(),
                     data: None,
                 });

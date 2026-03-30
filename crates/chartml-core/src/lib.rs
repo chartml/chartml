@@ -11,6 +11,7 @@ pub mod element;
 pub mod data;
 pub mod transform;
 pub mod params;
+pub mod theme;
 
 pub use error::ChartError;
 pub use spec::{parse, ChartMLSpec, Component};

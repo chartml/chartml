@@ -1060,7 +1060,7 @@ fn render_combo(
             transform: Some(Transform::Rotate(90.0, rx, margins.top + inner_height / 2.0)),
             font_size: Some("12px".to_string()),
             font_weight: None,
-            fill: Some("#666".to_string()),
+            fill: Some(chartml_core::theme::TEXT_SECONDARY.to_string()),
             class: "axis-label".to_string(),
             data: None,
         });
