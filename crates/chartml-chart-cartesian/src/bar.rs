@@ -1349,7 +1349,7 @@ fn render_combo(
             legend_elements.push(ChartElement::Text {
                 x: x_offset + 18.0, y: y + 10.0, content: name.clone(),
                 anchor: TextAnchor::Start, dominant_baseline: None,
-                transform: None, font_size: Some("12px".to_string()),
+                transform: None, font_size: Some("11px".to_string()),
                 font_weight: None,
                 fill: Some("var(--chartml-text-secondary, #6b7280)".to_string()), class: "legend-label".to_string(), data: None,
             });
