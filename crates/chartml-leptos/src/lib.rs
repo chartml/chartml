@@ -1,13 +1,11 @@
 pub mod chart;
 pub mod element;
-pub mod header_bar;
 pub mod hooks;
 pub mod params_ui;
 pub mod tooltip;
 
 pub use chart::{ChartMLChart, TooltipRenderer};
 pub use element::render_element;
-pub use header_bar::ChartHeaderBar;
 
 /// Chart CSS for consumers who need it as a string (SSR, non-Leptos).
 /// The `ChartMLChart` component injects this automatically on mount.

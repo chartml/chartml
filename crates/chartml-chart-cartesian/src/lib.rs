@@ -422,7 +422,7 @@ mod tests {
         let result = renderer.render(&data, &config);
         assert!(result.is_ok(), "Multi-series line render failed: {:?}", result.err());
         let element = result.unwrap();
-        let path_count = count_elements(&element, &|e| matches!(e, ChartElement::Path { class, .. } if class == "line"));
+        let path_count = count_elements(&element, &|e| matches!(e, ChartElement::Path { class, .. } if class == "chartml-line-path"));
         assert_eq!(path_count, 2, "Should have 2 line paths for 2 series, got {}", path_count);
     }
 

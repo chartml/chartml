@@ -15,7 +15,12 @@
     --chartml-bg: #ffffff;
 }
 
-@media (prefers-color-scheme: dark) {
+/* Dark mode colors are NOT set here via @media (prefers-color-scheme: dark).
+ * Consuming apps handle dark mode via their own mechanism (e.g. .dark class)
+ * and override --chartml-* variables accordingly. Using @media here would
+ * conflict with apps that use class-based dark mode toggling. */
+
+/* @media (prefers-color-scheme: dark) {
     :root {
         --chartml-text: #e5e7eb;
         --chartml-text-secondary: #9ca3af;
@@ -23,7 +28,7 @@
         --chartml-axis-line: #9ca3af;
         --chartml-bg: #1f2937;
     }
-}
+} */
 
 /* ── Bar entrance ── */
 .bars rect,

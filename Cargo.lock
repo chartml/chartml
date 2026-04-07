@@ -624,6 +624,7 @@ dependencies = [
  "chartml-core",
  "js-sys",
  "leptos",
+ "send_wrapper",
  "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-futures",
