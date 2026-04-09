@@ -21,7 +21,7 @@ impl Default for HttpDataSource {
 
 impl HttpDataSource {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 }
 

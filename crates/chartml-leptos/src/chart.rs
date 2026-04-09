@@ -20,7 +20,6 @@ pub type TooltipRenderer = Arc<dyn Fn(&ElementData) -> AnyView + Send + Sync>;
 fn inject_chartml_css() {
     #[cfg(target_arch = "wasm32")]
     {
-        use wasm_bindgen::JsCast;
         const CSS: &str = include_str!("../style/chartml.css");
         const CSS_ID: &str = "chartml-injected-styles";
         let document = web_sys::window().unwrap().document().unwrap();
