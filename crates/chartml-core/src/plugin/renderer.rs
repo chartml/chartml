@@ -4,6 +4,7 @@ use crate::data::DataTable;
 use crate::element::{ChartElement, Dimensions};
 use crate::error::ChartError;
 use crate::spec::VisualizeSpec;
+use crate::theme::Theme;
 
 /// Configuration passed to chart renderers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,6 +19,10 @@ pub struct ChartConfig {
     pub height: f64,
     /// Color palette to use.
     pub colors: Vec<String>,
+    /// Theme colors for chart chrome (axes, grid, text).
+    /// Not serialized — set at render time by the consuming application.
+    #[serde(skip, default)]
+    pub theme: Theme,
 }
 
 /// Chart renderer plugin — converts data + config into a ChartElement tree.

@@ -107,6 +107,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
                 width: config.width,
                 height: config.height,
                 colors,
+                theme: config.theme.clone(),
             };
             return render_bar(&long_data, &long_config);
         }
@@ -343,8 +344,17 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     // Axes (use domain_min/domain_max instead of 0.0/value_max)
     let axis_elements = if is_horizontal {
         // Category y-axis: generate at x=0 relative, then offset by margins.left
-        let x_axis = generate_y_axis_with_display(&categories, display_labels.as_deref(), (0.0, inner_height), 0.0, None);
-        let y_axis = generate_x_axis_numeric((domain_min, domain_max), (0.0, inner_width), margins.top + inner_height, effective_y_fmt_ref, 5, Some(inner_height), &grid);
+        let x_axis = generate_y_axis_with_display(&categories, display_labels.as_deref(), (0.0, inner_height), 0.0, None, &config.theme);
+        let y_axis = generate_x_axis_numeric(&crate::helpers::XAxisNumericParams {
+            domain: (domain_min, domain_max),
+            range: (0.0, inner_width),
+            y_position: margins.top + inner_height,
+            fmt: effective_y_fmt_ref,
+            tick_count: 5,
+            chart_height: Some(inner_height),
+            grid: &grid,
+            theme: &config.theme,
+        });
         let mut axes = Vec::new();
         axes.extend(x_axis.into_iter().map(|e| offset_element(e, margins.left, margins.top)));
         axes.extend(y_axis.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
@@ -363,6 +373,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
             chart_height: Some(inner_height),
             grid: &grid,
             axis_label: bottom_axis_label,
+            theme: &config.theme,
         });
         let left_axis_label = config.visualize.axes.as_ref()
             .and_then(|a| a.left.as_ref())
@@ -376,6 +387,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
             chart_width: Some(inner_width),
             grid: &grid,
             axis_label: left_axis_label,
+            theme: &config.theme,
         });
         let mut axes = Vec::new();
         axes.extend(x_axis_result.elements.into_iter().map(|e| offset_element(e, margins.left, 0.0)));
@@ -409,6 +421,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
                     inner_width,
                     inner_height,
                     Some(ann_cats),
+                    &config.theme,
                 );
                 if !ann_elements.is_empty() {
                     children.push(ChartElement::Group {
@@ -427,7 +440,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         let legend_config = LegendConfig::default();
         let legend_layout = calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config);
         let legend_y = config.height - legend_layout.total_height - 8.0;
-        let legend_elements = generate_legend(&series_names, &config.colors, config.width, legend_y);
+        let legend_elements = generate_legend(&series_names, &config.colors, config.width, legend_y, &config.theme);
         children.push(ChartElement::Group {
             class: "legend".to_string(),
             transform: None,
@@ -565,7 +578,7 @@ fn render_single_series_bars(
                         transform: None,
                         font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
                         font_weight: None,
-                        fill: Some(dl.color.clone().unwrap_or_else(|| "var(--chartml-text-secondary, #6b7280)".to_string())),
+                        fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.text_secondary.clone())),
                         class: "data-label".to_string(),
                         data: None,
                     });
@@ -1015,6 +1028,7 @@ fn render_combo(
         chart_height: Some(inner_height),
         grid: &grid,
         axis_label: bottom_axis_label,
+        theme: &config.theme,
     });
     let left_axis_label = axes_left.and_then(|a| a.label.as_deref());
     let y_axis_left = generate_y_axis_numeric(&crate::helpers::YAxisNumericParams {
@@ -1026,6 +1040,7 @@ fn render_combo(
         chart_width: Some(inner_width),
         grid: &grid,
         axis_label: left_axis_label,
+        theme: &config.theme,
     });
 
     let mut axis_elements = Vec::new();
@@ -1042,7 +1057,7 @@ fn render_combo(
         let right_axis = generate_y_axis_numeric_right(
             rs.domain(), (inner_height, 0.0), margins.left + inner_width,
             right_fmt, adaptive_tick_count(inner_height),
-            None,
+            None, &config.theme,
         );
         axis_elements.extend(right_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
     }
@@ -1060,7 +1075,7 @@ fn render_combo(
             transform: Some(Transform::Rotate(90.0, rx, margins.top + inner_height / 2.0)),
             font_size: Some("12px".to_string()),
             font_weight: None,
-            fill: Some(chartml_core::theme::TEXT_SECONDARY.to_string()),
+            fill: Some(config.theme.text_secondary.clone()),
             class: "axis-label".to_string(),
             data: None,
         });
@@ -1215,7 +1230,7 @@ fn render_combo(
                                 transform: None,
                                 font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
                                 font_weight: None,
-                                fill: Some(dl.color.clone().unwrap_or_else(|| "var(--chartml-text-secondary, #6b7280)".to_string())),
+                                fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.text_secondary.clone())),
                                 class: "data-label".to_string(), data: None,
                             });
                         }
@@ -1251,7 +1266,7 @@ fn render_combo(
                         let (ref cat, val) = point_data[i];
                         mark_elements.push(ChartElement::Circle {
                             cx: px, cy: py, r: 5.0,
-                            fill: color.clone(), stroke: Some(chartml_core::theme::BG_STROKE.to_string()),
+                            fill: color.clone(), stroke: Some(config.theme.bg.clone()),
                             class: "chartml-line-dot".to_string(),
                             data: Some(ElementData::new(cat, format_value(val, fmt_ref)).with_series(&label)),
                         });
@@ -1303,6 +1318,7 @@ fn render_combo(
                 inner_width,
                 inner_height,
                 Some(&categories),
+                &config.theme,
             );
             if !ann_elements.is_empty() {
                 children.push(ChartElement::Group {
@@ -1351,7 +1367,7 @@ fn render_combo(
                 anchor: TextAnchor::Start, dominant_baseline: None,
                 transform: None, font_size: Some("11px".to_string()),
                 font_weight: None,
-                fill: Some("var(--chartml-text-secondary, #6b7280)".to_string()), class: "legend-label".to_string(), data: None,
+                fill: Some(config.theme.text_secondary.clone()), class: "legend-label".to_string(), data: None,
             });
 
             let tw = chartml_core::layout::labels::approximate_text_width(name);

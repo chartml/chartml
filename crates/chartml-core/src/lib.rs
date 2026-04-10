@@ -18,6 +18,7 @@ pub use spec::{parse, ChartMLSpec, Component};
 pub use element::ChartElement;
 pub use plugin::{ChartConfig, ChartRenderer, DataSource, TransformMiddleware, DatasourceResolver};
 pub use registry::ChartMLRegistry;
+pub use theme::Theme;
 
 use std::collections::HashMap;
 use crate::data::{Row, DataTable};
@@ -36,6 +37,9 @@ pub struct ChartML {
     /// Default color palette — used when the spec doesn't specify `style.colors`.
     /// Mirrors the JS ChartML `setDefaultPalette()` API.
     default_palette: Option<Vec<String>>,
+    /// Theme colors for chart chrome (axes, grid, text).
+    /// Defaults to light mode. Set via `set_theme()` to match your app's appearance.
+    theme: theme::Theme,
 }
 
 impl ChartML {
@@ -46,6 +50,7 @@ impl ChartML {
             sources: HashMap::new(),
             param_values: params::ParamValues::new(),
             default_palette: None,
+            theme: theme::Theme::default(),
         }
     }
 
@@ -77,6 +82,13 @@ impl ChartML {
     /// Matches the JS ChartML `setDefaultPalette()` API.
     pub fn set_default_palette(&mut self, colors: Vec<String>) {
         self.default_palette = Some(colors);
+    }
+
+    /// Set the theme for chart chrome colors (axes, grid, text, background).
+    /// Use `Theme::default()` for light mode, `Theme::dark()` for dark mode,
+    /// or construct a custom `Theme` to match your application's appearance.
+    pub fn set_theme(&mut self, theme: theme::Theme) {
+        self.theme = theme;
     }
 
     // --- Component registration (matches JS chartml.registerComponent()) ---
@@ -363,6 +375,7 @@ impl ChartML {
             width,
             height,
             colors,
+            theme: self.theme.clone(),
         };
 
         renderer.render(&data, &config)
@@ -470,7 +483,7 @@ impl ChartML {
                         ("border-radius".to_string(), "4px".to_string()),
                         ("padding".to_string(), "6px 10px".to_string()),
                         ("font-size".to_string(), "13px".to_string()),
-                        ("color".to_string(), "var(--chartml-text, #374151)".to_string()),
+                        ("color".to_string(), self.theme.text.clone()),
                         ("min-width".to_string(), "140px".to_string()),
                     ]),
                     children: vec![ChartElement::Span {
@@ -493,7 +506,7 @@ impl ChartML {
                         ("border-radius".to_string(), "4px".to_string()),
                         ("padding".to_string(), "6px 10px".to_string()),
                         ("font-size".to_string(), "13px".to_string()),
-                        ("color".to_string(), "var(--chartml-text, #374151)".to_string()),
+                        ("color".to_string(), self.theme.text.clone()),
                         ("min-width".to_string(), "120px".to_string()),
                     ]),
                     children: vec![ChartElement::Span {
@@ -519,7 +532,7 @@ impl ChartML {
                         ("border-radius".to_string(), "4px".to_string()),
                         ("padding".to_string(), "6px 10px".to_string()),
                         ("font-size".to_string(), "13px".to_string()),
-                        ("color".to_string(), "var(--chartml-text, #374151)".to_string()),
+                        ("color".to_string(), self.theme.text.clone()),
                     ]),
                     children: vec![ChartElement::Span {
                         class: "".to_string(),
@@ -540,7 +553,7 @@ impl ChartML {
                         ("border-radius".to_string(), "4px".to_string()),
                         ("padding".to_string(), "6px 10px".to_string()),
                         ("font-size".to_string(), "13px".to_string()),
-                        ("color".to_string(), "var(--chartml-text, #374151)".to_string()),
+                        ("color".to_string(), self.theme.text.clone()),
                         ("min-width".to_string(), "80px".to_string()),
                     ]),
                     children: vec![ChartElement::Span {
@@ -562,7 +575,7 @@ impl ChartML {
                         ("border-radius".to_string(), "4px".to_string()),
                         ("padding".to_string(), "6px 10px".to_string()),
                         ("font-size".to_string(), "13px".to_string()),
-                        ("color".to_string(), "var(--chartml-text, #374151)".to_string()),
+                        ("color".to_string(), self.theme.text.clone()),
                     ]),
                     children: vec![ChartElement::Span {
                         class: "".to_string(),
@@ -779,6 +792,7 @@ impl ChartML {
             width,
             height,
             colors,
+            theme: self.theme.clone(),
         };
 
         renderer.render(data, &config)

@@ -190,6 +190,7 @@ pub fn generate_legend_elements(
     chart_width: f64,
     y_position: f64,
     mark: LegendMark,
+    theme: &crate::theme::Theme,
 ) -> Vec<ChartElement> {
     if series_names.len() <= 1 {
         return Vec::new();
@@ -255,7 +256,7 @@ pub fn generate_legend_elements(
             transform: None,
             font_size: Some("11px".to_string()),
             font_weight: None,
-            fill: Some("var(--chartml-text-secondary, #6b7280)".to_string()),
+            fill: Some(theme.text_secondary.clone()),
             class: "legend-label".to_string(),
             data: None,
         });

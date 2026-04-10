@@ -50,7 +50,7 @@ impl ChartRenderer for MetricRenderer {
             class: "chartml-metric-label".to_string(),
             style: HashMap::from([
                 ("font-size".to_string(), "14px".to_string()),
-                ("color".to_string(), "var(--chartml-text-secondary, #6b7280)".to_string()),
+                ("color".to_string(), config.theme.text_secondary.clone()),
             ]),
             content: label,
         });
@@ -61,7 +61,7 @@ impl ChartRenderer for MetricRenderer {
             style: HashMap::from([
                 ("font-size".to_string(), "36px".to_string()),
                 ("font-weight".to_string(), "bold".to_string()),
-                ("color".to_string(), "var(--chartml-text, #374151)".to_string()),
+                ("color".to_string(), config.theme.text.clone()),
             ]),
             content: formatted_value,
         });
@@ -79,7 +79,7 @@ impl ChartRenderer for MetricRenderer {
                 let invert = viz.invert_trend.unwrap_or(false);
                 let is_positive = if invert { change < 0.0 } else { change > 0.0 };
                 let trend_color = if change == 0.0 {
-                    "var(--chartml-text-secondary, #6b7280)".to_string()
+                    config.theme.text_secondary.clone()
                 } else if is_positive {
                     "#34a853".to_string() // green
                 } else {
@@ -146,6 +146,7 @@ mod tests {
             width: 300.0,
             height: 150.0,
             colors: vec![],
+            theme: chartml_core::theme::Theme::default(),
         }
     }
 
@@ -189,6 +190,7 @@ mod tests {
             width: 300.0,
             height: 150.0,
             colors: vec![],
+            theme: chartml_core::theme::Theme::default(),
         };
         // Error rate going down (0.023 < 0.031) should be green with invertTrend
         let rows: Vec<Row> = vec![

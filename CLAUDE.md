@@ -59,6 +59,53 @@ All golden SVGs (`test-output/golden/**/*.svg`) require a cryptographic signatur
 - **Only the chart-evaluator agent can sign charts**
 - Verify: `bash scripts/verify-charts.sh`
 
+## Theming
+
+Chart chrome colors (axes, grid, text, background) are controlled by `chartml_core::theme::Theme`.
+
+### Architecture
+
+- **SVG attributes** carry plain hex defaults (e.g. `stroke="#374151"`) — works in every SVG renderer
+- **Browser CSS overrides** — `chartml.css` maps element classes to CSS custom properties (e.g. `.axis-line { stroke: var(--chartml-axis-line) }`), enabling live dark/light mode switching
+- **Server-side rendering** — uses `Theme` values directly, no CSS engine needed
+
+### Usage (Rust)
+
+```rust
+use chartml_core::{ChartML, theme::Theme};
+
+let mut chartml = ChartML::new();
+// ... register renderers ...
+
+// Set dark theme before rendering
+chartml.set_theme(Theme::dark());
+
+// Or custom theme
+chartml.set_theme(Theme {
+    axis_line: "#9ca3af".into(),
+    grid: "#374151".into(),
+    ..Theme::dark()
+});
+```
+
+### Browser theming (CSS custom properties)
+
+Consuming apps set CSS custom properties to override chart colors:
+
+```css
+.dark {
+    --chartml-axis-line: #9ca3af;
+    --chartml-grid: #374151;
+    --chartml-text-secondary: #9ca3af;
+    --chartml-text-strong: #f3f4f6;
+    --chartml-bg: #1f2937;
+}
+```
+
+### Parity between browser and server
+
+For visual consistency, the `Theme` passed to server-side rendering must match the CSS custom properties set browser-side. `Theme::default()` matches light mode, `Theme::dark()` matches the dark mode CSS variables.
+
 ## Lint Suppression Policy
 
 Lint suppressions (`#[allow(...)]` in .rs files, `= "allow"` in Cargo.toml) are blocked by the pre-commit hook and CI. Fix the underlying warning instead.

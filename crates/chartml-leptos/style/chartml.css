@@ -6,11 +6,28 @@
  * Override any rule in your own stylesheet to customize.
  */
 
-/* ── Theme color defaults ──
- * NOT set via :root here. All theme colors use CSS variable fallbacks
- * directly in SVG attributes (e.g. var(--chartml-bg, #ffffff)), so
- * consuming apps can override at any specificity without source-order
- * conflicts from this injected stylesheet. */
+/* ── Theme color overrides ──
+ * SVG attributes carry plain hex defaults (e.g. stroke="#374151") that
+ * work in every renderer (browser, resvg, Inkscape). These class rules
+ * use CSS custom properties to override those defaults in browsers,
+ * enabling live theme switching (light/dark) without re-rendering.
+ *
+ * Consuming apps set the custom properties on a parent element:
+ *   .dark { --chartml-axis-line: #9ca3af; --chartml-grid: #374151; ... }
+ */
+.axis-line   { stroke: var(--chartml-axis-line, #374151); }
+.tick         { stroke: var(--chartml-axis-line, #374151); }
+.grid-line   { stroke: var(--chartml-grid, #e0e0e0); }
+.tick-label  { fill: var(--chartml-text-secondary, #6b7280); }
+.axis-label  { fill: var(--chartml-text-secondary, #6b7280); }
+.legend-label { fill: var(--chartml-text-secondary, #6b7280); }
+.data-label  { fill: var(--chartml-text-secondary, #6b7280); }
+.annotation-label { fill: var(--chartml-text-secondary, #6b7280); }
+.chart-title { color: var(--chartml-text-strong, #1f2937); }
+.chartml-line-dot,
+.chartml-area-dot { stroke: var(--chartml-bg, #ffffff); }
+.chartml-scatter-point { stroke: var(--chartml-bg, #ffffff); }
+.chartml-pie-slice { stroke: var(--chartml-bg, #ffffff); }
 
 /* ── Bar entrance ── */
 .bars rect,

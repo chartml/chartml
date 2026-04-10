@@ -236,6 +236,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         chart_height: Some(inner_height),
         grid: &grid,
         axis_label: bottom_axis_label,
+        theme: &config.theme,
     });
     let left_axis_label = config.visualize.axes.as_ref()
         .and_then(|a| a.left.as_ref())
@@ -249,6 +250,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         chart_width: Some(inner_width),
         grid: &grid,
         axis_label: left_axis_label,
+        theme: &config.theme,
     });
 
     let mut axis_elements = Vec::new();
@@ -268,7 +270,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         let right_axis = generate_y_axis_numeric_right(
             rs.domain(), (inner_height, 0.0), margins.left + inner_width,
             right_fmt, adaptive_tick_count(inner_height),
-            None,
+            None, &config.theme,
         );
         axis_elements.extend(right_axis.into_iter().map(|e| offset_element(e, 0.0, margins.top)));
     }
@@ -286,7 +288,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 transform: Some(Transform::Rotate(90.0, rx, margins.top + inner_height / 2.0)),
                 font_size: Some("12px".to_string()),
                 font_weight: None,
-                fill: Some(chartml_core::theme::TEXT_SECONDARY.to_string()),
+                fill: Some(config.theme.text_secondary.clone()),
                 class: "axis-label".to_string(),
                 data: None,
             });
@@ -310,6 +312,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 inner_width,
                 inner_height,
                 Some(&categories),
+                &config.theme,
             );
             if !ann_elements.is_empty() {
                 children.push(ChartElement::Group {
@@ -462,7 +465,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 line_elements.push(ChartElement::Circle {
                     cx: px, cy: py, r: 5.0,
                     fill: color.clone(),
-                    stroke: Some(chartml_core::theme::BG_STROKE.to_string()),
+                    stroke: Some(config.theme.bg.clone()),
                     class: "chartml-line-dot".to_string(),
                     data: Some(ElementData::new(cat, format_value(val, fmt_for_field)).with_series(&label)),
                 });
@@ -502,7 +505,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         let legend_config = LegendConfig::default();
         let legend_layout = calculate_legend_layout(&series_names, &series_colors, config.width, &legend_config);
         let legend_y = config.height - legend_layout.total_height - 8.0;
-        let legend_elements = generate_legend_with_mark(&series_names, &series_colors, config.width, legend_y, LegendMark::Line);
+        let legend_elements = generate_legend_with_mark(&series_names, &series_colors, config.width, legend_y, LegendMark::Line, &config.theme);
         children.push(ChartElement::Group {
             class: "legend".to_string(),
             transform: None,
@@ -573,7 +576,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     cy: py,
                     r: 5.0,
                     fill: color.clone(),
-                    stroke: Some(chartml_core::theme::BG_STROKE.to_string()),
+                    stroke: Some(config.theme.bg.clone()),
                     class: "chartml-line-dot".to_string(),
                     data: Some(ElementData::new(cat, format_value(val, y_fmt_ref)).with_series(series_name)),
                 });
@@ -585,7 +588,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         let legend_layout = calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config);
         let legend_y = config.height - legend_layout.total_height - 8.0;
         let legend_elements =
-            generate_legend_with_mark(&series_names, &config.colors, config.width, legend_y, LegendMark::Line);
+            generate_legend_with_mark(&series_names, &config.colors, config.width, legend_y, LegendMark::Line, &config.theme);
         children.push(ChartElement::Group {
             class: "legend".to_string(),
             transform: None,
@@ -645,7 +648,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     cy: py,
                     r: 5.0,
                     fill: color.clone(),
-                    stroke: Some(chartml_core::theme::BG_STROKE.to_string()),
+                    stroke: Some(config.theme.bg.clone()),
                     class: "chartml-line-dot".to_string(),
                     data: Some(ElementData::new(cat, format_value(val, y_fmt_ref))),
                 });

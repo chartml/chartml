@@ -7,8 +7,6 @@ use chartml_core::spec::{VisualizeSpec, FieldRef, MarkEncoding};
 use chartml_core::layout::margins::{MarginConfig, calculate_margins};
 use chartml_core::layout::labels::{approximate_text_width_at, format_tick_value_si};
 use chartml_core::layout::legend::{LegendMark, LegendConfig, calculate_legend_layout, generate_legend_elements};
-use chartml_core::theme;
-
 pub struct ScatterRenderer;
 
 impl ScatterRenderer {
@@ -133,7 +131,7 @@ impl ChartRenderer for ScatterRenderer {
                     cy,
                     r,
                     fill,
-                    stroke: Some(chartml_core::theme::BG_STROKE.to_string()),
+                    stroke: Some(config.theme.bg.clone()),
                     class: "chartml-scatter-point".to_string(),
                     data: Some(el_data),
                 });
@@ -167,13 +165,13 @@ impl ChartRenderer for ScatterRenderer {
             // Grid line — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: margins.left, y1: y, x2: margins.left + inner_width, y2: y,
-                stroke: theme::GRID.to_string(), stroke_width: Some(1.0),
+                stroke: config.theme.grid.clone(), stroke_width: Some(1.0),
                 stroke_dasharray: None, class: "grid-line".to_string(),
             });
             // Tick mark — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: margins.left - 5.0, y1: y, x2: margins.left, y2: y,
-                stroke: theme::TICK.to_string(), stroke_width: Some(1.0),
+                stroke: config.theme.tick.clone(), stroke_width: Some(1.0),
                 stroke_dasharray: None, class: "tick".to_string(),
             });
             // Label — only if not skipped
@@ -185,7 +183,7 @@ impl ChartRenderer for ScatterRenderer {
                     dominant_baseline: Some("middle".to_string()),
                     transform: None, font_size: Some("12px".to_string()),
                     font_weight: None,
-                    fill: Some(theme::TEXT_SECONDARY.to_string()), class: "tick-label".to_string(), data: None,
+                    fill: Some(config.theme.text_secondary.clone()), class: "tick-label".to_string(), data: None,
                 });
             }
         }
@@ -210,13 +208,13 @@ impl ChartRenderer for ScatterRenderer {
             // Grid line — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: x, y1: margins.top, x2: x, y2: x_axis_y,
-                stroke: theme::GRID.to_string(), stroke_width: Some(1.0),
+                stroke: config.theme.grid.clone(), stroke_width: Some(1.0),
                 stroke_dasharray: None, class: "grid-line".to_string(),
             });
             // Tick mark — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: x, y1: x_axis_y, x2: x, y2: x_axis_y + 5.0,
-                stroke: theme::TICK.to_string(), stroke_width: Some(1.0),
+                stroke: config.theme.tick.clone(), stroke_width: Some(1.0),
                 stroke_dasharray: None, class: "tick".to_string(),
             });
             // Label — only if not skipped
@@ -227,7 +225,7 @@ impl ChartRenderer for ScatterRenderer {
                     content: label, anchor: TextAnchor::Middle,
                     dominant_baseline: None, transform: None,
                     font_size: Some("12px".to_string()), font_weight: None,
-                    fill: Some(theme::TEXT_SECONDARY.to_string()),
+                    fill: Some(config.theme.text_secondary.clone()),
                     class: "tick-label".to_string(), data: None,
                 });
             }
@@ -236,12 +234,12 @@ impl ChartRenderer for ScatterRenderer {
         // Axis lines
         axis_elements.push(ChartElement::Line {
             x1: margins.left, y1: margins.top, x2: margins.left, y2: x_axis_y,
-            stroke: theme::AXIS_LINE.to_string(), stroke_width: Some(1.0),
+            stroke: config.theme.axis_line.clone(), stroke_width: Some(1.0),
             stroke_dasharray: None, class: "axis-line".to_string(),
         });
         axis_elements.push(ChartElement::Line {
             x1: margins.left, y1: x_axis_y, x2: margins.left + inner_width, y2: x_axis_y,
-            stroke: theme::AXIS_LINE.to_string(), stroke_width: Some(1.0),
+            stroke: config.theme.axis_line.clone(), stroke_width: Some(1.0),
             stroke_dasharray: None, class: "axis-line".to_string(),
         });
 
@@ -271,6 +269,7 @@ impl ChartRenderer for ScatterRenderer {
                 width,
                 legend_y,
                 LegendMark::Circle,
+                &config.theme,
             );
             children.push(ChartElement::Group {
                 class: "legend".to_string(),
@@ -396,6 +395,7 @@ mod tests {
                 "#E8533E".to_string(),
                 "#4CAF50".to_string(),
             ],
+            theme: chartml_core::theme::Theme::default(),
         }
     }
 
@@ -436,6 +436,7 @@ mod tests {
             width: 600.0,
             height: 400.0,
             colors: vec!["#2E7D9A".to_string()],
+            theme: chartml_core::theme::Theme::default(),
         }
     }
 

@@ -234,6 +234,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     chart_height: Some(inner_height),
                     grid: &grid,
                     axis_label: bottom_axis_label,
+                    theme: &config.theme,
                 });
             let y_axis_elements =
                 generate_y_axis_numeric(&crate::helpers::YAxisNumericParams {
@@ -245,6 +246,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     chart_width: Some(inner_width),
                     grid: &grid,
                     axis_label: left_axis_label,
+                    theme: &config.theme,
                 });
 
             children.push(ChartElement::Group {
@@ -362,6 +364,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     chart_height: Some(inner_height),
                     grid: &grid,
                     axis_label: bottom_axis_label,
+                    theme: &config.theme,
                 });
             let y_axis_elements =
                 generate_y_axis_numeric(&crate::helpers::YAxisNumericParams {
@@ -373,6 +376,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     chart_width: Some(inner_width),
                     grid: &grid,
                     axis_label: left_axis_label,
+                    theme: &config.theme,
                 });
 
             children.push(ChartElement::Group {
@@ -405,6 +409,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             &config.colors,
             config.width,
             legend_y,
+            &config.theme,
         );
         children.push(ChartElement::Group {
             class: "legend".to_string(),
@@ -498,6 +503,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     chart_height: Some(inner_height),
                     grid: &grid,
                     axis_label: bottom_axis_label,
+                    theme: &config.theme,
                 });
         let y_axis_elements =
             generate_y_axis_numeric(&crate::helpers::YAxisNumericParams {
@@ -509,6 +515,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 chart_width: Some(inner_width),
                 grid: &grid,
                 axis_label: left_axis_label,
+                theme: &config.theme,
             });
 
         children.push(ChartElement::Group {
@@ -549,6 +556,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 inner_width,
                 inner_height,
                 Some(&categories),
+                &config.theme,
             );
             if !ann_elements.is_empty() {
                 children.push(ChartElement::Group {

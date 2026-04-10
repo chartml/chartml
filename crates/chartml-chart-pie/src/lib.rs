@@ -71,7 +71,7 @@ impl ChartRenderer for PieRenderer {
             slice_elements.push(ChartElement::Path {
                 d: path_d,
                 fill: Some(color),
-                stroke: Some(chartml_core::theme::BG_STROKE.to_string()),
+                stroke: Some(config.theme.bg.clone()),
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
                 opacity: None,
@@ -124,7 +124,7 @@ impl ChartRenderer for PieRenderer {
                 transform: None,
                 font_size: Some("11px".to_string()),
                 font_weight: None,
-                fill: Some("var(--chartml-text-secondary, #6b7280)".to_string()),
+                fill: Some(config.theme.text_secondary.clone()),
                 class: "legend-label".to_string(),
                 data: None,
             });
@@ -187,6 +187,7 @@ mod tests {
             width: 400.0,
             height: 400.0,
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
+            theme: chartml_core::theme::Theme::default(),
         }
     }
 

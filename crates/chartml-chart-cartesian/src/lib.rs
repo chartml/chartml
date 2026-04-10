@@ -73,6 +73,7 @@ mod tests {
             width: 800.0,
             height: 400.0,
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
+            theme: chartml_core::theme::Theme::default(),
         }
     }
 
@@ -88,6 +89,7 @@ mod tests {
             width: 800.0,
             height: 400.0,
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
+            theme: chartml_core::theme::Theme::default(),
         }
     }
 
@@ -103,6 +105,7 @@ mod tests {
             width: 800.0,
             height: 400.0,
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
+            theme: chartml_core::theme::Theme::default(),
         }
     }
 
@@ -290,6 +293,7 @@ mod tests {
             width: 800.0,
             height: 400.0,
             colors: vec!["#2E7D9A".to_string()],
+            theme: chartml_core::theme::Theme::default(),
         };
         let renderer = CartesianRenderer::new();
         let element = renderer.render(&data, &config).unwrap();
@@ -354,6 +358,7 @@ mod tests {
             width: 800.0,
             height: 400.0,
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string()],
+            theme: chartml_core::theme::Theme::default(),
         };
         let renderer = CartesianRenderer::new();
         let result = renderer.render(&data, &config);
@@ -386,6 +391,7 @@ mod tests {
             width: 800.0,
             height: 400.0,
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string()],
+            theme: chartml_core::theme::Theme::default(),
         };
         let renderer = CartesianRenderer::new();
         let result = renderer.render(&data, &config);
@@ -417,6 +423,7 @@ mod tests {
             width: 800.0,
             height: 400.0,
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string()],
+            theme: chartml_core::theme::Theme::default(),
         };
         let renderer = CartesianRenderer::new();
         let result = renderer.render(&data, &config);
@@ -443,6 +450,7 @@ mod tests {
             labels: &labels, display_label_overrides: None,
             range: (0.0, 800.0), y_position: 350.0, available_width: 800.0,
             x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
+            theme: &chartml_core::theme::Theme::default(),
         });
         // Should be horizontal — no transforms on text elements
         let text_with_transform = result.elements.iter().filter(|e| {
@@ -459,6 +467,7 @@ mod tests {
             labels: &labels, display_label_overrides: None,
             range: (0.0, 300.0), y_position: 350.0, available_width: 300.0,
             x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
+            theme: &chartml_core::theme::Theme::default(),
         });
         // Should be rotated — text elements have transforms
         let text_with_transform = result.elements.iter().filter(|e| {
@@ -475,6 +484,7 @@ mod tests {
             labels: &labels, display_label_overrides: None,
             range: (0.0, 400.0), y_position: 350.0, available_width: 400.0,
             x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
+            theme: &chartml_core::theme::Theme::default(),
         });
         // Should be sampled — fewer label texts than total categories
         let label_count = result.elements.iter().filter(|e| {
@@ -514,6 +524,7 @@ style:
             width: 800.0,
             height: 400.0,
             colors: vec!["#2E7D9A".to_string()],
+            theme: chartml_core::theme::Theme::default(),
         };
 
         // Verify GridConfig resolves correctly
@@ -564,6 +575,7 @@ style:
             labels: &labels, display_label_overrides: None,
             range: (0.0, 800.0), y_position: 350.0, available_width: 800.0,
             x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
+            theme: &chartml_core::theme::Theme::default(),
         });
         // Labels should be reformatted as "Jan 01", "Jan 02", etc.
         let has_reformatted = result.elements.iter().any(|e| {
