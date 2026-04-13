@@ -42,7 +42,7 @@ pub mod svg;
 
 pub use error::RenderError;
 #[cfg(feature = "rasterize")]
-pub use rasterize::svg_to_png;
+pub use rasterize::{init_font_database, svg_to_png};
 pub use svg::element_to_svg;
 
 #[cfg(feature = "rasterize")]

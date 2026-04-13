@@ -2,17 +2,73 @@
 //!
 //! Uses resvg (pure Rust) for SVG parsing and rasterization.
 //! Supports density/DPI scaling, white background, and configurable padding.
+//!
+//! ## Font resolution
+//!
+//! The shared font database is lazily initialized with system fonts
+//! (Liberation Sans, DejaVu, etc. on Linux) on first use. Charts that
+//! emit SVG `<text>` elements with named `font-family` values beyond
+//! the system set (e.g. `'Instrument Serif'`, `'DM Sans'`) will silently
+//! fail to render text unless those fonts are registered first.
+//!
+//! To register additional fonts (e.g. compile-time embedded design-system
+//! fonts), call [`init_font_database`] before the first render:
+//!
+//! ```ignore
+//! let dm_sans = include_bytes!("fonts/DMSans-Regular.ttf").to_vec();
+//! chartml_render::init_font_database(vec![dm_sans]);
+//! ```
+//!
+//! If `init_font_database` is not called, the database initializes lazily
+//! with system fonts only — existing consumers see no behavior change.
 
 use crate::error::RenderError;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, OnceLock};
 
 /// Shared font database — loaded once, reused across all renders.
-static FONT_DB: LazyLock<Arc<fontdb::Database>> = LazyLock::new(|| {
+///
+/// First caller to any rasterize function (either `svg_to_png` directly or
+/// indirectly via `render_to_png`) triggers lazy initialization with system
+/// fonts only. To add extra fonts (e.g. design-system TTF bytes), call
+/// [`init_font_database`] BEFORE the first render.
+static FONT_DB: OnceLock<Arc<fontdb::Database>> = OnceLock::new();
+
+/// Initialize the font database with system fonts plus additional font data.
+///
+/// Call this once at startup, before any chart rendering, to register fonts
+/// that aren't installed system-wide (e.g. design-system fonts embedded via
+/// `include_bytes!`). If you call this AFTER the first render has already
+/// triggered lazy initialization, the call has no effect and returns `false`.
+///
+/// Returns `true` if the database was initialized by this call, `false` if
+/// it was already initialized (either by a previous `init_font_database`
+/// call or by lazy init on first render).
+///
+/// # Example
+/// ```ignore
+/// let dm_sans = include_bytes!("../../fonts/DMSans-Regular.ttf").to_vec();
+/// let geist_mono = include_bytes!("../../fonts/GeistMono-Regular.ttf").to_vec();
+/// chartml_render::init_font_database(vec![dm_sans, geist_mono]);
+/// ```
+pub fn init_font_database(extra_fonts: Vec<Vec<u8>>) -> bool {
     let mut db = fontdb::Database::new();
-    // Load system fonts (Liberation Sans, DejaVu, etc.)
     db.load_system_fonts();
-    Arc::new(db)
-});
+    for font_bytes in extra_fonts {
+        db.load_font_data(font_bytes);
+    }
+    FONT_DB.set(Arc::new(db)).is_ok()
+}
+
+/// Get (or lazily initialize) the shared font database.
+fn get_font_db() -> Arc<fontdb::Database> {
+    FONT_DB
+        .get_or_init(|| {
+            let mut db = fontdb::Database::new();
+            db.load_system_fonts();
+            Arc::new(db)
+        })
+        .clone()
+}
 
 /// Rasterize an SVG string to PNG bytes.
 ///
@@ -38,7 +94,7 @@ pub fn svg_to_png(
         font_family: "Inter, Liberation Sans, Arial, sans-serif".to_string(),
         font_size: 12.0,
         dpi: density as f32,
-        fontdb: FONT_DB.clone(),
+        fontdb: get_font_db(),
         ..Default::default()
     };
     let tree = usvg::Tree::from_str(svg, &options)
