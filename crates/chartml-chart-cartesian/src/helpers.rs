@@ -416,7 +416,7 @@ pub fn generate_x_axis_with_display(
         x2: range.1,
         y2: y_position,
         stroke: theme.axis_line.clone(),
-        stroke_width: Some(1.0),
+        stroke_width: Some(theme.axis_line_weight as f64),
         stroke_dasharray: None,
         class: "axis-line".to_string(),
     });
@@ -431,7 +431,7 @@ pub fn generate_x_axis_with_display(
                 };
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position - ch,
-                    stroke: grid.color.clone(), stroke_width: Some(1.0),
+                    stroke: grid.color.clone(), stroke_width: Some(theme.grid_line_weight as f64),
                     stroke_dasharray: grid.dash_array.clone(),
                     class: "grid-line grid-line-x".to_string(),
                 });
@@ -452,7 +452,7 @@ pub fn generate_x_axis_with_display(
                 // Tick mark
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
-                    stroke: theme.tick.clone(), stroke_width: Some(1.0),
+                    stroke: theme.tick.clone(), stroke_width: Some(theme.axis_line_weight as f64),
                     stroke_dasharray: None, class: "tick".to_string(),
                 });
                 // Label
@@ -517,7 +517,7 @@ pub fn generate_x_axis_with_display(
                 // Tick mark (always shown)
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
-                    stroke: theme.tick.clone(), stroke_width: Some(1.0),
+                    stroke: theme.tick.clone(), stroke_width: Some(theme.axis_line_weight as f64),
                     stroke_dasharray: None, class: "tick".to_string(),
                 });
                 // Label -- skip if skip_factor says so
@@ -567,7 +567,7 @@ pub fn generate_x_axis_with_display(
                 };
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
-                    stroke: theme.tick.clone(), stroke_width: Some(1.0),
+                    stroke: theme.tick.clone(), stroke_width: Some(theme.axis_line_weight as f64),
                     stroke_dasharray: None, class: "tick".to_string(),
                 });
                 let truncated = truncate_label(label, *max_width);
@@ -614,7 +614,7 @@ pub fn generate_x_axis_with_display(
                 // Tick mark for all
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
-                    stroke: theme.tick.clone(), stroke_width: Some(1.0),
+                    stroke: theme.tick.clone(), stroke_width: Some(theme.axis_line_weight as f64),
                     stroke_dasharray: None, class: "tick".to_string(),
                 });
                 // Label only for sampled indices, with truncation if needed
@@ -701,7 +701,7 @@ pub fn generate_y_axis_with_display(
         x2: x_position,
         y2: range.0.max(range.1),
         stroke: theme.axis_line.clone(),
-        stroke_width: Some(1.0),
+        stroke_width: Some(theme.axis_line_weight as f64),
         stroke_dasharray: None,
         class: "axis-line".to_string(),
     });
@@ -719,7 +719,7 @@ pub fn generate_y_axis_with_display(
             x2: x_position,
             y2: y,
             stroke: theme.tick.clone(),
-            stroke_width: Some(1.0),
+            stroke_width: Some(theme.axis_line_weight as f64),
             stroke_dasharray: None,
             class: "tick".to_string(),
         });
@@ -777,7 +777,7 @@ pub fn generate_y_axis_numeric(
         x2: x_position,
         y2: range.0.max(range.1),
         stroke: theme.axis_line.clone(),
-        stroke_width: Some(1.0),
+        stroke_width: Some(theme.axis_line_weight as f64),
         stroke_dasharray: None,
         class: "axis-line".to_string(),
     });
@@ -801,7 +801,7 @@ pub fn generate_y_axis_numeric(
                     x2: x_position + cw,
                     y2: y,
                     stroke: grid.color.clone(),
-                    stroke_width: Some(1.0),
+                    stroke_width: Some(theme.grid_line_weight as f64),
                     stroke_dasharray: grid.dash_array.clone(),
                     class: "grid-line grid-line-y".to_string(),
                 });
@@ -815,7 +815,7 @@ pub fn generate_y_axis_numeric(
             x2: x_position,
             y2: y,
             stroke: theme.tick.clone(),
-            stroke_width: Some(1.0),
+            stroke_width: Some(theme.axis_line_weight as f64),
             stroke_dasharray: None,
             class: "tick".to_string(),
         });
@@ -895,7 +895,7 @@ pub fn generate_y_axis_numeric_right(
     elements.push(ChartElement::Line {
         x1: x_position, y1: range.0.min(range.1),
         x2: x_position, y2: range.0.max(range.1),
-        stroke: theme.axis_line.clone(), stroke_width: Some(1.0),
+        stroke: theme.axis_line.clone(), stroke_width: Some(theme.axis_line_weight as f64),
         stroke_dasharray: None, class: "axis-line".to_string(),
     });
 
@@ -910,7 +910,7 @@ pub fn generate_y_axis_numeric_right(
         elements.push(ChartElement::Line {
             x1: x_position, y1: y,
             x2: x_position + 5.0, y2: y,
-            stroke: theme.tick.clone(), stroke_width: Some(1.0),
+            stroke: theme.tick.clone(), stroke_width: Some(theme.axis_line_weight as f64),
             stroke_dasharray: None, class: "tick".to_string(),
         });
 
@@ -994,7 +994,7 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
         x2: range.1,
         y2: y_position,
         stroke: theme.axis_line.clone(),
-        stroke_width: Some(1.0),
+        stroke_width: Some(theme.axis_line_weight as f64),
         stroke_dasharray: None,
         class: "axis-line".to_string(),
     });
@@ -1019,7 +1019,7 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
                     x2: x,
                     y2: y_position - ch,
                     stroke: grid.color.clone(),
-                    stroke_width: Some(1.0),
+                    stroke_width: Some(theme.grid_line_weight as f64),
                     stroke_dasharray: grid.dash_array.clone(),
                     class: "grid-line grid-line-x".to_string(),
                 });
@@ -1032,7 +1032,7 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
             x2: x,
             y2: y_position + 5.0,
             stroke: theme.tick.clone(),
-            stroke_width: Some(1.0),
+            stroke_width: Some(theme.axis_line_weight as f64),
             stroke_dasharray: None,
             class: "tick".to_string(),
         });
@@ -1491,6 +1491,8 @@ pub fn generate_annotations(
                 height: band_height,
                 fill: fill_color,
                 stroke: ann.stroke_color.clone(),
+                rx: None,
+                ry: None,
                 class: "annotation-band".to_string(),
                 data: None,
             });

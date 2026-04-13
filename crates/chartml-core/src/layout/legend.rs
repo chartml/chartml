@@ -241,6 +241,8 @@ pub fn generate_legend_elements(
                     height: config.symbol_size,
                     fill: item.color.clone(),
                     stroke: None,
+                    rx: None,
+                    ry: None,
                     class: "legend-symbol".to_string(),
                     data: None,
                 });

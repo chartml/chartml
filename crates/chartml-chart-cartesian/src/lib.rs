@@ -720,6 +720,222 @@ style:
             total_grid_count, dashed_grid_count);
     }
 
+    // ----- Phase 5: theme shape/stroke wiring -----
+
+    /// Collect every `Path` stroke_width on elements whose class matches
+    /// `series-line` (the series-weight role wired in Phase 5).
+    fn collect_series_stroke_widths(el: &ChartElement, out: &mut Vec<f64>) {
+        match el {
+            ChartElement::Path { stroke_width: Some(w), class, .. }
+                if class.split_whitespace().any(|c| c == "series-line") =>
+            {
+                out.push(*w);
+            }
+            ChartElement::Svg { children, .. }
+            | ChartElement::Group { children, .. } => {
+                for c in children {
+                    collect_series_stroke_widths(c, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect every `Line` stroke_width bucketed by role
+    /// (`axis-line`, `grid-line`, `tick`).
+    fn collect_line_stroke_widths_by_class(
+        el: &ChartElement,
+        out: &mut std::collections::HashMap<String, Vec<f64>>,
+    ) {
+        match el {
+            ChartElement::Line { stroke_width: Some(w), class, .. } => {
+                for token in class.split_whitespace() {
+                    if matches!(token, "axis-line" | "grid-line" | "tick") {
+                        out.entry(token.to_string()).or_default().push(*w);
+                    }
+                }
+            }
+            ChartElement::Svg { children, .. }
+            | ChartElement::Group { children, .. } => {
+                for c in children {
+                    collect_line_stroke_widths_by_class(c, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect all `(rx, ry)` pairs on `Rect` elements with a `bar` class.
+    fn collect_bar_corner_radii(
+        el: &ChartElement,
+        out: &mut Vec<(Option<f64>, Option<f64>)>,
+    ) {
+        match el {
+            ChartElement::Rect { rx, ry, class, .. }
+                if class.split_whitespace().any(|c| c == "bar") =>
+            {
+                out.push((*rx, *ry));
+            }
+            ChartElement::Svg { children, .. }
+            | ChartElement::Group { children, .. } => {
+                for c in children {
+                    collect_bar_corner_radii(c, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect every `Circle.r` on elements whose class contains `dot-marker`.
+    fn collect_dot_radii(el: &ChartElement, out: &mut Vec<f64>) {
+        match el {
+            ChartElement::Circle { r, class, .. }
+                if class.split_whitespace().any(|c| c == "dot-marker") =>
+            {
+                out.push(*r);
+            }
+            ChartElement::Svg { children, .. }
+            | ChartElement::Group { children, .. } => {
+                for c in children {
+                    collect_dot_radii(c, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn phase5_bar_corner_radius_omitted_by_default() {
+        // Default theme MUST NOT emit rx/ry on bar rects (byte-identical contract).
+        let renderer = CartesianRenderer::new();
+        let element = renderer
+            .render(&make_bar_data(), &make_bar_config())
+            .expect("render");
+
+        let mut radii = Vec::new();
+        collect_bar_corner_radii(&element, &mut radii);
+        assert!(!radii.is_empty(), "expected bar rects in default bar chart");
+        for (rx, ry) in &radii {
+            assert!(rx.is_none(), "default theme must leave Rect.rx == None");
+            assert!(ry.is_none(), "default theme must leave Rect.ry == None");
+        }
+    }
+
+    #[test]
+    fn phase5_custom_bar_corner_radius_emits_rx_ry() {
+        use chartml_core::theme::Theme;
+        let renderer = CartesianRenderer::new();
+        let mut config = make_bar_config();
+        config.theme = Theme {
+            bar_corner_radius: 8.0,
+            ..Theme::default()
+        };
+        let element = renderer.render(&make_bar_data(), &config).expect("render");
+
+        let mut radii = Vec::new();
+        collect_bar_corner_radii(&element, &mut radii);
+        assert!(!radii.is_empty());
+        for (rx, ry) in &radii {
+            assert_eq!(*rx, Some(8.0), "rx must match theme.bar_corner_radius");
+            assert_eq!(*ry, Some(8.0), "ry must match theme.bar_corner_radius");
+        }
+    }
+
+    #[test]
+    fn phase5_custom_series_line_weight_flows_to_line_path() {
+        use chartml_core::theme::Theme;
+        let renderer = CartesianRenderer::new();
+        let mut config = make_line_config();
+        config.theme = Theme {
+            series_line_weight: 4.0,
+            ..Theme::default()
+        };
+        let element = renderer
+            .render(&make_bar_data(), &config)
+            .expect("render");
+
+        let mut widths = Vec::new();
+        collect_series_stroke_widths(&element, &mut widths);
+        assert!(!widths.is_empty(), "expected at least one series-line path");
+        for w in &widths {
+            assert_eq!(*w, 4.0, "series-line stroke_width must read from theme");
+        }
+    }
+
+    #[test]
+    fn phase5_custom_series_line_weight_flows_to_area_outline() {
+        use chartml_core::theme::Theme;
+        let renderer = CartesianRenderer::new();
+        let mut config = make_area_config();
+        config.theme = Theme {
+            series_line_weight: 3.5,
+            ..Theme::default()
+        };
+        let element = renderer.render(&make_bar_data(), &config).expect("render");
+
+        let mut widths = Vec::new();
+        collect_series_stroke_widths(&element, &mut widths);
+        assert!(!widths.is_empty(), "expected area outline series-line path");
+        for w in &widths {
+            assert_eq!(*w, 3.5);
+        }
+    }
+
+    #[test]
+    fn phase5_custom_dot_radius_flows_to_line_markers() {
+        use chartml_core::theme::Theme;
+        let renderer = CartesianRenderer::new();
+        let mut config = make_line_config();
+        config.theme = Theme {
+            dot_radius: 10.0,
+            ..Theme::default()
+        };
+        let element = renderer.render(&make_bar_data(), &config).expect("render");
+
+        let mut radii = Vec::new();
+        collect_dot_radii(&element, &mut radii);
+        assert!(!radii.is_empty(), "expected dot-marker circles on line chart");
+        for r in &radii {
+            assert_eq!(*r, 10.0);
+        }
+    }
+
+    #[test]
+    fn phase5_custom_axis_and_grid_line_weights_flow_to_line_strokes() {
+        use chartml_core::theme::Theme;
+        let renderer = CartesianRenderer::new();
+        let mut config = make_bar_config();
+        config.theme = Theme {
+            axis_line_weight: 2.5,
+            grid_line_weight: 0.5,
+            ..Theme::default()
+        };
+
+        let element = renderer.render(&make_bar_data(), &config).expect("render");
+
+        let mut by_class: std::collections::HashMap<String, Vec<f64>> =
+            std::collections::HashMap::new();
+        collect_line_stroke_widths_by_class(&element, &mut by_class);
+
+        let axis = by_class.get("axis-line").cloned().unwrap_or_default();
+        let ticks = by_class.get("tick").cloned().unwrap_or_default();
+        let grid = by_class.get("grid-line").cloned().unwrap_or_default();
+
+        assert!(!axis.is_empty(), "expected axis-line elements");
+        assert!(!ticks.is_empty(), "expected tick elements");
+        assert!(!grid.is_empty(), "expected grid-line elements");
+
+        for w in &axis {
+            assert_eq!(*w, 2.5, "axis-line stroke_width must read from theme.axis_line_weight");
+        }
+        for w in &ticks {
+            assert_eq!(*w, 2.5, "tick stroke_width must read from theme.axis_line_weight");
+        }
+        for w in &grid {
+            assert_eq!(*w, 0.5, "grid-line stroke_width must read from theme.grid_line_weight");
+        }
+    }
+
     #[test]
     fn x_axis_date_labels_reformatted() {
         use crate::helpers::{generate_x_axis, GridConfig};

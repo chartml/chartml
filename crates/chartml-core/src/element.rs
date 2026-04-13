@@ -26,6 +26,15 @@ pub enum ChartElement {
         height: f64,
         fill: String,
         stroke: Option<String>,
+        /// Corner radius on the x axis. When `None`, no `rx` attribute is
+        /// emitted (preserving byte-identical output for un-themed charts).
+        /// Wired from `Theme::bar_corner_radius` in Phase 5 — bars emit
+        /// `Some(v)` when `theme.bar_corner_radius > 0.0`, else `None`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rx: Option<f64>,
+        /// Corner radius on the y axis. See `rx`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ry: Option<f64>,
         class: String,
         data: Option<ElementData>,
     },
@@ -459,11 +468,13 @@ mod tests {
                         ChartElement::Rect {
                             x: 0.0, y: 0.0, width: 50.0, height: 100.0,
                             fill: "red".to_string(), stroke: None,
+                            rx: None, ry: None,
                             class: "bar".to_string(), data: None,
                         },
                         ChartElement::Rect {
                             x: 60.0, y: 0.0, width: 50.0, height: 150.0,
                             fill: "blue".to_string(), stroke: None,
+                            rx: None, ry: None,
                             class: "bar".to_string(), data: None,
                         },
                     ],
@@ -508,6 +519,8 @@ mod tests {
                             height: 100.0,
                             fill: "red".to_string(),
                             stroke: None,
+                            rx: None,
+                            ry: None,
                             class: "bar".to_string(),
                             data: Some(
                                 ElementData::new("Jan", "1234").with_series("Revenue"),

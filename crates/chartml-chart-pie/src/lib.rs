@@ -111,6 +111,8 @@ impl ChartRenderer for PieRenderer {
                 height: legend_config.symbol_size,
                 fill: item.color.clone(),
                 stroke: None,
+                rx: None,
+                ry: None,
                 class: "legend-symbol".to_string(),
                 data: None,
             });

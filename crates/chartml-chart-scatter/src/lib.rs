@@ -101,9 +101,13 @@ impl ChartRenderer for ScatterRenderer {
 
                 let r = match (&size_field, &size_scale) {
                     (Some(sf), Some(ss)) => {
+                        // Spec-driven sized case — the `size` field overrides
+                        // `theme.dot_radius` per-point. The inner `unwrap_or(5.0)`
+                        // is the fallback for rows with a missing size value and
+                        // is intentionally unchanged by Phase 5 theme wiring.
                         data.get_f64(i, sf).map(|v| ss.map(v)).unwrap_or(5.0)
                     }
-                    _ => 5.0,
+                    _ => config.theme.dot_radius as f64,
                 };
 
                 let color_idx = if let Some(ref cf) = color_field {
@@ -165,13 +169,13 @@ impl ChartRenderer for ScatterRenderer {
             // Grid line — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: margins.left, y1: y, x2: margins.left + inner_width, y2: y,
-                stroke: config.theme.grid.clone(), stroke_width: Some(1.0),
+                stroke: config.theme.grid.clone(), stroke_width: Some(config.theme.grid_line_weight as f64),
                 stroke_dasharray: None, class: "grid-line".to_string(),
             });
             // Tick mark — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: margins.left - 5.0, y1: y, x2: margins.left, y2: y,
-                stroke: config.theme.tick.clone(), stroke_width: Some(1.0),
+                stroke: config.theme.tick.clone(), stroke_width: Some(config.theme.axis_line_weight as f64),
                 stroke_dasharray: None, class: "tick".to_string(),
             });
             // Label — only if not skipped
@@ -213,13 +217,13 @@ impl ChartRenderer for ScatterRenderer {
             // Grid line — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: x, y1: margins.top, x2: x, y2: x_axis_y,
-                stroke: config.theme.grid.clone(), stroke_width: Some(1.0),
+                stroke: config.theme.grid.clone(), stroke_width: Some(config.theme.grid_line_weight as f64),
                 stroke_dasharray: None, class: "grid-line".to_string(),
             });
             // Tick mark — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: x, y1: x_axis_y, x2: x, y2: x_axis_y + 5.0,
-                stroke: config.theme.tick.clone(), stroke_width: Some(1.0),
+                stroke: config.theme.tick.clone(), stroke_width: Some(config.theme.axis_line_weight as f64),
                 stroke_dasharray: None, class: "tick".to_string(),
             });
             // Label — only if not skipped
@@ -244,12 +248,12 @@ impl ChartRenderer for ScatterRenderer {
         // Axis lines
         axis_elements.push(ChartElement::Line {
             x1: margins.left, y1: margins.top, x2: margins.left, y2: x_axis_y,
-            stroke: config.theme.axis_line.clone(), stroke_width: Some(1.0),
+            stroke: config.theme.axis_line.clone(), stroke_width: Some(config.theme.axis_line_weight as f64),
             stroke_dasharray: None, class: "axis-line".to_string(),
         });
         axis_elements.push(ChartElement::Line {
             x1: margins.left, y1: x_axis_y, x2: margins.left + inner_width, y2: x_axis_y,
-            stroke: config.theme.axis_line.clone(), stroke_width: Some(1.0),
+            stroke: config.theme.axis_line.clone(), stroke_width: Some(config.theme.axis_line_weight as f64),
             stroke_dasharray: None, class: "axis-line".to_string(),
         });
 

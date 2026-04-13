@@ -455,7 +455,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     d: path_d,
                     fill: None,
                     stroke: Some(color.clone()),
-                    stroke_width: Some(2.0),
+                    stroke_width: Some(config.theme.series_line_weight as f64),
                     stroke_dasharray: dasharray,
                     opacity: None,
                     class: "chartml-line-path series-line".to_string(),
@@ -467,7 +467,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             for (i, &(px, py)) in points.iter().enumerate() {
                 let (ref cat, val) = point_data[i];
                 line_elements.push(ChartElement::Circle {
-                    cx: px, cy: py, r: 5.0,
+                    cx: px, cy: py, r: config.theme.dot_radius as f64,
                     fill: color.clone(),
                     stroke: Some(config.theme.bg.clone()),
                     class: "chartml-line-dot dot-marker".to_string(),
@@ -567,7 +567,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     d: path_d,
                     fill: None,
                     stroke: Some(color.clone()),
-                    stroke_width: Some(2.0),
+                    stroke_width: Some(config.theme.series_line_weight as f64),
                     stroke_dasharray: None,
                     opacity: None,
                     class: "chartml-line-path series-line".to_string(),
@@ -581,7 +581,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 line_elements.push(ChartElement::Circle {
                     cx: px,
                     cy: py,
-                    r: 5.0,
+                    r: config.theme.dot_radius as f64,
                     fill: color.clone(),
                     stroke: Some(config.theme.bg.clone()),
                     class: "chartml-line-dot dot-marker".to_string(),
@@ -639,7 +639,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     d: path_d,
                     fill: None,
                     stroke: Some(color.clone()),
-                    stroke_width: Some(2.0),
+                    stroke_width: Some(config.theme.series_line_weight as f64),
                     stroke_dasharray: None,
                     opacity: None,
                     class: "chartml-line-path series-line".to_string(),
@@ -653,7 +653,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 line_elements.push(ChartElement::Circle {
                     cx: px,
                     cy: py,
-                    r: 5.0,
+                    r: config.theme.dot_radius as f64,
                     fill: color.clone(),
                     stroke: Some(config.theme.bg.clone()),
                     class: "chartml-line-dot dot-marker".to_string(),

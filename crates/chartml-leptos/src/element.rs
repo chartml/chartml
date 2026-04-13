@@ -38,13 +38,15 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             }.into_any()
         }
 
-        ChartElement::Rect { x, y, width, height, fill, stroke, class, data } => {
+        ChartElement::Rect { x, y, width, height, fill, stroke, rx, ry, class, data } => {
             let x_str = x.to_string();
             let y_str = y.to_string();
             let w_str = width.to_string();
             let h_str = height.to_string();
             let fill = fill.clone();
             let stroke_str = stroke.clone().unwrap_or_default();
+            let rx_str = rx.map(|v| v.to_string()).unwrap_or_default();
+            let ry_str = ry.map(|v| v.to_string()).unwrap_or_default();
             let class = class.clone();
             // Bar animation: transform-origin depends on orientation.
             // Horizontal bars (wider than tall): left-center for scaleX.
@@ -61,7 +63,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
                     view! {
                         <rect
                             x=x_str y=y_str width=w_str height=h_str
-                            fill=fill stroke=stroke_str class=class
+                            fill=fill stroke=stroke_str rx=rx_str ry=ry_str class=class
                             style=base_style.clone()
                         />
                     }.into_any(),
@@ -72,7 +74,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
                 view! {
                     <rect
                         x=x_str y=y_str width=w_str height=h_str
-                        fill=fill stroke=stroke_str class=class
+                        fill=fill stroke=stroke_str rx=rx_str ry=ry_str class=class
                         style=base_style
                     />
                 }.into_any()

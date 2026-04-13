@@ -34,7 +34,7 @@ pub fn element_to_json(element: &ChartElement) -> Value {
             })
         }
 
-        ChartElement::Rect { x, y, width, height, fill, stroke, class, data } => {
+        ChartElement::Rect { x, y, width, height, fill, stroke, rx, ry, class, data } => {
             json!({
                 "type": "rect",
                 "x": x,
@@ -43,6 +43,8 @@ pub fn element_to_json(element: &ChartElement) -> Value {
                 "height": height,
                 "fill": fill,
                 "stroke": stroke,
+                "rx": rx,
+                "ry": ry,
                 "class": class,
                 "data": data.as_ref().map(data_to_json)
             })

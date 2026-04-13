@@ -78,7 +78,7 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             buf.push_str("</g>");
         }
 
-        ChartElement::Rect { x, y, width, height, fill, stroke, class, data } => {
+        ChartElement::Rect { x, y, width, height, fill, stroke, rx, ry, class, data } => {
             // Bar animation: transform-origin depends on orientation.
             // Vertical bars: bottom-center (scaleY grows upward from baseline).
             // Horizontal bars: left-center (scaleX grows rightward from y-axis).
@@ -95,6 +95,12 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             ).unwrap();
             if let Some(s) = stroke {
                 write!(buf, r#" stroke="{}""#, xml_escape(s)).unwrap();
+            }
+            if let Some(r) = rx {
+                write!(buf, r#" rx="{}""#, r).unwrap();
+            }
+            if let Some(r) = ry {
+                write!(buf, r#" ry="{}""#, r).unwrap();
             }
             if !class.is_empty() {
                 write!(buf, r#" class="{}""#, xml_escape(class)).unwrap();
@@ -296,6 +302,7 @@ mod tests {
                 ChartElement::Rect {
                     x: 10.0, y: 20.0, width: 50.0, height: 100.0,
                     fill: "#ff0000".to_string(), stroke: None,
+                    rx: None, ry: None,
                     class: "bar".to_string(), data: None,
                 },
             ],
@@ -317,6 +324,7 @@ mod tests {
                 ChartElement::Rect {
                     x: 0.0, y: 0.0, width: 50.0, height: 100.0,
                     fill: "blue".to_string(), stroke: Some("black".to_string()),
+                    rx: None, ry: None,
                     class: "".to_string(), data: None,
                 },
             ],
@@ -476,6 +484,7 @@ mod tests {
                 ChartElement::Rect {
                     x: 0.0, y: 0.0, width: 50.0, height: 50.0,
                     fill: "blue".to_string(), stroke: None,
+                    rx: None, ry: None,
                     class: "".to_string(),
                     data: Some(ElementData::new("Jan", "1234")),
                 },

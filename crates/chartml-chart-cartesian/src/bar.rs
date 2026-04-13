@@ -13,6 +13,20 @@ use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
 
 use crate::helpers::{GridConfig, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
 
+/// Resolve the `rx`/`ry` pair for a themed bar rect.
+///
+/// Returns `(None, None)` when `theme.bar_corner_radius == 0.0` — the default
+/// case preserves byte-identical SVG output (no `rx`/`ry` attribute emitted).
+/// Returns `(Some(v), Some(v))` when the radius is positive.
+fn bar_corner_radius(theme: &chartml_core::theme::Theme) -> (Option<f64>, Option<f64>) {
+    if theme.bar_corner_radius > 0.0 {
+        let r = theme.bar_corner_radius as f64;
+        (Some(r), Some(r))
+    } else {
+        (None, None)
+    }
+}
+
 struct SingleSeriesBarParams<'a> {
     category_field: &'a str,
     value_field: &'a str,
@@ -510,6 +524,7 @@ fn render_single_series_bars(
             };
             let bar_width = linear.map(val);
 
+            let (rx, ry) = bar_corner_radius(&config.theme);
             elements.push(ChartElement::Rect {
                 x: 0.0,
                 y: y + y_inset,
@@ -517,6 +532,8 @@ fn render_single_series_bars(
                 height: bar_render_height,
                 fill: fill_color.clone(),
                 stroke: None,
+                rx,
+                ry,
                 class: "bar bar-rect".to_string(),
                 data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
             });
@@ -549,6 +566,7 @@ fn render_single_series_bars(
             // For negative bars, rect y is at zero line (bar extends downward).
             let rect_y = bar_val_y.min(bar_zero_y);
 
+            let (rx, ry) = bar_corner_radius(&config.theme);
             elements.push(ChartElement::Rect {
                 x: x + x_inset,
                 y: rect_y,
@@ -556,6 +574,8 @@ fn render_single_series_bars(
                 height: bar_height,
                 fill: fill_color.clone(),
                 stroke: None,
+                rx,
+                ry,
                 class: "bar bar-rect".to_string(),
                 data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
             });
@@ -685,6 +705,7 @@ fn render_multi_series_bars(
                     .cloned()
                     .unwrap_or_else(|| "#2E7D9A".to_string());
 
+                let (rx, ry) = bar_corner_radius(&config.theme);
                 elements.push(ChartElement::Rect {
                     x: x_left.min(x_right),
                     y: y + y_inset,
@@ -692,6 +713,8 @@ fn render_multi_series_bars(
                     height: bar_render_height,
                     fill,
                     stroke: None,
+                    rx,
+                    ry,
                     class: "bar bar-rect".to_string(),
                     data: Some(
                         ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
@@ -725,6 +748,7 @@ fn render_multi_series_bars(
                     .cloned()
                     .unwrap_or_else(|| "#2E7D9A".to_string());
 
+                let (rx, ry) = bar_corner_radius(&config.theme);
                 elements.push(ChartElement::Rect {
                     x: x + x_inset,
                     y: y_top,
@@ -732,6 +756,8 @@ fn render_multi_series_bars(
                     height: bar_height,
                     fill,
                     stroke: None,
+                    rx,
+                    ry,
                     class: "bar bar-rect".to_string(),
                     data: Some(
                         ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
@@ -788,6 +814,7 @@ fn render_multi_series_bars(
                     .cloned()
                     .unwrap_or_else(|| "#2E7D9A".to_string());
 
+                let (rx, ry) = bar_corner_radius(&config.theme);
                 elements.push(ChartElement::Rect {
                     x: bar_left.min(bar_right),
                     y,
@@ -795,6 +822,8 @@ fn render_multi_series_bars(
                     height: sub_band_height,
                     fill,
                     stroke: None,
+                    rx,
+                    ry,
                     class: "bar bar-rect".to_string(),
                     data: Some(
                         ElementData::new(&cat, format_value(val, y_fmt_ref)).with_series(&series),
@@ -836,6 +865,7 @@ fn render_multi_series_bars(
                     .cloned()
                     .unwrap_or_else(|| "#2E7D9A".to_string());
 
+                let (rx, ry) = bar_corner_radius(&config.theme);
                 elements.push(ChartElement::Rect {
                     x,
                     y: bar_top,
@@ -843,6 +873,8 @@ fn render_multi_series_bars(
                     height: bar_height,
                     fill,
                     stroke: None,
+                    rx,
+                    ry,
                     class: "bar bar-rect".to_string(),
                     data: Some(
                         ElementData::new(&cat, format_value(val, y_fmt_ref)).with_series(&series),
@@ -1162,10 +1194,12 @@ fn render_combo(
                 let series_idx = color_series.iter().position(|s| s == &point.series).unwrap_or(0);
                 let fill = config.colors.get(series_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string());
 
+                let (rx, ry) = bar_corner_radius(&config.theme);
                 mark_elements.push(ChartElement::Rect {
                     x: x + x_inset + margins.left, y: y_top + margins.top,
                     width: bar_render_width, height: bar_height,
                     fill, stroke: None,
+                    rx, ry,
                     class: "bar bar-rect".to_string(),
                     data: Some(ElementData::new(&point.key, format_value(point.value, fmt_ref)).with_series(&point.series)),
                 });
@@ -1217,10 +1251,12 @@ fn render_combo(
                     let bar_height = (bar_zero_y - bar_val_y).abs();
                     let rect_y = bar_val_y.min(bar_zero_y);
 
+                    let (rx, ry) = bar_corner_radius(&config.theme);
                     mark_elements.push(ChartElement::Rect {
                         x: bar_x + margins.left, y: rect_y + margins.top,
                         width: sub_bar_width, height: bar_height,
                         fill: color.clone(), stroke: None,
+                        rx, ry,
                         class: "bar bar-rect".to_string(),
                         data: Some(ElementData::new(&cat, format_value(val, fmt_ref)).with_series(&label)),
                     });
@@ -1265,7 +1301,7 @@ fn render_combo(
                     let path_d = line_gen.generate(&points);
                     mark_elements.push(ChartElement::Path {
                         d: path_d, fill: None, stroke: Some(color.clone()),
-                        stroke_width: Some(2.0), stroke_dasharray: None,
+                        stroke_width: Some(config.theme.series_line_weight as f64), stroke_dasharray: None,
                         opacity: None,
                         class: "chartml-line-path series-line".to_string(),
                         data: Some(ElementData::new(&label, "").with_series(&label)),
@@ -1275,7 +1311,7 @@ fn render_combo(
                     for (i, &(px, py)) in points.iter().enumerate() {
                         let (ref cat, val) = point_data[i];
                         mark_elements.push(ChartElement::Circle {
-                            cx: px, cy: py, r: 5.0,
+                            cx: px, cy: py, r: config.theme.dot_radius as f64,
                             fill: color.clone(), stroke: Some(config.theme.bg.clone()),
                             class: "chartml-line-dot dot-marker".to_string(),
                             data: Some(ElementData::new(cat, format_value(val, fmt_ref)).with_series(&label)),
@@ -1370,6 +1406,7 @@ fn render_combo(
                     legend_elements.push(ChartElement::Rect {
                         x: x_offset, y, width: 12.0, height: 12.0,
                         fill: color.clone(), stroke: None,
+                        rx: None, ry: None,
                         class: "legend-symbol".to_string(), data: None,
                     });
                 }
