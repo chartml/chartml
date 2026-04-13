@@ -454,7 +454,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     stroke_width: Some(2.0),
                     stroke_dasharray: dasharray,
                     opacity: None,
-                    class: "chartml-line-path".to_string(),
+                    class: "chartml-line-path series-line".to_string(),
                     data: Some(ElementData::new(&label, "").with_series(&label)),
                 });
             }
@@ -466,7 +466,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     cx: px, cy: py, r: 5.0,
                     fill: color.clone(),
                     stroke: Some(config.theme.bg.clone()),
-                    class: "chartml-line-dot".to_string(),
+                    class: "chartml-line-dot dot-marker".to_string(),
                     data: Some(ElementData::new(cat, format_value(val, fmt_for_field)).with_series(&label)),
                 });
             }
@@ -563,7 +563,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     stroke_width: Some(2.0),
                     stroke_dasharray: None,
                     opacity: None,
-                    class: "chartml-line-path".to_string(),
+                    class: "chartml-line-path series-line".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
             }
@@ -577,7 +577,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     r: 5.0,
                     fill: color.clone(),
                     stroke: Some(config.theme.bg.clone()),
-                    class: "chartml-line-dot".to_string(),
+                    class: "chartml-line-dot dot-marker".to_string(),
                     data: Some(ElementData::new(cat, format_value(val, y_fmt_ref)).with_series(series_name)),
                 });
             }
@@ -635,7 +635,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     stroke_width: Some(2.0),
                     stroke_dasharray: None,
                     opacity: None,
-                    class: "chartml-line-path".to_string(),
+                    class: "chartml-line-path series-line".to_string(),
                     data: None,
                 });
             }
@@ -649,7 +649,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     r: 5.0,
                     fill: color.clone(),
                     stroke: Some(config.theme.bg.clone()),
-                    class: "chartml-line-dot".to_string(),
+                    class: "chartml-line-dot dot-marker".to_string(),
                     data: Some(ElementData::new(cat, format_value(val, y_fmt_ref))),
                 });
             }

@@ -517,7 +517,7 @@ fn render_single_series_bars(
                 height: bar_render_height,
                 fill: fill_color.clone(),
                 stroke: None,
-                class: "bar".to_string(),
+                class: "bar bar-rect".to_string(),
                 data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
             });
         }
@@ -556,7 +556,7 @@ fn render_single_series_bars(
                 height: bar_height,
                 fill: fill_color.clone(),
                 stroke: None,
-                class: "bar".to_string(),
+                class: "bar bar-rect".to_string(),
                 data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
             });
 
@@ -689,7 +689,7 @@ fn render_multi_series_bars(
                     height: bar_render_height,
                     fill,
                     stroke: None,
-                    class: "bar".to_string(),
+                    class: "bar bar-rect".to_string(),
                     data: Some(
                         ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
                             .with_series(&point.series),
@@ -729,7 +729,7 @@ fn render_multi_series_bars(
                     height: bar_height,
                     fill,
                     stroke: None,
-                    class: "bar".to_string(),
+                    class: "bar bar-rect".to_string(),
                     data: Some(
                         ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
                             .with_series(&point.series),
@@ -792,7 +792,7 @@ fn render_multi_series_bars(
                     height: sub_band_height,
                     fill,
                     stroke: None,
-                    class: "bar".to_string(),
+                    class: "bar bar-rect".to_string(),
                     data: Some(
                         ElementData::new(&cat, format_value(val, y_fmt_ref)).with_series(&series),
                     ),
@@ -840,7 +840,7 @@ fn render_multi_series_bars(
                     height: bar_height,
                     fill,
                     stroke: None,
-                    class: "bar".to_string(),
+                    class: "bar bar-rect".to_string(),
                     data: Some(
                         ElementData::new(&cat, format_value(val, y_fmt_ref)).with_series(&series),
                     ),
@@ -1159,7 +1159,7 @@ fn render_combo(
                     x: x + x_inset + margins.left, y: y_top + margins.top,
                     width: bar_render_width, height: bar_height,
                     fill, stroke: None,
-                    class: "bar".to_string(),
+                    class: "bar bar-rect".to_string(),
                     data: Some(ElementData::new(&point.key, format_value(point.value, fmt_ref)).with_series(&point.series)),
                 });
             }
@@ -1214,7 +1214,7 @@ fn render_combo(
                         x: bar_x + margins.left, y: rect_y + margins.top,
                         width: sub_bar_width, height: bar_height,
                         fill: color.clone(), stroke: None,
-                        class: "bar".to_string(),
+                        class: "bar bar-rect".to_string(),
                         data: Some(ElementData::new(&cat, format_value(val, fmt_ref)).with_series(&label)),
                     });
 
@@ -1257,7 +1257,7 @@ fn render_combo(
                         d: path_d, fill: None, stroke: Some(color.clone()),
                         stroke_width: Some(2.0), stroke_dasharray: None,
                         opacity: None,
-                        class: "chartml-line-path".to_string(),
+                        class: "chartml-line-path series-line".to_string(),
                         data: Some(ElementData::new(&label, "").with_series(&label)),
                     });
 
@@ -1267,7 +1267,7 @@ fn render_combo(
                         mark_elements.push(ChartElement::Circle {
                             cx: px, cy: py, r: 5.0,
                             fill: color.clone(), stroke: Some(config.theme.bg.clone()),
-                            class: "chartml-line-dot".to_string(),
+                            class: "chartml-line-dot dot-marker".to_string(),
                             data: Some(ElementData::new(cat, format_value(val, fmt_ref)).with_series(&label)),
                         });
                     }

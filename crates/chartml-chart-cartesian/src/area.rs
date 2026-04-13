@@ -212,7 +212,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     stroke_width: Some(2.0),
                     stroke_dasharray: None,
                     opacity: None,
-                    class: "chartml-line-path".to_string(),
+                    class: "chartml-line-path series-line".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
 
@@ -343,7 +343,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     stroke_width: Some(2.0),
                     stroke_dasharray: None,
                     opacity: None,
-                    class: "chartml-line-path".to_string(),
+                    class: "chartml-line-path series-line".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                 });
 
@@ -481,7 +481,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
                 opacity: None,
-                class: "chartml-line-path".to_string(),
+                class: "chartml-line-path series-line".to_string(),
                 data: None,
             });
 

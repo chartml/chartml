@@ -465,7 +465,7 @@ pub fn generate_x_axis_with_display(
                     font_size: Some("12px".to_string()),
                     font_weight: None,
                     fill: Some(theme.text_secondary.clone()),
-                    class: "tick-label".to_string(),
+                    class: "tick-label axis-label".to_string(),
                     data: None,
                 });
             }
@@ -538,7 +538,7 @@ pub fn generate_x_axis_with_display(
                         font_size: Some("12px".to_string()),
                         font_weight: None,
                         fill: Some(theme.text_secondary.clone()),
-                        class: "tick-label".to_string(),
+                        class: "tick-label axis-label".to_string(),
                         data: if is_truncated {
                             Some(ElementData::new(label.clone(), ""))
                         } else {
@@ -573,7 +573,7 @@ pub fn generate_x_axis_with_display(
                     font_size: Some("12px".to_string()),
                     font_weight: None,
                     fill: Some(theme.text_secondary.clone()),
-                    class: "tick-label".to_string(),
+                    class: "tick-label axis-label".to_string(),
                     data: if is_truncated {
                         Some(ElementData::new(label.clone(), ""))
                     } else {
@@ -622,7 +622,7 @@ pub fn generate_x_axis_with_display(
                         font_size: Some("12px".to_string()),
                         font_weight: None,
                         fill: Some(theme.text_secondary.clone()),
-                        class: "tick-label".to_string(),
+                        class: "tick-label axis-label".to_string(),
                         data: if is_truncated {
                             Some(ElementData::new(label.clone(), ""))
                         } else {
@@ -715,7 +715,7 @@ pub fn generate_y_axis_with_display(
             font_size: Some("12px".to_string()),
             font_weight: None,
             fill: Some(theme.text_secondary.clone()),
-            class: "tick-label".to_string(),
+            class: "tick-label axis-label".to_string(),
             data: None,
         });
     }
@@ -806,7 +806,7 @@ pub fn generate_y_axis_numeric(
             font_size: Some("12px".to_string()),
             font_weight: None,
             fill: Some(theme.text_secondary.clone()),
-            class: "tick-label".to_string(),
+            class: "tick-label tick-value".to_string(),
             data: None,
         });
     }
@@ -892,7 +892,7 @@ pub fn generate_y_axis_numeric_right(
             font_size: Some("12px".to_string()),
             font_weight: None,
             fill: Some(theme.text_secondary.clone()),
-            class: "tick-label".to_string(),
+            class: "tick-label tick-value".to_string(),
             data: None,
         });
     }
@@ -1007,7 +1007,7 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
             font_size: Some("12px".to_string()),
             font_weight: None,
             fill: Some(theme.text_secondary.clone()),
-            class: "tick-label".to_string(),
+            class: "tick-label tick-value".to_string(),
             data: None,
         });
     }

@@ -132,7 +132,7 @@ impl ChartRenderer for ScatterRenderer {
                     r,
                     fill,
                     stroke: Some(config.theme.bg.clone()),
-                    class: "chartml-scatter-point".to_string(),
+                    class: "chartml-scatter-point dot-marker".to_string(),
                     data: Some(el_data),
                 });
             }
@@ -183,7 +183,7 @@ impl ChartRenderer for ScatterRenderer {
                     dominant_baseline: Some("middle".to_string()),
                     transform: None, font_size: Some("12px".to_string()),
                     font_weight: None,
-                    fill: Some(config.theme.text_secondary.clone()), class: "tick-label".to_string(), data: None,
+                    fill: Some(config.theme.text_secondary.clone()), class: "tick-label tick-value".to_string(), data: None,
                 });
             }
         }
@@ -226,7 +226,7 @@ impl ChartRenderer for ScatterRenderer {
                     dominant_baseline: None, transform: None,
                     font_size: Some("12px".to_string()), font_weight: None,
                     fill: Some(config.theme.text_secondary.clone()),
-                    class: "tick-label".to_string(), data: None,
+                    class: "tick-label tick-value".to_string(), data: None,
                 });
             }
         }

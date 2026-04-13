@@ -302,7 +302,7 @@ mod tests {
         let mut bar_widths = Vec::new();
         fn collect_bar_widths(el: &ChartElement, widths: &mut Vec<f64>) {
             match el {
-                ChartElement::Rect { width, class, .. } if class == "bar" => {
+                ChartElement::Rect { width, class, .. } if class.split_whitespace().any(|c| c == "bar") => {
                     widths.push(*width);
                 }
                 ChartElement::Svg { children, .. }
@@ -364,7 +364,7 @@ mod tests {
         let result = renderer.render(&data, &config);
         assert!(result.is_ok(), "Stacked bar render failed: {:?}", result.err());
         let element = result.unwrap();
-        let rect_count = count_elements(&element, &|e| matches!(e, ChartElement::Rect { class, .. } if class == "bar"));
+        let rect_count = count_elements(&element, &|e| matches!(e, ChartElement::Rect { class, .. } if class.split_whitespace().any(|c| c == "bar")));
         assert_eq!(rect_count, 4, "Should have 4 bars (2 categories x 2 series), got {}", rect_count);
     }
 
@@ -397,7 +397,7 @@ mod tests {
         let result = renderer.render(&data, &config);
         assert!(result.is_ok(), "Grouped bar render failed: {:?}", result.err());
         let element = result.unwrap();
-        let rect_count = count_elements(&element, &|e| matches!(e, ChartElement::Rect { class, .. } if class == "bar"));
+        let rect_count = count_elements(&element, &|e| matches!(e, ChartElement::Rect { class, .. } if class.split_whitespace().any(|c| c == "bar")));
         assert_eq!(rect_count, 4, "Should have 4 bars (2 categories x 2 series), got {}", rect_count);
     }
 
@@ -429,7 +429,7 @@ mod tests {
         let result = renderer.render(&data, &config);
         assert!(result.is_ok(), "Multi-series line render failed: {:?}", result.err());
         let element = result.unwrap();
-        let path_count = count_elements(&element, &|e| matches!(e, ChartElement::Path { class, .. } if class == "chartml-line-path"));
+        let path_count = count_elements(&element, &|e| matches!(e, ChartElement::Path { class, .. } if class.split_whitespace().any(|c| c == "chartml-line-path")));
         assert_eq!(path_count, 2, "Should have 2 line paths for 2 series, got {}", path_count);
     }
 
@@ -488,7 +488,7 @@ mod tests {
         });
         // Should be sampled — fewer label texts than total categories
         let label_count = result.elements.iter().filter(|e| {
-            matches!(e, ChartElement::Text { class, .. } if class == "tick-label")
+            matches!(e, ChartElement::Text { class, .. } if class.split_whitespace().any(|c| c == "tick-label"))
         }).count();
         assert!(label_count < 100, "Sampled should show fewer labels: got {}", label_count);
         assert!(label_count >= 3, "Should show at least a few labels");
