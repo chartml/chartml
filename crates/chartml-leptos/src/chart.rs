@@ -416,6 +416,30 @@ mod title_style_tests {
         assert!(style.contains("font-size: 18.5px"), "style: {}", style);
     }
 
+    /// Phase 10 — Kyomi sanity check #1 (serif chart title). The full Kyomi
+    /// theme targets an `Instrument Serif, Georgia, serif` title face. The
+    /// integration-level `phase10_kyomi_sanity.rs` test cannot reach this
+    /// helper (it's `pub(crate)`), so this unit test pins the serif family
+    /// in the emitted title style string.
+    #[test]
+    fn phase10_kyomi_title_uses_serif_family() {
+        let theme = Theme {
+            title_font_family: "Instrument Serif, Georgia, serif".into(),
+            title_font_size: 22.0,
+            title_font_weight: 400,
+            title_font_style: "normal".into(),
+            ..Theme::default()
+        };
+        let style = build_title_style(&theme);
+        assert!(
+            style.contains("font-family: Instrument Serif, Georgia, serif"),
+            "kyomi title must use Instrument Serif family: {}",
+            style,
+        );
+        assert!(style.contains("font-size: 22px"), "style: {}", style);
+        assert!(style.contains("font-weight: 400"), "style: {}", style);
+    }
+
     #[test]
     fn only_size_override_keeps_legacy_weight_and_omits_family() {
         let theme = Theme { title_font_size: 20.0, ..Theme::default() };
