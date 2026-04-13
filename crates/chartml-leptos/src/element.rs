@@ -156,15 +156,24 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             }.into_any()
         }
 
-        ChartElement::Text { x, y, content, anchor, dominant_baseline, transform, font_size, font_weight, fill, class, data } => {
+        ChartElement::Text {
+            x, y, content, anchor, dominant_baseline, transform,
+            font_family, font_size, font_weight, letter_spacing, text_transform,
+            fill, class, data,
+        } => {
             let x = x.to_string();
             let y = y.to_string();
             let content = content.clone();
             let anchor = anchor.to_string();
             let db = dominant_baseline.clone().unwrap_or_default();
             let transform_str = transform.as_ref().map(|t| t.to_svg_string()).unwrap_or_default();
-            let fs = font_size.clone().unwrap_or_default();
-            let fw = font_weight.clone().unwrap_or_default();
+            // Pass typography Options directly to Leptos attrs — None omits the
+            // attribute entirely, avoiding empty-string attrs on default themes.
+            let ff = font_family.clone();
+            let fs = font_size.clone();
+            let fw = font_weight.clone();
+            let ls = letter_spacing.clone();
+            let tt = text_transform.clone();
             let fill = fill.clone().unwrap_or_default();
             let class = class.clone();
 
@@ -174,8 +183,11 @@ pub fn render_element(element: &ChartElement) -> AnyView {
                     text-anchor=anchor
                     dominant-baseline=db
                     transform=transform_str
+                    font-family=ff
                     font-size=fs
                     font-weight=fw
+                    letter-spacing=ls
+                    text-transform=tt
                     fill=fill
                     class=class
                 >

@@ -1,4 +1,4 @@
-use crate::element::{ChartElement, TextAnchor};
+use crate::element::{ChartElement, TextAnchor, TextRole, TextStyle};
 
 /// Legend symbol type — matches the JS renderSymbol() function.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -247,6 +247,7 @@ pub fn generate_legend_elements(
             }
         }
 
+        let ts = TextStyle::for_role(theme, TextRole::LegendLabel);
         elements.push(ChartElement::Text {
             x: x + config.symbol_size + config.symbol_text_gap,
             y: sym_y + 10.0,
@@ -254,8 +255,11 @@ pub fn generate_legend_elements(
             anchor: TextAnchor::Start,
             dominant_baseline: None,
             transform: None,
-            font_size: Some("11px".to_string()),
-            font_weight: None,
+            font_family: ts.font_family,
+            font_size: ts.font_size,
+            font_weight: ts.font_weight,
+            letter_spacing: ts.letter_spacing,
+            text_transform: ts.text_transform,
             fill: Some(theme.text_secondary.clone()),
             class: "legend-label".to_string(),
             data: None,
@@ -275,6 +279,113 @@ mod tests {
 
     fn make_colors(n: usize) -> Vec<String> {
         (0..n).map(|i| format!("#{:02x}{:02x}{:02x}", i * 30, i * 50, i * 70)).collect()
+    }
+
+    /// Phase 4: verify that non-default `legend_*` typography fields on
+    /// `Theme` are applied to the emitted `legend-label` text elements.
+    #[test]
+    fn phase4_legend_text_picks_up_theme_typography() {
+        use crate::theme::Theme;
+
+        let labels = make_labels(&["Alpha", "Beta"]);
+        let colors = make_colors(2);
+        let theme = Theme {
+            legend_font_family: "Georgia, serif".into(),
+            legend_font_weight: 800,
+            legend_font_size: 15.0,
+            ..Theme::default()
+        };
+
+        let elements = generate_legend_elements(
+            &labels,
+            &colors,
+            400.0,
+            100.0,
+            LegendMark::Rect,
+            &theme,
+        );
+
+        let mut label_hits = 0;
+        for el in &elements {
+            if let ChartElement::Text {
+                class,
+                font_family,
+                font_weight,
+                font_size,
+                ..
+            } = el
+            {
+                if class == "legend-label" {
+                    label_hits += 1;
+                    assert_eq!(
+                        font_family.as_deref(),
+                        Some("Georgia, serif"),
+                        "legend-label must carry theme.legend_font_family"
+                    );
+                    assert_eq!(
+                        font_weight.as_deref(),
+                        Some("800"),
+                        "legend-label must carry theme.legend_font_weight"
+                    );
+                    assert_eq!(
+                        font_size.as_deref(),
+                        Some("15px"),
+                        "legend-label must carry theme.legend_font_size"
+                    );
+                }
+            }
+        }
+        assert_eq!(
+            label_hits, 2,
+            "expected one text per legend item"
+        );
+    }
+
+    /// Phase 4: with a default theme, the legend-label text must NOT carry
+    /// `font-family` / `font-weight` / `letter-spacing` / `text-transform`
+    /// overrides and must restate the legacy 11px font-size. This is the
+    /// byte-identity guarantee at the unit-test level.
+    #[test]
+    fn phase4_legend_text_default_theme_preserves_legacy_emission() {
+        use crate::theme::Theme;
+
+        let labels = make_labels(&["Alpha", "Beta"]);
+        let colors = make_colors(2);
+        let theme = Theme::default();
+
+        let elements = generate_legend_elements(
+            &labels,
+            &colors,
+            400.0,
+            100.0,
+            LegendMark::Rect,
+            &theme,
+        );
+
+        for el in &elements {
+            if let ChartElement::Text {
+                class,
+                font_family,
+                font_weight,
+                letter_spacing,
+                text_transform,
+                font_size,
+                ..
+            } = el
+            {
+                if class == "legend-label" {
+                    assert!(font_family.is_none(), "default theme must not set font-family");
+                    assert!(font_weight.is_none(), "default theme must not set font-weight");
+                    assert!(letter_spacing.is_none(), "default theme must not set letter-spacing");
+                    assert!(text_transform.is_none(), "default theme must not set text-transform");
+                    assert_eq!(
+                        font_size.as_deref(),
+                        Some("11px"),
+                        "default theme must keep the legacy 11px legend size"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

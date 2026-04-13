@@ -1,4 +1,4 @@
-use chartml_core::element::{ChartElement, ElementData, TextAnchor, Transform};
+use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform};
 use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
 use chartml_core::format::{detect_date_format, reformat_date_label};
@@ -456,14 +456,18 @@ pub fn generate_x_axis_with_display(
                     stroke_dasharray: None, class: "tick".to_string(),
                 });
                 // Label
+                let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
                 elements.push(ChartElement::Text {
                     x, y: y_position + 18.0,
                     content: label.clone(),
                     anchor: TextAnchor::Middle,
                     dominant_baseline: None,
                     transform: None,
-                    font_size: Some("12px".to_string()),
-                    font_weight: None,
+                    font_family: ts.font_family,
+                    font_size: ts.font_size,
+                    font_weight: ts.font_weight,
+                    letter_spacing: ts.letter_spacing,
+                    text_transform: ts.text_transform,
                     fill: Some(theme.text_secondary.clone()),
                     class: "tick-label axis-label".to_string(),
                     data: None,
@@ -529,14 +533,18 @@ pub fn generate_x_axis_with_display(
                         label.clone()
                     };
                     let is_truncated = display_text != *label;
+                    let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
                     elements.push(ChartElement::Text {
                         x, y: y_position + 10.0,
                         content: display_text,
                         anchor: TextAnchor::End,
                         dominant_baseline: None,
                         transform: Some(Transform::Rotate(-45.0, x, y_position + 10.0)),
-                        font_size: Some("12px".to_string()),
-                        font_weight: None,
+                        font_family: ts.font_family,
+                        font_size: ts.font_size,
+                        font_weight: ts.font_weight,
+                        letter_spacing: ts.letter_spacing,
+                        text_transform: ts.text_transform,
                         fill: Some(theme.text_secondary.clone()),
                         class: "tick-label axis-label".to_string(),
                         data: if is_truncated {
@@ -564,14 +572,18 @@ pub fn generate_x_axis_with_display(
                 });
                 let truncated = truncate_label(label, *max_width);
                 let is_truncated = truncated != *label;
+                let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
                 elements.push(ChartElement::Text {
                     x, y: y_position + 18.0,
                     content: truncated,
                     anchor: TextAnchor::Middle,
                     dominant_baseline: None,
                     transform: None,
-                    font_size: Some("12px".to_string()),
-                    font_weight: None,
+                    font_family: ts.font_family,
+                    font_size: ts.font_size,
+                    font_weight: ts.font_weight,
+                    letter_spacing: ts.letter_spacing,
+                    text_transform: ts.text_transform,
                     fill: Some(theme.text_secondary.clone()),
                     class: "tick-label axis-label".to_string(),
                     data: if is_truncated {
@@ -613,14 +625,18 @@ pub fn generate_x_axis_with_display(
                         label.clone()
                     };
                     let is_truncated = display_text != *label;
+                    let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
                     elements.push(ChartElement::Text {
                         x, y: y_position + 18.0,
                         content: display_text,
                         anchor: TextAnchor::Middle,
                         dominant_baseline: None,
                         transform: None,
-                        font_size: Some("12px".to_string()),
-                        font_weight: None,
+                        font_family: ts.font_family,
+                        font_size: ts.font_size,
+                        font_weight: ts.font_weight,
+                        letter_spacing: ts.letter_spacing,
+                        text_transform: ts.text_transform,
                         fill: Some(theme.text_secondary.clone()),
                         class: "tick-label axis-label".to_string(),
                         data: if is_truncated {
@@ -639,6 +655,7 @@ pub fn generate_x_axis_with_display(
         let mid_x = (range.0 + range.1) / 2.0;
         // Position below the tick labels: y_position + tick offset + label height + gap
         let label_y = y_position + 38.0;
+        let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
         elements.push(ChartElement::Text {
             x: mid_x,
             y: label_y,
@@ -646,8 +663,11 @@ pub fn generate_x_axis_with_display(
             anchor: TextAnchor::Middle,
             dominant_baseline: None,
             transform: None,
-            font_size: Some("12px".to_string()),
-            font_weight: None,
+            font_family: ts.font_family,
+            font_size: ts.font_size,
+            font_weight: ts.font_weight,
+            letter_spacing: ts.letter_spacing,
+            text_transform: ts.text_transform,
             fill: Some(theme.text_secondary.clone()),
             class: "axis-label".to_string(),
             data: None,
@@ -705,6 +725,7 @@ pub fn generate_y_axis_with_display(
         });
 
         // Label
+        let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
         elements.push(ChartElement::Text {
             x: x_position - 8.0,
             y,
@@ -712,8 +733,11 @@ pub fn generate_y_axis_with_display(
             anchor: TextAnchor::End,
             dominant_baseline: Some("middle".to_string()),
             transform: None,
-            font_size: Some("12px".to_string()),
-            font_weight: None,
+            font_family: ts.font_family,
+            font_size: ts.font_size,
+            font_weight: ts.font_weight,
+            letter_spacing: ts.letter_spacing,
+            text_transform: ts.text_transform,
             fill: Some(theme.text_secondary.clone()),
             class: "tick-label axis-label".to_string(),
             data: None,
@@ -796,6 +820,7 @@ pub fn generate_y_axis_numeric(
             class: "tick".to_string(),
         });
 
+        let ts = TextStyle::for_role(theme, TextRole::TickValue);
         elements.push(ChartElement::Text {
             x: x_position - 8.0,
             y,
@@ -803,8 +828,11 @@ pub fn generate_y_axis_numeric(
             anchor: TextAnchor::End,
             dominant_baseline: Some("middle".to_string()),
             transform: None,
-            font_size: Some("12px".to_string()),
-            font_weight: None,
+            font_family: ts.font_family,
+            font_size: ts.font_size,
+            font_weight: ts.font_weight,
+            letter_spacing: ts.letter_spacing,
+            text_transform: ts.text_transform,
             fill: Some(theme.text_secondary.clone()),
             class: "tick-label tick-value".to_string(),
             data: None,
@@ -825,6 +853,7 @@ pub fn generate_y_axis_numeric(
             })
             .fold(0.0_f64, f64::max);
         let label_x = (x_position - 8.0 - max_tick_width - 12.0).max(10.0);
+        let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
         elements.push(ChartElement::Text {
             x: label_x,
             y: mid_y,
@@ -832,8 +861,11 @@ pub fn generate_y_axis_numeric(
             anchor: TextAnchor::Middle,
             dominant_baseline: Some("middle".to_string()),
             transform: Some(Transform::Rotate(-90.0, label_x, mid_y)),
-            font_size: Some("12px".to_string()),
-            font_weight: None,
+            font_family: ts.font_family,
+            font_size: ts.font_size,
+            font_weight: ts.font_weight,
+            letter_spacing: ts.letter_spacing,
+            text_transform: ts.text_transform,
             fill: Some(theme.text_secondary.clone()),
             class: "axis-label".to_string(),
             data: None,
@@ -883,14 +915,18 @@ pub fn generate_y_axis_numeric_right(
         });
 
         // Label (to the right)
+        let ts = TextStyle::for_role(theme, TextRole::TickValue);
         elements.push(ChartElement::Text {
             x: x_position + 8.0, y,
             content: label,
             anchor: TextAnchor::Start,
             dominant_baseline: Some("middle".to_string()),
             transform: None,
-            font_size: Some("12px".to_string()),
-            font_weight: None,
+            font_family: ts.font_family,
+            font_size: ts.font_size,
+            font_weight: ts.font_weight,
+            letter_spacing: ts.letter_spacing,
+            text_transform: ts.text_transform,
             fill: Some(theme.text_secondary.clone()),
             class: "tick-label tick-value".to_string(),
             data: None,
@@ -901,6 +937,7 @@ pub fn generate_y_axis_numeric_right(
     if let Some(label_text) = axis_label {
         let mid_y = (range.0 + range.1) / 2.0;
         let label_x = x_position + 45.0;
+        let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
         elements.push(ChartElement::Text {
             x: label_x,
             y: mid_y,
@@ -908,8 +945,11 @@ pub fn generate_y_axis_numeric_right(
             anchor: TextAnchor::Middle,
             dominant_baseline: Some("middle".to_string()),
             transform: Some(Transform::Rotate(90.0, label_x, mid_y)),
-            font_size: Some("12px".to_string()),
-            font_weight: None,
+            font_family: ts.font_family,
+            font_size: ts.font_size,
+            font_weight: ts.font_weight,
+            letter_spacing: ts.letter_spacing,
+            text_transform: ts.text_transform,
             fill: Some(theme.text_secondary.clone()),
             class: "axis-label".to_string(),
             data: None,
@@ -997,6 +1037,7 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
             class: "tick".to_string(),
         });
 
+        let ts = TextStyle::for_role(theme, TextRole::TickValue);
         elements.push(ChartElement::Text {
             x,
             y: y_position + 18.0,
@@ -1004,8 +1045,11 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
             anchor: TextAnchor::Middle,
             dominant_baseline: None,
             transform: None,
-            font_size: Some("12px".to_string()),
-            font_weight: None,
+            font_family: ts.font_family,
+            font_size: ts.font_size,
+            font_weight: ts.font_weight,
+            letter_spacing: ts.letter_spacing,
+            text_transform: ts.text_transform,
             fill: Some(theme.text_secondary.clone()),
             class: "tick-label tick-value".to_string(),
             data: None,
@@ -1365,8 +1409,11 @@ pub fn generate_annotations(
                     anchor: TextAnchor::Start,
                     dominant_baseline: None,
                     transform: None,
+                    font_family: None,
                     font_size: Some("12px".to_string()),
                     font_weight: None,
+                    letter_spacing: None,
+                    text_transform: None,
                     fill: Some(color.clone()),
                     class: "annotation-label".to_string(),
                     data: None,
@@ -1407,8 +1454,11 @@ pub fn generate_annotations(
                     anchor,
                     dominant_baseline: None,
                     transform: None,
+                    font_family: None,
                     font_size: Some("12px".to_string()),
                     font_weight: None,
+                    letter_spacing: None,
+                    text_transform: None,
                     fill: Some(color.clone()),
                     class: "annotation-label".to_string(),
                     data: None,
@@ -1453,8 +1503,11 @@ pub fn generate_annotations(
                     anchor: TextAnchor::Start,
                     dominant_baseline: None,
                     transform: None,
+                    font_family: None,
                     font_size: Some("12px".to_string()),
                     font_weight: None,
+                    letter_spacing: None,
+                    text_transform: None,
                     fill: Some(ann.color.clone().unwrap_or_else(|| theme.text_secondary.clone())),
                     class: "annotation-label".to_string(),
                     data: None,

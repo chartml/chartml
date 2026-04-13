@@ -91,6 +91,12 @@ impl ChartML {
         self.theme = theme;
     }
 
+    /// Get a reference to the current theme. Consumers (e.g. chartml-leptos)
+    /// use this to thread typography into HTML chrome rendered outside the SVG.
+    pub fn theme(&self) -> &theme::Theme {
+        &self.theme
+    }
+
     // --- Component registration (matches JS chartml.registerComponent()) ---
 
     /// Register a non-chart component (source, style, config, params) from a YAML string.

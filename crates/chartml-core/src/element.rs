@@ -68,8 +68,11 @@ pub enum ChartElement {
         anchor: TextAnchor,
         dominant_baseline: Option<String>,
         transform: Option<Transform>,
+        font_family: Option<String>,
         font_size: Option<String>,
         font_weight: Option<String>,
+        letter_spacing: Option<String>,
+        text_transform: Option<String>,
         fill: Option<String>,
         class: String,
         data: Option<ElementData>,
@@ -217,6 +220,183 @@ where
     count
 }
 
+// =============================================================================
+// TextStyle — role-based typography resolution from a Theme.
+// =============================================================================
+//
+// Theme typography fields are wired into `ChartElement::Text` via `TextStyle`.
+// Each text emission site picks a `TextRole` (axis-label / tick-value /
+// legend-label), builds a `TextStyle` from the active theme, and plugs the
+// resulting `Option<String>` fields into the `Text` literal.
+//
+// ## Backward-compatibility sentinels
+//
+// Phase 4 must preserve byte-identical SVG output for the `Theme::default()`
+// case. The pre-existing emission uses hardcoded values that differ from
+// `Theme::default()`'s typography fields (for example, the SVG serializer
+// stamps `font-family="Inter, Liberation Sans, Arial, sans-serif"` on every
+// `<text>` element regardless of what the `Text` element carries). The
+// "legacy sentinel" for each attribute is the value that would otherwise be
+// emitted today. `TextStyle` returns `None` for any attribute whose theme
+// value equals its legacy sentinel, ensuring the attribute is omitted (for
+// `font-family` / `letter-spacing` / `text-transform` / `font-weight`) or
+// restated unchanged (for `font-size`).
+
+/// Legacy hardcoded font-size string for axis labels and tick labels.
+///
+/// Companion constants for the other legacy typography values are not
+/// exported because they have no code consumers: the legacy font-family
+/// (`"Inter, Liberation Sans, Arial, sans-serif"`, owned by
+/// `chartml-render/src/svg.rs`) and legacy font-style (`"normal"`) are
+/// handled purely by the `Theme::default()` sentinel comparison in
+/// `TextStyle::for_role`, not by explicit constants.
+pub const LEGACY_LABEL_FONT_SIZE: &str = "12px";
+
+/// Legacy hardcoded font-size string for legend labels. Note this differs
+/// from `LEGACY_LABEL_FONT_SIZE` — the legend has historically used a
+/// slightly smaller size (11px) while all other chrome uses 12px.
+pub const LEGACY_LEGEND_FONT_SIZE: &str = "11px";
+
+/// Legacy font-weight for all chrome text. `None` because no current
+/// emission site sets `font-weight` at all — the attribute is absent from
+/// every pre-Phase-4 baseline SVG.
+pub const LEGACY_FONT_WEIGHT: u16 = 400;
+
+/// Role of a text element, used to select the right bundle of typography
+/// fields from the active `Theme`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextRole {
+    /// Axis titles and category/axis tick labels. Reads `label_*` fields.
+    AxisLabel,
+    /// Numeric tick labels. Reads `numeric_*` for family/size; inherits
+    /// `label_font_weight` / `label_letter_spacing` / `label_text_transform`.
+    TickValue,
+    /// Legend labels. Reads `legend_*` fields.
+    LegendLabel,
+}
+
+/// Resolved typography for a single `ChartElement::Text` literal. All fields
+/// are already prepared as `Option<String>` — plug them directly into the
+/// `Text` enum variant.
+#[derive(Debug, Clone)]
+pub struct TextStyle {
+    pub font_family: Option<String>,
+    pub font_size: Option<String>,
+    pub font_weight: Option<String>,
+    pub letter_spacing: Option<String>,
+    pub text_transform: Option<String>,
+}
+
+impl TextStyle {
+    /// Build a `TextStyle` for the given role from a `Theme`.
+    ///
+    /// Returns `Some(...)` only for attributes whose theme value diverges
+    /// from its legacy sentinel (see the module-level constants). This keeps
+    /// byte-identical output whenever `Theme::default()` is in effect.
+    pub fn for_role(theme: &crate::theme::Theme, role: TextRole) -> Self {
+        use crate::theme::{TextTransform, Theme};
+
+        let default_theme = Theme::default();
+
+        let (family, default_family, size_px, default_size_px, legacy_size) = match role {
+            TextRole::AxisLabel => (
+                &theme.label_font_family,
+                &default_theme.label_font_family,
+                theme.label_font_size,
+                default_theme.label_font_size,
+                LEGACY_LABEL_FONT_SIZE,
+            ),
+            TextRole::TickValue => (
+                &theme.numeric_font_family,
+                &default_theme.numeric_font_family,
+                theme.numeric_font_size,
+                default_theme.numeric_font_size,
+                LEGACY_LABEL_FONT_SIZE,
+            ),
+            TextRole::LegendLabel => (
+                &theme.legend_font_family,
+                &default_theme.legend_font_family,
+                theme.legend_font_size,
+                default_theme.legend_font_size,
+                LEGACY_LEGEND_FONT_SIZE,
+            ),
+        };
+        let weight = match role {
+            TextRole::AxisLabel | TextRole::TickValue => theme.label_font_weight,
+            TextRole::LegendLabel => theme.legend_font_weight,
+        };
+
+        // Axis-label, tick-value, and legend-label all inherit
+        // `label_letter_spacing` / `label_text_transform` (no legend-specific
+        // overrides per Phase 4 mapping).
+        let letter_spacing = theme.label_letter_spacing;
+        let text_transform = &theme.label_text_transform;
+
+        // Emit `font-family` only when the user has overridden the theme
+        // default. When the theme's family equals the default theme's family,
+        // omit the attribute so the SVG serializer's legacy hardcoded
+        // `Inter, Liberation Sans, Arial, sans-serif` path is preserved and
+        // baseline output stays byte-identical.
+        let font_family = if family == default_family {
+            None
+        } else {
+            Some(family.clone())
+        };
+
+        // Font size: `font-size` is always emitted today. To preserve
+        // byte-identical output for `Theme::default()`, when the theme's
+        // size equals the default (i.e. the user hasn't overridden it),
+        // emit the legacy hardcoded string — which differs from the default
+        // for the legend role (11px vs. 12.0 default).
+        let font_size = if (size_px - default_size_px).abs() < f32::EPSILON {
+            Some(legacy_size.to_string())
+        } else {
+            Some(format!("{}px", format_px(size_px)))
+        };
+
+        let font_weight = if weight == LEGACY_FONT_WEIGHT {
+            None
+        } else {
+            Some(weight.to_string())
+        };
+
+        // Exact-equals on f32 is safe here: the sentinel is the literal
+        // `0.0_f32` produced by `Theme::default()`, never the result of
+        // arithmetic. Same reasoning as the `size_px == default_size_px`
+        // sentinel above.
+        let letter_spacing = if letter_spacing == 0.0 {
+            None
+        } else {
+            Some(format_px(letter_spacing))
+        };
+
+        let text_transform = match text_transform {
+            TextTransform::None => None,
+            TextTransform::Uppercase => Some("uppercase".to_string()),
+            TextTransform::Lowercase => Some("lowercase".to_string()),
+        };
+
+        Self {
+            font_family,
+            font_size,
+            font_weight,
+            letter_spacing,
+            text_transform,
+        }
+    }
+}
+
+/// Format a pixel value, preferring an integer rendering when the value has
+/// no fractional part. Mirrors the pre-Phase-4 emission of `"12px"`
+/// (not `"12.0px"`), which every baseline snapshot asserts.
+fn format_px(v: f32) -> String {
+    if v.fract() == 0.0 {
+        format!("{}", v as i64)
+    } else {
+        format!("{}", v)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,7 +471,8 @@ mod tests {
                 ChartElement::Text {
                     x: 400.0, y: 20.0, content: "Title".to_string(),
                     anchor: TextAnchor::Middle, dominant_baseline: None,
-                    transform: None, font_size: None, font_weight: None, fill: None,
+                    transform: None, font_family: None, font_size: None, font_weight: None,
+                    letter_spacing: None, text_transform: None, fill: None,
                     class: "title".to_string(),
                     data: None,
                 },
@@ -361,8 +542,11 @@ mod tests {
                     anchor: TextAnchor::Middle,
                     dominant_baseline: Some("central".to_string()),
                     transform: Some(Transform::Rotate(45.0, 400.0, 20.0)),
+                    font_family: None,
                     font_size: Some("14px".to_string()),
                     font_weight: Some("bold".to_string()),
+                    letter_spacing: None,
+                    text_transform: None,
                     fill: Some("black".to_string()),
                     class: "title".to_string(),
                     data: None,

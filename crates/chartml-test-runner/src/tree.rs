@@ -89,7 +89,7 @@ pub fn element_to_json(element: &ChartElement) -> Value {
             })
         }
 
-        ChartElement::Text { x, y, content, anchor, dominant_baseline, transform, font_size, font_weight, fill, class, data } => {
+        ChartElement::Text { x, y, content, anchor, dominant_baseline, transform, font_size, font_weight, fill, class, data, .. } => {
             json!({
                 "type": "text",
                 "x": x,

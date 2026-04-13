@@ -163,11 +163,19 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             buf.push_str("/>");
         }
 
-        ChartElement::Text { x, y, content, anchor, dominant_baseline, transform, font_size, font_weight, fill, class, .. } => {
+        ChartElement::Text {
+            x, y, content, anchor, dominant_baseline, transform,
+            font_family, font_size, font_weight, letter_spacing, text_transform,
+            fill, class, ..
+        } => {
+            // Per-element font-family overrides the hardcoded default. When
+            // the Text carries no family, fall back to the legacy default
+            // (matches pre-Phase-4 baseline output byte-for-byte).
+            let family = font_family.as_deref().unwrap_or(DEFAULT_FONT_FAMILY);
             write!(
                 buf,
                 r#"<text x="{}" y="{}" text-anchor="{}" font-family="{}""#,
-                x, y, anchor, DEFAULT_FONT_FAMILY,
+                x, y, anchor, xml_escape(family),
             ).unwrap();
             if let Some(db) = dominant_baseline {
                 write!(buf, r#" dominant-baseline="{}""#, xml_escape(db)).unwrap();
@@ -180,6 +188,12 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             }
             if let Some(fw) = font_weight {
                 write!(buf, r#" font-weight="{}""#, xml_escape(fw)).unwrap();
+            }
+            if let Some(ls) = letter_spacing {
+                write!(buf, r#" letter-spacing="{}""#, xml_escape(ls)).unwrap();
+            }
+            if let Some(tt) = text_transform {
+                write!(buf, r#" text-transform="{}""#, xml_escape(tt)).unwrap();
             }
             if let Some(f) = fill {
                 write!(buf, r#" fill="{}""#, xml_escape(f)).unwrap();
@@ -328,8 +342,11 @@ mod tests {
                     anchor: TextAnchor::Middle,
                     dominant_baseline: None,
                     transform: None,
+                    font_family: None,
                     font_size: Some("16".to_string()),
                     font_weight: Some("bold".to_string()),
+                    letter_spacing: None,
+                    text_transform: None,
                     fill: Some("#333".to_string()),
                     class: "title".to_string(),
                     data: None,

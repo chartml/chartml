@@ -177,12 +177,17 @@ impl ChartRenderer for ScatterRenderer {
             // Label — only if not skipped
             if i % y_skip == 0 {
                 let label = format_tick_value_si(val, y_tick_step);
+                let ts = TextStyle::for_role(&config.theme, TextRole::TickValue);
                 axis_elements.push(ChartElement::Text {
                     x: margins.left - 8.0, y,
                     content: label, anchor: TextAnchor::End,
                     dominant_baseline: Some("middle".to_string()),
-                    transform: None, font_size: Some("12px".to_string()),
-                    font_weight: None,
+                    transform: None,
+                    font_family: ts.font_family,
+                    font_size: ts.font_size,
+                    font_weight: ts.font_weight,
+                    letter_spacing: ts.letter_spacing,
+                    text_transform: ts.text_transform,
                     fill: Some(config.theme.text_secondary.clone()), class: "tick-label tick-value".to_string(), data: None,
                 });
             }
@@ -220,11 +225,16 @@ impl ChartRenderer for ScatterRenderer {
             // Label — only if not skipped
             if i % x_skip == 0 {
                 let label = format_tick_value_si(val, x_tick_step);
+                let ts = TextStyle::for_role(&config.theme, TextRole::TickValue);
                 axis_elements.push(ChartElement::Text {
                     x, y: x_axis_y + 18.0,
                     content: label, anchor: TextAnchor::Middle,
                     dominant_baseline: None, transform: None,
-                    font_size: Some("12px".to_string()), font_weight: None,
+                    font_family: ts.font_family,
+                    font_size: ts.font_size,
+                    font_weight: ts.font_weight,
+                    letter_spacing: ts.letter_spacing,
+                    text_transform: ts.text_transform,
                     fill: Some(config.theme.text_secondary.clone()),
                     class: "tick-label tick-value".to_string(), data: None,
                 });

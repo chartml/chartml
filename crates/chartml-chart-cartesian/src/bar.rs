@@ -1,5 +1,5 @@
 use chartml_core::data::DataTable;
-use chartml_core::element::{ChartElement, ElementData, TextAnchor, Transform, ViewBox};
+use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform, ViewBox};
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
 use chartml_core::plugin::ChartConfig;
@@ -576,8 +576,11 @@ fn render_single_series_bars(
                         anchor: TextAnchor::Middle,
                         dominant_baseline: None,
                         transform: None,
+                        font_family: None,
                         font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
                         font_weight: None,
+                        letter_spacing: None,
+                        text_transform: None,
                         fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.text_secondary.clone())),
                         class: "data-label".to_string(),
                         data: None,
@@ -1066,6 +1069,7 @@ fn render_combo(
     // (the left axis label is already handled by generate_y_axis_numeric above).
     if let Some(label) = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()).and_then(|a| a.label.clone()) {
         let rx = config.width - 12.0;
+        let ts = TextStyle::for_role(&config.theme, TextRole::AxisLabel);
         axis_elements.push(ChartElement::Text {
             x: rx,
             y: margins.top + inner_height / 2.0,
@@ -1073,8 +1077,11 @@ fn render_combo(
             anchor: TextAnchor::Middle,
             dominant_baseline: None,
             transform: Some(Transform::Rotate(90.0, rx, margins.top + inner_height / 2.0)),
-            font_size: Some("12px".to_string()),
-            font_weight: None,
+            font_family: ts.font_family,
+            font_size: ts.font_size,
+            font_weight: ts.font_weight,
+            letter_spacing: ts.letter_spacing,
+            text_transform: ts.text_transform,
             fill: Some(config.theme.text_secondary.clone()),
             class: "axis-label".to_string(),
             data: None,
@@ -1228,8 +1235,11 @@ fn render_combo(
                                 content: format_value(val, dl_fmt),
                                 anchor: TextAnchor::Middle, dominant_baseline: None,
                                 transform: None,
+                                font_family: None,
                                 font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
                                 font_weight: None,
+                                letter_spacing: None,
+                                text_transform: None,
                                 fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.text_secondary.clone())),
                                 class: "data-label".to_string(), data: None,
                             });
@@ -1283,8 +1293,11 @@ fn render_combo(
                                     content: format_value(*val, dl_fmt),
                                     anchor: TextAnchor::Middle, dominant_baseline: None,
                                     transform: None,
+                                    font_family: None,
                                     font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
                                     font_weight: None,
+                                    letter_spacing: None,
+                                    text_transform: None,
                                     fill: Some(dl.color.clone().unwrap_or_else(|| color.clone())),
                                     class: "data-label".to_string(), data: None,
                                 });
@@ -1362,11 +1375,16 @@ fn render_combo(
                 }
             }
 
+            let ts = TextStyle::for_role(&config.theme, TextRole::LegendLabel);
             legend_elements.push(ChartElement::Text {
                 x: x_offset + 18.0, y: y + 10.0, content: name.clone(),
                 anchor: TextAnchor::Start, dominant_baseline: None,
-                transform: None, font_size: Some("11px".to_string()),
-                font_weight: None,
+                transform: None,
+                font_family: ts.font_family,
+                font_size: ts.font_size,
+                font_weight: ts.font_weight,
+                letter_spacing: ts.letter_spacing,
+                text_transform: ts.text_transform,
                 fill: Some(config.theme.text_secondary.clone()), class: "legend-label".to_string(), data: None,
             });
 

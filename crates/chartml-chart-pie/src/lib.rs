@@ -115,6 +115,7 @@ impl ChartRenderer for PieRenderer {
                 data: None,
             });
             // Label text
+            let ts = TextStyle::for_role(&config.theme, TextRole::LegendLabel);
             children.push(ChartElement::Text {
                 x: item.x + legend_config.symbol_size + legend_config.symbol_text_gap,
                 y: legend_y + item.y + 10.0, // vertical center of 20px row_height
@@ -122,8 +123,11 @@ impl ChartRenderer for PieRenderer {
                 anchor: TextAnchor::Start,
                 dominant_baseline: None,
                 transform: None,
-                font_size: Some("11px".to_string()),
-                font_weight: None,
+                font_family: ts.font_family,
+                font_size: ts.font_size,
+                font_weight: ts.font_weight,
+                letter_spacing: ts.letter_spacing,
+                text_transform: ts.text_transform,
                 fill: Some(config.theme.text_secondary.clone()),
                 class: "legend-label".to_string(),
                 data: None,

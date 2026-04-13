@@ -109,6 +109,161 @@ mod tests {
         }
     }
 
+    // ----- Phase 4: theme typography wiring -----
+
+    /// Verify that non-default Theme typography values flow through to the
+    /// emitted `ChartElement::Text` nodes. Specifically: a custom label
+    /// family, letter-spacing, and text-transform must appear on every
+    /// `axis-label` / `tick-value` / `legend-label` text element, while
+    /// defaults continue to produce the omitted-attribute legacy path.
+    #[test]
+    fn phase4_theme_typography_flows_to_axis_label_text() {
+        use chartml_core::theme::{TextTransform, Theme};
+
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data();
+        let mut config = make_bar_config();
+        config.theme = Theme {
+            label_font_family: "serif".into(),
+            label_letter_spacing: 1.5,
+            label_text_transform: TextTransform::Uppercase,
+            label_font_weight: 600,
+            ..Theme::default()
+        };
+
+        let element = renderer.render(&data, &config).unwrap();
+
+        // Walk the tree: for every axis-label text, assert the new fields
+        // are set from the theme override.
+        fn walk<'a>(el: &'a ChartElement, out: &mut Vec<&'a ChartElement>) {
+            match el {
+                ChartElement::Svg { children, .. }
+                | ChartElement::Group { children, .. } => {
+                    for c in children {
+                        walk(c, out);
+                    }
+                }
+                _ => out.push(el),
+            }
+        }
+        let mut leaves = Vec::new();
+        walk(&element, &mut leaves);
+
+        let mut axis_label_count = 0usize;
+        for leaf in &leaves {
+            if let ChartElement::Text {
+                class,
+                font_family,
+                letter_spacing,
+                text_transform,
+                font_weight,
+                ..
+            } = leaf
+            {
+                // Only inspect axis-label role (which reads the label_* group).
+                let is_axis_label = class
+                    .split_whitespace()
+                    .any(|c| c == "axis-label");
+                if !is_axis_label {
+                    continue;
+                }
+                axis_label_count += 1;
+
+                assert_eq!(
+                    font_family.as_deref(),
+                    Some("serif"),
+                    "axis-label text must carry theme.label_font_family"
+                );
+                assert_eq!(
+                    letter_spacing.as_deref(),
+                    Some("1.5"),
+                    "axis-label text must carry theme.label_letter_spacing"
+                );
+                assert_eq!(
+                    text_transform.as_deref(),
+                    Some("uppercase"),
+                    "axis-label text must carry theme.label_text_transform"
+                );
+                assert_eq!(
+                    font_weight.as_deref(),
+                    Some("600"),
+                    "axis-label text must carry theme.label_font_weight"
+                );
+            }
+        }
+        assert!(
+            axis_label_count > 0,
+            "bar chart should have at least one axis-label text"
+        );
+    }
+
+    /// Verify the same properties propagate to `tick-value` (numeric) text
+    /// elements, which read from the `numeric_*` group for family/size but
+    /// inherit `label_*` for weight, letter-spacing, and text-transform.
+    #[test]
+    fn phase4_theme_typography_flows_to_tick_value_text() {
+        use chartml_core::theme::{TextTransform, Theme};
+
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data();
+        let mut config = make_bar_config();
+        config.theme = Theme {
+            numeric_font_family: "monospace".into(),
+            label_letter_spacing: 0.75,
+            label_text_transform: TextTransform::Lowercase,
+            ..Theme::default()
+        };
+
+        let element = renderer.render(&data, &config).unwrap();
+
+        let mut found = false;
+        fn visit<F: FnMut(&ChartElement)>(el: &ChartElement, f: &mut F) {
+            f(el);
+            match el {
+                ChartElement::Svg { children, .. }
+                | ChartElement::Group { children, .. } => {
+                    for c in children {
+                        visit(c, f);
+                    }
+                }
+                _ => {}
+            }
+        }
+        visit(&element, &mut |el| {
+            if let ChartElement::Text {
+                class,
+                font_family,
+                letter_spacing,
+                text_transform,
+                ..
+            } = el
+            {
+                if class
+                    .split_whitespace()
+                    .any(|c| c == "tick-value")
+                {
+                    found = true;
+                    assert_eq!(
+                        font_family.as_deref(),
+                        Some("monospace"),
+                        "tick-value text must carry theme.numeric_font_family"
+                    );
+                    assert_eq!(
+                        letter_spacing.as_deref(),
+                        Some("0.75"),
+                        "tick-value text must inherit theme.label_letter_spacing"
+                    );
+                    assert_eq!(
+                        text_transform.as_deref(),
+                        Some("lowercase"),
+                        "tick-value text must inherit theme.label_text_transform"
+                    );
+                }
+            }
+        });
+        assert!(found, "bar chart should emit at least one tick-value text");
+    }
+
     #[test]
     fn bar_chart_renders() {
         let renderer = CartesianRenderer::new();
