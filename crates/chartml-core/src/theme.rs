@@ -81,6 +81,31 @@ pub struct ZeroLineSpec {
     pub width: f32,
 }
 
+/// Which corners of a bar rect are rounded.
+///
+/// Default is `Uniform(0.0)` — no rounding — preserving the legacy square-bar
+/// behavior. `Uniform(r)` rounds all four corners equally; `Top(r)` rounds
+/// only the two corners at the maximum-value end of the bar (the top of a
+/// vertical bar, the right end of a horizontal bar, and — for bars with
+/// negative values — the end that points away from the zero baseline).
+#[derive(Debug, Clone, PartialEq)]
+pub enum BarCornerRadius {
+    /// Round all four corners uniformly with the given radius.
+    Uniform(f32),
+    /// Round only the "top" corners — the two corners at the maximum-value
+    /// end of the bar. For a vertical bar this is the top of the rect; for a
+    /// horizontal bar this is the right side (the end pointing away from the
+    /// category axis). For bars with negative values, the rounded corners
+    /// flip to the opposite end (the side pointing away from zero).
+    Top(f32),
+}
+
+impl Default for BarCornerRadius {
+    fn default() -> Self {
+        Self::Uniform(0.0)
+    }
+}
+
 /// Chart theme — colors, typography, and shape defaults.
 ///
 /// Color fields are CSS color strings (typically hex like `"#374151"`) that
@@ -113,6 +138,10 @@ pub struct ZeroLineSpec {
 ///   stroke width from the spec (`ann.stroke_width` in `helpers.rs:1348, 1382`);
 ///   no hardcoded default exists. 1.0 is chosen as the natural fallback for
 ///   a future "annotation default" path (reference lines, brackets, etc.).
+/// - **bar_corner_radius = BarCornerRadius::Uniform(0.0)** — default is no
+///   rounding (byte-identical to pre-3.1 behavior). `Uniform(r)` rounds all
+///   four corners; `Top(r)` rounds only the two corners at the max-value end
+///   of the bar (see `BarCornerRadius` docs).
 /// - **dot_radius = 5.0** — matches `chartml-chart-scatter/src/lib.rs:106`
 ///   (default when no size field) and line endpoint markers in
 ///   `chartml-chart-cartesian/src/line.rs:{466, 577, 649}` and
@@ -184,9 +213,12 @@ pub struct Theme {
     /// Stroke width for annotation lines (reference lines, brackets).
     /// See audit in struct-level doc.
     pub annotation_line_weight: f32,
-    /// Corner radius (px) for bar rects. When `0.0`, renderers MUST NOT emit
-    /// any `rx`/`ry` attribute at all (to preserve byte-identical output).
-    pub bar_corner_radius: f32,
+    /// Corner radius for bar rects. Supports uniform rounding (all four
+    /// corners) and top-only rounding (the two corners at the max-value end
+    /// of the bar). When the enclosed radius is `0.0`, renderers MUST NOT
+    /// emit any `rx`/`ry` attribute and MUST emit a plain `<rect>` (to
+    /// preserve byte-identical output for un-themed charts).
+    pub bar_corner_radius: BarCornerRadius,
     /// Default radius (px) for scatter points and line endpoint markers.
     pub dot_radius: f32,
     /// Optional halo/outline color for dots. When `None`, no halo is drawn.
@@ -242,7 +274,7 @@ impl Default for Theme {
             grid_line_weight: 1.0,
             series_line_weight: 2.0,
             annotation_line_weight: 1.0,
-            bar_corner_radius: 0.0,
+            bar_corner_radius: BarCornerRadius::Uniform(0.0),
             dot_radius: 5.0,
             dot_halo_color: None,
             dot_halo_width: 0.0,
@@ -365,7 +397,7 @@ mod tests {
     #[test]
     fn default_shape_fields() {
         let t = Theme::default();
-        assert_eq!(t.bar_corner_radius, 0.0);
+        assert_eq!(t.bar_corner_radius, BarCornerRadius::Uniform(0.0));
         assert_eq!(t.dot_radius, 5.0);
         assert!(t.dot_halo_color.is_none());
         assert_eq!(t.dot_halo_width, 0.0);
@@ -405,7 +437,7 @@ mod tests {
     fn custom_theme_can_override_new_fields_individually() {
         let custom = Theme {
             series_line_weight: 3.5,
-            bar_corner_radius: 4.0,
+            bar_corner_radius: BarCornerRadius::Uniform(4.0),
             dot_halo_color: Some("#ffffff".into()),
             dot_halo_width: 2.0,
             grid_style: GridStyle::HorizontalOnly,
@@ -415,7 +447,7 @@ mod tests {
         };
         // Overridden
         assert_eq!(custom.series_line_weight, 3.5);
-        assert_eq!(custom.bar_corner_radius, 4.0);
+        assert_eq!(custom.bar_corner_radius, BarCornerRadius::Uniform(4.0));
         assert_eq!(custom.dot_halo_color.as_deref(), Some("#ffffff"));
         assert_eq!(custom.dot_halo_width, 2.0);
         assert_eq!(custom.grid_style, GridStyle::HorizontalOnly);

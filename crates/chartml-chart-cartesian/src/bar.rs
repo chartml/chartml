@@ -13,17 +13,159 @@ use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
 
 use crate::helpers::{GridConfig, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
 
-/// Resolve the `rx`/`ry` pair for a themed bar rect.
+/// Build a single bar element, honoring `theme.bar_corner_radius`.
 ///
-/// Returns `(None, None)` when `theme.bar_corner_radius == 0.0` — the default
-/// case preserves byte-identical SVG output (no `rx`/`ry` attribute emitted).
-/// Returns `(Some(v), Some(v))` when the radius is positive.
-fn bar_corner_radius(theme: &chartml_core::theme::Theme) -> (Option<f64>, Option<f64>) {
-    if theme.bar_corner_radius > 0.0 {
-        let r = theme.bar_corner_radius as f64;
-        (Some(r), Some(r))
-    } else {
-        (None, None)
+/// Decision tree:
+/// - `BarCornerRadius::Uniform(0.0)` or `Top(0.0)` → emit a plain
+///   `ChartElement::Rect` with `rx`/`ry` == `None` (byte-identical to the
+///   pre-3.1 un-themed output).
+/// - `BarCornerRadius::Uniform(r)` with `r > 0.0` → emit `Rect` with
+///   `rx = ry = Some(r)`.
+/// - `BarCornerRadius::Top(r)` with `r > 0.0` → emit a `ChartElement::Path`
+///   with a `d` string that rounds only the two corners at the max-value
+///   end of the bar (the top of a vertical positive bar, the bottom of a
+///   vertical negative bar, the right end of a horizontal positive bar,
+///   the left end of a horizontal negative bar). The radius is clamped to
+///   `min(width, height) / 2.0` to prevent degenerate paths.
+pub(crate) struct BarRectSpec {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub is_horizontal: bool,
+    pub is_negative: bool,
+    pub fill: String,
+    pub class: String,
+    pub data: Option<ElementData>,
+}
+
+pub(crate) fn build_bar_element(
+    spec: BarRectSpec,
+    theme: &chartml_core::theme::Theme,
+) -> ChartElement {
+    use chartml_core::theme::BarCornerRadius;
+    let BarRectSpec {
+        x, y, width, height, is_horizontal, is_negative, fill, class, data,
+    } = spec;
+
+    // Extract requested radius; short-circuit the zero case to emit a plain
+    // Rect (byte-identical contract).
+    let (radius, top_only) = match theme.bar_corner_radius {
+        BarCornerRadius::Uniform(r) => (r as f64, false),
+        BarCornerRadius::Top(r) => (r as f64, true),
+    };
+
+    if radius <= 0.0 {
+        return ChartElement::Rect {
+            x,
+            y,
+            width,
+            height,
+            fill,
+            stroke: None,
+            rx: None,
+            ry: None,
+            class,
+            data,
+        };
+    }
+
+    if !top_only {
+        return ChartElement::Rect {
+            x,
+            y,
+            width,
+            height,
+            fill,
+            stroke: None,
+            rx: Some(radius),
+            ry: Some(radius),
+            class,
+            data,
+        };
+    }
+
+    // Top-only rounding: emit a Path with custom d.
+    // Clamp radius to min(w,h)/2 to prevent degenerate geometry on very
+    // thin bars. debug_assert flags regressions in tests.
+    let max_r = (width.min(height) / 2.0).max(0.0);
+    debug_assert!(
+        radius <= max_r + 1e-9 || width <= 0.0 || height <= 0.0,
+        "bar_corner_radius {} exceeds min(w,h)/2 = {} (w={}, h={})",
+        radius, max_r, width, height
+    );
+    let r = radius.min(max_r);
+
+    // Degenerate zero-dimension bars (e.g. a value-at-zero bar that has
+    // height 0 on vertical orientation) collapse to a plain Rect. Emitting
+    // an arc of radius 0 would pollute the path string and confuse
+    // consumers.
+    if r <= 0.0 {
+        return ChartElement::Rect {
+            x,
+            y,
+            width,
+            height,
+            fill,
+            stroke: None,
+            rx: None,
+            ry: None,
+            class,
+            data,
+        };
+    }
+
+    // Absolute coordinates of the rect corners.
+    let x0 = x;
+    let y0 = y;
+    let x1 = x + width;
+    let y1 = y + height;
+
+    // Which two corners get rounded:
+    //   vertical + !negative → top two   (y0 edge)
+    //   vertical +  negative → bottom two (y1 edge)
+    //   horizontal + !negative → right two (x1 edge)
+    //   horizontal +  negative → left two  (x0 edge)
+    //
+    // Path is always traced clockwise starting from the corner immediately
+    // counter-clockwise of the first rounded corner, so the arc sweep flag
+    // is always 1 (clockwise).
+    let d = match (is_horizontal, is_negative) {
+        // Vertical, top rounding (two corners at y0)
+        (false, false) => format!(
+            "M {x0},{y0r} A {r},{r} 0 0 1 {x0r},{y0} L {x1mr},{y0} A {r},{r} 0 0 1 {x1},{y0r} L {x1},{y1} L {x0},{y1} Z",
+            x0 = x0, y0 = y0, x1 = x1, y1 = y1, r = r,
+            x0r = x0 + r, x1mr = x1 - r, y0r = y0 + r,
+        ),
+        // Vertical, negative value → bottom rounding (two corners at y1)
+        (false, true) => format!(
+            "M {x0},{y0} L {x1},{y0} L {x1},{y1mr} A {r},{r} 0 0 1 {x1mr},{y1} L {x0r},{y1} A {r},{r} 0 0 1 {x0},{y1mr} Z",
+            x0 = x0, y0 = y0, x1 = x1, y1 = y1, r = r,
+            x0r = x0 + r, x1mr = x1 - r, y1mr = y1 - r,
+        ),
+        // Horizontal, positive value → right-end rounding (two corners at x1)
+        (true, false) => format!(
+            "M {x0},{y0} L {x1mr},{y0} A {r},{r} 0 0 1 {x1},{y0r} L {x1},{y1mr} A {r},{r} 0 0 1 {x1mr},{y1} L {x0},{y1} Z",
+            x0 = x0, y0 = y0, x1 = x1, y1 = y1, r = r,
+            x1mr = x1 - r, y0r = y0 + r, y1mr = y1 - r,
+        ),
+        // Horizontal, negative value → left-end rounding (two corners at x0)
+        (true, true) => format!(
+            "M {x0r},{y0} L {x1},{y0} L {x1},{y1} L {x0r},{y1} A {r},{r} 0 0 1 {x0},{y1mr} L {x0},{y0r} A {r},{r} 0 0 1 {x0r},{y0} Z",
+            x0 = x0, y0 = y0, x1 = x1, y1 = y1, r = r,
+            x0r = x0 + r, y0r = y0 + r, y1mr = y1 - r,
+        ),
+    };
+
+    ChartElement::Path {
+        d,
+        fill: Some(fill),
+        stroke: None,
+        stroke_width: None,
+        stroke_dasharray: None,
+        opacity: None,
+        class,
+        data,
     }
 }
 
@@ -549,19 +691,20 @@ fn render_single_series_bars(
             };
             let bar_width = linear.map(val);
 
-            let (rx, ry) = bar_corner_radius(&config.theme);
-            elements.push(ChartElement::Rect {
-                x: 0.0,
-                y: y + y_inset,
-                width: bar_width,
-                height: bar_render_height,
-                fill: fill_color.clone(),
-                stroke: None,
-                rx,
-                ry,
-                class: "bar bar-rect".to_string(),
-                data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
-            });
+            elements.push(build_bar_element(
+                BarRectSpec {
+                    x: 0.0,
+                    y: y + y_inset,
+                    width: bar_width,
+                    height: bar_render_height,
+                    is_horizontal: true,
+                    is_negative: val < 0.0,
+                    fill: fill_color.clone(),
+                    class: "bar bar-rect".to_string(),
+                    data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
+                },
+                &config.theme,
+            ));
         }
     } else {
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
@@ -591,19 +734,20 @@ fn render_single_series_bars(
             // For negative bars, rect y is at zero line (bar extends downward).
             let rect_y = bar_val_y.min(bar_zero_y);
 
-            let (rx, ry) = bar_corner_radius(&config.theme);
-            elements.push(ChartElement::Rect {
-                x: x + x_inset,
-                y: rect_y,
-                width: bar_render_width,
-                height: bar_height,
-                fill: fill_color.clone(),
-                stroke: None,
-                rx,
-                ry,
-                class: "bar bar-rect".to_string(),
-                data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
-            });
+            elements.push(build_bar_element(
+                BarRectSpec {
+                    x: x + x_inset,
+                    y: rect_y,
+                    width: bar_render_width,
+                    height: bar_height,
+                    is_horizontal: false,
+                    is_negative: val < 0.0,
+                    fill: fill_color.clone(),
+                    class: "bar bar-rect".to_string(),
+                    data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
+                },
+                &config.theme,
+            ));
 
             // Data label above bar (if configured)
             if let Some(dl) = get_data_labels_config(config) {
@@ -730,22 +874,23 @@ fn render_multi_series_bars(
                     .cloned()
                     .unwrap_or_else(|| "#2E7D9A".to_string());
 
-                let (rx, ry) = bar_corner_radius(&config.theme);
-                elements.push(ChartElement::Rect {
-                    x: x_left.min(x_right),
-                    y: y + y_inset,
-                    width: bar_width,
-                    height: bar_render_height,
-                    fill,
-                    stroke: None,
-                    rx,
-                    ry,
-                    class: "bar bar-rect".to_string(),
-                    data: Some(
-                        ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
-                            .with_series(&point.series),
-                    ),
-                });
+                elements.push(build_bar_element(
+                    BarRectSpec {
+                        x: x_left.min(x_right),
+                        y: y + y_inset,
+                        width: bar_width,
+                        height: bar_render_height,
+                        is_horizontal: true,
+                        is_negative: point.value < 0.0,
+                        fill,
+                        class: "bar bar-rect".to_string(),
+                        data: Some(
+                            ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
+                                .with_series(&point.series),
+                        ),
+                    },
+                    &config.theme,
+                ));
             }
         } else {
             // Vertical stacked: band on x-axis (width), linear on y-axis (height)
@@ -773,22 +918,23 @@ fn render_multi_series_bars(
                     .cloned()
                     .unwrap_or_else(|| "#2E7D9A".to_string());
 
-                let (rx, ry) = bar_corner_radius(&config.theme);
-                elements.push(ChartElement::Rect {
-                    x: x + x_inset,
-                    y: y_top,
-                    width: bar_render_width,
-                    height: bar_height,
-                    fill,
-                    stroke: None,
-                    rx,
-                    ry,
-                    class: "bar bar-rect".to_string(),
-                    data: Some(
-                        ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
-                            .with_series(&point.series),
-                    ),
-                });
+                elements.push(build_bar_element(
+                    BarRectSpec {
+                        x: x + x_inset,
+                        y: y_top,
+                        width: bar_render_width,
+                        height: bar_height,
+                        is_horizontal: false,
+                        is_negative: point.value < 0.0,
+                        fill,
+                        class: "bar bar-rect".to_string(),
+                        data: Some(
+                            ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
+                                .with_series(&point.series),
+                        ),
+                    },
+                    &config.theme,
+                ));
             }
         }
 
@@ -839,21 +985,23 @@ fn render_multi_series_bars(
                     .cloned()
                     .unwrap_or_else(|| "#2E7D9A".to_string());
 
-                let (rx, ry) = bar_corner_radius(&config.theme);
-                elements.push(ChartElement::Rect {
-                    x: bar_left.min(bar_right),
-                    y,
-                    width: bar_width,
-                    height: sub_band_height,
-                    fill,
-                    stroke: None,
-                    rx,
-                    ry,
-                    class: "bar bar-rect".to_string(),
-                    data: Some(
-                        ElementData::new(&cat, format_value(val, y_fmt_ref)).with_series(&series),
-                    ),
-                });
+                elements.push(build_bar_element(
+                    BarRectSpec {
+                        x: bar_left.min(bar_right),
+                        y,
+                        width: bar_width,
+                        height: sub_band_height,
+                        is_horizontal: true,
+                        is_negative: val < 0.0,
+                        fill,
+                        class: "bar bar-rect".to_string(),
+                        data: Some(
+                            ElementData::new(&cat, format_value(val, y_fmt_ref))
+                                .with_series(&series),
+                        ),
+                    },
+                    &config.theme,
+                ));
             }
         } else {
             // Vertical grouped: band on x-axis (width), linear on y-axis (height)
@@ -890,21 +1038,23 @@ fn render_multi_series_bars(
                     .cloned()
                     .unwrap_or_else(|| "#2E7D9A".to_string());
 
-                let (rx, ry) = bar_corner_radius(&config.theme);
-                elements.push(ChartElement::Rect {
-                    x,
-                    y: bar_top,
-                    width: sub_band_width,
-                    height: bar_height,
-                    fill,
-                    stroke: None,
-                    rx,
-                    ry,
-                    class: "bar bar-rect".to_string(),
-                    data: Some(
-                        ElementData::new(&cat, format_value(val, y_fmt_ref)).with_series(&series),
-                    ),
-                });
+                elements.push(build_bar_element(
+                    BarRectSpec {
+                        x,
+                        y: bar_top,
+                        width: sub_band_width,
+                        height: bar_height,
+                        is_horizontal: false,
+                        is_negative: val < 0.0,
+                        fill,
+                        class: "bar bar-rect".to_string(),
+                        data: Some(
+                            ElementData::new(&cat, format_value(val, y_fmt_ref))
+                                .with_series(&series),
+                        ),
+                    },
+                    &config.theme,
+                ));
             }
         }
 
@@ -1232,15 +1382,23 @@ fn render_combo(
                 let series_idx = color_series.iter().position(|s| s == &point.series).unwrap_or(0);
                 let fill = config.colors.get(series_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string());
 
-                let (rx, ry) = bar_corner_radius(&config.theme);
-                mark_elements.push(ChartElement::Rect {
-                    x: x + x_inset + margins.left, y: y_top + margins.top,
-                    width: bar_render_width, height: bar_height,
-                    fill, stroke: None,
-                    rx, ry,
-                    class: "bar bar-rect".to_string(),
-                    data: Some(ElementData::new(&point.key, format_value(point.value, fmt_ref)).with_series(&point.series)),
-                });
+                mark_elements.push(build_bar_element(
+                    BarRectSpec {
+                        x: x + x_inset + margins.left,
+                        y: y_top + margins.top,
+                        width: bar_render_width,
+                        height: bar_height,
+                        is_horizontal: false,
+                        is_negative: point.value < 0.0,
+                        fill,
+                        class: "bar bar-rect".to_string(),
+                        data: Some(
+                            ElementData::new(&point.key, format_value(point.value, fmt_ref))
+                                .with_series(&point.series),
+                        ),
+                    },
+                    &config.theme,
+                ));
             }
         }
 
@@ -1289,15 +1447,23 @@ fn render_combo(
                     let bar_height = (bar_zero_y - bar_val_y).abs();
                     let rect_y = bar_val_y.min(bar_zero_y);
 
-                    let (rx, ry) = bar_corner_radius(&config.theme);
-                    mark_elements.push(ChartElement::Rect {
-                        x: bar_x + margins.left, y: rect_y + margins.top,
-                        width: sub_bar_width, height: bar_height,
-                        fill: color.clone(), stroke: None,
-                        rx, ry,
-                        class: "bar bar-rect".to_string(),
-                        data: Some(ElementData::new(&cat, format_value(val, fmt_ref)).with_series(&label)),
-                    });
+                    mark_elements.push(build_bar_element(
+                        BarRectSpec {
+                            x: bar_x + margins.left,
+                            y: rect_y + margins.top,
+                            width: sub_bar_width,
+                            height: bar_height,
+                            is_horizontal: false,
+                            is_negative: val < 0.0,
+                            fill: color.clone(),
+                            class: "bar bar-rect".to_string(),
+                            data: Some(
+                                ElementData::new(&cat, format_value(val, fmt_ref))
+                                    .with_series(&label),
+                            ),
+                        },
+                        &config.theme,
+                    ));
 
                     // Data labels
                     if let Some(ref dl) = field_spec.data_labels {

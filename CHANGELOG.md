@@ -5,6 +5,88 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - unreleased (feat/theme-hooks branch)
+
+### Theme hooks (additive, backward-compatible)
+
+`chartml_core::theme::Theme` now exposes typography, shape, grid, zero-line,
+and dot-halo hooks. Every new field has a default that produces byte-identical
+output vs 3.0.0 — verified by `cargo test -p chartml-test-runner --test backward_compat`
+against all 191 golden charts.
+
+#### New `Theme` fields
+
+**Typography — title**
+- `title_font_family`, `title_font_size`, `title_font_weight`, `title_font_style`
+
+**Typography — labels** (tick labels, axis labels, data labels)
+- `label_font_family`, `label_font_size`, `label_font_weight`,
+  `label_letter_spacing`, `label_text_transform`
+
+**Typography — numeric tick labels**
+- `numeric_font_family`, `numeric_font_size`
+
+**Typography — legend**
+- `legend_font_family`, `legend_font_size`, `legend_font_weight`
+
+**Shape / stroke**
+- `axis_line_weight`, `grid_line_weight`, `series_line_weight`,
+  `annotation_line_weight`
+- `bar_corner_radius: BarCornerRadius` — **API change** (see migration note
+  below). The previous `f32` field is now an enum supporting `Uniform(r)`
+  (all four corners, current behavior) and `Top(r)` (only the two corners at
+  the max-value end of the bar — the top of a vertical bar, the right end of
+  a horizontal bar, and for negative values the opposite end pointing away
+  from the zero baseline). Default is `BarCornerRadius::Uniform(0.0)`.
+- `dot_radius`, `dot_halo_color`, `dot_halo_width`
+
+**Grid + baseline**
+- `grid_style: GridStyle` — `Both` / `HorizontalOnly` / `VerticalOnly` /
+  `None`. Controls which gridlines are drawn.
+- `zero_line: Option<ZeroLineSpec>` — emphasized baseline on charts whose
+  data crosses zero.
+
+#### New public types
+- `GridStyle`, `TextTransform`, `ZeroLineSpec`, `BarCornerRadius`
+
+#### CSS class contract
+
+Every themed SVG element now carries a stable CSS class: `.chart-title`,
+`.axis-label`, `.tick-value`, `.legend-label`, `.series-line`, `.bar-rect`,
+`.dot-marker`, `.dot-halo`, `.zero-line`.
+
+#### Browser CSS variable overrides
+
+`crates/chartml-leptos/style/chartml.css` now ships `--chartml-*` custom
+property overrides with `revert` fallback semantics — consumers can override
+any theme field from a parent container without mirroring the Rust `Theme`
+in CSS. Requires Chrome 84+, Firefox 67+, Safari 9.1+.
+
+### Backward compatibility
+- `Theme::default()` and `Theme::dark()` produce byte-identical SVG output
+  vs 3.0.0. Verified by the `backward_compat` test over all 191 golden charts.
+- No call-site changes required for existing consumers **except** the
+  `bar_corner_radius` API change below.
+
+### Migration
+
+If you were constructing `Theme { bar_corner_radius: 4.0, .. }`, change it to:
+
+```rust
+use chartml_core::theme::{BarCornerRadius, Theme};
+
+Theme {
+    bar_corner_radius: BarCornerRadius::Uniform(4.0),
+    ..Theme::default()
+}
+```
+
+This is the only breaking source-level change in 3.1.0. For top-only
+rounding (the Kyomi visual target), use `BarCornerRadius::Top(r)` — the
+renderer emits bars as `ChartElement::Path` with custom `d` geometry rather
+than `ChartElement::Rect` so only the two corners at the max-value end of
+the bar are rounded.
+
 ## [3.0.0] - 2026-03-28
 
 ### Changed

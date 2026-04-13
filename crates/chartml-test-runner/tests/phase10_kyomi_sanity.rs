@@ -22,7 +22,7 @@
 use chartml_chart_cartesian::CartesianRenderer;
 use chartml_chart_scatter::ScatterRenderer;
 use chartml_core::element::{count_elements, ChartElement};
-use chartml_core::theme::{GridStyle, TextTransform, Theme, ZeroLineSpec};
+use chartml_core::theme::{BarCornerRadius, GridStyle, TextTransform, Theme, ZeroLineSpec};
 use chartml_core::ChartML;
 
 /// Build the Kyomi target theme exactly as specified in the Phase 10 plan.
@@ -64,7 +64,7 @@ fn kyomi_theme() -> Theme {
         grid_line_weight: 1.0,
         series_line_weight: 2.0,
         annotation_line_weight: 1.0,
-        bar_corner_radius: 2.0,
+        bar_corner_radius: BarCornerRadius::Top(2.0),
         dot_radius: 4.0,
         dot_halo_color: Some("#FAFAF8".into()),
         dot_halo_width: 1.5,
@@ -236,26 +236,52 @@ fn phase10_check3_series_line_weight_is_2px() {
     }
 }
 
-/// Check 4 — Bars carry `rx == Some(2.0)` AND `ry == Some(2.0)`.
-///
-/// NOTE: the Phase 10 plan says "2px rounded top corners", but
-/// `Theme::bar_corner_radius` is a uniform radius applied to all four corners.
-/// This is a documented distinction: uniform rounding is what is wired through
-/// the theme today. A top-only variant is out of scope for Phase 10.
+/// Check 4 — Bars use `BarCornerRadius::Top(2.0)` — i.e. each bar is
+/// emitted as a `Path` whose `d` attribute contains exactly two 2px arcs on
+/// the max-value end of the bar. Top-only rounding is what the Kyomi visual
+/// target requires; uniform rounding produces a pill/toy look on bars that
+/// sit on the baseline.
 #[test]
-fn phase10_check4_bars_have_2px_uniform_rounding() {
+fn phase10_check4_bars_have_2px_top_rounding() {
     let el = render_bar_crossing_zero();
     let mut bars = Vec::new();
     collect(
         &el,
-        &|e| matches!(e, ChartElement::Rect { class, .. } if has_class(class, "bar-rect")),
+        &|e| matches!(e, ChartElement::Path { class, .. } if has_class(class, "bar-rect")),
         &mut bars,
     );
-    assert!(!bars.is_empty(), "expected at least one bar-rect");
+    assert!(
+        !bars.is_empty(),
+        "expected at least one bar-rect Path (Top(2.0) must emit Path, not Rect)"
+    );
     for b in &bars {
-        if let ChartElement::Rect { rx, ry, .. } = b {
-            assert_eq!(*rx, Some(2.0), "bar rx must be 2.0");
-            assert_eq!(*ry, Some(2.0), "bar ry must be 2.0");
+        if let ChartElement::Path { d, .. } = b {
+            // Exactly two arcs of radius 2 per bar.
+            assert_eq!(
+                d.matches("A 2,2").count(),
+                2,
+                "bar path must contain exactly two 2px arcs, got d={d}"
+            );
+        }
+    }
+
+    // Sanity: any leftover bar-rect Rect under Top(2.0) must be a
+    // degenerate zero-dimension bar (e.g. a value-at-zero category whose
+    // height collapses to 0). Those can't host an arc so the helper emits
+    // a plain Rect — but they must not have rx/ry.
+    let mut leftover_rects = Vec::new();
+    collect(
+        &el,
+        &|e| matches!(e, ChartElement::Rect { class, .. } if has_class(class, "bar-rect")),
+        &mut leftover_rects,
+    );
+    for r in &leftover_rects {
+        if let ChartElement::Rect { width, height, rx, ry, .. } = r {
+            assert!(
+                *width <= 0.0 || *height <= 0.0,
+                "leftover bar Rect under Top(2.0) must be zero-dimension, got w={width} h={height}"
+            );
+            assert!(rx.is_none() && ry.is_none());
         }
     }
 }

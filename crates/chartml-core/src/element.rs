@@ -29,7 +29,9 @@ pub enum ChartElement {
         /// Corner radius on the x axis. When `None`, no `rx` attribute is
         /// emitted (preserving byte-identical output for un-themed charts).
         /// Wired from `Theme::bar_corner_radius` in Phase 5 — bars emit
-        /// `Some(v)` when `theme.bar_corner_radius > 0.0`, else `None`.
+        /// `Some(v)` when `bar_corner_radius` is `Uniform(v)` with `v > 0.0`,
+        /// else `None`. Top-only rounding is emitted as a `Path` instead of
+        /// a `Rect` (see `BarCornerRadius::Top`).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rx: Option<f64>,
         /// Corner radius on the y axis. See `rx`.

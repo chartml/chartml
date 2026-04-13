@@ -823,11 +823,11 @@ style:
 
     #[test]
     fn phase5_custom_bar_corner_radius_emits_rx_ry() {
-        use chartml_core::theme::Theme;
+        use chartml_core::theme::{BarCornerRadius, Theme};
         let renderer = CartesianRenderer::new();
         let mut config = make_bar_config();
         config.theme = Theme {
-            bar_corner_radius: 8.0,
+            bar_corner_radius: BarCornerRadius::Uniform(8.0),
             ..Theme::default()
         };
         let element = renderer.render(&make_bar_data(), &config).expect("render");
@@ -839,6 +839,170 @@ style:
             assert_eq!(*rx, Some(8.0), "rx must match theme.bar_corner_radius");
             assert_eq!(*ry, Some(8.0), "ry must match theme.bar_corner_radius");
         }
+    }
+
+    // ---- Phase follow-up: BarCornerRadius::Top top-only rounding ----
+
+    fn collect_bar_elements<'a>(el: &'a ChartElement, out: &mut Vec<&'a ChartElement>) {
+        match el {
+            ChartElement::Rect { class, .. } | ChartElement::Path { class, .. }
+                if class.split_whitespace().any(|c| c == "bar-rect") =>
+            {
+                out.push(el);
+            }
+            ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                for c in children {
+                    collect_bar_elements(c, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn phase_followup_bar_top_rounding_zero_is_plain_rect() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        let renderer = CartesianRenderer::new();
+        let mut config = make_bar_config();
+        config.theme = Theme {
+            bar_corner_radius: BarCornerRadius::Top(0.0),
+            ..Theme::default()
+        };
+        let element = renderer.render(&make_bar_data(), &config).expect("render");
+
+        let mut bars = Vec::new();
+        collect_bar_elements(&element, &mut bars);
+        assert!(!bars.is_empty());
+        for b in &bars {
+            match b {
+                ChartElement::Rect { rx, ry, .. } => {
+                    assert!(rx.is_none(), "Top(0.0) must emit Rect with rx=None");
+                    assert!(ry.is_none(), "Top(0.0) must emit Rect with ry=None");
+                }
+                other => panic!("Top(0.0) must emit Rect, got {:?}", other),
+            }
+        }
+    }
+
+    #[test]
+    fn phase_followup_bar_top_rounding_vertical() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        let renderer = CartesianRenderer::new();
+        let mut config = make_bar_config();
+        config.theme = Theme {
+            bar_corner_radius: BarCornerRadius::Top(8.0),
+            ..Theme::default()
+        };
+        let element = renderer.render(&make_bar_data(), &config).expect("render");
+
+        let mut bars = Vec::new();
+        collect_bar_elements(&element, &mut bars);
+        assert!(!bars.is_empty(), "expected bar elements");
+        for b in &bars {
+            match b {
+                ChartElement::Path { d, .. } => {
+                    assert_eq!(
+                        d.matches("A 8,8").count(),
+                        2,
+                        "vertical Top(8) must produce 2 arcs, got d={d}"
+                    );
+                }
+                other => panic!("vertical Top(8) must emit Path, got {:?}", other),
+            }
+        }
+    }
+
+    #[test]
+    fn phase_followup_bar_top_rounding_horizontal() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        let renderer = CartesianRenderer::new();
+        let mut config = make_bar_config();
+        config.visualize.orientation = Some(chartml_core::spec::Orientation::Horizontal);
+        config.theme = Theme {
+            bar_corner_radius: BarCornerRadius::Top(8.0),
+            ..Theme::default()
+        };
+        let element = renderer.render(&make_bar_data(), &config).expect("render");
+
+        let mut bars = Vec::new();
+        collect_bar_elements(&element, &mut bars);
+        assert!(!bars.is_empty(), "expected bar elements (horizontal)");
+        for b in &bars {
+            match b {
+                ChartElement::Path { d, .. } => {
+                    assert_eq!(
+                        d.matches("A 8,8").count(),
+                        2,
+                        "horizontal Top(8) must produce 2 arcs, got d={d}"
+                    );
+                }
+                other => panic!("horizontal Top(8) must emit Path, got {:?}", other),
+            }
+        }
+    }
+
+    #[test]
+    fn phase_followup_bar_top_rounding_negative_vertical() {
+        // Drive build_bar_element directly so the test doesn't depend on a
+        // chart spec that emits negative values.
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        use crate::bar::{build_bar_element, BarRectSpec};
+
+        let theme = Theme {
+            bar_corner_radius: BarCornerRadius::Top(8.0),
+            ..Theme::default()
+        };
+
+        let pos = build_bar_element(
+            BarRectSpec {
+                x: 100.0, y: 50.0, width: 40.0, height: 200.0,
+                is_horizontal: false, is_negative: false,
+                fill: "#000".into(),
+                class: "bar bar-rect".into(),
+                data: None,
+            },
+            &theme,
+        );
+        let neg = build_bar_element(
+            BarRectSpec {
+                x: 100.0, y: 50.0, width: 40.0, height: 200.0,
+                is_horizontal: false, is_negative: true,
+                fill: "#000".into(),
+                class: "bar bar-rect".into(),
+                data: None,
+            },
+            &theme,
+        );
+
+        let pos_d = match &pos {
+            ChartElement::Path { d, .. } => d.clone(),
+            _ => panic!("pos must be Path"),
+        };
+        let neg_d = match &neg {
+            ChartElement::Path { d, .. } => d.clone(),
+            _ => panic!("neg must be Path"),
+        };
+
+        assert_eq!(pos_d.matches("A 8,8").count(), 2);
+        assert_eq!(neg_d.matches("A 8,8").count(), 2);
+
+        // Positive vertical: top rounding → path starts at (x, y+r) = (100, 58).
+        assert!(
+            pos_d.starts_with("M 100,58"),
+            "pos vertical Top path should start at y+r=58, got {pos_d}"
+        );
+        // Negative vertical: bottom rounding → path starts at the (square)
+        // top-left corner (100, 50).
+        assert!(
+            neg_d.starts_with("M 100,50"),
+            "neg vertical Top path should start at (x, y)=(100, 50), got {neg_d}"
+        );
+        // Negative path must reference the bottom-edge-minus-r coordinate
+        // y1-r = 50+200-8 = 242 where its arcs live.
+        assert!(
+            neg_d.contains(",242"),
+            "neg vertical Top path should contain y1-r=242, got {neg_d}"
+        );
     }
 
     #[test]
