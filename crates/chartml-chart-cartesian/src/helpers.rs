@@ -24,6 +24,69 @@ pub fn should_draw_vertical_grid(style: &GridStyle) -> bool {
     matches!(style, GridStyle::Both | GridStyle::VerticalOnly)
 }
 
+/// Emit an emphasized baseline "zero line" element, if `theme.zero_line` is set
+/// AND the numeric domain strictly crosses zero (i.e. `domain.0 < 0 < domain.1`).
+///
+/// The returned element is positioned in the plot's INNER coordinate space
+/// (origin `(0, 0)` at the top-left of the plot area). Callers are responsible
+/// for offsetting by `(margins.left, margins.top)` like any other axis element.
+///
+/// For vertical orientation (the common case: categorical x-axis, numeric y-axis)
+/// this emits a horizontal line spanning the full plot width at the pixel y-coord
+/// corresponding to data value 0. For horizontal orientation (horizontal bar
+/// charts: categorical y-axis, numeric x-axis) it emits a vertical line
+/// spanning the full plot height at the pixel x-coord corresponding to value 0.
+///
+/// Scatter plots (two numeric axes) are intentionally out of scope for this
+/// helper — emitting baselines on either/both numeric axes needs more design.
+///
+/// Returns `None` when:
+/// - `theme.zero_line` is `None` (backward-compatible default), or
+/// - the domain does not strictly cross zero (e.g. all-positive data anchored at 0).
+pub fn emit_zero_line_if_crosses(
+    theme: &Theme,
+    domain: (f64, f64),
+    inner_width: f64,
+    inner_height: f64,
+    is_horizontal: bool,
+) -> Option<ChartElement> {
+    let spec = theme.zero_line.as_ref()?;
+    // Strictly crosses zero — avoids drawing when data is all-positive and the
+    // axis simply starts at 0, which is the most common case.
+    if !(domain.0 < 0.0 && domain.1 > 0.0) {
+        return None;
+    }
+    if is_horizontal {
+        // Numeric scale runs along x: (domain -> 0..inner_width)
+        let scale = ScaleLinear::new(domain, (0.0, inner_width));
+        let x = scale.map(0.0);
+        Some(ChartElement::Line {
+            x1: x,
+            y1: 0.0,
+            x2: x,
+            y2: inner_height,
+            stroke: spec.color.clone(),
+            stroke_width: Some(spec.width as f64),
+            stroke_dasharray: None,
+            class: "zero-line".to_string(),
+        })
+    } else {
+        // Numeric scale runs along y: (domain -> inner_height..0)
+        let scale = ScaleLinear::new(domain, (inner_height, 0.0));
+        let y = scale.map(0.0);
+        Some(ChartElement::Line {
+            x1: 0.0,
+            y1: y,
+            x2: inner_width,
+            y2: y,
+            stroke: spec.color.clone(),
+            stroke_width: Some(spec.width as f64),
+            stroke_dasharray: None,
+            class: "zero-line".to_string(),
+        })
+    }
+}
+
 /// Grid line configuration resolved from the spec.
 #[derive(Debug, Clone)]
 pub struct GridConfig {
@@ -1309,6 +1372,93 @@ mod tick_tests {
     fn d3_ticks_single_on_equal_bounds() {
         let ticks = d3_ticks(50.0, 50.0, 5);
         assert_eq!(ticks, vec![50.0]);
+    }
+}
+
+#[cfg(test)]
+mod zero_line_tests {
+    use super::emit_zero_line_if_crosses;
+    use chartml_core::element::ChartElement;
+    use chartml_core::theme::{Theme, ZeroLineSpec};
+
+    fn themed(spec: Option<ZeroLineSpec>) -> Theme {
+        Theme { zero_line: spec, ..Theme::default() }
+    }
+
+    #[test]
+    fn none_when_theme_zero_line_is_none() {
+        let theme = themed(None);
+        // Even with a crossing domain, no element should be emitted.
+        assert!(emit_zero_line_if_crosses(&theme, (-5.0, 10.0), 400.0, 300.0, false).is_none());
+        assert!(emit_zero_line_if_crosses(&theme, (-5.0, 10.0), 400.0, 300.0, true).is_none());
+    }
+
+    #[test]
+    fn none_when_domain_all_positive() {
+        let theme = themed(Some(ZeroLineSpec { color: "#ff0000".into(), width: 1.5 }));
+        // Domain starts AT zero (non-strict) — per plan, we draw only when strictly crossing.
+        assert!(emit_zero_line_if_crosses(&theme, (0.0, 10.0), 400.0, 300.0, false).is_none());
+        // Fully positive
+        assert!(emit_zero_line_if_crosses(&theme, (1.0, 3.0), 400.0, 300.0, false).is_none());
+    }
+
+    #[test]
+    fn none_when_domain_all_negative() {
+        let theme = themed(Some(ZeroLineSpec { color: "#ff0000".into(), width: 1.5 }));
+        assert!(emit_zero_line_if_crosses(&theme, (-10.0, -1.0), 400.0, 300.0, false).is_none());
+        // Domain ends AT zero (non-strict)
+        assert!(emit_zero_line_if_crosses(&theme, (-10.0, 0.0), 400.0, 300.0, false).is_none());
+    }
+
+    #[test]
+    fn vertical_emits_horizontal_line_at_value_zero() {
+        let theme = themed(Some(ZeroLineSpec { color: "#ff0000".into(), width: 1.5 }));
+        let el = emit_zero_line_if_crosses(&theme, (-5.0, 10.0), 400.0, 300.0, false)
+            .expect("should emit when domain crosses zero");
+        match el {
+            ChartElement::Line {
+                x1, y1, x2, y2, stroke, stroke_width, stroke_dasharray, class,
+            } => {
+                // Spans the full plot width
+                assert_eq!(x1, 0.0);
+                assert_eq!(x2, 400.0);
+                // Horizontal (y1 == y2)
+                assert!((y1 - y2).abs() < 1e-9);
+                // Value 0 on a domain (-5..10) mapped to (inner_height..0):
+                // scale(0) = 300 * (10 - 0) / (10 - (-5)) = 300 * 10/15 = 200
+                assert!((y1 - 200.0).abs() < 1e-6, "expected y=200, got {}", y1);
+                assert_eq!(stroke, "#ff0000");
+                assert_eq!(stroke_width, Some(1.5));
+                assert_eq!(stroke_dasharray, None);
+                assert_eq!(class, "zero-line");
+            }
+            other => panic!("expected ChartElement::Line, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn horizontal_emits_vertical_line_at_value_zero() {
+        let theme = themed(Some(ZeroLineSpec { color: "#00ff00".into(), width: 2.0 }));
+        let el = emit_zero_line_if_crosses(&theme, (-5.0, 15.0), 400.0, 300.0, true)
+            .expect("should emit for horizontal orientation");
+        match el {
+            ChartElement::Line {
+                x1, y1, x2, y2, stroke, stroke_width, class, ..
+            } => {
+                // Spans the full plot height
+                assert_eq!(y1, 0.0);
+                assert_eq!(y2, 300.0);
+                // Vertical (x1 == x2)
+                assert!((x1 - x2).abs() < 1e-9);
+                // Value 0 on domain (-5..15) mapped to (0..400):
+                // scale(0) = 400 * (0 - (-5)) / (15 - (-5)) = 400 * 5/20 = 100
+                assert!((x1 - 100.0).abs() < 1e-6, "expected x=100, got {}", x1);
+                assert_eq!(stroke, "#00ff00");
+                assert_eq!(stroke_width, Some(2.0));
+                assert_eq!(class, "zero-line");
+            }
+            other => panic!("expected ChartElement::Line, got {:?}", other),
+        }
     }
 }
 

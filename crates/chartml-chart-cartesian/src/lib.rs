@@ -1063,4 +1063,191 @@ style:
         assert_eq!(vx, 0, "None: no grid-line-x expected, got {}", vx);
         assert_eq!(hy, 0, "None: no grid-line-y expected, got {}", hy);
     }
+
+    // ----- Phase 7: zero-line wiring -----
+
+    fn make_bar_data_crossing_zero() -> DataTable {
+        let rows = vec![
+            [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(-5))].into_iter().collect(),
+            [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(0))].into_iter().collect(),
+            [("month".to_string(), json!("Mar")), ("revenue".to_string(), json!(10))].into_iter().collect(),
+        ];
+        DataTable::from_rows(&rows).unwrap()
+    }
+
+    fn count_zero_lines(el: &ChartElement) -> usize {
+        count_elements(el, &|e| {
+            matches!(e, ChartElement::Line { class, .. } if class.split_whitespace().any(|c| c == "zero-line"))
+        })
+    }
+
+    /// With the default theme (`zero_line: None`), no zero-line element must
+    /// ever be emitted — even when the data range obviously crosses zero.
+    #[test]
+    fn phase7_default_theme_emits_no_zero_line() {
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data_crossing_zero();
+        let config = make_bar_config();
+        let element = renderer.render(&data, &config).unwrap();
+        assert_eq!(count_zero_lines(&element), 0, "default theme must not emit zero-line");
+    }
+
+    /// With a non-default `zero_line` spec AND data that strictly crosses zero,
+    /// exactly one `zero-line` Line must be emitted with the spec'd color/width.
+    #[test]
+    fn phase7_bar_crossing_zero_emits_one_zero_line() {
+        use chartml_core::theme::{Theme, ZeroLineSpec};
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data_crossing_zero();
+        let mut config = make_bar_config();
+        config.theme = Theme {
+            zero_line: Some(ZeroLineSpec { color: "#ff0000".into(), width: 1.5 }),
+            ..Theme::default()
+        };
+
+        let element = renderer.render(&data, &config).unwrap();
+        assert_eq!(count_zero_lines(&element), 1, "expected exactly one zero-line");
+
+        // Verify the emitted element has the configured stroke + width.
+        fn find_zero_line(el: &ChartElement) -> Option<(String, Option<f64>)> {
+            match el {
+                ChartElement::Line { class, stroke, stroke_width, .. }
+                    if class.split_whitespace().any(|c| c == "zero-line") =>
+                {
+                    Some((stroke.clone(), *stroke_width))
+                }
+                ChartElement::Group { children, .. } | ChartElement::Svg { children, .. } => {
+                    children.iter().find_map(find_zero_line)
+                }
+                _ => None,
+            }
+        }
+        let (stroke, width) = find_zero_line(&element).expect("zero-line present");
+        assert_eq!(stroke, "#ff0000");
+        assert_eq!(width, Some(1.5));
+    }
+
+    /// Horizontal bar parity: crossing-zero data + non-default zero_line must
+    /// emit exactly one zero-line, and for a horizontal bar chart (numeric axis
+    /// is x) that line must run vertically — x1 == x2 and y1 != y2.
+    #[test]
+    fn phase7_horizontal_bar_crossing_zero_emits_one_zero_line() {
+        use chartml_core::theme::{Theme, ZeroLineSpec};
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data_crossing_zero();
+        let viz: VisualizeSpec = serde_yaml::from_str(r#"
+            type: bar
+            orientation: horizontal
+            columns: month
+            rows: revenue
+        "#).unwrap();
+        let config = ChartConfig {
+            visualize: viz,
+            title: Some("Test Horizontal Bar".to_string()),
+            width: 800.0,
+            height: 400.0,
+            colors: vec!["#2E7D9A".to_string()],
+            theme: Theme {
+                zero_line: Some(ZeroLineSpec { color: "#ff0000".into(), width: 1.5 }),
+                ..Theme::default()
+            },
+        };
+
+        let element = renderer.render(&data, &config).unwrap();
+        assert_eq!(count_zero_lines(&element), 1, "expected exactly one zero-line");
+
+        // Find the emitted zero-line Line and assert it runs vertically with
+        // the spec'd stroke + width.
+        struct ZeroLineGeom {
+            x1: f64,
+            y1: f64,
+            x2: f64,
+            y2: f64,
+            stroke: String,
+            stroke_width: Option<f64>,
+        }
+        fn find_zero_line_geom(el: &ChartElement) -> Option<ZeroLineGeom> {
+            match el {
+                ChartElement::Line { class, x1, y1, x2, y2, stroke, stroke_width, .. }
+                    if class.split_whitespace().any(|c| c == "zero-line") =>
+                {
+                    Some(ZeroLineGeom {
+                        x1: *x1,
+                        y1: *y1,
+                        x2: *x2,
+                        y2: *y2,
+                        stroke: stroke.clone(),
+                        stroke_width: *stroke_width,
+                    })
+                }
+                ChartElement::Group { children, .. } | ChartElement::Svg { children, .. } => {
+                    children.iter().find_map(find_zero_line_geom)
+                }
+                _ => None,
+            }
+        }
+        let ZeroLineGeom { x1, y1, x2, y2, stroke, stroke_width: width } =
+            find_zero_line_geom(&element).expect("zero-line present");
+        assert!(
+            (x1 - x2).abs() < f64::EPSILON,
+            "horizontal-bar zero-line must be vertical: x1={x1} x2={x2}",
+        );
+        assert!(
+            (y1 - y2).abs() > f64::EPSILON,
+            "horizontal-bar zero-line must have non-zero height: y1={y1} y2={y2}",
+        );
+        assert_eq!(stroke, "#ff0000");
+        assert_eq!(width, Some(1.5));
+    }
+
+    /// With a non-default `zero_line` spec BUT data entirely positive (so the
+    /// domain floor is 0 and doesn't strictly cross zero), no zero-line is emitted.
+    #[test]
+    fn phase7_bar_all_positive_emits_no_zero_line() {
+        use chartml_core::theme::{Theme, ZeroLineSpec};
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data(); // values: 100, 200, 150 — all positive
+        let mut config = make_bar_config();
+        config.theme = Theme {
+            zero_line: Some(ZeroLineSpec { color: "#ff0000".into(), width: 1.5 }),
+            ..Theme::default()
+        };
+
+        let element = renderer.render(&data, &config).unwrap();
+        assert_eq!(
+            count_zero_lines(&element),
+            0,
+            "all-positive data must not emit a zero-line",
+        );
+    }
+
+    /// Line chart parity: crossing-zero data + non-default zero_line emits one line.
+    #[test]
+    fn phase7_line_crossing_zero_emits_one_zero_line() {
+        use chartml_core::theme::{Theme, ZeroLineSpec};
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data_crossing_zero();
+        let mut config = make_line_config();
+        config.theme = Theme {
+            zero_line: Some(ZeroLineSpec { color: "#00ff00".into(), width: 2.0 }),
+            ..Theme::default()
+        };
+        let element = renderer.render(&data, &config).unwrap();
+        assert_eq!(count_zero_lines(&element), 1);
+    }
+
+    /// Area chart parity: crossing-zero data + non-default zero_line emits one line.
+    #[test]
+    fn phase7_area_crossing_zero_emits_one_zero_line() {
+        use chartml_core::theme::{Theme, ZeroLineSpec};
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data_crossing_zero();
+        let mut config = make_area_config();
+        config.theme = Theme {
+            zero_line: Some(ZeroLineSpec { color: "#0000ff".into(), width: 1.0 }),
+            ..Theme::default()
+        };
+        let element = renderer.render(&data, &config).unwrap();
+        assert_eq!(count_zero_lines(&element), 1);
+    }
 }

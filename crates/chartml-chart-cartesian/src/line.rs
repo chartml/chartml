@@ -11,7 +11,7 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
 use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
 
-use crate::helpers::{GridConfig, LegendMark, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend_with_mark, get_color_field, get_field_name, get_x_format, get_y_format, nice_domain, offset_element};
+use crate::helpers::{GridConfig, LegendMark, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend_with_mark, get_color_field, get_field_name, get_x_format, get_y_format, nice_domain, offset_element};
 
 pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
@@ -264,6 +264,18 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             .into_iter()
             .map(|e| offset_element(e, 0.0, margins.top)),
     );
+    // Zero-line (Phase 7): emitted after the y-axis grid lines so the line
+    // series paints over it. No-op when theme.zero_line is None (default) or
+    // when the domain doesn't strictly cross zero.
+    if let Some(zl) = emit_zero_line_if_crosses(
+        &config.theme,
+        (domain_min, domain_max),
+        inner_width,
+        inner_height,
+        false,
+    ) {
+        axis_elements.push(offset_element(zl, margins.left, margins.top));
+    }
 
     // Right axis — ticks and labels on the right side
     if let Some(ref rs) = right_scale {

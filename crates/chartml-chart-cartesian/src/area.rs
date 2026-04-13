@@ -11,7 +11,7 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
 
 use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
 
-use crate::helpers::{GridConfig, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{GridConfig, emit_zero_line_if_crosses, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     let category_field = get_field_name(&config.visualize.columns)?;
@@ -264,6 +264,20 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                             .into_iter()
                             .map(|e| offset_element(e, 0.0, margins.top)),
                     );
+                    // Zero-line (Phase 7): stacked area anchors value_min=0.0
+                    // (see lines 145/154 above), so the domain never strictly
+                    // crosses zero and this call is a no-op — kept for
+                    // consistency so every cartesian render path flows through
+                    // the same helper.
+                    if let Some(zl) = emit_zero_line_if_crosses(
+                        &config.theme,
+                        (value_min, value_max),
+                        inner_width,
+                        inner_height,
+                        false,
+                    ) {
+                        axes.push(offset_element(zl, margins.left, margins.top));
+                    }
                     axes
                 },
             });
@@ -394,6 +408,16 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                             .into_iter()
                             .map(|e| offset_element(e, 0.0, margins.top)),
                     );
+                    // Zero-line (Phase 7): multi-series non-stacked area.
+                    if let Some(zl) = emit_zero_line_if_crosses(
+                        &config.theme,
+                        (value_min, value_max),
+                        inner_width,
+                        inner_height,
+                        false,
+                    ) {
+                        axes.push(offset_element(zl, margins.left, margins.top));
+                    }
                     axes
                 },
             });
@@ -533,6 +557,16 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                         .into_iter()
                         .map(|e| offset_element(e, 0.0, margins.top)),
                 );
+                // Zero-line (Phase 7): single-series area path.
+                if let Some(zl) = emit_zero_line_if_crosses(
+                    &config.theme,
+                    (value_min, value_max),
+                    inner_width,
+                    inner_height,
+                    false,
+                ) {
+                    axes.push(offset_element(zl, margins.left, margins.top));
+                }
                 axes
             },
         });
