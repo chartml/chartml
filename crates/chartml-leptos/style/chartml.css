@@ -29,6 +29,64 @@
 .chartml-scatter-point { stroke: var(--chartml-bg, #ffffff); }
 .chartml-pie-slice { stroke: var(--chartml-bg, #ffffff); }
 
+/* ── Theme hook variables (typography, shape) ──
+ *
+ * This block is the browser-side contract for the theme hooks landed in
+ * chartml_core::theme::Theme. SVG emission already writes inline presentation
+ * attributes carrying the Theme values, but presentation attributes lose to
+ * CSS cascade — so a naive `var(--x, <default>)` fallback would clobber any
+ * non-default Theme value whenever the consumer hasn't mirrored it as a CSS
+ * custom property.
+ *
+ * Strategy: use `revert` as the fallback. When the custom property is unset,
+ * `revert` defers to the SVG presentation attribute (which the renderer
+ * emits directly from Theme), keeping SSR and browser rendering in sync
+ * without forcing consumers to mirror every Theme field as a CSS variable.
+ * When the consumer *does* set the custom property, their override wins.
+ *
+ * Consumers override any property on a parent element, e.g.
+ *     .dark .chartml-chart { --chartml-series-line-weight: 3px; }
+ *
+ * Browser support: `revert` is Chrome ≥84, Firefox ≥67, Safari ≥9.1 — all
+ * modern browsers.
+ *
+ * dot-halo and zero-line are intentionally absent from this contract:
+ * they are opt-in via Rust Theme (dot_halo_color / zero_line Options), the
+ * renderer only emits these elements when configured, and the inline SVG
+ * attributes are the single source of truth. Defining CSS variables for
+ * them would risk cascade-masking the inline stroke/width values.
+ */
+.chart-title {
+    font-family: var(--chartml-title-font, revert);
+    font-size: var(--chartml-title-font-size, revert);
+    font-weight: var(--chartml-title-font-weight, revert);
+    font-style: var(--chartml-title-font-style, revert);
+}
+.axis-label {
+    font-family: var(--chartml-label-font, revert);
+    font-size: var(--chartml-label-font-size, revert);
+    font-weight: var(--chartml-label-font-weight, revert);
+    letter-spacing: var(--chartml-label-letter-spacing, revert);
+    text-transform: var(--chartml-label-text-transform, revert);
+}
+.tick-value {
+    font-family: var(--chartml-numeric-font, revert);
+    font-size: var(--chartml-numeric-font-size, revert);
+    /* tabular-nums is intentionally unconditional: numeric tick alignment
+     * relies on fixed-width digits regardless of consumer theme overrides. */
+    font-variant-numeric: tabular-nums;
+}
+.legend-label {
+    font-family: var(--chartml-legend-font, revert);
+    font-size: var(--chartml-legend-font-size, revert);
+    font-weight: var(--chartml-legend-font-weight, revert);
+}
+/* Shape rules: `revert` defers to the inline SVG presentation attribute
+ * (emitted by the renderer from Theme) when the CSS variable is unset. */
+.series-line { stroke-width: var(--chartml-series-line-weight, revert); }
+.bar-rect    { rx: var(--chartml-bar-corner-radius, revert); ry: var(--chartml-bar-corner-radius, revert); }
+.dot-marker  { r: var(--chartml-dot-radius, revert); }
+
 /* ── Bar entrance ── */
 .bars rect,
 .bar {
