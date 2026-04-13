@@ -1666,6 +1666,7 @@ pub fn generate_annotations(
                 ry: None,
                 class: "annotation-band".to_string(),
                 data: None,
+                animation_origin: None,
             });
 
             if let Some(ref label) = ann.label {

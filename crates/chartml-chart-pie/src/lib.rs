@@ -77,6 +77,7 @@ impl ChartRenderer for PieRenderer {
                 opacity: None,
                 class: "chartml-pie-slice".to_string(),
                 data: Some(data),
+                animation_origin: None,
             });
         }
 
@@ -116,6 +117,7 @@ impl ChartRenderer for PieRenderer {
                 ry: None,
                 class: "legend-symbol".to_string(),
                 data: None,
+                animation_origin: None,
             });
             // Label text
             let ts = TextStyle::for_role(&config.theme, TextRole::LegendLabel);

@@ -415,6 +415,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                             opacity: Some(fill_opacity),
                             class: "range-area".to_string(),
                             data: None,
+                            animation_origin: None,
                         });
                     }
                 }
@@ -480,6 +481,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     opacity: None,
                     class: "chartml-line-path series-line".to_string(),
                     data: Some(ElementData::new(&label, "").with_series(&label)),
+                    animation_origin: None,
                 });
             }
 
@@ -599,6 +601,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     opacity: None,
                     class: "chartml-line-path series-line".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
+                    animation_origin: None,
                 });
             }
 
@@ -678,6 +681,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     opacity: None,
                     class: "chartml-line-path series-line".to_string(),
                     data: None,
+                    animation_origin: None,
                 });
             }
 

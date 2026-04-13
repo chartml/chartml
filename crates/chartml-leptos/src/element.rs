@@ -38,7 +38,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             }.into_any()
         }
 
-        ChartElement::Rect { x, y, width, height, fill, stroke, rx, ry, class, data } => {
+        ChartElement::Rect { x, y, width, height, fill, stroke, rx, ry, class, data, animation_origin } => {
             let x_str = x.to_string();
             let y_str = y.to_string();
             let w_str = width.to_string();
@@ -48,15 +48,19 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             let rx_str = rx.map(|v| v.to_string()).unwrap_or_default();
             let ry_str = ry.map(|v| v.to_string()).unwrap_or_default();
             let class = class.clone();
-            // Bar animation: transform-origin depends on orientation.
-            // Horizontal bars (wider than tall): left-center for scaleX.
-            // Vertical bars: bottom-center for scaleY.
-            let (origin_x, origin_y) = if width > height {
-                (*x, y + height / 2.0)
-            } else {
-                (x + width / 2.0, y + height)
+            // Animation origin comes from the emission layer (see
+            // `bar_animation_origin` in chartml-chart-cartesian/src/bar.rs).
+            // The renderer no longer tries to guess orientation from
+            // width-vs-height — that heuristic was wrong for square bars
+            // and for every negative-value bar. Non-bar Rects leave the
+            // field `None`, in which case we emit no inline style and let
+            // the CSS default in `chartml.css` (`.bar { transform-origin:
+            // 50% 100%; }`) cover the common vertical-positive case as a
+            // safety net.
+            let base_style = match animation_origin {
+                Some((ox, oy)) => format!("transform-origin: {}px {}px;", ox, oy),
+                None => String::new(),
             };
-            let base_style = format!("transform-origin: {}px {}px;", origin_x, origin_y);
 
             if let Some(data) = data.clone() {
                 render_interactive(
@@ -81,7 +85,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             }
         }
 
-        ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, opacity, class, data } => {
+        ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, opacity, class, data, animation_origin } => {
             let d = d.clone();
             let fill_str = fill.clone().unwrap_or_else(|| "none".to_string());
             let stroke_str = stroke.clone().unwrap_or_else(|| "none".to_string());
@@ -89,6 +93,16 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             let sda = stroke_dasharray.clone().unwrap_or_default();
             let op = opacity.map(|o| o.to_string()).unwrap_or_default();
             let class = class.clone();
+            // Top-rounded bars are emitted as `Path` (SVG <rect> can't
+            // round only two corners). `build_bar_element` populates
+            // `animation_origin` with the bar's baseline anchor so the
+            // entrance animation grows from the axis outward instead of
+            // the path's geometric center. All non-bar Paths leave the
+            // field `None` → no inline style emitted.
+            let base_style = match animation_origin {
+                Some((ox, oy)) => format!("transform-origin: {}px {}px;", ox, oy),
+                None => String::new(),
+            };
 
             if let Some(data) = data.clone() {
                 render_interactive(
@@ -96,9 +110,10 @@ pub fn render_element(element: &ChartElement) -> AnyView {
                         <path
                             d=d fill=fill_str stroke=stroke_str
                             stroke-width=sw stroke-dasharray=sda opacity=op class=class
+                            style=base_style.clone()
                         />
                     }.into_any(),
-                    String::new(),
+                    base_style,
                     data,
                 )
             } else {
@@ -106,6 +121,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
                     <path
                         d=d fill=fill_str stroke=stroke_str
                         stroke-width=sw stroke-dasharray=sda opacity=op class=class
+                        style=base_style
                     />
                 }.into_any()
             }

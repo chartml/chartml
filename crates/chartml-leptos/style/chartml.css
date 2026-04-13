@@ -87,10 +87,22 @@
 .bar-rect    { rx: var(--chartml-bar-corner-radius, revert); ry: var(--chartml-bar-corner-radius, revert); }
 .dot-marker  { r: var(--chartml-dot-radius, revert); }
 
-/* ── Bar entrance ── */
+/* ── Bar entrance ──
+ *
+ * Belt-and-braces default: every `.bar` (Rect or Path) animates from
+ * bottom-center, which is the correct anchor for the ~90% case
+ * (vertical positive bars). Horizontal and negative bars are handled by
+ * the inline `style="transform-origin: ..."` emitted by `build_bar_element`
+ * in chartml-chart-cartesian/src/bar.rs (consumed by `chartml-leptos/src/element.rs`).
+ * Inline styles win over class rules in the cascade, so the per-bar value
+ * always overrides this default when present. If a future emission site
+ * forgets to populate `animation_origin`, this default at least keeps the
+ * common case looking right instead of growing-from-center.
+ */
 .bars rect,
 .bar {
     animation: chartml-bar-grow 400ms ease-out both;
+    transform-origin: 50% 100%;
     opacity: 0.9;
     transition: opacity 200ms ease, stroke 200ms ease, stroke-width 200ms ease;
     stroke: transparent;

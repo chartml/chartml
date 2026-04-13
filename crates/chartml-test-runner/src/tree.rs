@@ -34,7 +34,7 @@ pub fn element_to_json(element: &ChartElement) -> Value {
             })
         }
 
-        ChartElement::Rect { x, y, width, height, fill, stroke, rx, ry, class, data } => {
+        ChartElement::Rect { x, y, width, height, fill, stroke, rx, ry, class, data, animation_origin: _ } => {
             json!({
                 "type": "rect",
                 "x": x,
@@ -50,7 +50,7 @@ pub fn element_to_json(element: &ChartElement) -> Value {
             })
         }
 
-        ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, opacity, class, data } => {
+        ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, opacity, class, data, animation_origin: _ } => {
             json!({
                 "type": "path",
                 "d": d,

@@ -39,6 +39,15 @@ pub enum ChartElement {
         ry: Option<f64>,
         class: String,
         data: Option<ElementData>,
+        /// CSS `transform-origin` anchor for entrance animations, in the
+        /// element's own coordinate space (absolute SVG coords). Populated
+        /// by bar emission sites in `chartml-chart-cartesian/src/bar.rs` so
+        /// the renderer never has to guess orientation/sign. `None` for
+        /// every non-bar Rect — the renderer falls back to its legacy
+        /// behavior, preserving byte-identical SVG output for all
+        /// pre-existing baselines (see `backward_compat_goldens_byte_identical`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        animation_origin: Option<(f64, f64)>,
     },
     #[serde(rename_all = "camelCase")]
     Path {
@@ -50,6 +59,12 @@ pub enum ChartElement {
         opacity: Option<f64>,
         class: String,
         data: Option<ElementData>,
+        /// See [`ChartElement::Rect::animation_origin`]. Populated by
+        /// `build_bar_element` for top-rounded bars (`BarCornerRadius::Top`),
+        /// which are emitted as `Path` instead of `Rect` because SVG `<rect>`
+        /// can't round only two corners. `None` for every other Path.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        animation_origin: Option<(f64, f64)>,
     },
     Circle {
         cx: f64,
@@ -446,6 +461,7 @@ pub fn emit_dot_halo_if_enabled(
         opacity: None,
         class: "dot-halo".to_string(),
         data: None,
+        animation_origin: None,
     })
 }
 
@@ -524,12 +540,14 @@ mod tests {
                             fill: "red".to_string(), stroke: None,
                             rx: None, ry: None,
                             class: "bar".to_string(), data: None,
+                            animation_origin: None,
                         },
                         ChartElement::Rect {
                             x: 60.0, y: 0.0, width: 50.0, height: 150.0,
                             fill: "blue".to_string(), stroke: None,
                             rx: None, ry: None,
                             class: "bar".to_string(), data: None,
+                            animation_origin: None,
                         },
                     ],
                 },
@@ -579,6 +597,7 @@ mod tests {
                             data: Some(
                                 ElementData::new("Jan", "1234").with_series("Revenue"),
                             ),
+                            animation_origin: None,
                         },
                         ChartElement::Path {
                             d: "M0,0 L10,10".to_string(),
@@ -589,6 +608,7 @@ mod tests {
                             opacity: Some(0.8),
                             class: "line".to_string(),
                             data: None,
+                            animation_origin: None,
                         },
                     ],
                 },

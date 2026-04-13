@@ -254,6 +254,7 @@ pub fn generate_legend_elements(
                     ry: None,
                     class: "legend-symbol".to_string(),
                     data: None,
+                    animation_origin: None,
                 });
             }
         }

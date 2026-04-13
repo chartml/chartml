@@ -9,7 +9,7 @@ mod line;
 mod area;
 pub(crate) mod helpers;
 
-pub use bar::render_bar;
+pub use bar::{bar_animation_origin, render_bar};
 pub use line::render_line;
 pub use area::render_area;
 

@@ -873,3 +873,330 @@ fn phase11_kyomi_typography_no_overlap_pie() {
     let boxes = collect_text_boxes(&el);
     assert_no_overlap_within_group("pie", &boxes);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 12 — bar entrance-animation origin under the Kyomi theme.
+//
+// Kyomi sets `BarCornerRadius::Top(2.0)`, which makes `build_bar_element`
+// emit bars as `ChartElement::Path` (since SVG `<rect>` cannot round only two
+// corners). Before this change, `chartml-leptos/src/element.rs` only computed
+// `transform-origin` for the `Rect` branch (with a buggy `width > height`
+// heuristic) and emitted nothing for `Path` — so every Kyomi bar animated
+// growing from the path's geometric center instead of the baseline.
+//
+// The fix is at the emission layer: `build_bar_element` populates
+// `animation_origin` with the correct anchor for every shape variant, and
+// every renderer just applies the value verbatim. These tests pin that
+// contract end-to-end across all Kyomi bar fixtures.
+// ---------------------------------------------------------------------------
+
+const KYOMI_BAR_POSITIVE_VERTICAL_YAML: &str = r#"
+type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - month: "Jan"
+      v: 10
+    - month: "Feb"
+      v: 25
+    - month: "Mar"
+      v: 18
+visualize:
+  type: bar
+  columns: month
+  rows: v
+"#;
+
+const KYOMI_BAR_NEGATIVE_VERTICAL_YAML: &str = r#"
+type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - month: "Jan"
+      v: -8
+    - month: "Feb"
+      v: -15
+    - month: "Mar"
+      v: -3
+visualize:
+  type: bar
+  columns: month
+  rows: v
+"#;
+
+const KYOMI_BAR_HORIZONTAL_YAML: &str = r#"
+type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - region: "North"
+      v: 12
+    - region: "South"
+      v: 24
+    - region: "East"
+      v: 18
+visualize:
+  type: bar
+  orientation: horizontal
+  columns: region
+  rows: v
+"#;
+
+const KYOMI_BAR_GROUPED_YAML: &str = r#"
+type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - month: "Jan"
+      product: "A"
+      v: 10
+    - month: "Jan"
+      product: "B"
+      v: 6
+    - month: "Feb"
+      product: "A"
+      v: 14
+    - month: "Feb"
+      product: "B"
+      v: 8
+visualize:
+  type: bar
+  mode: grouped
+  columns: month
+  rows: v
+  marks:
+    color: product
+"#;
+
+const KYOMI_BAR_STACKED_YAML: &str = r#"
+type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - month: "Jan"
+      product: "A"
+      v: 10
+    - month: "Jan"
+      product: "B"
+      v: 6
+    - month: "Feb"
+      product: "A"
+      v: 14
+    - month: "Feb"
+      product: "B"
+      v: 8
+visualize:
+  type: bar
+  mode: stacked
+  columns: month
+  rows: v
+  marks:
+    color: product
+"#;
+
+/// `(x, y, w, h, animation_origin, tag)` for one bar element.
+type BarSample = (f64, f64, f64, f64, Option<(f64, f64)>, &'static str);
+
+/// Pull every bar's `(x, y, w, h, animation_origin)` tuple out of the tree
+/// for elements whose class contains `bar-rect`, regardless of whether the
+/// emitter chose `Rect` or `Path`.
+fn collect_bar_animation_origins(el: &ChartElement) -> Vec<BarSample> {
+    fn walk(el: &ChartElement, out: &mut Vec<BarSample>) {
+        match el {
+            ChartElement::Rect { x, y, width, height, class, animation_origin, .. }
+                if has_class(class, "bar-rect") =>
+            {
+                out.push((*x, *y, *width, *height, *animation_origin, "rect"));
+            }
+            ChartElement::Path { class, animation_origin, d, .. }
+                if has_class(class, "bar-rect") =>
+            {
+                // Recover the bar's bounding box from the path `d` string
+                // by walking the SVG path command stream. The bounding box
+                // of all M/L points and arc destinations equals the bar's
+                // own rect (every bar-path traces all four extents).
+                let (mut min_x, mut min_y) = (f64::INFINITY, f64::INFINITY);
+                let (mut max_x, mut max_y) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+                let toks: Vec<&str> = d.split_ascii_whitespace().collect();
+                let mut i = 0;
+                while i < toks.len() {
+                    let t = toks[i];
+                    let push = |xs: &str, ys: &str,
+                                mnx: &mut f64, mny: &mut f64,
+                                mxx: &mut f64, mxy: &mut f64| {
+                        if let (Ok(x), Ok(y)) = (xs.parse::<f64>(), ys.parse::<f64>()) {
+                            if x < *mnx { *mnx = x; }
+                            if y < *mny { *mny = y; }
+                            if x > *mxx { *mxx = x; }
+                            if y > *mxy { *mxy = y; }
+                        }
+                    };
+                    match t {
+                        "M" | "L" => {
+                            if let Some((xs, ys)) = toks[i + 1].split_once(',') {
+                                push(xs, ys, &mut min_x, &mut min_y, &mut max_x, &mut max_y);
+                            }
+                            i += 2;
+                        }
+                        "A" => {
+                            // A rx,ry x-axis-rotation large-arc sweep x,y
+                            if let Some((xs, ys)) = toks[i + 5].split_once(',') {
+                                push(xs, ys, &mut min_x, &mut min_y, &mut max_x, &mut max_y);
+                            }
+                            i += 6;
+                        }
+                        _ => i += 1,
+                    }
+                }
+                out.push((min_x, min_y, max_x - min_x, max_y - min_y, *animation_origin, "path"));
+            }
+            ChartElement::Svg { children, .. }
+            | ChartElement::Group { children, .. }
+            | ChartElement::Div { children, .. } => {
+                for c in children {
+                    walk(c, out);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(el, &mut out);
+    out
+}
+
+fn assert_origin_matches_baseline(
+    fixture_name: &str,
+    bars: &[BarSample],
+    expected: impl Fn(f64, f64, f64, f64) -> (f64, f64),
+) {
+    assert!(
+        !bars.is_empty(),
+        "{fixture_name}: expected at least one bar-rect element"
+    );
+    for (x, y, w, h, origin, tag) in bars {
+        // Skip degenerate zero-dimension bars (e.g. the literal value-zero
+        // category in the crosses-zero fixture); they collapse to plain
+        // Rects with no useful baseline anyway.
+        if *w <= 0.0 || *h <= 0.0 {
+            continue;
+        }
+        let origin = origin.unwrap_or_else(|| {
+            panic!(
+                "{fixture_name}: bar (tag={tag}) at x={x} y={y} w={w} h={h} \
+                 has animation_origin == None — every bar emission site must \
+                 populate it (see build_bar_element in chartml-chart-cartesian/src/bar.rs)"
+            )
+        });
+        let (ex, ey) = expected(*x, *y, *w, *h);
+        let dx = (origin.0 - ex).abs();
+        let dy = (origin.1 - ey).abs();
+        assert!(
+            dx < 1e-6 && dy < 1e-6,
+            "{fixture_name}: bar (tag={tag}) at x={x} y={y} w={w} h={h} \
+             expected origin ({ex}, {ey}), got ({}, {})",
+            origin.0, origin.1
+        );
+    }
+}
+
+#[test]
+fn phase12_kyomi_bar_origin_positive_vertical() {
+    let el = render_with_kyomi(KYOMI_BAR_POSITIVE_VERTICAL_YAML);
+    let bars = collect_bar_animation_origins(&el);
+    // Vertical positive: bottom-center
+    assert_origin_matches_baseline("positive_vertical", &bars, |x, y, w, h| {
+        (x + w / 2.0, y + h)
+    });
+}
+
+#[test]
+fn phase12_kyomi_bar_origin_negative_vertical() {
+    let el = render_with_kyomi(KYOMI_BAR_NEGATIVE_VERTICAL_YAML);
+    let bars = collect_bar_animation_origins(&el);
+    // Vertical negative: top-center (the rect sits BELOW the zero line, so
+    // the value-baseline is its top edge).
+    assert_origin_matches_baseline("negative_vertical", &bars, |x, y, w, _h| {
+        (x + w / 2.0, y)
+    });
+}
+
+#[test]
+fn phase12_kyomi_bar_origin_horizontal() {
+    let el = render_with_kyomi(KYOMI_BAR_HORIZONTAL_YAML);
+    let bars = collect_bar_animation_origins(&el);
+    // Horizontal positive: left-center
+    assert_origin_matches_baseline("horizontal", &bars, |x, y, _w, h| {
+        (x, y + h / 2.0)
+    });
+}
+
+#[test]
+fn phase12_kyomi_bar_origin_grouped() {
+    let el = render_with_kyomi(KYOMI_BAR_GROUPED_YAML);
+    let bars = collect_bar_animation_origins(&el);
+    assert_origin_matches_baseline("grouped", &bars, |x, y, w, h| {
+        (x + w / 2.0, y + h)
+    });
+}
+
+#[test]
+fn phase12_kyomi_bar_origin_stacked() {
+    let el = render_with_kyomi(KYOMI_BAR_STACKED_YAML);
+    let bars = collect_bar_animation_origins(&el);
+    assert_origin_matches_baseline("stacked", &bars, |x, y, w, h| {
+        (x + w / 2.0, y + h)
+    });
+}
+
+#[test]
+fn phase12_kyomi_bar_origin_crosses_zero() {
+    // The crosses-zero fixture mixes positive and negative values. We can't
+    // use a single closure here because the expected origin depends on each
+    // bar's sign (which we recover from the rect's vertical position
+    // relative to the chart's zero baseline). Instead, we simply assert
+    // every bar HAS Some origin and that the y component sits at one of the
+    // two valid baselines: y (top edge, negative) or y+h (bottom edge,
+    // positive). Either is correct depending on sign.
+    let el = render_with_kyomi(BAR_CROSSING_ZERO_YAML);
+    let bars = collect_bar_animation_origins(&el);
+    assert!(!bars.is_empty(), "crosses_zero: expected bars");
+    let mut saw_positive_anchor = false;
+    let mut saw_negative_anchor = false;
+    for (x, y, w, h, origin, tag) in &bars {
+        if *w <= 0.0 || *h <= 0.0 {
+            continue;
+        }
+        let (ox, oy) = origin.unwrap_or_else(|| {
+            panic!("crosses_zero: bar (tag={tag}) at x={x} y={y} w={w} h={h} has None origin")
+        });
+        // x component must be the rect's horizontal midline.
+        let ex = x + w / 2.0;
+        assert!(
+            (ox - ex).abs() < 1e-6,
+            "crosses_zero: x mismatch — expected {ex}, got {ox}"
+        );
+        // y component must be either y (negative bar → top edge) or y+h
+        // (positive bar → bottom edge).
+        let at_top = (oy - y).abs() < 1e-6;
+        let at_bottom = (oy - (y + h)).abs() < 1e-6;
+        assert!(
+            at_top || at_bottom,
+            "crosses_zero: y origin {oy} is neither top ({y}) nor bottom ({})",
+            y + h
+        );
+        if at_top {
+            saw_negative_anchor = true;
+        }
+        if at_bottom {
+            saw_positive_anchor = true;
+        }
+    }
+    assert!(saw_positive_anchor, "crosses_zero: expected at least one positive bar");
+    assert!(saw_negative_anchor, "crosses_zero: expected at least one negative bar");
+}

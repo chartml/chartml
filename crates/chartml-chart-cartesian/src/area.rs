@@ -209,6 +209,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     opacity: Some(0.6),
                     class: "chartml-area-path".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
+                    animation_origin: None,
                 });
 
                 // Stroke line along the top edge of the area
@@ -222,6 +223,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     opacity: None,
                     class: "chartml-line-path series-line".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
+                    animation_origin: None,
                 });
 
                 // Area charts do not show dots by default (matches JS reference behaviour)
@@ -354,6 +356,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     opacity: Some(0.6),
                     class: "chartml-area-path".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
+                    animation_origin: None,
                 });
 
                 // Stroke line along the top edge of the area
@@ -367,6 +370,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     opacity: None,
                     class: "chartml-line-path series-line".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
+                    animation_origin: None,
                 });
 
             }
@@ -505,6 +509,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 opacity: Some(0.6),
                 class: "chartml-area-path".to_string(),
                 data: None,
+                animation_origin: None,
             });
 
             // Stroke line along the top edge of the area
@@ -518,6 +523,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 opacity: None,
                 class: "chartml-line-path series-line".to_string(),
                 data: None,
+                animation_origin: None,
             });
 
             // Area charts do not show dots by default (matches JS reference behaviour)

@@ -39,6 +39,42 @@ pub(crate) struct BarRectSpec {
     pub data: Option<ElementData>,
 }
 
+/// Compute the CSS `transform-origin` anchor for a bar's entrance animation.
+///
+/// The anchor is the bar's value-baseline edge midpoint, in absolute SVG
+/// coordinates, so a `scaleX`/`scaleY` keyframe grows the bar from the axis
+/// outward toward its value end:
+///
+/// - vertical, positive value  → bottom-center  (grows up)
+/// - vertical, negative value  → top-center     (grows down)
+/// - horizontal, positive value → left-center   (grows right)
+/// - horizontal, negative value → right-center  (grows left)
+///
+/// Computing the anchor at emission time is essential: the renderer cannot
+/// recover orientation/sign from `<rect>`/`<path>` geometry alone (the
+/// historical `width > height` heuristic guessed wrong for square bars and
+/// for any negative bar). See `chartml-leptos/src/element.rs`, where the
+/// heuristic was deleted in favor of consuming this value.
+pub fn bar_animation_origin(
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    is_horizontal: bool,
+    is_negative: bool,
+) -> (f64, f64) {
+    match (is_horizontal, is_negative) {
+        // Vertical positive: rect spans [y, y+h]; baseline is y+h (bottom).
+        (false, false) => (x + width / 2.0, y + height),
+        // Vertical negative: rect spans [y, y+h] BELOW zero line; baseline is y (top).
+        (false, true) => (x + width / 2.0, y),
+        // Horizontal positive: rect spans [x, x+w]; baseline is x (left).
+        (true, false) => (x, y + height / 2.0),
+        // Horizontal negative: rect spans [x, x+w] LEFT of zero line; baseline is x+w (right).
+        (true, true) => (x + width, y + height / 2.0),
+    }
+}
+
 pub(crate) fn build_bar_element(
     spec: BarRectSpec,
     theme: &chartml_core::theme::Theme,
@@ -47,6 +83,7 @@ pub(crate) fn build_bar_element(
     let BarRectSpec {
         x, y, width, height, is_horizontal, is_negative, fill, class, data,
     } = spec;
+    let anim_origin = Some(bar_animation_origin(x, y, width, height, is_horizontal, is_negative));
 
     // Extract requested radius; short-circuit the zero case to emit a plain
     // Rect (byte-identical contract).
@@ -67,6 +104,7 @@ pub(crate) fn build_bar_element(
             ry: None,
             class,
             data,
+            animation_origin: anim_origin,
         };
     }
 
@@ -82,6 +120,7 @@ pub(crate) fn build_bar_element(
             ry: Some(radius),
             class,
             data,
+            animation_origin: anim_origin,
         };
     }
 
@@ -112,6 +151,7 @@ pub(crate) fn build_bar_element(
             ry: None,
             class,
             data,
+            animation_origin: anim_origin,
         };
     }
 
@@ -166,6 +206,7 @@ pub(crate) fn build_bar_element(
         opacity: None,
         class,
         data,
+        animation_origin: anim_origin,
     }
 }
 
@@ -1532,6 +1573,7 @@ fn render_combo(
                         opacity: None,
                         class: "chartml-line-path series-line".to_string(),
                         data: Some(ElementData::new(&label, "").with_series(&label)),
+                        animation_origin: None,
                     });
 
                     // Dots
@@ -1640,6 +1682,7 @@ fn render_combo(
                         fill: color.clone(), stroke: None,
                         rx: None, ry: None,
                         class: "legend-symbol".to_string(), data: None,
+                        animation_origin: None,
                     });
                 }
             }

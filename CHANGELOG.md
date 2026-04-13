@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.1.0] - unreleased (feat/theme-hooks branch)
 
+### Fixed
+
+- **Bar entrance animation grew from the wrong anchor under top-rounded and
+  square bars (third reintroduction of the same root cause).** The leptos
+  renderer (`chartml-leptos/src/element.rs`) and the SVG renderer were both
+  guessing orientation from a `width > height` heuristic and only computing
+  `transform-origin` for `ChartElement::Rect` — so any bar emitted as a
+  `ChartElement::Path` (top-rounded `BarCornerRadius::Top`, used by Kyomi)
+  animated growing from its geometric center, and any square or wider-than-
+  tall vertical bar animated as if horizontal. Fix moves the anchor
+  computation into the emission layer: `chartml_chart_cartesian::bar::
+  bar_animation_origin` now computes the correct baseline anchor per
+  orientation/sign (vertical+ → bottom-center, vertical- → top-center,
+  horizontal+ → left-center, horizontal- → right-center), and every bar
+  emission site in `build_bar_element` populates the new
+  `ChartElement::{Rect,Path}::animation_origin` field. The leptos renderer
+  applies the value verbatim; its old heuristic is deleted. The static SVG
+  renderer (`chartml-render/src/svg.rs`) keeps its legacy `Rect` heuristic
+  for byte-identical golden compatibility — `transform-origin` has no visual
+  effect in a static snapshot anyway — and honors `animation_origin` for
+  `Path`. A new regression test
+  (`chartml-test-runner/tests/bar_animation_origin.rs`) pins all 12
+  combinations of `{Uniform(0.0), Uniform(4.0), Top(4.0)} × {vertical+,
+  vertical-, horizontal+, horizontal-}`, plus six new
+  `phase12_kyomi_bar_origin_*` cases under the Kyomi theme.
+  `chartml-leptos/style/chartml.css` also gains a `.bar { transform-origin:
+  50% 100% }` safety net for the common case if any future emission site
+  forgets to populate the field.
+
 ### Theme hooks (additive, backward-compatible)
 
 `chartml_core::theme::Theme` now exposes typography, shape, grid, zero-line,
