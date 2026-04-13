@@ -1236,6 +1236,87 @@ style:
         assert_eq!(count_zero_lines(&element), 1);
     }
 
+    // ----- Phase 8: dot_halo wiring -----
+
+    fn count_halos(el: &ChartElement) -> usize {
+        count_elements(el, &|e| matches!(e, ChartElement::Path { class, .. } if class == "dot-halo"))
+    }
+
+    fn count_dot_markers(el: &ChartElement) -> usize {
+        count_elements(el, &|e| matches!(e, ChartElement::Circle { class, .. } if class.contains("dot-marker")))
+    }
+
+    #[test]
+    fn phase8_line_default_theme_emits_no_halo() {
+        let renderer = CartesianRenderer::new();
+        let element = renderer.render(&make_bar_data(), &make_line_config()).unwrap();
+        assert_eq!(count_halos(&element), 0, "default theme line chart must emit zero halos");
+    }
+
+    #[test]
+    fn phase8_line_halo_matches_dot_count_and_ordering() {
+        use chartml_core::theme::Theme;
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data();
+        let mut config = make_line_config();
+        config.theme = Theme {
+            dot_halo_color: Some("#ffffff".to_string()),
+            dot_halo_width: 1.5,
+            ..Theme::default()
+        };
+        let element = renderer.render(&data, &config).unwrap();
+
+        let dot_n = count_dot_markers(&element);
+        let halo_n = count_halos(&element);
+        assert!(dot_n > 0, "line chart should produce at least one dot-marker");
+        assert_eq!(halo_n, dot_n, "one halo per dot-marker required");
+
+        // Halo must precede its dot: in the lines group, walk children and
+        // assert every dot-halo Path is immediately followed by a Circle.
+        fn walk_lines_group<'a>(el: &'a ChartElement) -> Option<&'a Vec<ChartElement>> {
+            match el {
+                ChartElement::Group { class, children, .. } if class == "lines" => Some(children),
+                ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                    children.iter().find_map(walk_lines_group)
+                }
+                _ => None,
+            }
+        }
+        let lines = walk_lines_group(&element).expect("lines group");
+        let mut pair = 0;
+        let mut iter = lines.iter().peekable();
+        while let Some(el) = iter.next() {
+            if let ChartElement::Path { class, .. } = el {
+                if class == "dot-halo" {
+                    match iter.peek() {
+                        Some(ChartElement::Circle { class: cc, .. }) => {
+                            assert!(cc.contains("dot-marker"));
+                            pair += 1;
+                        }
+                        other => panic!("halo not followed by dot: {:?}", other.map(|_| "other")),
+                    }
+                }
+            }
+        }
+        assert_eq!(pair, dot_n);
+
+        // Verify stroke / stroke-width on first halo.
+        fn first_halo(el: &ChartElement) -> Option<(String, f64)> {
+            match el {
+                ChartElement::Path { class, stroke, stroke_width, .. } if class == "dot-halo" => {
+                    Some((stroke.clone().unwrap_or_default(), stroke_width.unwrap_or(-1.0)))
+                }
+                ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                    children.iter().find_map(first_halo)
+                }
+                _ => None,
+            }
+        }
+        let (stroke, width) = first_halo(&element).unwrap();
+        assert_eq!(stroke, "#ffffff");
+        assert!((width - 1.5).abs() < 1e-9);
+    }
+
     /// Area chart parity: crossing-zero data + non-default zero_line emits one line.
     #[test]
     fn phase7_area_crossing_zero_emits_one_zero_line() {

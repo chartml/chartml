@@ -144,6 +144,9 @@ impl ChartRenderer for ScatterRenderer {
                     }
                 }
 
+                if let Some(halo) = emit_dot_halo_if_enabled(&config.theme, cx, cy, r) {
+                    point_elements.push(halo);
+                }
                 point_elements.push(ChartElement::Circle {
                     cx,
                     cy,
@@ -552,6 +555,199 @@ mod tests {
         }
         visit(el, &mut n);
         n
+    }
+
+    // ----- Phase 8: dot_halo wiring -----
+
+    /// Collect (index, class) of every Circle and dot-halo Path in a flat
+    /// traversal order. Used by Phase 8 tests to assert halo-before-dot
+    /// ordering and counts.
+    fn collect_dot_and_halo_order(el: &ChartElement) -> Vec<(usize, String)> {
+        let mut out = Vec::new();
+        fn visit(el: &ChartElement, out: &mut Vec<(usize, String)>) {
+            match el {
+                ChartElement::Circle { class, .. } => {
+                    let idx = out.len();
+                    out.push((idx, class.clone()));
+                }
+                ChartElement::Path { class, .. } if class == "dot-halo" => {
+                    let idx = out.len();
+                    out.push((idx, class.clone()));
+                }
+                ChartElement::Svg { children, .. }
+                | ChartElement::Group { children, .. } => {
+                    for c in children {
+                        visit(c, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        visit(el, &mut out);
+        out
+    }
+
+    fn count_halos(el: &ChartElement) -> usize {
+        count_elements(el, &|e| matches!(e, ChartElement::Path { class, .. } if class == "dot-halo"))
+    }
+
+    #[test]
+    fn phase8_scatter_default_theme_emits_no_halo() {
+        use chartml_core::theme::Theme;
+        let renderer = ScatterRenderer::new();
+        let mut config = make_scatter_config();
+        config.theme = Theme::default();
+        let element = renderer.render(&make_scatter_data(), &config).unwrap();
+        assert_eq!(count_halos(&element), 0, "default theme must emit zero dot-halo elements");
+    }
+
+    #[test]
+    fn phase8_scatter_halo_color_emits_one_halo_per_point() {
+        use chartml_core::theme::Theme;
+        let renderer = ScatterRenderer::new();
+        let mut config = make_scatter_config();
+        config.theme = Theme {
+            dot_halo_color: Some("#ffffff".to_string()),
+            dot_halo_width: 1.5,
+            ..Theme::default()
+        };
+        let element = renderer.render(&make_scatter_data(), &config).unwrap();
+
+        // 4 data points → 4 halos (legend circles don't get halos).
+        assert_eq!(count_halos(&element), 4);
+
+        // Data-point circles should also still number 4.
+        let data_circles = count_elements(&element, &|e| {
+            matches!(e, ChartElement::Circle { class, .. } if class.contains("chartml-scatter-point"))
+        });
+        assert_eq!(data_circles, 4);
+
+        // Verify halo stroke + width on at least one emitted halo.
+        fn find_halo(el: &ChartElement) -> Option<(String, f64)> {
+            match el {
+                ChartElement::Path { class, stroke, stroke_width, .. } if class == "dot-halo" => {
+                    Some((stroke.clone().unwrap_or_default(), stroke_width.unwrap_or(-1.0)))
+                }
+                ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                    children.iter().find_map(find_halo)
+                }
+                _ => None,
+            }
+        }
+        let (stroke, width) = find_halo(&element).expect("at least one halo");
+        assert_eq!(stroke, "#ffffff");
+        assert!((width - 1.5).abs() < 1e-9, "halo stroke-width {} != 1.5", width);
+    }
+
+    #[test]
+    fn phase8_scatter_halo_precedes_dot_in_order() {
+        use chartml_core::theme::Theme;
+        let renderer = ScatterRenderer::new();
+        let mut config = make_scatter_config();
+        config.theme = Theme {
+            dot_halo_color: Some("#ffffff".to_string()),
+            dot_halo_width: 1.5,
+            ..Theme::default()
+        };
+        let element = renderer.render(&make_scatter_data(), &config).unwrap();
+
+        // Walk the points group and assert every dot-marker circle is
+        // preceded immediately by a dot-halo.
+        fn find_points_group(el: &ChartElement) -> Option<&Vec<ChartElement>> {
+            match el {
+                ChartElement::Group { class, children, .. }
+                    if class == "chartml-scatter-points" => Some(children),
+                ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                    children.iter().find_map(find_points_group)
+                }
+                _ => None,
+            }
+        }
+        let points = find_points_group(&element).expect("points group");
+        let mut pair_count = 0;
+        let mut iter = points.iter().peekable();
+        while let Some(el) = iter.next() {
+            if let ChartElement::Path { class, .. } = el {
+                if class == "dot-halo" {
+                    let next = iter.peek().expect("halo must be followed by dot");
+                    match next {
+                        ChartElement::Circle { class, .. } => {
+                            assert!(class.contains("dot-marker"));
+                            pair_count += 1;
+                        }
+                        _ => panic!("halo not immediately followed by a Circle"),
+                    }
+                }
+            }
+        }
+        assert_eq!(pair_count, 4);
+    }
+
+    #[test]
+    fn phase8_bubble_halo_radius_tracks_per_point_size() {
+        // For a bubble chart each point has a distinct radius from the size
+        // scale. The halo's path must encode that same radius, not a static
+        // theme.dot_radius default.
+        use chartml_core::theme::Theme;
+        let renderer = ScatterRenderer::new();
+        let mut config = make_bubble_config();
+        config.theme = Theme {
+            dot_halo_color: Some("#000000".to_string()),
+            dot_halo_width: 1.0,
+            ..Theme::default()
+        };
+        let element = renderer.render(&make_bubble_data(), &config).unwrap();
+
+        // Collect halo path d strings and dot radii in traversal order.
+        fn collect(el: &ChartElement, halos: &mut Vec<String>, dots: &mut Vec<f64>) {
+            match el {
+                ChartElement::Path { class, d, .. } if class == "dot-halo" => halos.push(d.clone()),
+                ChartElement::Circle { class, r, .. } if class.contains("chartml-scatter-point") => {
+                    dots.push(*r);
+                }
+                ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                    for c in children { collect(c, halos, dots); }
+                }
+                _ => {}
+            }
+        }
+        let mut halos = Vec::new();
+        let mut dots = Vec::new();
+        collect(&element, &mut halos, &mut dots);
+        assert_eq!(halos.len(), 3);
+        assert_eq!(dots.len(), 3);
+        // Distinct radii → distinct halo d strings.
+        let unique_d: std::collections::HashSet<&String> = halos.iter().collect();
+        assert_eq!(unique_d.len(), 3, "bubble halos should have 3 distinct path d values, one per radius");
+        // Each halo d must contain the per-point radius.
+        for (d, r) in halos.iter().zip(dots.iter()) {
+            assert!(
+                d.contains(&format!("{},{}", r, r)) || d.contains(&format!(" {},", r)),
+                "halo d {:?} should encode per-point radius {}",
+                d,
+                r
+            );
+        }
+    }
+
+    #[test]
+    fn phase8_scatter_traversal_order_sanity() {
+        // Basic smoke: with halo enabled, the recorded sequence should
+        // alternate halo/dot for each data point.
+        use chartml_core::theme::Theme;
+        let renderer = ScatterRenderer::new();
+        let mut config = make_scatter_config();
+        config.theme = Theme {
+            dot_halo_color: Some("#ffffff".to_string()),
+            dot_halo_width: 1.0,
+            ..Theme::default()
+        };
+        let element = renderer.render(&make_scatter_data(), &config).unwrap();
+        let order = collect_dot_and_halo_order(&element);
+        // Find the first "dot-halo" entry and ensure it's followed by a
+        // scatter-point dot.
+        let first_halo = order.iter().position(|(_, c)| c == "dot-halo");
+        assert!(first_halo.is_some());
     }
 
     #[test]

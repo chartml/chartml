@@ -395,6 +395,58 @@ impl TextStyle {
     }
 }
 
+// =============================================================================
+// Dot halo helper (Phase 8) — outer ring behind dot markers.
+// =============================================================================
+//
+// Every dot marker in ChartML (scatter points, line endpoint markers, combo
+// dot markers) is a `ChartElement::Circle`. When `theme.dot_halo_color` is
+// `Some`, a halo is emitted BEFORE the dot so it renders underneath. The
+// halo is a stroke-based ring at the same radius as the dot, which means the
+// stroke extends half-outside the dot — producing a crisp visible outline.
+//
+// The helper returns `None` when `theme.dot_halo_color` is `None`, which
+// keeps byte-identical emission for the default theme (Phase 0 contract).
+//
+// The halo is emitted as a `ChartElement::Path` (not `Circle`) because
+// `Circle` has no `stroke_width` field — `Path` supports `stroke_width`,
+// `stroke`, and `fill` directly and renders the same visual result. The
+// emitted class is `dot-halo`, which Phase 9 CSS can target regardless of
+// underlying SVG tag.
+
+/// Emit a halo element to render BEFORE a dot marker, or `None` when
+/// `theme.dot_halo_color` is `None`. Uses `theme.dot_halo_width` as the
+/// stroke width. The halo radius always matches the dot's own radius so the
+/// ring hugs the dot — bubble charts pass the per-point radius here, not a
+/// static theme default.
+pub fn emit_dot_halo_if_enabled(
+    theme: &crate::theme::Theme,
+    cx: f64,
+    cy: f64,
+    r: f64,
+) -> Option<ChartElement> {
+    let color = theme.dot_halo_color.as_ref()?;
+    // SVG circle-as-path: move to (cx-r, cy), arc 180° to (cx+r, cy), arc
+    // 180° back. Two half-arcs form a full circle.
+    let d = format!(
+        "M {cx},{cy} m -{r},0 a {r},{r} 0 1,0 {d2},0 a {r},{r} 0 1,0 -{d2},0",
+        cx = cx,
+        cy = cy,
+        r = r,
+        d2 = 2.0 * r,
+    );
+    Some(ChartElement::Path {
+        d,
+        fill: None,
+        stroke: Some(color.clone()),
+        stroke_width: Some(theme.dot_halo_width as f64),
+        stroke_dasharray: None,
+        opacity: None,
+        class: "dot-halo".to_string(),
+        data: None,
+    })
+}
+
 /// Format a pixel value, preferring an integer rendering when the value has
 /// no fractional part. Mirrors the pre-Phase-4 emission of `"12px"`
 /// (not `"12.0px"`), which every baseline snapshot asserts.

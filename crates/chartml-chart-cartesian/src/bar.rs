@@ -1,5 +1,5 @@
 use chartml_core::data::DataTable;
-use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform, ViewBox};
+use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform, ViewBox, emit_dot_halo_if_enabled};
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
 use chartml_core::plugin::ChartConfig;
@@ -1346,10 +1346,14 @@ fn render_combo(
                     });
 
                     // Dots
+                    let dot_r = config.theme.dot_radius as f64;
                     for (i, &(px, py)) in points.iter().enumerate() {
                         let (ref cat, val) = point_data[i];
+                        if let Some(halo) = emit_dot_halo_if_enabled(&config.theme, px, py, dot_r) {
+                            mark_elements.push(halo);
+                        }
                         mark_elements.push(ChartElement::Circle {
-                            cx: px, cy: py, r: config.theme.dot_radius as f64,
+                            cx: px, cy: py, r: dot_r,
                             fill: color.clone(), stroke: Some(config.theme.bg.clone()),
                             class: "chartml-line-dot dot-marker".to_string(),
                             data: Some(ElementData::new(cat, format_value(val, fmt_ref)).with_series(&label)),
