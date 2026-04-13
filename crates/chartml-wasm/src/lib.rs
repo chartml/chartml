@@ -79,6 +79,7 @@ impl WasmChartML {
     /// Register a named JS data source.
     ///
     /// The function receives `(spec: object)` and must return a `Promise<object[]>`.
+    #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen(js_name = "registerDataSource")]
     pub fn register_data_source(&mut self, name: &str, fetch_fn: js_sys::Function) {
         self.inner.register_data_source(
@@ -91,6 +92,7 @@ impl WasmChartML {
     ///
     /// The function receives `(rows: object[], spec: object, context: object)` and
     /// must return a `Promise<{data: object[], metadata: object}>`.
+    #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen(js_name = "registerTransform")]
     pub fn register_transform(&mut self, transform_fn: js_sys::Function) {
         self.inner.register_transform(
@@ -102,6 +104,7 @@ impl WasmChartML {
     ///
     /// The function receives `(slug: string)` and must return a
     /// `Promise<{provider: string, connectionString?: string, config: object}>`.
+    #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen(js_name = "setDatasourceResolver")]
     pub fn set_datasource_resolver(&mut self, resolver_fn: js_sys::Function) {
         self.inner.set_datasource_resolver(

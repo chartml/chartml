@@ -381,7 +381,7 @@ fn all_models_produce_valid_output() {
     println!("=== ALL MODELS COMPARISON ===");
     for (name, model) in &models {
         let config = ForecastConfig {
-            model: model.clone(),
+            model: *model,
             horizon: 5,
             confidence_level: 0.95,
         };

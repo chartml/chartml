@@ -191,7 +191,7 @@ mod tests {
     fn linear_scale_ticks() {
         let scale = ScaleLinear::new((0.0, 100.0), (0.0, 500.0));
         let ticks = scale.ticks(5);
-        let expected = vec![0.0, 20.0, 40.0, 60.0, 80.0, 100.0];
+        let expected = [0.0, 20.0, 40.0, 60.0, 80.0, 100.0];
         assert_eq!(ticks.len(), expected.len(), "tick count mismatch: got {:?}", ticks);
         for (a, b) in ticks.iter().zip(expected.iter()) {
             assert!((a - b).abs() < 1e-10, "tick mismatch: {} vs {}", a, b);
@@ -202,7 +202,7 @@ mod tests {
     fn linear_scale_ticks_non_round() {
         let scale = ScaleLinear::new((0.0, 1.0), (0.0, 500.0));
         let ticks = scale.ticks(5);
-        let expected = vec![0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
+        let expected = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
         assert_eq!(ticks.len(), expected.len(), "tick count mismatch: got {:?}", ticks);
         for (a, b) in ticks.iter().zip(expected.iter()) {
             assert!((a - b).abs() < 1e-10, "tick mismatch: {} vs {}", a, b);

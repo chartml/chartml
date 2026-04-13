@@ -1437,7 +1437,7 @@ style:
 
         // Halo must precede its dot: in the lines group, walk children and
         // assert every dot-halo Path is immediately followed by a Circle.
-        fn walk_lines_group<'a>(el: &'a ChartElement) -> Option<&'a Vec<ChartElement>> {
+        fn walk_lines_group(el: &ChartElement) -> Option<&Vec<ChartElement>> {
             match el {
                 ChartElement::Group { class, children, .. } if class == "lines" => Some(children),
                 ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {

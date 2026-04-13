@@ -567,7 +567,7 @@ mod tests {
 
     #[test]
     fn test_precision_fixed() {
-        assert_eq!(NumberFormatter::new(".2f").format(3.14159), "3.14");
+        assert_eq!(NumberFormatter::new(".2f").format(4.56789), "4.57");
     }
 
     #[test]

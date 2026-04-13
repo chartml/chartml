@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn default_format_decimal() {
-        assert_eq!(default_format(3.14), "3.14");
+        assert_eq!(default_format(2.71), "2.71");
     }
 
     #[test]

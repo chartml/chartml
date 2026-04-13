@@ -103,7 +103,7 @@ mod tests {
         // ~30 day intervals with some variance; mode should win
         let ts = vec![100, 130, 161, 191, 222];
         let interval = detect_interval(&ts);
-        assert!(interval >= 30 && interval <= 31);
+        assert!((30..=31).contains(&interval));
     }
 
     #[test]

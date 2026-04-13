@@ -1345,7 +1345,7 @@ mod tick_tests {
         // Verification case from the bug report:
         // domain (0, 200000) with count=5 must produce [0, 50000, 100000, 150000, 200000]
         let ticks = d3_ticks(0.0, 200_000.0, 5);
-        let expected = vec![0.0, 50_000.0, 100_000.0, 150_000.0, 200_000.0];
+        let expected = [0.0, 50_000.0, 100_000.0, 150_000.0, 200_000.0];
         assert_eq!(ticks.len(), expected.len(), "wrong tick count: {:?}", ticks);
         for (got, exp) in ticks.iter().zip(expected.iter()) {
             assert!((got - exp).abs() < 1e-6, "tick mismatch: got {}, expected {}", got, exp);
@@ -1356,7 +1356,7 @@ mod tick_tests {
     fn d3_ticks_0_to_100_count5() {
         // Standard case: should produce [0, 20, 40, 60, 80, 100]
         let ticks = d3_ticks(0.0, 100.0, 5);
-        let expected = vec![0.0, 20.0, 40.0, 60.0, 80.0, 100.0];
+        let expected = [0.0, 20.0, 40.0, 60.0, 80.0, 100.0];
         assert_eq!(ticks.len(), expected.len(), "wrong tick count: {:?}", ticks);
         for (got, exp) in ticks.iter().zip(expected.iter()) {
             assert!((got - exp).abs() < 1e-6, "tick mismatch: got {}, expected {}", got, exp);
