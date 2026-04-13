@@ -954,4 +954,113 @@ style:
         });
         assert!(has_reformatted, "Date labels should be reformatted");
     }
+
+    // ----- Phase 6: theme.grid_style gating -----
+
+    /// Walk an element tree and count grid-line-x (vertical) and grid-line-y
+    /// (horizontal) gridlines emitted by the cartesian renderer.
+    fn count_grid_lines(el: &ChartElement) -> (usize, usize) {
+        let (mut vx, mut hy) = (0usize, 0usize);
+        fn visit(el: &ChartElement, vx: &mut usize, hy: &mut usize) {
+            match el {
+                ChartElement::Line { class, .. } => {
+                    let has_x = class.split_whitespace().any(|c| c == "grid-line-x");
+                    let has_y = class.split_whitespace().any(|c| c == "grid-line-y");
+                    if has_x {
+                        *vx += 1;
+                    }
+                    if has_y {
+                        *hy += 1;
+                    }
+                }
+                ChartElement::Svg { children, .. }
+                | ChartElement::Group { children, .. } => {
+                    for c in children {
+                        visit(c, vx, hy);
+                    }
+                }
+                _ => {}
+            }
+        }
+        visit(el, &mut vx, &mut hy);
+        (vx, hy)
+    }
+
+    /// Build a bar-chart config with both horizontal and vertical gridlines
+    /// enabled (show_y defaults to true; explicitly force show_x via spec).
+    fn make_bar_config_both_grids() -> ChartConfig {
+        let viz: VisualizeSpec = serde_yaml::from_str(r#"
+            type: bar
+            columns: month
+            rows: revenue
+            style:
+              grid:
+                x: true
+                y: true
+        "#).unwrap();
+        ChartConfig {
+            visualize: viz,
+            title: Some("Test Bar GridStyle".to_string()),
+            width: 800.0,
+            height: 400.0,
+            colors: vec!["#2E7D9A".to_string()],
+            theme: chartml_core::theme::Theme::default(),
+        }
+    }
+
+    #[test]
+    fn phase6_grid_style_both_default_emits_both_orientations() {
+        use chartml_core::theme::{GridStyle, Theme};
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data();
+        let mut config = make_bar_config_both_grids();
+        config.theme = Theme { grid_style: GridStyle::Both, ..Theme::default() };
+
+        let element = renderer.render(&data, &config).unwrap();
+        let (vx, hy) = count_grid_lines(&element);
+        assert!(vx > 0, "Both: expected vertical gridlines (grid-line-x)");
+        assert!(hy > 0, "Both: expected horizontal gridlines (grid-line-y)");
+    }
+
+    #[test]
+    fn phase6_grid_style_horizontal_only_skips_vertical() {
+        use chartml_core::theme::{GridStyle, Theme};
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data();
+        let mut config = make_bar_config_both_grids();
+        config.theme = Theme { grid_style: GridStyle::HorizontalOnly, ..Theme::default() };
+
+        let element = renderer.render(&data, &config).unwrap();
+        let (vx, hy) = count_grid_lines(&element);
+        assert_eq!(vx, 0, "HorizontalOnly: no grid-line-x expected, got {}", vx);
+        assert!(hy > 0, "HorizontalOnly: expected grid-line-y lines");
+    }
+
+    #[test]
+    fn phase6_grid_style_vertical_only_skips_horizontal() {
+        use chartml_core::theme::{GridStyle, Theme};
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data();
+        let mut config = make_bar_config_both_grids();
+        config.theme = Theme { grid_style: GridStyle::VerticalOnly, ..Theme::default() };
+
+        let element = renderer.render(&data, &config).unwrap();
+        let (vx, hy) = count_grid_lines(&element);
+        assert!(vx > 0, "VerticalOnly: expected grid-line-x lines");
+        assert_eq!(hy, 0, "VerticalOnly: no grid-line-y expected, got {}", hy);
+    }
+
+    #[test]
+    fn phase6_grid_style_none_skips_all_gridlines() {
+        use chartml_core::theme::{GridStyle, Theme};
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data();
+        let mut config = make_bar_config_both_grids();
+        config.theme = Theme { grid_style: GridStyle::None, ..Theme::default() };
+
+        let element = renderer.render(&data, &config).unwrap();
+        let (vx, hy) = count_grid_lines(&element);
+        assert_eq!(vx, 0, "None: no grid-line-x expected, got {}", vx);
+        assert_eq!(hy, 0, "None: no grid-line-y expected, got {}", hy);
+    }
 }

@@ -7,6 +7,20 @@ use chartml_core::spec::{VisualizeSpec, FieldRef, MarkEncoding};
 use chartml_core::layout::margins::{MarginConfig, calculate_margins};
 use chartml_core::layout::labels::{approximate_text_width_at, format_tick_value_si};
 use chartml_core::layout::legend::{LegendMark, LegendConfig, calculate_legend_layout, generate_legend_elements};
+use chartml_core::theme::GridStyle;
+
+/// Whether horizontal (constant-y) gridlines should be drawn.
+#[inline]
+fn should_draw_horizontal_grid(style: &GridStyle) -> bool {
+    matches!(style, GridStyle::Both | GridStyle::HorizontalOnly)
+}
+
+/// Whether vertical (constant-x) gridlines should be drawn.
+#[inline]
+fn should_draw_vertical_grid(style: &GridStyle) -> bool {
+    matches!(style, GridStyle::Both | GridStyle::VerticalOnly)
+}
+
 pub struct ScatterRenderer;
 
 impl ScatterRenderer {
@@ -164,14 +178,18 @@ impl ChartRenderer for ScatterRenderer {
         }.max(1);
 
         // Horizontal grid lines + y-axis ticks
+        let draw_h_grid = should_draw_horizontal_grid(&config.theme.grid_style);
+        let draw_v_grid = should_draw_vertical_grid(&config.theme.grid_style);
         for (i, &val) in y_ticks.iter().enumerate() {
             let y = y_scale.map(val);
-            // Grid line — always rendered
-            axis_elements.push(ChartElement::Line {
-                x1: margins.left, y1: y, x2: margins.left + inner_width, y2: y,
-                stroke: config.theme.grid.clone(), stroke_width: Some(config.theme.grid_line_weight as f64),
-                stroke_dasharray: None, class: "grid-line".to_string(),
-            });
+            // Grid line — gated on grid_style (horizontal: constant y)
+            if draw_h_grid {
+                axis_elements.push(ChartElement::Line {
+                    x1: margins.left, y1: y, x2: margins.left + inner_width, y2: y,
+                    stroke: config.theme.grid.clone(), stroke_width: Some(config.theme.grid_line_weight as f64),
+                    stroke_dasharray: None, class: "grid-line".to_string(),
+                });
+            }
             // Tick mark — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: margins.left - 5.0, y1: y, x2: margins.left, y2: y,
@@ -214,12 +232,14 @@ impl ChartRenderer for ScatterRenderer {
         let x_axis_y = margins.top + inner_height;
         for (i, &val) in x_ticks.iter().enumerate() {
             let x = x_scale.map(val);
-            // Grid line — always rendered
-            axis_elements.push(ChartElement::Line {
-                x1: x, y1: margins.top, x2: x, y2: x_axis_y,
-                stroke: config.theme.grid.clone(), stroke_width: Some(config.theme.grid_line_weight as f64),
-                stroke_dasharray: None, class: "grid-line".to_string(),
-            });
+            // Grid line — gated on grid_style (vertical: constant x)
+            if draw_v_grid {
+                axis_elements.push(ChartElement::Line {
+                    x1: x, y1: margins.top, x2: x, y2: x_axis_y,
+                    stroke: config.theme.grid.clone(), stroke_width: Some(config.theme.grid_line_weight as f64),
+                    stroke_dasharray: None, class: "grid-line".to_string(),
+                });
+            }
             // Tick mark — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: x, y1: x_axis_y, x2: x, y2: x_axis_y + 5.0,
@@ -508,5 +528,52 @@ mod tests {
         let data = DataTable::from_rows(&Vec::<Row>::new()).unwrap();
         let result = renderer.render(&data, &make_scatter_config());
         assert!(result.is_err());
+    }
+
+    // ----- Phase 6: theme.grid_style gating -----
+
+    fn count_scatter_grid_lines(el: &ChartElement) -> usize {
+        let mut n = 0usize;
+        fn visit(el: &ChartElement, n: &mut usize) {
+            match el {
+                ChartElement::Line { class, .. } => {
+                    if class.split_whitespace().any(|c| c == "grid-line") {
+                        *n += 1;
+                    }
+                }
+                ChartElement::Svg { children, .. }
+                | ChartElement::Group { children, .. } => {
+                    for c in children {
+                        visit(c, n);
+                    }
+                }
+                _ => {}
+            }
+        }
+        visit(el, &mut n);
+        n
+    }
+
+    #[test]
+    fn phase6_scatter_grid_style_none_skips_all_gridlines() {
+        use chartml_core::theme::{GridStyle, Theme};
+        let renderer = ScatterRenderer::new();
+        let data = make_scatter_data();
+        let mut config = make_scatter_config();
+
+        // Sanity: Both (default) produces > 0 gridlines.
+        let baseline = renderer.render(&data, &config).unwrap();
+        let baseline_count = count_scatter_grid_lines(&baseline);
+        assert!(
+            baseline_count > 0,
+            "scatter default (GridStyle::Both) should emit gridlines, got {}",
+            baseline_count
+        );
+
+        // None: zero gridlines of either orientation.
+        config.theme = Theme { grid_style: GridStyle::None, ..Theme::default() };
+        let element = renderer.render(&data, &config).unwrap();
+        let n = count_scatter_grid_lines(&element);
+        assert_eq!(n, 0, "GridStyle::None: expected 0 scatter gridlines, got {}", n);
     }
 }

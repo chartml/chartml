@@ -6,7 +6,23 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, approxima
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::spec::{AnnotationSpec, FieldRef, FieldRefItem, MarkEncoding};
-use chartml_core::theme::Theme;
+use chartml_core::theme::{GridStyle, Theme};
+
+/// Whether horizontal (constant-y) gridlines should be drawn for the given
+/// grid style. Horizontal gridlines are the ones emitted across the plot for
+/// y-axis ticks (class `grid-line-y`).
+#[inline]
+pub fn should_draw_horizontal_grid(style: &GridStyle) -> bool {
+    matches!(style, GridStyle::Both | GridStyle::HorizontalOnly)
+}
+
+/// Whether vertical (constant-x) gridlines should be drawn for the given
+/// grid style. Vertical gridlines are the ones emitted up/down the plot for
+/// x-axis ticks (class `grid-line-x`).
+#[inline]
+pub fn should_draw_vertical_grid(style: &GridStyle) -> bool {
+    matches!(style, GridStyle::Both | GridStyle::VerticalOnly)
+}
 
 /// Grid line configuration resolved from the spec.
 #[derive(Debug, Clone)]
@@ -422,7 +438,7 @@ pub fn generate_x_axis_with_display(
     });
 
     // Vertical grid lines (if grid.show_x and chart_height provided)
-    if grid.show_x {
+    if grid.show_x && should_draw_vertical_grid(&theme.grid_style) {
         if let Some(ch) = chart_height {
             for band_key in band_keys.iter() {
                 let x = match band.map(band_key) {
@@ -793,7 +809,7 @@ pub fn generate_y_axis_numeric(
         };
 
         // Horizontal grid line
-        if grid.show_y {
+        if grid.show_y && should_draw_horizontal_grid(&theme.grid_style) {
             if let Some(cw) = chart_width {
                 elements.push(ChartElement::Line {
                     x1: x_position,
@@ -1011,7 +1027,7 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
         };
 
         // Vertical grid line
-        if grid.show_x {
+        if grid.show_x && should_draw_vertical_grid(&theme.grid_style) {
             if let Some(ch) = chart_height {
                 elements.push(ChartElement::Line {
                     x1: x,
