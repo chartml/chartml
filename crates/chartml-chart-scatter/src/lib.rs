@@ -5,7 +5,7 @@ use chartml_core::error::ChartError;
 use chartml_core::scales::{ScaleLinear, ScaleSqrt};
 use chartml_core::spec::{VisualizeSpec, FieldRef, MarkEncoding};
 use chartml_core::layout::margins::{MarginConfig, calculate_margins};
-use chartml_core::layout::labels::{approximate_text_width_at, format_tick_value_si};
+use chartml_core::layout::labels::{TextMetrics, approximate_text_width_at, format_tick_value_si, measure_text};
 use chartml_core::layout::legend::{LegendMark, LegendConfig, calculate_legend_layout, generate_legend_elements};
 use chartml_core::theme::GridStyle;
 
@@ -54,7 +54,10 @@ impl ChartRenderer for ScatterRenderer {
 
         let has_legend = color_categories.len() > 1;
         let legend_height = if has_legend {
-            let legend_config = LegendConfig::default();
+            let legend_config = LegendConfig {
+                text_metrics: TextMetrics::from_theme_legend(&config.theme),
+                ..LegendConfig::default()
+            };
             calculate_legend_layout(&color_categories, &config.colors, width, &legend_config).total_height
         } else {
             0.0
@@ -62,6 +65,8 @@ impl ChartRenderer for ScatterRenderer {
         let margin_config = MarginConfig {
             legend_height,
             chart_height: height,
+            tick_value_metrics: TextMetrics::from_theme_tick_value(&config.theme),
+            axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
             ..Default::default()
         };
         let margins = calculate_margins(&margin_config);
@@ -219,8 +224,20 @@ impl ChartRenderer for ScatterRenderer {
         }
 
         // X-axis label skip factor: skip labels that would overlap horizontally
+        // Scatter historically measured X tick labels at 11px (one px below
+        // the 12px default) — preserve that exactly when the theme is the
+        // legacy default to keep golden snapshots byte-identical. Any theme
+        // override switches to the full theme-aware measurement.
+        let scatter_tick_metrics = TextMetrics::from_theme_tick_value(&config.theme);
         let x_label_widths: Vec<f64> = x_ticks.iter()
-            .map(|&v| approximate_text_width_at(&format_tick_value_si(v, x_tick_step), 11.0))
+            .map(|&v| {
+                let label = format_tick_value_si(v, x_tick_step);
+                if scatter_tick_metrics.is_legacy_default() {
+                    approximate_text_width_at(&label, 11.0)
+                } else {
+                    measure_text(&label, &scatter_tick_metrics)
+                }
+            })
             .collect();
         let x_widest = x_label_widths.iter().cloned().fold(0.0_f64, f64::max);
         let x_skip = if x_ticks.len() > 1 {
@@ -297,7 +314,10 @@ impl ChartRenderer for ScatterRenderer {
 
         // Legend — reuse color_categories computed earlier
         if color_categories.len() > 1 {
-            let legend_config = LegendConfig::default();
+            let legend_config = LegendConfig {
+                text_metrics: TextMetrics::from_theme_legend(&config.theme),
+                ..LegendConfig::default()
+            };
             let legend_layout = calculate_legend_layout(&color_categories, &config.colors, width, &legend_config);
             let legend_y = height - legend_layout.total_height - 8.0;
             let legend_elements = generate_legend_elements(

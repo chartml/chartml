@@ -2,7 +2,7 @@ use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, Tex
 use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
 use chartml_core::format::{detect_date_format, reformat_date_label};
-use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, approximate_text_width, truncate_label};
+use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics, measure_text, truncate_label_with_metrics};
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::spec::{AnnotationSpec, FieldRef, FieldRefItem, MarkEncoding};
@@ -481,8 +481,13 @@ pub fn generate_x_axis_with_display(
     // Step 1: Format labels (date detection or explicit format)
     let display_labels = format_display_labels(raw_labels, x_format);
 
-    // Step 2: Determine label strategy
-    let label_config = LabelStrategyConfig::default();
+    // Step 2: Determine label strategy — measured under the theme's axis
+    // label metrics so rotation, skip factors, and truncation all see the
+    // actual rendered width of the tick text.
+    let label_config = LabelStrategyConfig {
+        text_metrics: TextMetrics::from_theme_axis_label(theme),
+        ..LabelStrategyConfig::default()
+    };
     let strategy = LabelStrategy::determine(&display_labels, available_width, &label_config);
 
     let mut elements = Vec::new();
@@ -607,7 +612,7 @@ pub fn generate_x_axis_with_display(
                 if should_show {
                     // Truncate the label if its rotated projection would cause overlap
                     let display_text = if max_full_width > 0.0 {
-                        truncate_label(label, max_full_width)
+                        truncate_label_with_metrics(label, max_full_width, &TextMetrics::from_theme_axis_label(theme))
                     } else {
                         label.clone()
                     };
@@ -649,7 +654,7 @@ pub fn generate_x_axis_with_display(
                     stroke: theme.tick.clone(), stroke_width: Some(theme.axis_line_weight as f64),
                     stroke_dasharray: None, class: "tick".to_string(),
                 });
-                let truncated = truncate_label(label, *max_width);
+                let truncated = truncate_label_with_metrics(label, *max_width, &TextMetrics::from_theme_axis_label(theme));
                 let is_truncated = truncated != *label;
                 let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
                 elements.push(ChartElement::Text {
@@ -699,7 +704,7 @@ pub fn generate_x_axis_with_display(
                 // Label only for sampled indices, with truncation if needed
                 if indices.contains(&i) {
                     let display_text = if sampled_max_width > 0.0 {
-                        truncate_label(label, sampled_max_width)
+                        truncate_label_with_metrics(label, sampled_max_width, &TextMetrics::from_theme_axis_label(theme))
                     } else {
                         label.clone()
                     };
@@ -928,7 +933,7 @@ pub fn generate_y_axis_numeric(
                     Some(f) => format_value(*val, Some(f)),
                     None => format_tick_value(*val, tick_step),
                 };
-                approximate_text_width(&label)
+                measure_text(&label, &TextMetrics::from_theme_tick_value(theme))
             })
             .fold(0.0_f64, f64::max);
         let label_x = (x_position - 8.0 - max_tick_width - 12.0).max(10.0);

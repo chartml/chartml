@@ -7,7 +7,7 @@ use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::layout::adaptive_tick_count;
 use chartml_core::spec::{ChartMode, Orientation};
 
-use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
+use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics, measure_text};
 
 use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
 
@@ -324,7 +324,11 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     let formatted_for_strategy = crate::helpers::format_display_labels(raw_for_strategy, x_format.as_deref());
     let x_extra_margin = if !is_horizontal {
         let estimated_width = config.width - 80.0;
-        let x_strategy = LabelStrategy::determine(&formatted_for_strategy, estimated_width, &LabelStrategyConfig::default());
+        let label_strategy_config = LabelStrategyConfig {
+            text_metrics: TextMetrics::from_theme_axis_label(&config.theme),
+            ..LabelStrategyConfig::default()
+        };
+        let x_strategy = LabelStrategy::determine(&formatted_for_strategy, estimated_width, &label_strategy_config);
         match &x_strategy {
             LabelStrategy::Rotated { margin, .. } => *margin,
             _ => 0.0,
@@ -395,7 +399,10 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     // Pre-compute legend height so the bottom margin accounts for multi-row legends.
     let legend_height = if let Some(ref color_f) = color_field {
         let series_names = data.unique_values(color_f);
-        let legend_config = LegendConfig::default();
+        let legend_config = LegendConfig {
+            text_metrics: TextMetrics::from_theme_legend(&config.theme),
+            ..LegendConfig::default()
+        };
         calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config).total_height
     } else {
         0.0
@@ -417,6 +424,14 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         has_y_axis_label,
         x_label_strategy_margin: x_extra_margin,
         y_tick_labels: y_tick_labels_for_margin,
+        // For horizontal charts the Y-axis displays category labels (axis
+        // label metrics); for vertical charts it shows numeric tick values.
+        tick_value_metrics: if is_horizontal {
+            TextMetrics::from_theme_axis_label(&config.theme)
+        } else {
+            TextMetrics::from_theme_tick_value(&config.theme)
+        },
+        axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
         ..Default::default()
     };
     let margins = calculate_margins(&margin_config);
@@ -618,7 +633,10 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     // Legend
     if let Some(ref color_f) = color_field {
         let series_names = data.unique_values(color_f);
-        let legend_config = LegendConfig::default();
+        let legend_config = LegendConfig {
+            text_metrics: TextMetrics::from_theme_legend(&config.theme),
+            ..LegendConfig::default()
+        };
         let legend_layout = calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config);
         let legend_y = config.height - legend_layout.total_height - 8.0;
         let legend_elements = generate_legend(&series_names, &config.colors, config.width, legend_y, &config.theme);
@@ -1118,7 +1136,10 @@ fn render_combo(
         .map(|f| f.label.clone().unwrap_or_else(|| f.field.clone()))
         .collect();
     let combo_legend_height = if combo_legend_labels.len() > 1 || color_field.is_some() {
-        let legend_config = LegendConfig::default();
+        let legend_config = LegendConfig {
+            text_metrics: TextMetrics::from_theme_legend(&config.theme),
+            ..LegendConfig::default()
+        };
         calculate_legend_layout(&combo_legend_labels, &config.colors, config.width, &legend_config).total_height
     } else {
         0.0
@@ -1132,6 +1153,8 @@ fn render_combo(
         has_x_axis_label,
         has_right_axis: has_right,
         right_tick_labels,
+        tick_value_metrics: TextMetrics::from_theme_tick_value(&config.theme),
+        axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
         ..Default::default()
     };
     let margins = calculate_margins(&margin_config);
@@ -1589,9 +1612,10 @@ fn render_combo(
 
     // Legend with mixed marks — anchor using pre-computed legend height
     if series_names.len() > 1 {
+        let combo_legend_metrics = TextMetrics::from_theme_legend(&config.theme);
         let mut legend_elements = Vec::new();
         let total_w: f64 = series_names.iter().map(|name| {
-            let tw = chartml_core::layout::labels::approximate_text_width(name);
+            let tw = measure_text(name, &combo_legend_metrics);
             12.0 + 6.0 + tw + 16.0
         }).sum();
         let mut x_offset = (config.width - total_w).max(0.0) / 2.0;
@@ -1633,7 +1657,7 @@ fn render_combo(
                 fill: Some(config.theme.text_secondary.clone()), class: "legend-label".to_string(), data: None,
             });
 
-            let tw = chartml_core::layout::labels::approximate_text_width(name);
+            let tw = measure_text(name, &combo_legend_metrics);
             x_offset += 12.0 + 6.0 + tw + 16.0;
         }
 

@@ -4,7 +4,7 @@ use chartml_core::element::*;
 use chartml_core::error::ChartError;
 use chartml_core::shapes::{ArcGenerator, PieLayout};
 use chartml_core::spec::{VisualizeSpec, FieldRef};
-use chartml_core::layout::{calculate_legend_layout, LegendConfig, LegendAlignment};
+use chartml_core::layout::{calculate_legend_layout, LegendConfig, LegendAlignment, TextMetrics};
 
 #[derive(Default)]
 pub struct PieRenderer;
@@ -93,6 +93,7 @@ impl ChartRenderer for PieRenderer {
         // Legend — rendered below the pie, horizontally centered
         let legend_config = LegendConfig {
             alignment: LegendAlignment::Center,
+            text_metrics: TextMetrics::from_theme_legend(&config.theme),
             ..LegendConfig::default()
         };
         // Build ordered labels and colors (original data order matches color palette order)

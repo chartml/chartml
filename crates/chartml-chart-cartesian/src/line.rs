@@ -7,7 +7,7 @@ use chartml_core::layout::adaptive_tick_count;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::shapes::LineGenerator;
 
-use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig};
+use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics};
 
 use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
 
@@ -49,7 +49,10 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     let estimated_width = config.width - 80.0;
     let x_format = get_x_format(config);
     let formatted_for_strategy = crate::helpers::format_display_labels(&categories, x_format.as_deref());
-    let x_strategy = LabelStrategy::determine(&formatted_for_strategy, estimated_width, &LabelStrategyConfig::default());
+    let x_strategy = LabelStrategy::determine(&formatted_for_strategy, estimated_width, &LabelStrategyConfig {
+        text_metrics: TextMetrics::from_theme_axis_label(&config.theme),
+        ..LabelStrategyConfig::default()
+    });
     let x_extra_margin = match &x_strategy {
         LabelStrategy::Rotated { margin, .. } => *margin,
         _ => 0.0,
@@ -124,7 +127,10 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         } else {
             vec![]
         };
-        let legend_config = LegendConfig::default();
+        let legend_config = LegendConfig {
+            text_metrics: TextMetrics::from_theme_legend(&config.theme),
+            ..LegendConfig::default()
+        };
         calculate_legend_layout(&legend_series_names, &config.colors, config.width, &legend_config).total_height
     } else {
         0.0
@@ -147,6 +153,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         y_tick_labels: prelim_labels,
         has_right_axis: has_right,
         right_tick_labels,
+        tick_value_metrics: TextMetrics::from_theme_tick_value(&config.theme),
+        axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
         ..Default::default()
     };
     let margins = calculate_margins(&margin_config);
@@ -525,7 +533,10 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         }
 
         // Legend
-        let legend_config = LegendConfig::default();
+        let legend_config = LegendConfig {
+            text_metrics: TextMetrics::from_theme_legend(&config.theme),
+            ..LegendConfig::default()
+        };
         let legend_layout = calculate_legend_layout(&series_names, &series_colors, config.width, &legend_config);
         let legend_y = config.height - legend_layout.total_height - 8.0;
         let legend_elements = generate_legend_with_mark(&series_names, &series_colors, config.width, legend_y, LegendMark::Line, &config.theme);
@@ -611,7 +622,10 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         }
 
         // Legend
-        let legend_config = LegendConfig::default();
+        let legend_config = LegendConfig {
+            text_metrics: TextMetrics::from_theme_legend(&config.theme),
+            ..LegendConfig::default()
+        };
         let legend_layout = calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config);
         let legend_y = config.height - legend_layout.total_height - 8.0;
         let legend_elements =

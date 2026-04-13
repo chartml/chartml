@@ -62,6 +62,58 @@ property overrides with `revert` fallback semantics — consumers can override
 any theme field from a parent container without mirroring the Rust `Theme`
 in CSS. Requires Chrome 84+, Firefox 67+, Safari 9.1+.
 
+### Self-correcting text measurement
+
+Layout decisions (margin width, tick label strategy, legend packing, label
+truncation, label rotation) now measure label text under the same theme
+typography that will be applied at paint time. Previously every layout pass
+called `approximate_text_width`, which was hardcoded to a 12px sans-serif
+calibration and ignored `label_font_size`, `label_letter_spacing`,
+`label_text_transform`, and font family. With the theme hooks exposed in this
+release, that approximation became visible: consumers setting `Uppercase`,
+letter-spacing, or monospace numeric ticks would see overlapping tick labels
+and legend items because the layout passes thought the text was narrower
+than it actually rendered.
+
+#### New API in `chartml_core::layout::labels`
+- `TextMetrics` — text shaping inputs that drive width measurement
+  (`font_size_px`, `letter_spacing_px`, `text_transform`, `monospace`).
+- `measure_text(text, &TextMetrics)` — theme-aware width estimator. Accounts
+  for font size scaling, CSS `letter-spacing`, `text-transform: uppercase`
+  (with a 1.10× width correction since uppercase glyphs are wider than the
+  mixed-case calibration), and monospace face widths.
+- `truncate_label_with_metrics(label, max_width, &TextMetrics)` — truncation
+  that uses the same theme-aware width.
+- `TextMetrics::from_theme_tick_value`, `from_theme_axis_label`,
+  `from_theme_legend`, `from_theme_title` — build metrics from a `Theme` for
+  the appropriate text role.
+
+#### Layout config additions
+- `LabelStrategyConfig.text_metrics`
+- `LegendConfig.text_metrics`
+- `MarginConfig.tick_value_metrics` / `axis_label_metrics`
+
+All chart renderers (bar, line, area, scatter, pie) now thread theme metrics
+into these configs.
+
+#### Backward compatibility
+- `TextMetrics::default()` matches the legacy 12px sans calibration exactly,
+  so `measure_text(text, &TextMetrics::default()) == approximate_text_width(text)`
+  for every input.
+- All four `Theme::*_text_metrics()` constructors return `TextMetrics::default()`
+  when the relevant fields on the theme equal `Theme::default()`'s values, so
+  the legacy short-circuit fires for every un-themed render.
+- Verified by the `backward_compat_goldens_byte_identical` test over all 191
+  golden charts.
+
+#### Acceptance gate
+`crates/chartml-test-runner/tests/phase10_kyomi_sanity.rs` adds four
+`phase11_kyomi_typography_no_overlap_*` tests that render bar, line, scatter
+and pie charts under the aggressive Kyomi typography (Instrument Serif 22px
+title, DM Sans 10px Uppercase 1.2px tracking, Geist Mono 11px numerics) and
+walk every emitted `<text>` element to assert that no two boxes inside the
+same role group intersect.
+
 ### Backward compatibility
 - `Theme::default()` and `Theme::dark()` produce byte-identical SVG output
   vs 3.0.0. Verified by the `backward_compat` test over all 191 golden charts.

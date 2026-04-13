@@ -20,8 +20,10 @@
 //! per-check comments below.
 
 use chartml_chart_cartesian::CartesianRenderer;
+use chartml_chart_pie::PieRenderer;
 use chartml_chart_scatter::ScatterRenderer;
-use chartml_core::element::{count_elements, ChartElement};
+use chartml_core::element::{count_elements, ChartElement, TextAnchor, Transform as ElTransform};
+use chartml_core::layout::labels::{measure_text, TextMetrics};
 use chartml_core::theme::{BarCornerRadius, GridStyle, TextTransform, Theme, ZeroLineSpec};
 use chartml_core::ChartML;
 
@@ -81,7 +83,10 @@ fn new_chartml() -> ChartML {
     let mut c = ChartML::new();
     c.register_renderer("bar", CartesianRenderer::new());
     c.register_renderer("line", CartesianRenderer::new());
+    c.register_renderer("area", CartesianRenderer::new());
     c.register_renderer("scatter", ScatterRenderer::new());
+    c.register_renderer("pie", PieRenderer::new());
+    c.register_renderer("doughnut", PieRenderer::new());
     c.set_theme(kyomi_theme());
     c
 }
@@ -505,4 +510,366 @@ fn phase10_check9_theme_bg_propagates_to_dot_marker_stroke() {
         "found {} white-fill rect(s) — Kyomi theme expects transparent background",
         white_rects.len()
     );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 11 — text overlap acceptance gate.
+//
+// This is the gate the upstream consumer (Kyomi) needs to flip: when a chart
+// is rendered with the aggressive Kyomi typography overrides (uppercase
+// labels with letter-spacing, monospace numeric ticks, oversize serif
+// title), the layout passes must not allow text to overlap inside any of
+// the four label groups: tick labels, axis labels, legend items, chart
+// titles.
+//
+// The check measures each rendered `<text>` element with the same theme-
+// aware `measure_text` the layout uses, projects it to a screen-space bbox
+// (handling text-anchor and -45° rotated tick labels), then asserts that
+// no two boxes inside the same group intersect.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+struct TextBox {
+    role: String,
+    content: String,
+    x_min: f64,
+    x_max: f64,
+    y_min: f64,
+    y_max: f64,
+}
+
+fn parse_px(value: Option<&String>) -> Option<f64> {
+    value.and_then(|s| s.trim_end_matches("px").parse::<f64>().ok())
+}
+
+fn metrics_from_text_attrs(
+    font_size: Option<&String>,
+    letter_spacing: Option<&String>,
+    text_transform: Option<&String>,
+    font_family: Option<&String>,
+) -> TextMetrics {
+    let mut m = TextMetrics::default();
+    if let Some(px) = parse_px(font_size) {
+        m.font_size_px = px;
+    }
+    if let Some(px) = parse_px(letter_spacing) {
+        m.letter_spacing_px = px;
+    }
+    if let Some(t) = text_transform {
+        m.text_transform = match t.as_str() {
+            "uppercase" => TextTransform::Uppercase,
+            "lowercase" => TextTransform::Lowercase,
+            _ => TextTransform::None,
+        };
+    }
+    if let Some(family) = font_family {
+        let lower = family.to_ascii_lowercase();
+        if lower.contains("mono") || lower.contains("menlo") || lower.contains("consolas")
+            || lower.contains("ui-monospace") || lower.contains("courier")
+        {
+            m.monospace = true;
+        }
+    }
+    m
+}
+
+fn role_for(class: &str) -> Option<&'static str> {
+    if class.split_whitespace().any(|c| c == "tick-value") {
+        Some("tick-value")
+    } else if class.split_whitespace().any(|c| c == "tick-label") {
+        Some("tick-label")
+    } else if class.split_whitespace().any(|c| c == "legend-label") {
+        Some("legend-label")
+    } else if class.split_whitespace().any(|c| c == "axis-label") {
+        Some("axis-label")
+    } else if class.split_whitespace().any(|c| c == "chart-title") {
+        Some("chart-title")
+    } else {
+        None
+    }
+}
+
+/// Walk the element tree and return one `TextBox` per visible text element
+/// whose class identifies it as a label/title role we want to police.
+fn collect_text_boxes(root: &ChartElement) -> Vec<TextBox> {
+    let mut texts = Vec::new();
+    collect(root, &|e| matches!(e, ChartElement::Text { .. }), &mut texts);
+
+    let mut boxes = Vec::new();
+    for el in texts {
+        let ChartElement::Text {
+            x,
+            y,
+            content,
+            anchor,
+            transform,
+            font_family,
+            font_size,
+            letter_spacing,
+            text_transform,
+            class,
+            ..
+        } = el
+        else {
+            continue;
+        };
+        let Some(role) = role_for(class) else {
+            continue;
+        };
+        if content.is_empty() {
+            continue;
+        }
+        let metrics = metrics_from_text_attrs(
+            font_size.as_ref(),
+            letter_spacing.as_ref(),
+            text_transform.as_ref(),
+            font_family.as_ref(),
+        );
+        let width = measure_text(content, &metrics);
+        let height = metrics.font_size_px;
+
+        // x range from anchor (unrotated baseline math).
+        let (mut x_min, mut x_max) = match anchor {
+            TextAnchor::Start => (*x, *x + width),
+            TextAnchor::Middle => (*x - width / 2.0, *x + width / 2.0),
+            TextAnchor::End => (*x - width, *x),
+        };
+        let (mut y_min, mut y_max) = (*y - height * 0.80, *y + height * 0.20);
+
+        // For rotated tick labels (-45°), the horizontal projection shrinks
+        // by cos(45°) and the vertical projection grows. Approximate the
+        // axis-aligned bounding box of the rotated rect.
+        if let Some(ElTransform::Rotate(angle, ..)) = transform {
+            if (*angle - -45.0_f64).abs() < 1e-6 {
+                let cos45 = std::f64::consts::FRAC_PI_4.cos();
+                let sin45 = std::f64::consts::FRAC_PI_4.sin();
+                let proj_w = width * cos45;
+                let proj_h = width * sin45 + height;
+                // Tick labels rotate around an end-anchored point at (x, y).
+                x_min = *x - proj_w;
+                x_max = *x;
+                y_min = *y - height * 0.5;
+                y_max = *y - height * 0.5 + proj_h;
+            }
+        }
+
+        boxes.push(TextBox {
+            role: role.to_string(),
+            content: content.clone(),
+            x_min,
+            x_max,
+            y_min,
+            y_max,
+        });
+    }
+    boxes
+}
+
+fn boxes_overlap(a: &TextBox, b: &TextBox) -> bool {
+    // Allow a 0.25px slack so abutting glyph cells are not flagged.
+    let pad = 0.25;
+    a.x_min < b.x_max - pad
+        && b.x_min < a.x_max - pad
+        && a.y_min < b.y_max - pad
+        && b.y_min < a.y_max - pad
+}
+
+fn assert_no_overlap_within_group(label: &str, boxes: &[TextBox]) {
+    let mut by_role: std::collections::HashMap<&str, Vec<&TextBox>> =
+        std::collections::HashMap::new();
+    for b in boxes {
+        by_role.entry(b.role.as_str()).or_default().push(b);
+    }
+    for (role, items) in &by_role {
+        for i in 0..items.len() {
+            for j in (i + 1)..items.len() {
+                if boxes_overlap(items[i], items[j]) {
+                    panic!(
+                        "[{label}] text overlap in role '{role}': '{a}' ({a_x_min:.1}..{a_x_max:.1}, {a_y_min:.1}..{a_y_max:.1}) overlaps '{b}' ({b_x_min:.1}..{b_x_max:.1}, {b_y_min:.1}..{b_y_max:.1})",
+                        a = items[i].content,
+                        a_x_min = items[i].x_min,
+                        a_x_max = items[i].x_max,
+                        a_y_min = items[i].y_min,
+                        a_y_max = items[i].y_max,
+                        b = items[j].content,
+                        b_x_min = items[j].x_min,
+                        b_x_max = items[j].x_max,
+                        b_y_min = items[j].y_min,
+                        b_y_max = items[j].y_max,
+                    );
+                }
+            }
+        }
+    }
+}
+
+const KYOMI_BAR_YAML: &str = r#"
+type: chart
+version: 1
+title: "Monthly Revenue"
+data:
+  provider: inline
+  rows:
+    - month: "January"
+      product: "Widgets"
+      revenue: 12500
+    - month: "January"
+      product: "Gadgets"
+      revenue: 8400
+    - month: "February"
+      product: "Widgets"
+      revenue: 14200
+    - month: "February"
+      product: "Gadgets"
+      revenue: 9100
+    - month: "March"
+      product: "Widgets"
+      revenue: 16800
+    - month: "March"
+      product: "Gadgets"
+      revenue: 9700
+    - month: "April"
+      product: "Widgets"
+      revenue: 15400
+    - month: "April"
+      product: "Gadgets"
+      revenue: 10500
+    - month: "May"
+      product: "Widgets"
+      revenue: 17900
+    - month: "May"
+      product: "Gadgets"
+      revenue: 11200
+    - month: "June"
+      product: "Widgets"
+      revenue: 18600
+    - month: "June"
+      product: "Gadgets"
+      revenue: 12100
+visualize:
+  type: bar
+  columns: month
+  rows: revenue
+  marks:
+    color: product
+"#;
+
+const KYOMI_LINE_YAML: &str = r#"
+type: chart
+version: 1
+title: "Quarterly Trend"
+data:
+  provider: inline
+  rows:
+    - q: "Q1 2024"
+      v: 1234567
+    - q: "Q2 2024"
+      v: 2345678
+    - q: "Q3 2024"
+      v: 3456789
+    - q: "Q4 2024"
+      v: 2987654
+visualize:
+  type: line
+  columns: q
+  rows: v
+"#;
+
+const KYOMI_SCATTER_YAML: &str = r#"
+type: chart
+version: 1
+title: "Revenue vs Cost"
+data:
+  provider: inline
+  rows:
+    - revenue: 1000
+      cost: 800
+      category: "alpha bravo"
+    - revenue: 2000
+      cost: 1500
+      category: "alpha bravo"
+    - revenue: 3000
+      cost: 2100
+      category: "charlie delta"
+    - revenue: 4000
+      cost: 2800
+      category: "charlie delta"
+    - revenue: 5000
+      cost: 3300
+      category: "echo foxtrot"
+    - revenue: 6000
+      cost: 4000
+      category: "echo foxtrot"
+visualize:
+  type: scatter
+  columns: revenue
+  rows: cost
+  marks:
+    color: category
+"#;
+
+const KYOMI_PIE_YAML: &str = r#"
+type: chart
+version: 1
+title: "Market Share"
+data:
+  provider: inline
+  rows:
+    - segment: "Enterprise"
+      revenue: 4500
+    - segment: "Mid-Market"
+      revenue: 3200
+    - segment: "Small Business"
+      revenue: 2100
+    - segment: "Consumer"
+      revenue: 1700
+visualize:
+  type: pie
+  columns: segment
+  rows: revenue
+"#;
+
+fn render_with_kyomi(yaml: &str) -> ChartElement {
+    let chartml = new_chartml();
+    chartml.render_from_yaml(yaml).expect("render under kyomi theme")
+}
+
+#[test]
+fn phase11_kyomi_typography_no_overlap_bar() {
+    let el = render_with_kyomi(KYOMI_BAR_YAML);
+    let boxes = collect_text_boxes(&el);
+    assert!(
+        boxes.iter().any(|b| b.role == "tick-label"),
+        "expected at least one tick label in bar render"
+    );
+    assert!(
+        boxes.iter().any(|b| b.role == "legend-label"),
+        "expected at least one legend label in bar render"
+    );
+    assert_no_overlap_within_group("bar", &boxes);
+}
+
+#[test]
+fn phase11_kyomi_typography_no_overlap_line() {
+    let el = render_with_kyomi(KYOMI_LINE_YAML);
+    let boxes = collect_text_boxes(&el);
+    assert_no_overlap_within_group("line", &boxes);
+}
+
+#[test]
+fn phase11_kyomi_typography_no_overlap_scatter() {
+    let el = render_with_kyomi(KYOMI_SCATTER_YAML);
+    let boxes = collect_text_boxes(&el);
+    assert!(
+        boxes.iter().any(|b| b.role == "legend-label"),
+        "expected legend labels in scatter render"
+    );
+    assert_no_overlap_within_group("scatter", &boxes);
+}
+
+#[test]
+fn phase11_kyomi_typography_no_overlap_pie() {
+    let el = render_with_kyomi(KYOMI_PIE_YAML);
+    let boxes = collect_text_boxes(&el);
+    assert_no_overlap_within_group("pie", &boxes);
 }

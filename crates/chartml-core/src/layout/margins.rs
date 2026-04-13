@@ -46,6 +46,14 @@ pub struct MarginConfig {
     pub max_right_margin: f64,
     /// Total SVG height — used to scale bottom margin for small charts.
     pub chart_height: f64,
+    /// Text metrics used to measure numeric tick labels (left/right axes).
+    /// Defaults to the legacy 12px sans calibration; override via
+    /// `TextMetrics::from_theme_tick_value(theme)` when the theme overrides
+    /// numeric typography.
+    pub tick_value_metrics: super::labels::TextMetrics,
+    /// Text metrics used to reserve room for the rotated Y-axis label.
+    /// Defaults to legacy.
+    pub axis_label_metrics: super::labels::TextMetrics,
 }
 
 impl Default for MarginConfig {
@@ -62,6 +70,8 @@ impl Default for MarginConfig {
             max_left_margin: 250.0,
             max_right_margin: 250.0,
             chart_height: 400.0,
+            tick_value_metrics: super::labels::TextMetrics::default(),
+            axis_label_metrics: super::labels::TextMetrics::default(),
         }
     }
 }
@@ -77,14 +87,14 @@ impl Default for MarginConfig {
 /// - Bottom: 40px base + x_label_strategy_margin (rotation) + 20px if x-axis label
 ///   + legend_height + 8px gap when legend is present
 pub fn calculate_margins(config: &MarginConfig) -> Margins {
-    use super::labels::approximate_text_width;
+    use super::labels::measure_text;
 
     // Top margin — matches JS d3CartesianChart.js marginTop=20 (title is rendered as HTML outside SVG)
     let top = 20.0;
 
     // Left margin: based on Y-axis tick label widths
     let max_y_label_width = config.y_tick_labels.iter()
-        .map(|l| approximate_text_width(l))
+        .map(|l| measure_text(l, &config.tick_value_metrics))
         .fold(0.0_f64, f64::max);
     let tick_padding = 15.0;
     let left_base = if max_y_label_width > 0.0 {
@@ -94,10 +104,17 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
     };
     // When a y-axis label is present (rotated -90°), ensure the left margin
     // accommodates: tick_label_max_width + tick_padding (15px) + gap (4px)
-    // + axis_label_width (~14px for rotated text at 11-12px font).
+    // + axis_label_width (rotated text height ≈ font size + padding).
     // This prevents the rotated axis label from overlapping the tick labels.
     let left = if config.has_y_axis_label {
-        let axis_label_width = 14.0_f64; // rotated text height ≈ font size + padding
+        // Base legacy allowance is 14px; when the theme scales the axis
+        // label font up, grow the reservation in proportion so the rotated
+        // label still clears the tick labels.
+        let axis_label_width = if config.axis_label_metrics.is_legacy_default() {
+            14.0_f64
+        } else {
+            (config.axis_label_metrics.font_size_px + 2.0).max(14.0)
+        };
         let gap = 4.0_f64;
         let min_with_label = max_y_label_width + tick_padding + gap + axis_label_width;
         left_base.max(min_with_label)
@@ -108,7 +125,7 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
     // Right margin
     let right = if config.has_right_axis {
         let max_right_width = config.right_tick_labels.iter()
-            .map(|l| approximate_text_width(l))
+            .map(|l| measure_text(l, &config.tick_value_metrics))
             .fold(0.0_f64, f64::max);
         // 24px for tick+gap, +20px for axis title label
         (max_right_width + 24.0 + 20.0)
