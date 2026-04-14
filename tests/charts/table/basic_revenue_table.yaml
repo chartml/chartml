@@ -1,0 +1,45 @@
+name: "Table — basic revenue table (drop-in from bar)"
+tags: [table, drop-in, currency-format]
+description: >
+  A monthly revenue table sourced from the same columns + rows shape
+  a bar chart would use. Demonstrates that `type: table` is a drop-in
+  for `type: bar` — no other spec changes required. Header labels come
+  from `FieldSpec.label`, cell formatting from `FieldSpec.format`.
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Revenue"
+  data:
+    provider: inline
+    rows:
+      - month: "Jan"
+        revenue: 1200
+        cost: 400
+      - month: "Feb"
+        revenue: 1500
+        cost: 450
+      - month: "Mar"
+        revenue: 1800
+        cost: 500
+  visualize:
+    type: table
+    columns: month
+    rows:
+      - field: revenue
+        label: Revenue
+        format: "$,.0f"
+      - field: cost
+        label: Cost
+        format: "$,.0f"
+
+assertions:
+  structure:
+    root: div
+    is_table: true
+  columns: [month, Revenue, Cost]
+  row_count: 3
+  cells:
+    - { row: 0, col: month, text: "Jan" }
+    - { row: 0, col: Revenue, text: "$1,200" }
+    - { row: 2, col: Cost, text: "$500" }

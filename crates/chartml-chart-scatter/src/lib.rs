@@ -626,11 +626,10 @@ mod tests {
         use chartml_core::theme::Theme;
         let renderer = ScatterRenderer::new();
         let mut config = make_scatter_config();
-        config.theme = Theme {
-            dot_halo_color: Some("#ffffff".to_string()),
-            dot_halo_width: 1.5,
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.dot_halo_color = Some("#ffffff".to_string());
+        t.dot_halo_width = 1.5;
+        config.theme = t;
         let element = renderer.render(&make_scatter_data(), &config).unwrap();
 
         // 4 data points → 4 halos (legend circles don't get halos).
@@ -664,11 +663,10 @@ mod tests {
         use chartml_core::theme::Theme;
         let renderer = ScatterRenderer::new();
         let mut config = make_scatter_config();
-        config.theme = Theme {
-            dot_halo_color: Some("#ffffff".to_string()),
-            dot_halo_width: 1.5,
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.dot_halo_color = Some("#ffffff".to_string());
+        t.dot_halo_width = 1.5;
+        config.theme = t;
         let element = renderer.render(&make_scatter_data(), &config).unwrap();
 
         // Walk the points group and assert every dot-marker circle is
@@ -711,11 +709,10 @@ mod tests {
         use chartml_core::theme::Theme;
         let renderer = ScatterRenderer::new();
         let mut config = make_bubble_config();
-        config.theme = Theme {
-            dot_halo_color: Some("#000000".to_string()),
-            dot_halo_width: 1.0,
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.dot_halo_color = Some("#000000".to_string());
+        t.dot_halo_width = 1.0;
+        config.theme = t;
         let element = renderer.render(&make_bubble_data(), &config).unwrap();
 
         // Collect halo path d strings and dot radii in traversal order.
@@ -757,11 +754,10 @@ mod tests {
         use chartml_core::theme::Theme;
         let renderer = ScatterRenderer::new();
         let mut config = make_scatter_config();
-        config.theme = Theme {
-            dot_halo_color: Some("#ffffff".to_string()),
-            dot_halo_width: 1.0,
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.dot_halo_color = Some("#ffffff".to_string());
+        t.dot_halo_width = 1.0;
+        config.theme = t;
         let element = renderer.render(&make_scatter_data(), &config).unwrap();
         let order = collect_dot_and_halo_order(&element);
         // Find the first "dot-halo" entry and ensure it's followed by a
@@ -787,7 +783,9 @@ mod tests {
         );
 
         // None: zero gridlines of either orientation.
-        config.theme = Theme { grid_style: GridStyle::None, ..Theme::default() };
+        let mut t = Theme::default();
+        t.grid_style = GridStyle::None;
+        config.theme = t;
         let element = renderer.render(&data, &config).unwrap();
         let n = count_scatter_grid_lines(&element);
         assert_eq!(n, 0, "GridStyle::None: expected 0 scatter gridlines, got {}", n);

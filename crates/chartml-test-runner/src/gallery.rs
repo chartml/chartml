@@ -150,7 +150,7 @@ fn build_wasm_html(specs: &[SpecInfo]) -> String {
 
     let type_order = [
         "bar", "line", "area", "pie", "doughnut", "scatter", "bubble", "metric",
-        "edge_cases", "sizing",
+        "table", "edge_cases", "sizing",
     ];
 
     let total = specs.len();

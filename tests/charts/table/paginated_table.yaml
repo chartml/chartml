@@ -1,0 +1,42 @@
+name: "Table — pagination via style.pageSize"
+tags: [table, pagination]
+description: >
+  Six rows with pageSize 3 — only the first three render and a pager
+  footer appears. Verifies the only table-specific spec field
+  (`visualize.style.pageSize`).
+
+chart:
+  type: chart
+  version: 1
+  title: "Top Products"
+  data:
+    provider: inline
+    rows:
+      - product: "A"
+        units: 100
+      - product: "B"
+        units: 90
+      - product: "C"
+        units: 80
+      - product: "D"
+        units: 70
+      - product: "E"
+        units: 60
+      - product: "F"
+        units: 50
+  visualize:
+    type: table
+    columns: product
+    rows:
+      - field: units
+        label: Units
+    style:
+      pageSize: 3
+
+assertions:
+  structure:
+    root: div
+    is_table: true
+  columns: [product, Units]
+  row_count: 3
+  has_pager: true

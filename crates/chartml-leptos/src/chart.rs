@@ -395,13 +395,11 @@ mod title_style_tests {
 
     #[test]
     fn custom_title_typography_is_threaded_through() {
-        let theme = Theme {
-            title_font_family: "Georgia, serif".into(),
-            title_font_size: 22.0,
-            title_font_weight: 800,
-            title_font_style: "italic".into(),
-            ..Theme::default()
-        };
+        let mut theme = Theme::default();
+        theme.title_font_family = "Georgia, serif".into();
+        theme.title_font_size = 22.0;
+        theme.title_font_weight = 800;
+        theme.title_font_style = "italic".into();
         let style = build_title_style(&theme);
         assert!(style.contains("font-size: 22px"), "style: {}", style);
         assert!(style.contains("font-weight: 800"), "style: {}", style);
@@ -411,7 +409,8 @@ mod title_style_tests {
 
     #[test]
     fn fractional_font_size_preserves_decimal() {
-        let theme = Theme { title_font_size: 18.5, ..Theme::default() };
+        let mut theme = Theme::default();
+        theme.title_font_size = 18.5;
         let style = build_title_style(&theme);
         assert!(style.contains("font-size: 18.5px"), "style: {}", style);
     }
@@ -423,13 +422,11 @@ mod title_style_tests {
     /// in the emitted title style string.
     #[test]
     fn phase10_kyomi_title_uses_serif_family() {
-        let theme = Theme {
-            title_font_family: "Instrument Serif, Georgia, serif".into(),
-            title_font_size: 22.0,
-            title_font_weight: 400,
-            title_font_style: "normal".into(),
-            ..Theme::default()
-        };
+        let mut theme = Theme::default();
+        theme.title_font_family = "Instrument Serif, Georgia, serif".into();
+        theme.title_font_size = 22.0;
+        theme.title_font_weight = 400;
+        theme.title_font_style = "normal".into();
         let style = build_title_style(&theme);
         assert!(
             style.contains("font-family: Instrument Serif, Georgia, serif"),
@@ -442,7 +439,8 @@ mod title_style_tests {
 
     #[test]
     fn only_size_override_keeps_legacy_weight_and_omits_family() {
-        let theme = Theme { title_font_size: 20.0, ..Theme::default() };
+        let mut theme = Theme::default();
+        theme.title_font_size = 20.0;
         let style = build_title_style(&theme);
         assert!(style.contains("font-size: 20px"));
         // Weight still matches default sentinel -> legacy 600.

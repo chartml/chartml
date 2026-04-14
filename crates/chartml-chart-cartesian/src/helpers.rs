@@ -1387,7 +1387,9 @@ mod zero_line_tests {
     use chartml_core::theme::{Theme, ZeroLineSpec};
 
     fn themed(spec: Option<ZeroLineSpec>) -> Theme {
-        Theme { zero_line: spec, ..Theme::default() }
+        let mut t = Theme::default();
+        t.zero_line = spec;
+        t
     }
 
     #[test]

@@ -123,13 +123,12 @@ mod tests {
         let renderer = CartesianRenderer::new();
         let data = make_bar_data();
         let mut config = make_bar_config();
-        config.theme = Theme {
-            label_font_family: "serif".into(),
-            label_letter_spacing: 1.5,
-            label_text_transform: TextTransform::Uppercase,
-            label_font_weight: 600,
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.label_font_family = "serif".into();
+        t.label_letter_spacing = 1.5;
+        t.label_text_transform = TextTransform::Uppercase;
+        t.label_font_weight = 600;
+        config.theme = t;
 
         let element = renderer.render(&data, &config).unwrap();
 
@@ -207,12 +206,11 @@ mod tests {
         let renderer = CartesianRenderer::new();
         let data = make_bar_data();
         let mut config = make_bar_config();
-        config.theme = Theme {
-            numeric_font_family: "monospace".into(),
-            label_letter_spacing: 0.75,
-            label_text_transform: TextTransform::Lowercase,
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.numeric_font_family = "monospace".into();
+        t.label_letter_spacing = 0.75;
+        t.label_text_transform = TextTransform::Lowercase;
+        config.theme = t;
 
         let element = renderer.render(&data, &config).unwrap();
 
@@ -826,10 +824,9 @@ style:
         use chartml_core::theme::{BarCornerRadius, Theme};
         let renderer = CartesianRenderer::new();
         let mut config = make_bar_config();
-        config.theme = Theme {
-            bar_corner_radius: BarCornerRadius::Uniform(8.0),
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.bar_corner_radius = BarCornerRadius::Uniform(8.0);
+        config.theme = t;
         let element = renderer.render(&make_bar_data(), &config).expect("render");
 
         let mut radii = Vec::new();
@@ -864,10 +861,9 @@ style:
         use chartml_core::theme::{BarCornerRadius, Theme};
         let renderer = CartesianRenderer::new();
         let mut config = make_bar_config();
-        config.theme = Theme {
-            bar_corner_radius: BarCornerRadius::Top(0.0),
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.bar_corner_radius = BarCornerRadius::Top(0.0);
+        config.theme = t;
         let element = renderer.render(&make_bar_data(), &config).expect("render");
 
         let mut bars = Vec::new();
@@ -889,10 +885,9 @@ style:
         use chartml_core::theme::{BarCornerRadius, Theme};
         let renderer = CartesianRenderer::new();
         let mut config = make_bar_config();
-        config.theme = Theme {
-            bar_corner_radius: BarCornerRadius::Top(8.0),
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.bar_corner_radius = BarCornerRadius::Top(8.0);
+        config.theme = t;
         let element = renderer.render(&make_bar_data(), &config).expect("render");
 
         let mut bars = Vec::new();
@@ -918,10 +913,9 @@ style:
         let renderer = CartesianRenderer::new();
         let mut config = make_bar_config();
         config.visualize.orientation = Some(chartml_core::spec::Orientation::Horizontal);
-        config.theme = Theme {
-            bar_corner_radius: BarCornerRadius::Top(8.0),
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.bar_corner_radius = BarCornerRadius::Top(8.0);
+        config.theme = t;
         let element = renderer.render(&make_bar_data(), &config).expect("render");
 
         let mut bars = Vec::new();
@@ -948,10 +942,8 @@ style:
         use chartml_core::theme::{BarCornerRadius, Theme};
         use crate::bar::{build_bar_element, BarRectSpec};
 
-        let theme = Theme {
-            bar_corner_radius: BarCornerRadius::Top(8.0),
-            ..Theme::default()
-        };
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Top(8.0);
 
         let pos = build_bar_element(
             BarRectSpec {
@@ -1010,10 +1002,9 @@ style:
         use chartml_core::theme::Theme;
         let renderer = CartesianRenderer::new();
         let mut config = make_line_config();
-        config.theme = Theme {
-            series_line_weight: 4.0,
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.series_line_weight = 4.0;
+        config.theme = t;
         let element = renderer
             .render(&make_bar_data(), &config)
             .expect("render");
@@ -1031,10 +1022,9 @@ style:
         use chartml_core::theme::Theme;
         let renderer = CartesianRenderer::new();
         let mut config = make_area_config();
-        config.theme = Theme {
-            series_line_weight: 3.5,
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.series_line_weight = 3.5;
+        config.theme = t;
         let element = renderer.render(&make_bar_data(), &config).expect("render");
 
         let mut widths = Vec::new();
@@ -1050,10 +1040,9 @@ style:
         use chartml_core::theme::Theme;
         let renderer = CartesianRenderer::new();
         let mut config = make_line_config();
-        config.theme = Theme {
-            dot_radius: 10.0,
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.dot_radius = 10.0;
+        config.theme = t;
         let element = renderer.render(&make_bar_data(), &config).expect("render");
 
         let mut radii = Vec::new();
@@ -1069,11 +1058,10 @@ style:
         use chartml_core::theme::Theme;
         let renderer = CartesianRenderer::new();
         let mut config = make_bar_config();
-        config.theme = Theme {
-            axis_line_weight: 2.5,
-            grid_line_weight: 0.5,
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.axis_line_weight = 2.5;
+        t.grid_line_weight = 0.5;
+        config.theme = t;
 
         let element = renderer.render(&make_bar_data(), &config).expect("render");
 
@@ -1178,7 +1166,9 @@ style:
         let renderer = CartesianRenderer::new();
         let data = make_bar_data();
         let mut config = make_bar_config_both_grids();
-        config.theme = Theme { grid_style: GridStyle::Both, ..Theme::default() };
+        let mut t = Theme::default();
+        t.grid_style = GridStyle::Both;
+        config.theme = t;
 
         let element = renderer.render(&data, &config).unwrap();
         let (vx, hy) = count_grid_lines(&element);
@@ -1192,7 +1182,9 @@ style:
         let renderer = CartesianRenderer::new();
         let data = make_bar_data();
         let mut config = make_bar_config_both_grids();
-        config.theme = Theme { grid_style: GridStyle::HorizontalOnly, ..Theme::default() };
+        let mut t = Theme::default();
+        t.grid_style = GridStyle::HorizontalOnly;
+        config.theme = t;
 
         let element = renderer.render(&data, &config).unwrap();
         let (vx, hy) = count_grid_lines(&element);
@@ -1206,7 +1198,9 @@ style:
         let renderer = CartesianRenderer::new();
         let data = make_bar_data();
         let mut config = make_bar_config_both_grids();
-        config.theme = Theme { grid_style: GridStyle::VerticalOnly, ..Theme::default() };
+        let mut t = Theme::default();
+        t.grid_style = GridStyle::VerticalOnly;
+        config.theme = t;
 
         let element = renderer.render(&data, &config).unwrap();
         let (vx, hy) = count_grid_lines(&element);
@@ -1220,7 +1214,9 @@ style:
         let renderer = CartesianRenderer::new();
         let data = make_bar_data();
         let mut config = make_bar_config_both_grids();
-        config.theme = Theme { grid_style: GridStyle::None, ..Theme::default() };
+        let mut t = Theme::default();
+        t.grid_style = GridStyle::None;
+        config.theme = t;
 
         let element = renderer.render(&data, &config).unwrap();
         let (vx, hy) = count_grid_lines(&element);
@@ -1264,10 +1260,9 @@ style:
         let renderer = CartesianRenderer::new();
         let data = make_bar_data_crossing_zero();
         let mut config = make_bar_config();
-        config.theme = Theme {
-            zero_line: Some(ZeroLineSpec { color: "#ff0000".into(), width: 1.5 }),
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.zero_line = Some(ZeroLineSpec { color: "#ff0000".into(), width: 1.5 });
+        config.theme = t;
 
         let element = renderer.render(&data, &config).unwrap();
         assert_eq!(count_zero_lines(&element), 1, "expected exactly one zero-line");
@@ -1305,16 +1300,15 @@ style:
             columns: month
             rows: revenue
         "#).unwrap();
+        let mut theme = Theme::default();
+        theme.zero_line = Some(ZeroLineSpec { color: "#ff0000".into(), width: 1.5 });
         let config = ChartConfig {
             visualize: viz,
             title: Some("Test Horizontal Bar".to_string()),
             width: 800.0,
             height: 400.0,
             colors: vec!["#2E7D9A".to_string()],
-            theme: Theme {
-                zero_line: Some(ZeroLineSpec { color: "#ff0000".into(), width: 1.5 }),
-                ..Theme::default()
-            },
+            theme,
         };
 
         let element = renderer.render(&data, &config).unwrap();
@@ -1372,10 +1366,9 @@ style:
         let renderer = CartesianRenderer::new();
         let data = make_bar_data(); // values: 100, 200, 150 — all positive
         let mut config = make_bar_config();
-        config.theme = Theme {
-            zero_line: Some(ZeroLineSpec { color: "#ff0000".into(), width: 1.5 }),
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.zero_line = Some(ZeroLineSpec { color: "#ff0000".into(), width: 1.5 });
+        config.theme = t;
 
         let element = renderer.render(&data, &config).unwrap();
         assert_eq!(
@@ -1392,10 +1385,9 @@ style:
         let renderer = CartesianRenderer::new();
         let data = make_bar_data_crossing_zero();
         let mut config = make_line_config();
-        config.theme = Theme {
-            zero_line: Some(ZeroLineSpec { color: "#00ff00".into(), width: 2.0 }),
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.zero_line = Some(ZeroLineSpec { color: "#00ff00".into(), width: 2.0 });
+        config.theme = t;
         let element = renderer.render(&data, &config).unwrap();
         assert_eq!(count_zero_lines(&element), 1);
     }
@@ -1423,11 +1415,10 @@ style:
         let renderer = CartesianRenderer::new();
         let data = make_bar_data();
         let mut config = make_line_config();
-        config.theme = Theme {
-            dot_halo_color: Some("#ffffff".to_string()),
-            dot_halo_width: 1.5,
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.dot_halo_color = Some("#ffffff".to_string());
+        t.dot_halo_width = 1.5;
+        config.theme = t;
         let element = renderer.render(&data, &config).unwrap();
 
         let dot_n = count_dot_markers(&element);
@@ -1488,10 +1479,9 @@ style:
         let renderer = CartesianRenderer::new();
         let data = make_bar_data_crossing_zero();
         let mut config = make_area_config();
-        config.theme = Theme {
-            zero_line: Some(ZeroLineSpec { color: "#0000ff".into(), width: 1.0 }),
-            ..Theme::default()
-        };
+        let mut t = Theme::default();
+        t.zero_line = Some(ZeroLineSpec { color: "#0000ff".into(), width: 1.0 });
+        config.theme = t;
         let element = renderer.render(&data, &config).unwrap();
         assert_eq!(count_zero_lines(&element), 1);
     }

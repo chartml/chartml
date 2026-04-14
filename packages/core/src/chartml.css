@@ -31,6 +31,14 @@
   --chartml-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --chartml-focus-ring: rgba(59, 130, 246, 0.1);
   --chartml-focus-border: #3b82f6;
+  --chartml-table-header-bg: #f9fafb;
+  --chartml-table-header-text: #1f2937;
+  --chartml-table-row-bg: #ffffff;
+  --chartml-table-row-bg-alt: #f9fafb;
+  --chartml-table-border: #e5e7eb;
+  --chartml-table-text: #374151;
+  --chartml-table-cell-padding: 8px 12px;
+  --chartml-table-font-size: 13px;
 }
 
 .dark {
@@ -51,6 +59,12 @@
   --chartml-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
   --chartml-focus-ring: rgba(59, 130, 246, 0.3);
   --chartml-focus-border: #60a5fa;
+  --chartml-table-header-bg: #111827;
+  --chartml-table-header-text: #f3f4f6;
+  --chartml-table-row-bg: #1f2937;
+  --chartml-table-row-bg-alt: #111827;
+  --chartml-table-border: #374151;
+  --chartml-table-text: #e5e7eb;
 }
 
 /* Standalone fallback: auto-detect dark preference when no .light/.dark class is set */
@@ -73,7 +87,58 @@
     --chartml-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
     --chartml-focus-ring: rgba(59, 130, 246, 0.3);
     --chartml-focus-border: #60a5fa;
+    --chartml-table-header-bg: #111827;
+    --chartml-table-header-text: #f3f4f6;
+    --chartml-table-row-bg: #1f2937;
+    --chartml-table-row-bg-alt: #111827;
+    --chartml-table-border: #374151;
+    --chartml-table-text: #e5e7eb;
   }
+}
+
+/* ============================================================
+ * Table chart — class hooks for consumer theming.
+ *
+ * The Rust renderer emits inline styles from Theme values for SSR
+ * fidelity. These class rules layer the matching CSS custom properties
+ * on top so browser hosts can switch light/dark live or override any
+ * token without touching chartml itself. Consumers (e.g. Kyomi) ship
+ * their own CSS targeting these class names to make tables look
+ * distinctively their own.
+ * ============================================================ */
+.chartml-table {
+  background: var(--chartml-table-row-bg);
+  color: var(--chartml-table-text);
+  border-color: var(--chartml-table-border);
+}
+.chartml-table-header {
+  background: var(--chartml-table-header-bg);
+}
+.chartml-table-header-cell {
+  color: var(--chartml-table-header-text);
+  padding: var(--chartml-table-cell-padding);
+  font-size: var(--chartml-table-font-size);
+  border-bottom-color: var(--chartml-table-border);
+}
+.chartml-table-row {
+  background: var(--chartml-table-row-bg);
+}
+.chartml-table-row-alt {
+  background: var(--chartml-table-row-bg-alt);
+}
+.chartml-table-cell {
+  color: var(--chartml-table-text);
+  padding: var(--chartml-table-cell-padding);
+  font-size: var(--chartml-table-font-size);
+  border-bottom-color: var(--chartml-table-border);
+}
+.chartml-table-pager {
+  background: var(--chartml-table-header-bg);
+  border-top-color: var(--chartml-table-border);
+}
+.chartml-table-pager-info {
+  font-size: var(--chartml-table-font-size);
+  color: var(--chartml-text-secondary);
 }
 
 /* Defensive CSS fallback for D3-generated axis elements */

@@ -29,54 +29,50 @@ use chartml_core::ChartML;
 
 /// Build the Kyomi target theme exactly as specified in the Phase 10 plan.
 fn kyomi_theme() -> Theme {
-    Theme {
-        // Chrome colors
-        text: "#1C1917".into(),
-        text_secondary: "#6B6660".into(),
-        text_strong: "#1C1917".into(),
-        axis_line: "#1C1917".into(),
-        tick: "#1C1917".into(),
-        grid: "#EDE9E0".into(),
-        bg: String::new(), // transparent
+    let mut t = Theme::default();
+    // Chrome colors
+    t.text = "#1C1917".into();
+    t.text_secondary = "#6B6660".into();
+    t.text_strong = "#1C1917".into();
+    t.axis_line = "#1C1917".into();
+    t.tick = "#1C1917".into();
+    t.grid = "#EDE9E0".into();
+    t.bg = String::new(); // transparent
 
-        // Title typography
-        title_font_family: "Instrument Serif, Georgia, serif".into(),
-        title_font_size: 22.0,
-        title_font_weight: 400,
-        title_font_style: "normal".into(),
+    // Title typography
+    t.title_font_family = "Instrument Serif, Georgia, serif".into();
+    t.title_font_size = 22.0;
+    t.title_font_weight = 400;
+    t.title_font_style = "normal".into();
 
-        // Label typography
-        label_font_family: "DM Sans, system-ui, sans-serif".into(),
-        label_font_size: 10.0,
-        label_font_weight: 500,
-        label_letter_spacing: 1.2,
-        label_text_transform: TextTransform::Uppercase,
+    // Label typography
+    t.label_font_family = "DM Sans, system-ui, sans-serif".into();
+    t.label_font_size = 10.0;
+    t.label_font_weight = 500;
+    t.label_letter_spacing = 1.2;
+    t.label_text_transform = TextTransform::Uppercase;
 
-        // Numeric tick typography
-        numeric_font_family: "Geist Mono, monospace".into(),
-        numeric_font_size: 11.0,
+    // Numeric tick typography
+    t.numeric_font_family = "Geist Mono, monospace".into();
+    t.numeric_font_size = 11.0;
 
-        // Legend typography
-        legend_font_family: "DM Sans, system-ui, sans-serif".into(),
-        legend_font_size: 11.0,
-        legend_font_weight: 500,
+    // Legend typography
+    t.legend_font_family = "DM Sans, system-ui, sans-serif".into();
+    t.legend_font_size = 11.0;
+    t.legend_font_weight = 500;
 
-        // Shape / stroke — defaults already match plan targets
-        axis_line_weight: 1.0,
-        grid_line_weight: 1.0,
-        series_line_weight: 2.0,
-        annotation_line_weight: 1.0,
-        bar_corner_radius: BarCornerRadius::Top(2.0),
-        dot_radius: 4.0,
-        dot_halo_color: Some("#FAFAF8".into()),
-        dot_halo_width: 1.5,
+    // Shape / stroke
+    t.bar_corner_radius = BarCornerRadius::Top(2.0);
+    t.dot_radius = 4.0;
+    t.dot_halo_color = Some("#FAFAF8".into());
+    t.dot_halo_width = 1.5;
 
-        grid_style: GridStyle::HorizontalOnly,
-        zero_line: Some(ZeroLineSpec {
-            color: "#1C1917".into(),
-            width: 1.5,
-        }),
-    }
+    t.grid_style = GridStyle::HorizontalOnly;
+    t.zero_line = Some(ZeroLineSpec {
+        color: "#1C1917".into(),
+        width: 1.5,
+    });
+    t
 }
 
 fn new_chartml() -> ChartML {

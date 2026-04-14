@@ -40,12 +40,12 @@
 //! // Dark mode
 //! let dark = Theme::dark();
 //!
-//! // Custom theme
-//! let custom = Theme {
-//!     axis_line: "#9ca3af".into(),
-//!     grid: "#374151".into(),
-//!     ..Theme::dark()
-//! };
+//! // Custom theme — `Theme` is `#[non_exhaustive]`, so consumers must
+//! // start from `Theme::default()` or `Theme::dark()` and mutate fields.
+//! // This makes adding new theme fields non-breaking forever.
+//! let mut custom = Theme::dark();
+//! custom.axis_line = "#9ca3af".into();
+//! custom.grid = "#374151".into();
 //! ```
 
 /// Grid line style — controls which gridlines are drawn.
@@ -146,7 +146,24 @@ impl Default for BarCornerRadius {
 ///   (default when no size field) and line endpoint markers in
 ///   `chartml-chart-cartesian/src/line.rs:{466, 577, 649}` and
 ///   `bar.rs:1268` (combo line dots).
+///
+/// ## Construction contract
+///
+/// `Theme` is `#[non_exhaustive]`: external crates cannot construct it with
+/// a struct literal *or* the functional-update spread syntax. They must start
+/// from `Theme::default()` (or `Theme::dark()`) and mutate fields:
+///
+/// ```ignore
+/// let mut theme = Theme::default();
+/// theme.axis_line = "#9ca3af".into();
+/// theme.grid = "#374151".into();
+/// ```
+///
+/// This makes adding new fields genuinely non-breaking forever — every
+/// downstream consumer that follows the mutate-after-default pattern keeps
+/// compiling regardless of how many fields land in `Theme` later.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct Theme {
     // ----- Chrome colors -----
     /// Primary text color (metric values, param controls).
@@ -231,6 +248,24 @@ pub struct Theme {
     pub grid_style: GridStyle,
     /// Optional emphasized zero line on the value axis. `None` = no zero line.
     pub zero_line: Option<ZeroLineSpec>,
+
+    // ----- Table chart tokens -----
+    /// Background color for the table header row.
+    pub table_header_bg: String,
+    /// Text color for the table header row.
+    pub table_header_text: String,
+    /// Background color for a regular (non-striped) body row.
+    pub table_row_bg: String,
+    /// Background color for the alternating zebra-striped body row.
+    pub table_row_bg_alt: String,
+    /// Border color between cells and between header/body.
+    pub table_border: String,
+    /// Text color for body cells.
+    pub table_text: String,
+    /// CSS shorthand padding for body cells (e.g. `"8px 12px"`).
+    pub table_cell_padding: String,
+    /// CSS font size for table text (e.g. `"13px"`).
+    pub table_font_size: String,
 }
 
 impl Default for Theme {
@@ -282,6 +317,16 @@ impl Default for Theme {
             // Grid + baseline
             grid_style: GridStyle::Both,
             zero_line: None,
+
+            // Table tokens — light mode defaults
+            table_header_bg: "#f9fafb".into(),
+            table_header_text: "#1f2937".into(),
+            table_row_bg: "#ffffff".into(),
+            table_row_bg_alt: "#f9fafb".into(),
+            table_border: "#e5e7eb".into(),
+            table_text: "#374151".into(),
+            table_cell_padding: "8px 12px".into(),
+            table_font_size: "13px".into(),
         }
     }
 }
@@ -290,7 +335,7 @@ impl Theme {
     /// Dark mode theme — matches the `chartml.css` dark-mode custom properties.
     ///
     /// Typography and shape defaults are identical to `Theme::default()`;
-    /// only the chrome color fields differ.
+    /// chrome color fields and table tokens are overridden to dark values.
     pub fn dark() -> Self {
         Self {
             text: "#e5e7eb".into(),
@@ -300,6 +345,12 @@ impl Theme {
             tick: "#9ca3af".into(),
             grid: "#374151".into(),
             bg: "#1f2937".into(),
+            table_header_bg: "#111827".into(),
+            table_header_text: "#f3f4f6".into(),
+            table_row_bg: "#1f2937".into(),
+            table_row_bg_alt: "#111827".into(),
+            table_border: "#374151".into(),
+            table_text: "#e5e7eb".into(),
             ..Theme::default()
         }
     }

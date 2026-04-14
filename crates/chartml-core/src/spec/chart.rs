@@ -234,6 +234,8 @@ pub struct ChartStyleSpec {
     pub fill_opacity: Option<f64>,
     pub fonts: Option<FontsSpec>,
     pub legend: Option<LegendSpec>,
+    /// Table-only: rows per page (default 50). Ignored by non-table chart types.
+    pub page_size: Option<usize>,
 }
 
 // --- LayoutSpec ---

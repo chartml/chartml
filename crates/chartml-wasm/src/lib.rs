@@ -5,6 +5,7 @@ use chartml_chart_cartesian::CartesianRenderer;
 use chartml_chart_metric::MetricRenderer;
 use chartml_chart_pie::PieRenderer;
 use chartml_chart_scatter::ScatterRenderer;
+use chartml_chart_table::TableRenderer;
 use chartml_core::ChartML;
 use chartml_render::element_to_svg;
 use wasm_bindgen::prelude::*;
@@ -34,6 +35,7 @@ impl WasmChartML {
         chartml.register_renderer("scatter", ScatterRenderer::new());
         chartml.register_renderer("bubble", ScatterRenderer::new());
         chartml.register_renderer("metric", MetricRenderer::new());
+        chartml.register_renderer("table", TableRenderer::new());
         // Register built-in data sources (browser-only)
         #[cfg(target_arch = "wasm32")]
         chartml.register_data_source("http", data_sources::http::HttpDataSource::new());

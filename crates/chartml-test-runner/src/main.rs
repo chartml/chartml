@@ -16,6 +16,7 @@ use chartml_chart_cartesian::CartesianRenderer;
 use chartml_chart_pie::PieRenderer;
 use chartml_chart_scatter::ScatterRenderer;
 use chartml_chart_metric::MetricRenderer;
+use chartml_chart_table::TableRenderer;
 use chartml_render::element_to_svg;
 use std::path::{Path, PathBuf};
 use std::fs;
@@ -30,6 +31,7 @@ fn create_chartml() -> ChartML {
     c.register_renderer("scatter", ScatterRenderer::new());
     c.register_renderer("bubble", ScatterRenderer::new());
     c.register_renderer("metric", MetricRenderer::new());
+    c.register_renderer("table", TableRenderer::new());
     c
 }
 

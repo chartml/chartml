@@ -34,10 +34,8 @@ use chartml_core::ChartML;
 fn make_chartml(corner: &BarCornerRadius) -> ChartML {
     let mut c = ChartML::new();
     c.register_renderer("bar", CartesianRenderer::new());
-    let theme = Theme {
-        bar_corner_radius: corner.clone(),
-        ..Theme::default()
-    };
+    let mut theme = Theme::default();
+    theme.bar_corner_radius = corner.clone();
     c.set_theme(theme);
     c
 }
