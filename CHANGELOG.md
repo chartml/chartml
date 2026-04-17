@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1] - 2026-04-17
+
+### Fixed
+
+- **`@chartml/core`**: restore the `"./style.css"` entry in the npm
+  package's `exports` map. `dist/style.css` still shipped (via
+  `files: ["dist/"]`) in 4.0.0 but Node / Vite / Webpack resolvers
+  couldn't reach it, so consumers doing the 2.x-era
+  `import "@chartml/core/style.css"` hit `Missing "./style.css"
+  specifier in "@chartml/core"`. No code change; packaging fix only.
+
 ## [4.0.0] - 2026-04-17
 
 ### BREAKING CHANGES

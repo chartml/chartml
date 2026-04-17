@@ -1,6 +1,6 @@
 {
   "name": "@chartml/core",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "ChartML chart rendering engine — Rust/WASM powered",
   "type": "module",
   "main": "dist/index.js",
@@ -10,6 +10,7 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./style.css": "./dist/style.css",
     "./wasm": {
       "node": "./pkg/node/chartml_wasm.js",
       "default": "./pkg/web/chartml_wasm.js"
