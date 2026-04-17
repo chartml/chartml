@@ -10,8 +10,8 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-chartml-core = { path = "../chartml-core", version = "3.1.0" }
-chartml-datafusion = { path = "../chartml-datafusion", version = "3.1.0" }
+chartml-core = { path = "../chartml-core", version = "4.0.0" }
+chartml-datafusion = { path = "../chartml-datafusion", version = "4.0.0" }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 serde = { version = "1", features = ["derive"] }

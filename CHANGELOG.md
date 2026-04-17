@@ -5,7 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.1.0] - unreleased (feat/theme-hooks branch)
+## [4.0.0] - 2026-04-17
+
+### BREAKING CHANGES
+
+- **`chartml_core::theme::Theme` is now `#[non_exhaustive]`.** Downstream
+  crates can no longer construct `Theme` with a struct literal
+  (`Theme { axis_line: "…".into(), .. }`). Use `Theme::default()` /
+  `Theme::dark()` as a base and mutate fields, or use the struct update
+  syntax with `..Theme::default()`. Builder-pattern construction via the
+  public setters continues to work unchanged.
+- **`bar_corner_radius` is now `BarCornerRadius` (enum), not `f32`.** See
+  migration note at the bottom of this entry.
+
+### Added
+
+- **`chartml-chart-table`** — new crate providing a native table renderer.
+  Registered via `register_chart_table()` just like the other built-in
+  chart types.
+- **Opt-in font database registration for SSR** — `chartml-render` no
+  longer loads the system font database at import time. Consumers that
+  render to PNG/raster in a server context call
+  `chartml_render::register_fontdb(..)` to supply their own preloaded
+  `fontdb::Database`. This avoids the multi-second startup cost for
+  consumers that only need SVG.
 
 ### Fixed
 
@@ -162,7 +185,8 @@ Theme {
 }
 ```
 
-This is the only breaking source-level change in 3.1.0. For top-only
+Along with the `#[non_exhaustive]` change above, this is the breaking
+source-level change in 4.0.0. For top-only
 rounding (the Kyomi visual target), use `BarCornerRadius::Top(r)` — the
 renderer emits bars as `ChartElement::Path` with custom `d` geometry rather
 than `ChartElement::Rect` so only the two corners at the max-value end of

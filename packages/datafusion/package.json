@@ -1,6 +1,6 @@
 {
   "name": "@chartml/datafusion",
-  "version": "3.1.0",
+  "version": "4.0.0",
   "description": "ChartML DataFusion transform plugin — SQL/aggregate/forecast",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,7 @@
     "build": "bash build.sh"
   },
   "peerDependencies": {
-    "@chartml/core": "^3.1.0"
+    "@chartml/core": "^4.0.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0"

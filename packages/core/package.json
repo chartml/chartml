@@ -1,6 +1,6 @@
 {
   "name": "@chartml/core",
-  "version": "3.1.0",
+  "version": "4.0.0",
   "description": "ChartML chart rendering engine — Rust/WASM powered",
   "type": "module",
   "main": "dist/index.js",

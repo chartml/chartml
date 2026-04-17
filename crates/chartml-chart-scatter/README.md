@@ -8,7 +8,7 @@ Part of [ChartML](https://chartml.org) — declarative chart markup powered by R
 
 ```toml
 [dependencies]
-chartml-chart-scatter = "3.1.0"
+chartml-chart-scatter = "4.0.0"
 ```
 
 See [chartml.org](https://chartml.org) for documentation.

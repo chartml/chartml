@@ -1,6 +1,6 @@
 {
   "name": "chartml-monorepo",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "type": "module",
   "private": true,
   "description": "ChartML — declarative chart markup, powered by Rust/WASM",

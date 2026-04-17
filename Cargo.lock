@@ -519,7 +519,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "chartml-chart-cartesian"
-version = "3.1.0"
+version = "4.0.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -528,7 +528,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-metric"
-version = "3.1.0"
+version = "4.0.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -537,7 +537,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-pie"
-version = "3.1.0"
+version = "4.0.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -546,7 +546,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-scatter"
-version = "3.1.0"
+version = "4.0.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -554,7 +554,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-table"
-version = "3.1.0"
+version = "4.0.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -563,7 +563,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-core"
-version = "3.1.0"
+version = "4.0.0"
 dependencies = [
  "arrow",
  "async-trait",
@@ -576,7 +576,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-datafusion"
-version = "3.1.0"
+version = "4.0.0"
 dependencies = [
  "arrow",
  "async-trait",
@@ -611,7 +611,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-forecast"
-version = "3.1.0"
+version = "4.0.0"
 dependencies = [
  "augurs-core",
  "augurs-ets",
@@ -642,7 +642,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-render"
-version = "3.1.0"
+version = "4.0.0"
 dependencies = [
  "chartml-core",
  "fontdb",

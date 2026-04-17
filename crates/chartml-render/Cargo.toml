@@ -1,6 +1,6 @@
 [package]
 name = "chartml-render"
-version = "3.1.0"
+version = "4.0.0"
 edition = "2021"
 license = "MIT"
 description = "Server-side ChartML rendering: ChartElement tree → SVG → PNG"
@@ -15,7 +15,7 @@ default = ["rasterize"]
 rasterize = ["dep:resvg", "dep:usvg", "dep:fontdb", "dep:tiny-skia", "dep:png"]
 
 [dependencies]
-chartml-core = { path = "../chartml-core", version = "3.1.0" }
+chartml-core = { path = "../chartml-core", version = "4.0.0" }
 thiserror = "2"
 
 # Optional native-only deps for PNG rasterization
