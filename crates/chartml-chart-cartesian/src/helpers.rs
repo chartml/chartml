@@ -195,13 +195,22 @@ pub fn get_data_labels_config(config: &ChartConfig) -> Option<&chartml_core::spe
 }
 
 /// Extract the field name from a FieldRef (Simple, Detailed, or Multiple).
+///
+/// Errors if the resolved spec is a range-mark (which has no single `field`
+/// name) — callers that may encounter range marks should branch on `mark`
+/// themselves before calling this.
 pub fn get_field_name(field_ref: &Option<FieldRef>) -> Result<String, ChartError> {
+    fn field_or_err(spec: &chartml_core::spec::FieldSpec) -> Result<String, ChartError> {
+        spec.field
+            .clone()
+            .ok_or_else(|| ChartError::MissingField("rows/columns field (range-mark spec has no `field`)".into()))
+    }
     match field_ref {
         Some(FieldRef::Simple(name)) => Ok(name.clone()),
-        Some(FieldRef::Detailed(spec)) => Ok(spec.field.clone()),
+        Some(FieldRef::Detailed(spec)) => field_or_err(spec),
         Some(FieldRef::Multiple(items)) => match items.first() {
             Some(FieldRefItem::Simple(name)) => Ok(name.clone()),
-            Some(FieldRefItem::Detailed(spec)) => Ok(spec.field.clone()),
+            Some(FieldRefItem::Detailed(spec)) => field_or_err(spec),
             None => Err(ChartError::MissingField("rows/columns field".into())),
         },
         None => Err(ChartError::MissingField("rows/columns field".into())),

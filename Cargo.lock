@@ -519,7 +519,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "chartml-chart-cartesian"
-version = "4.0.0"
+version = "4.1.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -537,7 +537,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-pie"
-version = "4.0.0"
+version = "4.1.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -546,7 +546,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-scatter"
-version = "4.0.0"
+version = "4.1.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -554,7 +554,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-table"
-version = "4.0.0"
+version = "4.1.0"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -563,11 +563,12 @@ dependencies = [
 
 [[package]]
 name = "chartml-core"
-version = "4.0.0"
+version = "4.1.0"
 dependencies = [
  "arrow",
  "async-trait",
  "chrono",
+ "indexmap",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -628,7 +629,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-leptos"
-version = "0.1.0"
+version = "4.0.2"
 dependencies = [
  "chartml-core",
  "js-sys",

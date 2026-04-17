@@ -85,7 +85,7 @@ fn bar_basic_inline_data_rows() {
     let chart = parse_fixture("bar_basic.yaml");
     match &chart.data {
         DataRef::Inline(data) => {
-            assert_eq!(data.provider, "inline");
+            assert_eq!(data.provider.as_deref(), Some("inline"));
             let rows = data.rows.as_ref().expect("Expected rows");
             assert_eq!(rows.len(), 3, "bar_basic should have 3 data rows");
         }
@@ -686,7 +686,8 @@ fn all_fixtures_have_inline_provider() {
         match &chart.data {
             DataRef::Inline(data) => {
                 assert_eq!(
-                    data.provider, "inline",
+                    data.provider.as_deref(),
+                    Some("inline"),
                     "Fixture {} should have provider 'inline'",
                     name
                 );
@@ -746,4 +747,71 @@ visualize:
     height: 300"#;
     let result = chartml_core::parse(yaml);
     assert!(result.is_ok(), "Failed to parse named source chart: {:?}", result.err());
+}
+
+#[test]
+fn parse_prod_named_source_map_with_cache() {
+    // Reproduces the exact shape the Kyomi AI agent emits for dashboards —
+    // multi-named `data:` with per-source cache config. Before the 4.0.3 fix
+    // this failed with "data did not match any variant of untagged enum
+    // ChartMLSpec" because InlineData didn't accept `datasource`/`query` and
+    // DataRef had no map variant.
+    let yaml = r#"type: chart
+version: 1
+title: "Daily Visitors"
+data:
+  visitors:
+    datasource: plausible-analytics
+    query: |
+      SELECT toDate(start) AS date, COUNT(DISTINCT user_id) AS visitors
+      FROM sessions_v2
+      WHERE start >= now() - INTERVAL 30 DAY
+      GROUP BY date
+      ORDER BY date
+    cache:
+      ttl: 6h
+      autoRefresh: true
+visualize:
+  type: line
+  columns: date
+  rows: visitors
+"#;
+    let result = chartml_core::parse(yaml);
+    assert!(
+        result.is_ok(),
+        "prod-shape named-source map must parse cleanly: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn parse_prod_forecast_range_mark() {
+    // Reproduces the forecast-band range-mark shape: one `rows:` entry has
+    // no `field`, only `upper`/`lower`. Before the fix FieldSpec required
+    // `field`, so the whole spec failed `untagged` enum resolution.
+    let yaml = r##"type: chart
+version: 1
+title: "Visitors with Forecast"
+data: visitors_forecast
+visualize:
+  type: line
+  columns: date
+  rows:
+    - field: visitor_count
+      label: Historical
+    - field: forecast
+      label: Forecast
+      lineStyle: dashed
+    - mark: range
+      upper: upper_bound
+      lower: lower_bound
+      color: "#4285f4"
+      opacity: 0.15
+"##;
+    let result = chartml_core::parse(yaml);
+    assert!(
+        result.is_ok(),
+        "forecast range-mark must parse cleanly: {:?}",
+        result.err()
+    );
 }

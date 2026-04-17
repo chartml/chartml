@@ -28,7 +28,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         Some(FieldRef::Multiple(items)) => items.iter().map(|item| match item {
             FieldRefItem::Detailed(spec) => spec.as_ref().clone(),
             FieldRefItem::Simple(name) => FieldSpec {
-                field: name.clone(), mark: None, axis: None, label: None,
+                field: Some(name.clone()), mark: None, axis: None, label: None,
                 color: None, format: None, data_labels: None,
                 line_style: None, upper: None, lower: None, opacity: None,
             },
@@ -36,8 +36,12 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         _ => vec![],
     };
     let is_multi_field = !multi_fields.is_empty();
+    // value_field is unused when all multi-fields are range marks (no scalar
+    // series to plot), so falling back to an empty string is fine — data
+    // lookups against an unknown field name return None and are benignly
+    // skipped by filter_map.
     let value_field = if is_multi_field {
-        multi_fields[0].field.clone()
+        multi_fields[0].field.clone().unwrap_or_default()
     } else {
         get_field_name(&config.visualize.rows)?
     };
@@ -67,7 +71,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         let mut fields: Vec<String> = multi_fields.iter()
             .filter(|f| f.mark.as_deref() != Some("range"))
             .filter(|f| !has_right || f.axis.as_deref() != Some("right"))
-            .map(|f| f.field.clone())
+            .filter_map(|f| f.field.clone())
             .collect();
         // Include upper/lower bound fields from range marks for domain calculation
         for f in &multi_fields {
@@ -107,7 +111,10 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     let right_tick_labels: Vec<String> = if has_right {
         let right_max = multi_fields.iter()
             .filter(|f| f.axis.as_deref() == Some("right"))
-            .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
+            .flat_map(|f| {
+                let name = f.field.as_deref().unwrap_or("").to_string();
+                (0..data.num_rows()).filter_map(move |i| data.get_f64(i, &name))
+            })
             .fold(0.0_f64, f64::max);
         let right_domain_max = if right_max <= 0.0 { 1.0 } else { right_max };
         let tmp_scale = ScaleLinear::new((0.0, right_domain_max), (0.0, 100.0));
@@ -119,9 +126,12 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     // Pre-compute legend height so the bottom margin accounts for multi-row legends.
     let legend_height = if has_series {
         let legend_series_names: Vec<String> = if is_multi_field {
-            multi_fields.iter().map(|f| {
-                f.label.clone().unwrap_or_else(|| f.field.clone())
-            }).collect()
+            multi_fields.iter()
+                // Range marks render as shaded bands, not a legend entry; skip them.
+                .filter(|f| f.mark.as_deref() != Some("range"))
+                .map(|f| {
+                    f.label.clone().unwrap_or_else(|| f.field.clone().unwrap_or_default())
+                }).collect()
         } else if let Some(ref color_f) = color_field {
             data.unique_values(color_f)
         } else {
@@ -164,10 +174,11 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
     // Find value extent — when dual-axis, compute separate domains for left and right
     let (domain_min, domain_max, right_domain): (f64, f64, Option<(f64, f64)>) = if has_right {
-        // Left-axis fields only
+        // Left-axis fields only (range marks excluded — they use upper/lower,
+        // which are included in the prelim domain computation above).
         let left_fields: Vec<&str> = multi_fields.iter()
             .filter(|f| f.axis.as_deref() != Some("right") && f.mark.as_deref() != Some("range"))
-            .map(|f| f.field.as_str())
+            .filter_map(|f| f.field.as_deref())
             .collect();
         let mut left_vals: Vec<f64> = Vec::new();
         for field in &left_fields {
@@ -184,7 +195,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         // Right-axis fields only
         let right_fields: Vec<&str> = multi_fields.iter()
             .filter(|f| f.axis.as_deref() == Some("right"))
-            .map(|f| f.field.as_str())
+            .filter_map(|f| f.field.as_deref())
             .collect();
         let mut right_vals: Vec<f64> = Vec::new();
         for field in &right_fields {
@@ -200,9 +211,13 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
         (left_domain_min, left_domain_max, Some((right_domain_min, right_domain_max)))
     } else {
-        // Single-axis: all fields share one domain
+        // Single-axis: all scalar fields share one domain. Range marks are
+        // picked up separately via their upper/lower fields — skip them here.
         let all_value_fields: Vec<String> = if is_multi_field {
-            multi_fields.iter().map(|f| f.field.clone()).collect()
+            multi_fields.iter()
+                .filter(|f| f.mark.as_deref() != Some("range"))
+                .filter_map(|f| f.field.clone())
+                .collect()
         } else {
             vec![value_field.clone()]
         };
@@ -422,8 +437,9 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 continue; // range marks don't render as lines
             }
 
-            let field_name = &field_spec.field;
-            let label = field_spec.label.clone().unwrap_or_else(|| field_name.clone());
+            // Reached only for non-range specs, which always have a `field`.
+            let field_name = field_spec.field.as_deref().unwrap_or("");
+            let label = field_spec.label.clone().unwrap_or_else(|| field_name.to_string());
 
             // Determine dash pattern from lineStyle
             let dasharray = match field_spec.line_style.as_deref() {

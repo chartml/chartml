@@ -403,6 +403,11 @@ impl ChartML {
                         format!("Named data source '{}' not found", name)
                     ))
             }
+            DataRef::NamedMap(_) => {
+                Err(ChartError::InvalidSpec(
+                    "Multi-source `data:` map requires each source to be pre-fetched and registered by name, then `data:` rewritten to that name. The core renderer cannot fetch sources directly.".into()
+                ))
+            }
         }
     }
 
@@ -717,6 +722,11 @@ impl ChartML {
                 self.sources.get(name).cloned()
                     .ok_or_else(|| ChartError::DataError(format!("Source '{}' not found", name)))?
             }
+            DataRef::NamedMap(_) => {
+                return Err(ChartError::InvalidSpec(
+                    "Multi-source `data:` map requires each source to be pre-fetched and registered by name, then `data:` rewritten to that name.".into()
+                ));
+            }
         };
 
         let transformed_data = if let Some(ref transform_spec) = chart_spec.transform {
@@ -757,6 +767,11 @@ impl ChartML {
                     .ok_or_else(|| ChartError::DataError(
                         format!("Named data source '{}' not found", name)
                     ))
+            }
+            DataRef::NamedMap(_) => {
+                Err(ChartError::InvalidSpec(
+                    "Multi-source `data:` map requires each source to be pre-fetched and registered by name, then `data:` rewritten to that name.".into()
+                ))
             }
         }
     }

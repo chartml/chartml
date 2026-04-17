@@ -37,12 +37,15 @@ impl Column {
         }
     }
 
-    fn from_field_spec(spec: &FieldSpec) -> Self {
-        Self {
-            field: spec.field.clone(),
-            label: spec.label.clone().unwrap_or_else(|| spec.field.clone()),
+    /// Returns `None` for range-mark specs, which have no single field name
+    /// and don't correspond to a column in a tabular view.
+    fn from_field_spec(spec: &FieldSpec) -> Option<Self> {
+        let field = spec.field.clone()?;
+        Some(Self {
+            label: spec.label.clone().unwrap_or_else(|| field.clone()),
+            field,
             format: spec.format.clone(),
-        }
+        })
     }
 }
 
@@ -81,12 +84,20 @@ fn resolve_columns(viz: &VisualizeSpec, data: &DataTable) -> Vec<Column> {
 fn append_field_ref(out: &mut Vec<Column>, field_ref: &FieldRef) {
     match field_ref {
         FieldRef::Simple(name) => out.push(Column::plain(name)),
-        FieldRef::Detailed(spec) => out.push(Column::from_field_spec(spec)),
+        FieldRef::Detailed(spec) => {
+            if let Some(col) = Column::from_field_spec(spec) {
+                out.push(col);
+            }
+        }
         FieldRef::Multiple(items) => {
             for item in items {
                 match item {
                     FieldRefItem::Simple(name) => out.push(Column::plain(name)),
-                    FieldRefItem::Detailed(spec) => out.push(Column::from_field_spec(spec)),
+                    FieldRefItem::Detailed(spec) => {
+                        if let Some(col) = Column::from_field_spec(spec) {
+                            out.push(col);
+                        }
+                    }
                 }
             }
         }

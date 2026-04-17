@@ -154,13 +154,18 @@ impl ChartRenderer for PieRenderer {
 }
 
 fn get_field_name(field_ref: &Option<FieldRef>) -> Result<String, ChartError> {
+    fn field_or_err(spec: &chartml_core::spec::FieldSpec) -> Result<String, ChartError> {
+        spec.field
+            .clone()
+            .ok_or_else(|| ChartError::MissingField("field (range-mark specs are not supported for pie charts)".into()))
+    }
     match field_ref {
         Some(FieldRef::Simple(name)) => Ok(name.clone()),
-        Some(FieldRef::Detailed(spec)) => Ok(spec.field.clone()),
+        Some(FieldRef::Detailed(spec)) => field_or_err(spec),
         Some(FieldRef::Multiple(items)) => {
             match items.first() {
                 Some(chartml_core::spec::FieldRefItem::Simple(s)) => Ok(s.clone()),
-                Some(chartml_core::spec::FieldRefItem::Detailed(spec)) => Ok(spec.field.clone()),
+                Some(chartml_core::spec::FieldRefItem::Detailed(spec)) => field_or_err(spec),
                 None => Err(ChartError::MissingField("field".into())),
             }
         }

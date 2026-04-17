@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2026-04-18
+
+### Added
+
+- **`chartml-core`**: the YAML parser now accepts two spec shapes the JS
+  package has long accepted but the Rust port rejected. Kyomi's production
+  dashboards use these shapes, and moving the Leptos frontend onto the Rust
+  engine surfaced the gap as `data did not match any variant of untagged
+  enum ChartMLSpec` on every dashboard.
+  - **Multi-named `data:` map.** `data:` may now be a map of user-chosen
+    source names to per-source specs — e.g.
+    `data: { visitors: { datasource: ..., query: ..., cache: { ttl: 6h,
+    autoRefresh: true } } }`. A new `DataRef::NamedMap` variant
+    (`IndexMap<String, InlineData>`) preserves declaration order. The core
+    renderer itself does not fetch these sources; the host app is expected
+    to pre-register each by name and then rewrite `data:` to the chosen
+    source — the rendering path returns a clear error if a `NamedMap` is
+    left unresolved.
+  - **Range-mark `rows:` items without `field`.** Forecast confidence-band
+    shading uses `{ mark: range, upper: ..., lower: ... }` with no single
+    `field` name. `FieldSpec.field` is now `Option<String>`, and all
+    downstream cartesian/pie/scatter/table renderers handle the missing
+    field safely.
+  - **`InlineData` accepts `datasource` + `query`**; `provider` is now
+    optional. The slug-based datasource shape
+    `{ datasource: "production-postgres", query: "..." }` parses cleanly.
+  - **`CacheConfig` gained `autoRefresh: bool`** and `ttl` is now optional.
+
+### Migration
+
+- `spec::FieldSpec.field: String` → `Option<String>`. Rust consumers that
+  construct `FieldSpec` literals must wrap the name in `Some(...)`. Reads
+  should either branch on `mark == Some("range")` first or use
+  `field.as_deref().unwrap_or("")` for tolerant data lookups.
+- `spec::InlineData.provider: String` → `Option<String>`. Comparisons
+  against `"inline"` need `.as_deref() == Some("inline")`.
+- `spec::source::CacheConfig.ttl: String` → `Option<String>`.
+
 ## [4.0.2] - 2026-04-17
 
 ### Added

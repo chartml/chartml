@@ -1,6 +1,6 @@
 [package]
 name = "chartml-chart-scatter"
-version = "4.0.0"
+version = "4.1.0"
 edition = "2021"
 license = "MIT"
 description = "ChartML scatter and bubble chart renderers"
@@ -11,7 +11,7 @@ keywords = ["chartml", "chart", "scatter", "bubble"]
 categories = ["visualization"]
 
 [dependencies]
-chartml-core = { path = "../chartml-core", version = "4.0.0" }
+chartml-core = { path = "../chartml-core", version = "4.1.0" }
 
 [dev-dependencies]
 serde_json = "1"

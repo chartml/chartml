@@ -15,5 +15,6 @@ pub struct SourceSpec {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheConfig {
-    pub ttl: String,
+    pub ttl: Option<String>,
+    pub auto_refresh: Option<bool>,
 }

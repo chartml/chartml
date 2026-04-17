@@ -241,7 +241,7 @@ visualize:
             Component::Chart(chart) => {
                 match &chart.data {
                     DataRef::Inline(data) => {
-                        assert_eq!(data.provider, "inline");
+                        assert_eq!(data.provider.as_deref(), Some("inline"));
                         assert!(data.rows.is_some());
                     }
                     other => panic!("Expected Inline data ref, got {:?}", other),
@@ -274,7 +274,7 @@ visualize:
                 }
                 match &chart.visualize.rows {
                     Some(FieldRef::Detailed(spec)) => {
-                        assert_eq!(spec.field, "revenue");
+                        assert_eq!(spec.field.as_deref(), Some("revenue"));
                         assert_eq!(spec.label, Some("Revenue ($)".to_string()));
                     }
                     other => panic!("Expected Detailed field ref, got {:?}", other),
@@ -441,6 +441,128 @@ visualize:
                     other => panic!("Expected Multiple field ref, got {:?}", other),
                 }
             }
+            other => panic!("Expected Chart, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_named_source_map() {
+        // Prod YAML shape: `data:` is a map of user-chosen source names to
+        // per-source specs. This shape is what the Kyomi AI agent and dashboard
+        // authors use when a chart needs to fan out SQL across multiple
+        // datasources or when the host app pre-fetches each one independently.
+        let yaml = r#"
+type: chart
+version: 1
+data:
+  visitors:
+    datasource: plausible-analytics
+    query: |
+      SELECT toDate(start) AS date, COUNT(DISTINCT user_id) FROM sessions
+    cache:
+      ttl: 6h
+      autoRefresh: true
+  revenue:
+    datasource: billing-postgres
+    query: |
+      SELECT date, sum(amount) FROM charges GROUP BY 1
+visualize:
+  type: line
+  columns: date
+  rows: value
+"#;
+        let result = parse(yaml).unwrap();
+        match unwrap_single(result) {
+            Component::Chart(chart) => match &chart.data {
+                DataRef::NamedMap(sources) => {
+                    assert_eq!(sources.len(), 2);
+                    // IndexMap preserves declaration order — visitors first.
+                    let (first_name, first_source) = sources.iter().next().unwrap();
+                    assert_eq!(first_name, "visitors");
+                    assert_eq!(first_source.datasource.as_deref(), Some("plausible-analytics"));
+                    assert!(first_source.query.as_ref().unwrap().contains("sessions"));
+                    let cache = first_source.cache.as_ref().expect("Expected cache config");
+                    assert_eq!(cache.ttl.as_deref(), Some("6h"));
+                    assert_eq!(cache.auto_refresh, Some(true));
+
+                    let revenue = sources.get("revenue").unwrap();
+                    assert_eq!(revenue.datasource.as_deref(), Some("billing-postgres"));
+                }
+                other => panic!("Expected NamedMap data ref, got {:?}", other),
+            },
+            other => panic!("Expected Chart, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_datasource_query_inline() {
+        // Unnamed shape with `datasource` + `query` — commonly emitted when a
+        // chart reads from exactly one slug-resolved datasource. Before this
+        // fix InlineData required `provider`, so this shape failed to parse.
+        let yaml = r#"
+type: chart
+version: 1
+data:
+  datasource: production-postgres
+  query: SELECT month, revenue FROM monthly_sales
+visualize:
+  type: bar
+  columns: month
+  rows: revenue
+"#;
+        let result = parse(yaml).unwrap();
+        match unwrap_single(result) {
+            Component::Chart(chart) => match &chart.data {
+                DataRef::Inline(data) => {
+                    assert_eq!(data.datasource.as_deref(), Some("production-postgres"));
+                    assert!(data.query.is_some());
+                    assert!(data.provider.is_none(), "No explicit provider → should be None");
+                }
+                other => panic!("Expected Inline data ref, got {:?}", other),
+            },
+            other => panic!("Expected Chart, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_range_mark_without_field() {
+        // Range marks on line charts shade a confidence band between upper
+        // and lower bound columns — there's no single `field` name, just
+        // `upper` and `lower`. JS chartml accepts this shape; Rust must too.
+        let yaml = r##"
+type: chart
+version: 1
+data: sales_forecast
+visualize:
+  type: line
+  columns: date
+  rows:
+    - field: visitor_count
+    - field: forecast
+    - mark: range
+      upper: upper_bound
+      lower: lower_bound
+      color: "#4285f4"
+      opacity: 0.15
+"##;
+        let result = parse(yaml).unwrap();
+        match unwrap_single(result) {
+            Component::Chart(chart) => match &chart.visualize.rows {
+                Some(FieldRef::Multiple(items)) => {
+                    assert_eq!(items.len(), 3);
+                    match &items[2] {
+                        FieldRefItem::Detailed(spec) => {
+                            assert!(spec.field.is_none(), "Range-mark spec has no `field`");
+                            assert_eq!(spec.mark.as_deref(), Some("range"));
+                            assert_eq!(spec.upper.as_deref(), Some("upper_bound"));
+                            assert_eq!(spec.lower.as_deref(), Some("lower_bound"));
+                            assert_eq!(spec.opacity, Some(0.15));
+                        }
+                        other => panic!("Expected Detailed range-mark, got {:?}", other),
+                    }
+                }
+                other => panic!("Expected Multiple field ref, got {:?}", other),
+            },
             other => panic!("Expected Chart, got {:?}", other),
         }
     }

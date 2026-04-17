@@ -1,3 +1,4 @@
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use super::source::CacheConfig;
@@ -19,23 +20,51 @@ pub struct ChartSpec {
     pub params: Option<Vec<super::params::ParamDef>>,
 }
 
-// --- DataRef: either a string reference or inline data ---
+// --- DataRef: string reference, inline/single data source, or a named-source map ---
+//
+// The JS chartml accepts three shapes for `data`:
+//   data: sales                     # registered-source reference (Named)
+//   data: { provider: ..., rows: ... }   # single inline/plugin source (Inline)
+//   data:                           # multi-source map, keyed by user-chosen names (NamedMap)
+//     visitors:  { datasource: ..., query: ... }
+//     revenue:   { datasource: ..., query: ... }
+//
+// The NamedMap variant is recognised because its values are themselves maps that
+// (unlike Inline's flat keys) don't contain the reserved data-source keywords
+// directly on `data`. Serde's untagged enum does structural matching, so order
+// here matters: Named first (plain string), Inline next (flat map with the
+// reserved keys), NamedMap last (map-of-maps).
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum DataRef {
     Named(String),
     Inline(InlineData),
+    NamedMap(IndexMap<String, InlineData>),
 }
 
+/// Inline / single-source data descriptor. Every field is optional so the struct
+/// matches all of JS chartml's reserved-key shapes: `rows`-based inline data,
+/// `url`-based HTTP, `provider`-based plugin, and `datasource`+`query`-based
+/// slug references.
+///
+/// `deny_unknown_fields` is critical: the untagged `DataRef` enum tries
+/// `Inline` before `NamedMap`, and without the deny-unknown guard a
+/// named-source map like `{ visitors: {...}, revenue: {...} }` would silently
+/// deserialize into `InlineData` with every field set to `None`, masking the
+/// real shape.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InlineData {
-    pub provider: String,
+    pub provider: Option<String>,
     pub rows: Option<Vec<serde_json::Value>>,
     pub url: Option<String>,
     pub endpoint: Option<String>,
     pub cache: Option<CacheConfig>,
+    /// Slug-based datasource reference (resolved at runtime by the host app).
+    pub datasource: Option<String>,
+    /// SQL query string for slug-based datasources.
+    pub query: Option<String>,
 }
 
 // --- StyleRef for chart-level: string or inline style ---
@@ -108,10 +137,16 @@ pub enum FieldRefItem {
     Detailed(Box<FieldSpec>),
 }
 
+/// A row/column field specification.
+///
+/// `field` is `Option<String>` rather than `String` because range marks —
+/// used for shading forecast confidence bands on line charts — have no single
+/// field name, only `upper`/`lower` bound field names. A range-mark item
+/// looks like `{ mark: range, upper: upper_bound, lower: lower_bound }`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldSpec {
-    pub field: String,
+    pub field: Option<String>,
     pub mark: Option<String>,
     pub axis: Option<String>,
     pub label: Option<String>,
@@ -127,6 +162,7 @@ pub struct FieldSpec {
     /// Fill opacity for range marks (default 0.15)
     pub opacity: Option<f64>,
 }
+
 
 // --- DataLabelsSpec ---
 

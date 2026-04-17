@@ -246,7 +246,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         Some(FieldRef::Multiple(items)) => items.iter().map(|item| match item {
             FieldRefItem::Detailed(spec) => spec.as_ref().clone(),
             FieldRefItem::Simple(name) => FieldSpec {
-                field: name.clone(), mark: None, axis: None, label: None,
+                field: Some(name.clone()), mark: None, axis: None, label: None,
                 color: None, format: None, data_labels: None,
                 line_style: None, upper: None, lower: None, opacity: None,
             },
@@ -270,9 +270,17 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
             let mut long_rows: Vec<chartml_core::data::Row> = Vec::new();
             for i in 0..data.num_rows() {
                 for field_spec in &multi_fields {
+                    // Range marks have no `field` — they shade an area between
+                    // `upper` and `lower`. Horizontal bar charts have no notion
+                    // of a shaded band, so skip them here (JS chartml does the
+                    // same; range marks are line-chart only).
+                    if field_spec.mark.as_deref() == Some("range") {
+                        continue;
+                    }
+                    let Some(field_name) = field_spec.field.as_deref() else { continue };
                     let cat = data.get_string(i, &category_field).unwrap_or_default();
-                    let val = data.get_f64(i, &field_spec.field).unwrap_or(0.0);
-                    let label = field_spec.label.clone().unwrap_or_else(|| field_spec.field.clone());
+                    let val = data.get_f64(i, field_name).unwrap_or(0.0);
+                    let label = field_spec.label.clone().unwrap_or_else(|| field_name.to_string());
                     let mut row = std::collections::HashMap::new();
                     row.insert(category_field.clone(), serde_json::json!(cat));
                     row.insert("_value".to_string(), serde_json::json!(val));
@@ -1156,7 +1164,8 @@ fn render_combo(
         // Estimate right-axis values for label width measurement
         let right_max = fields.iter()
             .filter(|f| f.axis.as_deref() == Some("right"))
-            .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
+            .filter_map(|f| f.field.as_deref())
+            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
             .fold(0.0_f64, f64::max);
         let right_domain_max = config.visualize.axes.as_ref()
             .and_then(|a| a.right.as_ref())
@@ -1172,9 +1181,16 @@ fn render_combo(
         .and_then(|a| a.x.as_ref())
         .and_then(|a| a.label.as_ref())
         .is_some();
-    // Pre-compute combo legend height from field labels
+    // Pre-compute combo legend height from field labels. Range marks are
+    // skipped in the render loop and don't get a legend entry, so exclude
+    // them from the legend-height calculation too.
     let combo_legend_labels: Vec<String> = fields.iter()
-        .map(|f| f.label.clone().unwrap_or_else(|| f.field.clone()))
+        .filter(|f| f.mark.as_deref() != Some("range"))
+        .map(|f| {
+            f.label
+                .clone()
+                .unwrap_or_else(|| f.field.clone().unwrap_or_default())
+        })
         .collect();
     let combo_legend_height = if combo_legend_labels.len() > 1 || color_field.is_some() {
         let legend_config = LegendConfig {
@@ -1220,6 +1236,7 @@ fn render_combo(
         let color_series = data.unique_values(color_f);
         let mut max_stack = 0.0_f64;
         for f in &left_fields {
+            let Some(field_name) = f.field.as_deref() else { continue };
             for cat in &categories {
                 let mut stack_total = 0.0_f64;
                 for series in &color_series {
@@ -1228,7 +1245,7 @@ fn render_combo(
                             data.get_string(i, &category_field).as_deref() == Some(cat.as_str())
                                 && data.get_string(i, color_f).as_deref() == Some(series.as_str())
                         })
-                        .and_then(|i| data.get_f64(i, &f.field))
+                        .and_then(|i| data.get_f64(i, field_name))
                         .unwrap_or(0.0);
                     stack_total += val;
                 }
@@ -1238,12 +1255,14 @@ fn render_combo(
         max_stack
     } else {
         left_fields.iter()
-            .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
+            .filter_map(|f| f.field.as_deref())
+            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
             .fold(0.0_f64, f64::max)
     };
     // Compute left-axis data minimum to support negative bar values.
     let left_data_min = left_fields.iter()
-        .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
+        .filter_map(|f| f.field.as_deref())
+        .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
         .fold(0.0_f64, f64::min);
     // Keep data_min at 0 when all values are non-negative (standard bar chart behavior)
     let left_data_min = if left_data_min >= 0.0 { 0.0 } else { left_data_min };
@@ -1263,10 +1282,12 @@ fn render_combo(
     // Compute right-axis domain with D3-style nice rounding (Regressions 2 & 3).
     let right_scale = if !right_fields.is_empty() {
         let right_max = right_fields.iter()
-            .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
+            .filter_map(|f| f.field.as_deref())
+            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
             .fold(0.0_f64, f64::max);
         let right_data_min = right_fields.iter()
-            .flat_map(|f| (0..data.num_rows()).filter_map(|i| data.get_f64(i, &f.field)))
+            .filter_map(|f| f.field.as_deref())
+            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
             .fold(0.0_f64, f64::min);
         let axes_right = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref());
         let right_explicit_min = axes_right.and_then(|a| a.min);
@@ -1405,7 +1426,7 @@ fn render_combo(
             let mark = field_spec.mark.as_deref().unwrap_or("bar");
             if mark != "bar" { continue; }
 
-            let field_name = &field_spec.field;
+            let field_name = field_spec.field.as_deref().unwrap_or("");
             let is_right = field_spec.axis.as_deref() == Some("right");
             let scale = if is_right { right_scale.as_ref().unwrap_or(&left_scale) } else { &left_scale };
             let fmt_ref = if is_right {
@@ -1480,13 +1501,21 @@ fn render_combo(
     };
 
     for (field_idx, field_spec) in fields.iter().enumerate() {
-        let field_name = &field_spec.field;
+        // Range marks have no scalar `field` — they shade a band between
+        // `upper` and `lower`. Combo (bar+line) charts don't render shaded
+        // bands (that's a line-chart-only feature in JS chartml too), so skip
+        // them entirely here — otherwise the outer loop would emit a phantom
+        // legend entry and attempt to fetch data under an empty field name.
+        if field_spec.mark.as_deref() == Some("range") {
+            continue;
+        }
+        let field_name = field_spec.field.as_deref().unwrap_or("");
         let is_right = field_spec.axis.as_deref() == Some("right");
         let scale = if is_right { right_scale.as_ref().unwrap_or(&left_scale) } else { &left_scale };
         let mark = field_spec.mark.as_deref().unwrap_or("bar");
         let color = field_spec.color.clone()
             .unwrap_or_else(|| config.colors.get(field_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string()));
-        let label = field_spec.label.clone().unwrap_or_else(|| field_name.clone());
+        let label = field_spec.label.clone().unwrap_or_else(|| field_name.to_string());
         let fmt_ref = if is_right {
             config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()).and_then(|a| a.format.as_deref())
         } else {
