@@ -66,6 +66,7 @@ jobs:
           publish_if_new chartml-chart-pie
           publish_if_new chartml-chart-scatter
           publish_if_new chartml-chart-metric
+          publish_if_new chartml-chart-table
 
           echo "=== Group 3: higher-level crates ==="
           publish_if_new chartml-datafusion

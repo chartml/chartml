@@ -447,7 +447,7 @@ impl NumberFormatter {
 
 fn format_general(value: f64, precision: usize) -> String {
     if value == 0.0 {
-        return format!("{:.prec$}", 0.0, prec = precision.saturating_sub(1).max(0));
+        return format!("{:.prec$}", 0.0, prec = precision.saturating_sub(1));
     }
     let exp = value.log10().floor() as i32;
     if exp < -4 || exp >= precision as i32 {
