@@ -47,13 +47,19 @@ jobs:
             version=$(cargo metadata --no-deps --format-version 1 \
               | jq -r ".packages[] | select(.name == \"$crate\") | .version")
 
-            if curl -sf "https://crates.io/api/v1/crates/$crate/$version" > /dev/null 2>&1; then
-              echo "::notice::$crate@$version already published — skipping"
-            else
-              echo "Publishing $crate@$version..."
-              cargo publish -p "$crate" --no-verify $FLAGS
+            echo "Publishing $crate@$version..."
+            local output
+            if output=$(cargo publish -p "$crate" --no-verify $FLAGS 2>&1); then
+              echo "$output"
               echo "Waiting for crates.io index update..."
               sleep 60
+            else
+              echo "$output"
+              if echo "$output" | grep -qE "already (exists|uploaded)"; then
+                echo "::notice::$crate@$version already on crates.io — skipping"
+              else
+                return 1
+              fi
             fi
           }
 
