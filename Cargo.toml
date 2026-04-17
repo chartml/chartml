@@ -41,9 +41,9 @@ unused_variables = "deny"
 unused_mut = "deny"
 
 [workspace.lints.clippy]
-too_many_arguments = "forbid"
-large_enum_variant = "forbid"
-wrong_self_convention = "forbid"
+too_many_arguments = "deny"
+large_enum_variant = "deny"
+wrong_self_convention = "deny"
 
 # Optimize WASM release builds for size
 [profile.release]

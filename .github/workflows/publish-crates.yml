@@ -77,3 +77,4 @@ jobs:
           echo "=== Group 3: higher-level crates ==="
           publish_if_new chartml-datafusion
           publish_if_new chartml-render
+          publish_if_new chartml-leptos

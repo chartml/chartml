@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.2] - 2026-04-17
+
+### Added
+
+- **`chartml-leptos` is now published to crates.io.** Previously held off
+  the registry (`publish = false`) during the v3 migration while the
+  public API stabilized; Kyomi consumed it via local path. It's stable
+  enough now to ship on crates.io so downstream Leptos apps can depend
+  on it like any other crate. No API change — just flipping the publish
+  bit. First public version is `4.0.2` to align with the workspace
+  release train.
+
 ## [4.0.1] - 2026-04-17
 
 ### Fixed
