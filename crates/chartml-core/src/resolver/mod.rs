@@ -110,10 +110,15 @@ use crate::spec::InlineData;
 pub mod builtin;
 pub mod cache;
 pub mod cancel;
+pub mod hooks;
 
 pub use builtin::{HttpProvider, InlineProvider};
 pub use cache::{CacheBackend, CacheError, CachedEntry, MemoryBackend};
 pub use cancel::CancellationToken;
+pub use hooks::{
+    CacheHitEvent, CacheMissEvent, CacheTier, ErrorEvent, HooksRef, MissReason, NullHooks, Phase,
+    ProgressEvent, ResolverHooks,
+};
 
 /// Default TTL applied when a spec doesn't declare one. Five minutes matches
 /// the JS middleware's `CACHE_TTL_DEFAULT_MS`.
@@ -327,10 +332,11 @@ pub struct Resolver {
     persistent: Lock<Option<Arc<dyn CacheBackend>>>,
     inflight: SharedRef<Lock<HashMap<u64, SharedFetch>>>,
     providers: Lock<HashMap<String, Arc<dyn DataSourceProvider>>>,
-    // Reserved for phase 3c — a `Lock<Option<Arc<dyn ResolverHooks>>>`
-    // slot will land here without changing this field's surrounding code.
-    // Intentionally a unit field so the struct's storage stays predictable.
-    _hooks_slot: (),
+    /// Optional hook impl. Wrapped in `Lock<Option<...>>` so `set_hooks`
+    /// works without `&mut self` (the resolver lives behind a `SharedRef`).
+    /// Snapshotted into a local clone before each instrumentation site so
+    /// the hook lock is never held across an `await`.
+    hooks: Lock<Option<HooksRef>>,
 }
 
 /// Shared in-flight future type. Boxed for dyn-trait erasure; `Shared` lets
@@ -376,7 +382,7 @@ impl Resolver {
             persistent: Lock::new(None),
             inflight: SharedRef::new(Lock::new(HashMap::new())),
             providers: Lock::new(HashMap::new()),
-            _hooks_slot: (),
+            hooks: Lock::new(None),
         }
     }
 
@@ -394,6 +400,32 @@ impl Resolver {
     pub fn set_persistent_cache(&self, backend: Arc<dyn CacheBackend>) {
         let mut guard = self.persistent.write_lock("persistent cache");
         *guard = Some(backend);
+    }
+
+    /// Register a [`ResolverHooks`] impl. Replaces any previously registered
+    /// hooks; passes the new impl in as a `HooksRef` (`Arc` on native, `Rc`
+    /// on WASM). After this call every `Resolver::fetch` invocation emits
+    /// progress / cache / error events through the new impl.
+    pub fn set_hooks(&self, hooks: HooksRef) {
+        let mut guard = self.hooks.write_lock("hooks");
+        *guard = Some(hooks);
+    }
+
+    /// Clear any previously registered hooks. Subsequent `fetch` calls
+    /// behave as if `set_hooks` had never been called (no-op emission).
+    pub fn clear_hooks(&self) {
+        let mut guard = self.hooks.write_lock("hooks");
+        *guard = None;
+    }
+
+    /// Snapshot the current hooks `HooksRef` (or `None`) so the resolver
+    /// can release the lock before entering any cache walk or `.await`.
+    /// Must be called once at the top of `fetch`; downstream sites use the
+    /// snapshot rather than re-acquiring the lock to keep the hook lock
+    /// off the hot path. Also called by `ChartML::transform` (one crate up)
+    /// at the top of the transform stage for the same reason.
+    pub(crate) fn hooks_snapshot(&self) -> Option<HooksRef> {
+        self.hooks.read_lock("hooks").clone()
     }
 
     /// Snapshot the tier-1 cache `Arc` so we can drop the lock before the
@@ -485,11 +517,18 @@ impl Resolver {
     ) -> Result<ResolveOutcome, FetchError> {
         let primary = self.primary_snapshot();
         let persistent = self.persistent_snapshot();
+        // Snapshot the hooks `HooksRef` ONCE up front so the hooks lock is
+        // never held across an `.await` and downstream sites can share the
+        // same clone without re-acquiring.
+        let hooks = self.hooks_snapshot();
+        let source_name = request.source_name.clone();
 
         // ── Tier 1: in-process cache ──
-        // TODO(phase-3c): hooks.on_cache_hit / on_cache_miss(Memory)
+        let mut tier1_expired = false;
         if let Some(entry) = primary.get(key).await {
             if !entry.is_expired() {
+                let age = entry.age();
+                emit_cache_hit(&hooks, key, &source_name, hooks::CacheTier::Memory, age);
                 return Ok(ResolveOutcome {
                     result: FetchResult {
                         data: entry.data,
@@ -499,15 +538,26 @@ impl Resolver {
                 });
             }
             // Expired — let it fall through; we'll overwrite on success.
+            tier1_expired = true;
         }
 
         // ── Tier 2: persistent cache (phase 3b populates this) ──
-        // TODO(phase-3c): hooks.on_cache_hit(Persistent) / on_cache_miss
+        let mut tier2_expired = false;
         if let Some(p) = &persistent {
             if let Some(entry) = p.get(key).await {
                 if !entry.is_expired() {
+                    let age = entry.age();
                     // Hydrate tier-1 so subsequent reads stay in-process.
+                    // Memory hydration is silent (no event) — only the
+                    // logical tier-2 hit fires.
                     let _ = primary.put(key, entry.clone()).await;
+                    emit_cache_hit(
+                        &hooks,
+                        key,
+                        &source_name,
+                        hooks::CacheTier::Persistent,
+                        age,
+                    );
                     return Ok(ResolveOutcome {
                         result: FetchResult {
                             data: entry.data,
@@ -518,8 +568,35 @@ impl Resolver {
                 }
                 // Expired — evict from tier-2 too.
                 let _ = p.invalidate(key).await;
+                tier2_expired = true;
             }
         }
+
+        // Both tiers missed — emit one cache-miss with the most specific
+        // reason we can prove. `Expired` if either tier had an entry that
+        // had aged out; `NotFound` otherwise. (`Invalidated` is reserved
+        // for explicit invalidation flows wired later.)
+        let miss_reason = if tier1_expired || tier2_expired {
+            hooks::MissReason::Expired
+        } else {
+            hooks::MissReason::NotFound
+        };
+        emit_cache_miss(&hooks, key, &source_name, miss_reason);
+
+        // Provider call start — fire BEFORE the dedup wait so consumers
+        // see a "fetching" event for every distinct cache miss, not just
+        // the first concurrent one.
+        emit_progress(
+            &hooks,
+            hooks::Phase::Fetch,
+            &source_name,
+            None,
+            None,
+            format!(
+                "Fetching {}",
+                source_name.as_deref().unwrap_or("source"),
+            ),
+        );
 
         // ── In-flight dedup ──
         // If another fetch for the same key is already in flight, await its
@@ -533,12 +610,31 @@ impl Resolver {
         // retry, not stick.
         self.inflight.write_lock("inflight").remove(&key);
 
-        // TODO(phase-3c): hooks.on_error if result.is_err()
-        let result = result?;
-        Ok(ResolveOutcome {
-            result,
-            cache_hit: false,
-        })
+        match result {
+            Ok(fetch_result) => {
+                let row_count = fetch_result.data.num_rows();
+                emit_progress(
+                    &hooks,
+                    hooks::Phase::Fetch,
+                    &source_name,
+                    Some(row_count as u64),
+                    None,
+                    format!(
+                        "Fetched {} ({} rows)",
+                        source_name.as_deref().unwrap_or("source"),
+                        row_count,
+                    ),
+                );
+                Ok(ResolveOutcome {
+                    result: fetch_result,
+                    cache_hit: false,
+                })
+            }
+            Err(err) => {
+                emit_error(&hooks, hooks::Phase::Fetch, &source_name, err.to_string());
+                Err(err)
+            }
+        }
     }
 
     /// Get-or-insert the in-flight `Shared` future for a key. Returns a
@@ -667,6 +763,93 @@ impl Resolver {
             p.shutdown().await;
         }
     }
+}
+
+/// Emit a [`hooks::CacheHitEvent`] through the registered hook impl, if
+/// any. Fire-and-forget via `spawn_hook`; never blocks the resolver.
+fn emit_cache_hit(
+    hooks: &Option<HooksRef>,
+    key: u64,
+    source_name: &Option<String>,
+    tier: hooks::CacheTier,
+    age: Duration,
+) {
+    let Some(h) = hooks.as_ref() else { return };
+    let h = h.clone();
+    let event = hooks::CacheHitEvent {
+        key,
+        source_name: source_name.clone(),
+        tier,
+        age,
+    };
+    hooks::spawn_hook(async move {
+        h.on_cache_hit(event).await;
+    });
+}
+
+/// Emit a [`hooks::CacheMissEvent`] through the registered hook impl.
+fn emit_cache_miss(
+    hooks: &Option<HooksRef>,
+    key: u64,
+    source_name: &Option<String>,
+    reason: hooks::MissReason,
+) {
+    let Some(h) = hooks.as_ref() else { return };
+    let h = h.clone();
+    let event = hooks::CacheMissEvent {
+        key,
+        source_name: source_name.clone(),
+        reason,
+    };
+    hooks::spawn_hook(async move {
+        h.on_cache_miss(event).await;
+    });
+}
+
+/// Emit a [`hooks::ProgressEvent`] through the registered hook impl.
+/// `pub(crate)` so `ChartML::transform` / `render_prepared_to_svg` can
+/// emit transform/render-phase progress without re-implementing the
+/// snapshot dance.
+pub(crate) fn emit_progress(
+    hooks: &Option<HooksRef>,
+    phase: hooks::Phase,
+    source_name: &Option<String>,
+    loaded: Option<u64>,
+    total: Option<u64>,
+    message: String,
+) {
+    let Some(h) = hooks.as_ref() else { return };
+    let h = h.clone();
+    let event = hooks::ProgressEvent {
+        phase,
+        source_name: source_name.clone(),
+        loaded,
+        total,
+        message,
+    };
+    hooks::spawn_hook(async move {
+        h.on_progress(event).await;
+    });
+}
+
+/// Emit a [`hooks::ErrorEvent`] through the registered hook impl.
+/// `pub(crate)` so `ChartML::transform` can emit transform-phase errors.
+pub(crate) fn emit_error(
+    hooks: &Option<HooksRef>,
+    phase: hooks::Phase,
+    source_name: &Option<String>,
+    error: String,
+) {
+    let Some(h) = hooks.as_ref() else { return };
+    let h = h.clone();
+    let event = hooks::ErrorEvent {
+        phase,
+        source_name: source_name.clone(),
+        error,
+    };
+    hooks::spawn_hook(async move {
+        h.on_error(event).await;
+    });
 }
 
 /// Build the tag list applied to `CachedEntry` on write. `slug` and

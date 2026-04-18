@@ -601,6 +601,8 @@ dependencies = [
  "serde_yaml",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
+ "wasm-bindgen-futures",
  "wiremock",
  "xxhash-rust",
 ]

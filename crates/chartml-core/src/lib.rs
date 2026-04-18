@@ -24,9 +24,10 @@ pub use registry::ChartMLRegistry;
 pub use theme::Theme;
 pub use pipeline::{FetchedChart, PreparedChart, FetchMetadata, PreparedMetadata, RenderOptions};
 pub use resolver::{
-    CacheBackend, CacheConfig, CacheError, CachedEntry, CancellationToken, DataSourceProvider,
-    FetchError, FetchRequest, FetchResult, HttpProvider, InlineProvider, MemoryBackend,
-    ResolveOutcome, Resolver, ResolverRef,
+    CacheBackend, CacheConfig, CacheError, CachedEntry, CacheHitEvent, CacheMissEvent, CacheTier,
+    CancellationToken, DataSourceProvider, ErrorEvent, FetchError, FetchRequest, FetchResult,
+    HooksRef, HttpProvider, InlineProvider, MemoryBackend, MissReason, NullHooks, Phase,
+    ProgressEvent, ResolveOutcome, Resolver, ResolverHooks, ResolverRef,
 };
 
 use std::collections::HashMap;
@@ -238,6 +239,23 @@ impl ChartML {
     /// API (or inspect registered provider kinds).
     pub fn resolver(&self) -> resolver::ResolverRef {
         self.resolver.clone()
+    }
+
+    /// Register a [`resolver::ResolverHooks`] impl. Replaces any previously
+    /// registered hooks. Pass `NullHooks` (or call `clear_hooks` on the
+    /// resolver handle) to disable observability.
+    ///
+    /// Hook callbacks are fire-and-forget on the current async runtime
+    /// (`tokio::spawn` on native, `wasm_bindgen_futures::spawn_local` on
+    /// WASM) so a slow telemetry sink can't stall the resolver. See
+    /// [`resolver::ResolverHooks`] for the safety contract (panic-free,
+    /// no resolver re-entry, no shared locks).
+    pub fn set_hooks(&self, hooks: impl resolver::ResolverHooks + 'static) {
+        #[cfg(not(target_arch = "wasm32"))]
+        let r: resolver::HooksRef = std::sync::Arc::new(hooks);
+        #[cfg(target_arch = "wasm32")]
+        let r: resolver::HooksRef = std::rc::Rc::new(hooks);
+        self.resolver.set_hooks(r);
     }
 
     /// Await graceful shutdown on every registered provider AND cache
@@ -914,39 +932,71 @@ impl ChartML {
         // `_opts` is reserved — phase 3 will thread params through TransformContext.
         let FetchedChart { spec, sources, metadata: _ } = fetched;
 
+        // Snapshot hooks once so the lock is never held across `await`.
+        let hooks = self.resolver.hooks_snapshot();
+        resolver::emit_progress(
+            &hooks,
+            resolver::Phase::Transform,
+            &None,
+            None,
+            None,
+            "Transforming chart".to_string(),
+        );
+
         if sources.is_empty() {
             // Internal invariant: phase 2 fetch always produces ≥1 entry.
-            return Err(ChartError::InvalidSpec(
+            let err = ChartError::InvalidSpec(
                 "Internal invariant violation: ChartML::fetch produced zero sources. \
                  Every spec must resolve to at least one named source before transform.".into(),
-            ));
+            );
+            resolver::emit_error(
+                &hooks,
+                resolver::Phase::Transform,
+                &None,
+                err.to_string(),
+            );
+            return Err(err);
         }
 
         let sources_used: Vec<String> = sources.keys().cloned().collect();
 
-        let (data, transform_applied) = match spec.transform.as_ref() {
+        let result: Result<(DataTable, bool), ChartError> = match spec.transform.as_ref() {
             None => {
                 // No transform → passthrough requires exactly one source;
                 // multi-source maps without a transform have no defined
                 // merge semantics. Error text begins with the React-matching
                 // wording, then appends source-count context for debuggability.
-                let single = single_source_or_err_no_transform(&sources)?;
-                (single, false)
+                single_source_or_err_no_transform(&sources).map(|single| (single, false))
             }
             Some(transform_spec) => {
                 if let Some(middleware) = self.registry.get_transform() {
                     let context = plugin::TransformContext::default();
-                    let result = middleware
+                    middleware
                         .transform(&sources, transform_spec, &context)
-                        .await?;
-                    (result.data, true)
+                        .await
+                        .map(|r| (r.data, true))
                 } else {
                     // No middleware — built-in fallback handles aggregate-only on a single table.
-                    let single_ref = single_source_or_err(&sources, transform_spec)?;
-                    let rows = single_ref.to_rows();
-                    let transformed_rows = transform::apply_transforms(rows, transform_spec)?;
-                    (DataTable::from_rows(&transformed_rows)?, true)
+                    single_source_or_err(&sources, transform_spec).and_then(|single_ref| {
+                        let rows = single_ref.to_rows();
+                        let transformed_rows =
+                            transform::apply_transforms(rows, transform_spec)?;
+                        Ok((DataTable::from_rows(&transformed_rows)?, true))
+                    })
                 }
+            }
+        };
+
+        let (data, transform_applied) = match result {
+            Ok(t) => t,
+            Err(err) => {
+                resolver::emit_error(
+                    &hooks,
+                    resolver::Phase::Transform,
+                    &None,
+                    err.to_string(),
+                );
+                return Err(err);
             }
         };
 
