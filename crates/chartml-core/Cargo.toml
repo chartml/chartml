@@ -20,5 +20,16 @@ async-trait = "0.1"
 arrow = { version = "57", default-features = false, features = ["ipc"] }
 indexmap = { version = "2", features = ["serde"] }
 
+# Native-only: lets the sync `render_to_svg` / `render_from_yaml*` path
+# dispatch through a registered async `TransformMiddleware` (e.g. DataFusion)
+# so multi-source NamedMap + SQL joins work end-to-end on native targets.
+# WASM keeps the sync limitation: callers must use the async API there.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+pollster = "0.4"
+
+[dev-dependencies]
+chartml-datafusion = { path = "../chartml-datafusion" }
+tokio = { version = "1", features = ["rt", "macros"] }
+
 [lints]
 workspace = true

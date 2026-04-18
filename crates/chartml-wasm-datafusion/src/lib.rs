@@ -1,3 +1,4 @@
+use indexmap::IndexMap;
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 use chartml_core::data::DataTable;
@@ -47,7 +48,13 @@ pub async fn transform(rows_js: JsValue, spec_js: JsValue, context_js: JsValue) 
 
     let transformer = DataFusionTransform;
 
-    let result = transformer.transform(data, &spec, &context).await
+    // Single-source JS bridge: wrap the input in a 1-entry map keyed `"source"`
+    // so legacy SQL referencing `FROM source` keeps working unchanged. The
+    // alias logic in DataFusionTransform is therefore a no-op for this caller.
+    let mut sources: IndexMap<String, DataTable> = IndexMap::new();
+    sources.insert("source".to_string(), data);
+
+    let result = transformer.transform(&sources, &spec, &context).await
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     // Serialize result: { data: rows[], metadata: object }

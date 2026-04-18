@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use indexmap::IndexMap;
 use std::collections::HashMap;
 
 use chartml_core::data::DataTable;
@@ -38,7 +39,11 @@ struct JsTransformResultDto {
 /// JS-backed transform middleware adapter.
 ///
 /// Wraps a JS callback:
-/// `(rows: object[], spec: object, context: object) => Promise<{data: object[], metadata: object}>`
+/// `(sources: Record<string, object[]>, spec: object, context: object) => Promise<{data: object[], metadata: object}>`
+///
+/// `sources` is an object keyed by source name. For single-source pipelines the
+/// object has one entry; for multi-source pipelines (named-map `data:`), one
+/// entry per declared name, in YAML insertion order.
 pub struct JsTransformMiddleware {
     transform_fn: SendFunction,
 }
@@ -56,13 +61,18 @@ impl JsTransformMiddleware {
 impl TransformMiddleware for JsTransformMiddleware {
     async fn transform(
         &self,
-        data: DataTable,
+        sources: &IndexMap<String, DataTable>,
         spec: &TransformSpec,
         context: &TransformContext,
     ) -> Result<TransformResult, ChartError> {
-        // Convert DataTable to JSON rows for JS
-        let rows = data.to_rows();
-        let rows_js = serde_wasm_bindgen::to_value(&rows)
+        // Convert each source's DataTable into a JSON-row array, preserving
+        // insertion order so JS callbacks see source names in the same order
+        // they appear in the YAML `data:` map.
+        let sources_js_map: IndexMap<String, Vec<chartml_core::data::Row>> = sources
+            .iter()
+            .map(|(name, table)| (name.clone(), table.to_rows()))
+            .collect();
+        let sources_js = serde_wasm_bindgen::to_value(&sources_js_map)
             .map_err(|e| ChartError::DataError(e.to_string()))?;
 
         // TransformSpec already implements Serialize
@@ -78,7 +88,7 @@ impl TransformMiddleware for JsTransformMiddleware {
         let promise = self
             .transform_fn
             .0
-            .call3(&JsValue::NULL, &rows_js, &spec_js, &ctx_js)
+            .call3(&JsValue::NULL, &sources_js, &spec_js, &ctx_js)
             .map_err(|e| ChartError::DataError(format!("JS transform error: {e:?}")))?;
 
         let promise: js_sys::Promise = promise.dyn_into().map_err(|_| {

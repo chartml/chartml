@@ -21,8 +21,9 @@ pub use registry::ChartMLRegistry;
 pub use theme::Theme;
 
 use std::collections::HashMap;
+use indexmap::IndexMap;
 use crate::data::{Row, DataTable};
-use crate::spec::{ChartSpec, DataRef};
+use crate::spec::{ChartSpec, DataRef, InlineData};
 
 /// Main ChartML instance. Orchestrates parsing, data fetching, and rendering.
 /// Maintains source and parameter registries that persist across render calls,
@@ -327,6 +328,13 @@ impl ChartML {
     }
 
     /// Internal render method that accepts named sources for resolution.
+    ///
+    /// On native targets, when a `TransformMiddleware` is registered the sync
+    /// path dispatches through it via `pollster::block_on`, so multi-source
+    /// `NamedMap` + SQL joins work identically to the async path. On WASM the
+    /// async middleware can't be polled synchronously — multi-source maps and
+    /// `sql` / `forecast` transforms surface a clear error pointing the caller
+    /// to `render_from_yaml_with_params_async`.
     fn render_chart_internal(
         &self,
         chart_spec: &ChartSpec,
@@ -334,81 +342,92 @@ impl ChartML {
         container_height: Option<f64>,
         sources: &HashMap<String, DataTable>,
     ) -> Result<ChartElement, ChartError> {
-        let chart_type = &chart_spec.visualize.chart_type;
+        // Resolve every declared source into an ordered map. Inline / Named /
+        // single-entry NamedMap collapse to a 1-entry map; multi-entry NamedMap
+        // produces one entry per declared source.
+        let chart_sources = self.resolve_chart_data(chart_spec, sources)?;
 
-        // Look up renderer
-        let renderer = self.registry.get_renderer(chart_type)
-            .ok_or_else(|| ChartError::UnknownChartType(chart_type.clone()))?;
+        // Apply transforms — preferring the registered middleware so the sync
+        // and async paths share semantics (DataFusion SQL, multi-source joins,
+        // etc.). Falls back to the built-in aggregate-only sync transform when
+        // no middleware is registered AND the spec only uses an aggregate.
+        let data = self.run_sync_transform_pipeline(chart_spec, &chart_sources)?;
 
-        // Extract data (inline or from named source)
-        let mut data = self.extract_data(chart_spec, sources)?;
-
-        // Apply transforms if specified (sync fallback: DataTable → Vec<Row> → transform → DataTable)
-        if let Some(ref transform_spec) = chart_spec.transform {
-            let rows = data.to_rows();
-            let transformed_rows = transform::apply_transforms(rows, transform_spec)?;
-            data = DataTable::from_rows(&transformed_rows)?;
-        }
-
-        // Build chart config — spec dimensions override container dimensions
-        let default_height = renderer.default_dimensions(&chart_spec.visualize)
-            .map(|d| d.height)
-            .unwrap_or(400.0);
-
-        let height = chart_spec.visualize.style
-            .as_ref()
-            .and_then(|s| s.height)
-            .or(container_height)
-            .unwrap_or(default_height);
-
-        let width = chart_spec.visualize.style
-            .as_ref()
-            .and_then(|s| s.width)
-            .or(container_width)
-            .unwrap_or(800.0);
-
-        let colors = chart_spec.visualize.style
-            .as_ref()
-            .and_then(|s| s.colors.clone())
-            .or_else(|| self.default_palette.clone())
-            .unwrap_or_else(|| {
-                color::get_chart_colors(12, color::palettes::get_palette("autumn_forest"))
-            });
-
-        let config = ChartConfig {
-            visualize: chart_spec.visualize.clone(),
-            title: chart_spec.title.clone(),
-            width,
-            height,
-            colors,
-            theme: self.theme.clone(),
-        };
-
-        renderer.render(&data, &config)
+        self.build_and_render(chart_spec, &data, container_width, container_height)
     }
 
-    /// Extract data from a chart spec, resolving both inline and named sources.
-    fn extract_data(&self, chart_spec: &ChartSpec, sources: &HashMap<String, DataTable>) -> Result<DataTable, ChartError> {
-        match &chart_spec.data {
-            DataRef::Inline(inline) => {
-                let rows = inline.rows.as_ref()
-                    .ok_or_else(|| ChartError::DataError("Inline data source has no rows".into()))?;
-                let json_rows = self.convert_json_rows(rows)?;
-                DataTable::from_rows(&json_rows)
+    /// Run the transform stage on the sync render path, sharing dispatch logic
+    /// with the async path. When a `TransformMiddleware` is registered, the
+    /// async `transform` call is driven to completion with `pollster::block_on`
+    /// on native targets. WASM has no synchronous executor available, so the
+    /// sync path keeps the legacy aggregate-only fallback there and surfaces a
+    /// clear error if the spec needs middleware features (sql / forecast /
+    /// multi-source joins).
+    fn run_sync_transform_pipeline(
+        &self,
+        chart_spec: &ChartSpec,
+        chart_sources: &IndexMap<String, DataTable>,
+    ) -> Result<DataTable, ChartError> {
+        let Some(transform_spec) = chart_spec.transform.as_ref() else {
+            return single_source_or_err_no_transform(chart_sources);
+        };
+
+        if let Some(_middleware) = self.registry.get_transform() {
+            // Native: drive the async middleware to completion synchronously so
+            // multi-source NamedMap + SQL joins work on both sync and async
+            // entry points. WASM has no sync executor — surface a clear error
+            // so callers move to the async API instead of hanging.
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let context = plugin::TransformContext::default();
+                let result = pollster::block_on(
+                    _middleware.transform(chart_sources, transform_spec, &context),
+                )?;
+                return Ok(result.data);
             }
-            DataRef::Named(name) => {
-                sources.get(name)
-                    .cloned()
-                    .ok_or_else(|| ChartError::DataError(
-                        format!("Named data source '{}' not found", name)
-                    ))
-            }
-            DataRef::NamedMap(_) => {
-                Err(ChartError::InvalidSpec(
-                    "Multi-source `data:` map requires each source to be pre-fetched and registered by name, then `data:` rewritten to that name. The core renderer cannot fetch sources directly.".into()
-                ))
+            #[cfg(target_arch = "wasm32")]
+            {
+                return Err(ChartError::InvalidSpec(
+                    "Sync render cannot drive the registered TransformMiddleware on WASM. Call `render_from_yaml_with_params_async` instead.".into(),
+                ));
             }
         }
+
+        // No middleware registered — fall back to the built-in aggregate
+        // transform. Multi-source maps and sql / forecast transforms require
+        // middleware; surface a clear error for those.
+        if transform_spec.sql.is_some() || transform_spec.forecast.is_some() {
+            return Err(ChartError::InvalidSpec(format!(
+                "Spec uses `{}` transform but no TransformMiddleware is registered. Call `register_transform(DataFusionTransform)` (or another middleware) before rendering.",
+                describe_transform(transform_spec),
+            )));
+        }
+        let single = single_source_or_err(chart_sources, transform_spec)?;
+        let rows = single.to_rows();
+        let transformed_rows = transform::apply_transforms(rows, transform_spec)?;
+        DataTable::from_rows(&transformed_rows)
+    }
+
+    /// Resolve a single named-map entry: look up `name` in pre-registered
+    /// sources first; if the entry carried inline `rows`, materialize those.
+    /// Returns an error if neither path produces a table.
+    fn materialize_named_entry(
+        &self,
+        name: &str,
+        inline: &InlineData,
+        sources: &HashMap<String, DataTable>,
+    ) -> Result<DataTable, ChartError> {
+        if let Some(table) = sources.get(name) {
+            return Ok(table.clone());
+        }
+        if let Some(rows) = &inline.rows {
+            let json_rows = self.convert_json_rows(rows)?;
+            return DataTable::from_rows(&json_rows);
+        }
+        Err(ChartError::DataError(format!(
+            "Named data source '{}' is not pre-registered (call `register_source(\"{}\", ...)` before rendering) and the spec did not provide inline `rows`.",
+            name, name,
+        )))
     }
 
     /// Convert JSON value rows into typed Row objects.
@@ -664,24 +683,29 @@ impl ChartML {
             }
         };
 
-        // Step 4: Resolve data
-        let chart_data = self.resolve_chart_data(chart_spec, &sources)?;
+        // Step 4: Resolve data — produces an IndexMap of all named sources so
+        // multi-source maps can flow into the transform middleware.
+        let chart_sources = self.resolve_chart_data(chart_spec, &sources)?;
 
         // Step 5: Transform — use middleware for ALL transforms when registered
         let transformed_data = if let Some(ref transform_spec) = chart_spec.transform {
             if let Some(middleware) = self.registry.get_transform() {
                 let context = plugin::TransformContext::default();
-                let result = middleware.transform(chart_data, transform_spec, &context).await?;
+                let result = middleware.transform(&chart_sources, transform_spec, &context).await?;
                 result.data
             } else {
-                // No middleware — fall back to built-in sync transform (aggregate only)
-                // DataTable → Vec<Row> → apply_transforms → DataTable
-                let rows = chart_data.to_rows();
+                // No middleware — fall back to built-in sync transform (aggregate only).
+                // The fallback only operates on a single table; multi-source maps
+                // require a registered TransformMiddleware to join.
+                let single = single_source_or_err(&chart_sources, transform_spec)?;
+                let rows = single.to_rows();
                 let transformed_rows = transform::apply_transforms(rows, transform_spec)?;
                 DataTable::from_rows(&transformed_rows)?
             }
         } else {
-            chart_data
+            // No transform — passthrough requires exactly one source; multi-source
+            // maps without a transform have no defined merge semantics.
+            single_source_or_err_no_transform(&chart_sources)?
         };
 
         // Step 6: Render
@@ -709,71 +733,117 @@ impl ChartML {
             }
         };
 
-        let chart_data = match &chart_spec.data {
+        // Build the named-source map. Single-source shapes (Inline / Named)
+        // produce a 1-entry map; NamedMap produces one entry per declared
+        // source. Pre-registered sources fill in entries that don't carry
+        // inline rows.
+        let chart_sources: IndexMap<String, DataTable> = match &chart_spec.data {
             DataRef::Inline(inline) => {
+                // `unwrap_or_default()` collapses "no `rows:` key" and "rows: []" to
+                // the same empty `Vec<Row>` — the `is_empty()` check below then
+                // falls through to the caller-supplied `data`, which is the
+                // explicit contract of `render_from_yaml_with_data_async`.
                 let inline_rows = inline.rows.as_ref()
                     .map(|r| self.convert_json_rows(r))
                     .transpose()?
                     .unwrap_or_default();
                 let inline_table = DataTable::from_rows(&inline_rows)?;
-                if inline_table.is_empty() && !data.is_empty() { data } else { inline_table }
+                let chosen = if inline_table.is_empty() && !data.is_empty() {
+                    data
+                } else {
+                    inline_table
+                };
+                let mut map = IndexMap::new();
+                map.insert("source".to_string(), chosen);
+                map
             }
             DataRef::Named(name) => {
-                self.sources.get(name).cloned()
-                    .ok_or_else(|| ChartError::DataError(format!("Source '{}' not found", name)))?
+                let table = self.sources.get(name).cloned().ok_or_else(|| {
+                    ChartError::DataError(format!("Source '{}' not found", name))
+                })?;
+                let mut map = IndexMap::new();
+                map.insert(name.clone(), table);
+                map
             }
-            DataRef::NamedMap(_) => {
-                return Err(ChartError::InvalidSpec(
-                    "Multi-source `data:` map requires each source to be pre-fetched and registered by name, then `data:` rewritten to that name.".into()
-                ));
+            DataRef::NamedMap(map) => {
+                let mut out = IndexMap::new();
+                for (name, inline) in map {
+                    let table = self.materialize_named_entry(name, inline, &self.sources)?;
+                    out.insert(name.clone(), table);
+                }
+                out
             }
         };
 
         let transformed_data = if let Some(ref transform_spec) = chart_spec.transform {
             if let Some(middleware) = self.registry.get_transform() {
                 let context = plugin::TransformContext::default();
-                let result = middleware.transform(chart_data, transform_spec, &context).await?;
+                let result = middleware.transform(&chart_sources, transform_spec, &context).await?;
                 result.data
             } else if transform_spec.sql.is_some() || transform_spec.forecast.is_some() {
                 return Err(ChartError::InvalidSpec(
                     "Spec uses sql or forecast transforms but no TransformMiddleware is registered".into()
                 ));
             } else {
-                // Sync fallback: DataTable → Vec<Row> → apply_transforms → DataTable
-                let rows = chart_data.to_rows();
+                // Sync fallback: DataTable → Vec<Row> → apply_transforms → DataTable.
+                // The sync path only handles a single table — multi-source maps
+                // require a registered TransformMiddleware to join.
+                let single = single_source_or_err(&chart_sources, transform_spec)?;
+                let rows = single.to_rows();
                 let transformed_rows = transform::apply_transforms(rows, transform_spec)?;
                 DataTable::from_rows(&transformed_rows)?
             }
         } else {
-            chart_data
+            single_source_or_err_no_transform(&chart_sources)?
         };
 
         self.build_and_render(chart_spec, &transformed_data, None, None)
     }
 
-    /// Resolve chart data from inline rows or named sources.
-    fn resolve_chart_data(&self, chart_spec: &ChartSpec, sources: &HashMap<String, DataTable>) -> Result<DataTable, ChartError> {
+    /// Resolve a chart spec's `data:` reference into a map of named source
+    /// tables. The map is `IndexMap`-typed so insertion order from the YAML is
+    /// preserved when the spec uses a multi-source `data:` map.
+    ///
+    /// - `DataRef::Inline(flat)` → 1-entry map keyed `"source"` (the canonical
+    ///   default name; transform middleware aliases this so legacy SQL keeps
+    ///   working).
+    /// - `DataRef::Named(name)` → 1-entry map keyed `name`, looked up in
+    ///   pre-registered sources.
+    /// - `DataRef::NamedMap(map)` → one entry per declared source. Each entry
+    ///   is resolved via pre-registered sources first, falling back to inline
+    ///   `rows` carried directly on the entry. All entries must resolve to a
+    ///   table; missing sources produce a clear error message.
+    fn resolve_chart_data(
+        &self,
+        chart_spec: &ChartSpec,
+        sources: &HashMap<String, DataTable>,
+    ) -> Result<IndexMap<String, DataTable>, ChartError> {
+        let mut out = IndexMap::new();
         match &chart_spec.data {
             DataRef::Inline(inline) => {
-                let json_rows = inline.rows.as_ref()
+                let json_rows = inline
+                    .rows
+                    .as_ref()
                     .map(|r| self.convert_json_rows(r))
                     .transpose()?
                     .unwrap_or_default();
-                DataTable::from_rows(&json_rows)
+                let table = DataTable::from_rows(&json_rows)?;
+                out.insert("source".to_string(), table);
             }
             DataRef::Named(name) => {
-                sources.get(name)
-                    .cloned()
-                    .ok_or_else(|| ChartError::DataError(
-                        format!("Named data source '{}' not found", name)
-                    ))
+                let table = sources.get(name).cloned().ok_or_else(|| {
+                    ChartError::DataError(format!("Named data source '{}' not found", name))
+                })?;
+                out.insert(name.clone(), table);
             }
-            DataRef::NamedMap(_) => {
-                Err(ChartError::InvalidSpec(
-                    "Multi-source `data:` map requires each source to be pre-fetched and registered by name, then `data:` rewritten to that name.".into()
-                ))
+            DataRef::NamedMap(map) => {
+                for (name, inline) in map {
+                    let table = self.materialize_named_entry(name, inline, sources)?;
+                    out.insert(name.clone(), table);
+                }
             }
         }
+        Ok(out)
     }
 
     /// Build chart config and render — shared by sync and async paths.
@@ -833,6 +903,60 @@ impl ChartML {
 impl Default for ChartML {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Helper: when no `TransformMiddleware` is registered, the sync fallback can
+/// only operate on a single source table. Multi-source maps with a transform
+/// require the user to register a middleware (e.g. `DataFusionTransform`) that
+/// can join the sources.
+fn single_source_or_err<'a>(
+    sources: &'a IndexMap<String, DataTable>,
+    transform_spec: &spec::TransformSpec,
+) -> Result<&'a DataTable, ChartError> {
+    if sources.len() == 1 {
+        return Ok(sources
+            .values()
+            .next()
+            .expect("sources has 1 entry"));
+    }
+    Err(ChartError::InvalidSpec(format!(
+        "Multi-source `data:` map (got {} sources: {}) with transform `{}` requires a registered TransformMiddleware to join the sources. Call `register_transform(DataFusionTransform)` (or another middleware) before rendering.",
+        sources.len(),
+        sources.keys().cloned().collect::<Vec<_>>().join(", "),
+        describe_transform(transform_spec),
+    )))
+}
+
+/// Helper: when no transform is declared, the renderer needs exactly one
+/// source table. Multi-source maps without a transform have no defined merge
+/// semantics — surface a clear error so the user adds a transform block.
+fn single_source_or_err_no_transform(
+    sources: &IndexMap<String, DataTable>,
+) -> Result<DataTable, ChartError> {
+    if sources.len() == 1 {
+        return Ok(sources
+            .values()
+            .next()
+            .expect("sources has 1 entry")
+            .clone());
+    }
+    Err(ChartError::InvalidSpec(format!(
+        "Named data sources require a transform block when multiple sources are defined (got {} sources: {}).",
+        sources.len(),
+        sources.keys().cloned().collect::<Vec<_>>().join(", "),
+    )))
+}
+
+fn describe_transform(spec: &spec::TransformSpec) -> &'static str {
+    if spec.sql.is_some() {
+        "sql"
+    } else if spec.aggregate.is_some() {
+        "aggregate"
+    } else if spec.forecast.is_some() {
+        "forecast"
+    } else {
+        "transform"
     }
 }
 

@@ -14,6 +14,7 @@ use chartml_core::plugin::transform::{TransformContext, TransformMiddleware, Tra
 use chartml_core::spec::TransformSpec;
 use datafusion::prelude::*;
 use arrow::array::RecordBatch;
+use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -23,6 +24,12 @@ use std::sync::Arc;
 /// 1. **SQL stage** — execute raw SQL with placeholder replacement
 /// 2. **Aggregate stage** — declarative GROUP BY / measures / filters
 /// 3. **Forecast stage** — time series forecasting via chartml-forecast
+///
+/// All entries in the `sources` map are registered under their declared name.
+/// For single-entry maps where the sole key is not already `"source"`, the
+/// table is additionally registered under the alias `"source"` so legacy SQL
+/// referencing `FROM source` keeps working. Multi-entry maps are NOT aliased —
+/// user SQL must reference each source by its own name.
 pub struct DataFusionTransform;
 
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
@@ -30,26 +37,79 @@ pub struct DataFusionTransform;
 impl TransformMiddleware for DataFusionTransform {
     async fn transform(
         &self,
-        data: DataTable,
+        sources: &IndexMap<String, DataTable>,
         spec: &TransformSpec,
         _context: &TransformContext,
     ) -> Result<TransformResult, ChartError> {
+        if sources.is_empty() {
+            return Err(ChartError::DataError(
+                "DataFusionTransform: at least one source table is required".to_string(),
+            ));
+        }
+
         let ctx = SessionContext::new();
 
-        // Register input data as "source" table — no conversion needed,
-        // DataTable already holds an Arrow RecordBatch.
-        let batch = data.record_batch().clone();
-        let schema = batch.schema();
-        let mem_table =
-            datafusion::datasource::MemTable::try_new(schema, vec![vec![batch]]).map_err(|e| {
-                ChartError::DataError(format!("Failed to create source MemTable: {}", e))
-            })?;
-        ctx.register_table("source", std::sync::Arc::new(mem_table))
-            .map_err(|e| {
-                ChartError::DataError(format!("Failed to register source table: {}", e))
-            })?;
+        // Register every source under its declared name. DataTable already
+        // holds an Arrow RecordBatch so no conversion is required.
+        for (name, table) in sources {
+            let batch = table.record_batch().clone();
+            let schema = batch.schema();
+            let mem_table = datafusion::datasource::MemTable::try_new(schema, vec![vec![batch]])
+                .map_err(|e| {
+                    ChartError::DataError(format!(
+                        "Failed to create MemTable for source '{}': {}",
+                        name, e
+                    ))
+                })?;
+            ctx.register_table(name.as_str(), Arc::new(mem_table))
+                .map_err(|e| {
+                    ChartError::DataError(format!(
+                        "Failed to register source table '{}': {}",
+                        name, e
+                    ))
+                })?;
+        }
 
-        let mut current_table = "source".to_string();
+        // Single-source back-compat: alias the sole entry as "source" so legacy
+        // SQL referencing `FROM source` keeps working when the registered name
+        // differs. Multi-entry maps are intentionally NOT aliased — user SQL
+        // must address each source by its declared name.
+        if sources.len() == 1 && !sources.contains_key("source") {
+            // Safe to unwrap: just checked sources.len() == 1.
+            let (sole_name, sole_table) = sources.iter().next().expect("sources has 1 entry");
+            let batch = sole_table.record_batch().clone();
+            let schema = batch.schema();
+            let alias_table = datafusion::datasource::MemTable::try_new(schema, vec![vec![batch]])
+                .map_err(|e| {
+                    ChartError::DataError(format!(
+                        "Failed to create alias MemTable for source '{}': {}",
+                        sole_name, e
+                    ))
+                })?;
+            ctx.register_table("source", Arc::new(alias_table))
+                .map_err(|e| {
+                    ChartError::DataError(format!(
+                        "Failed to register `source` alias for '{}': {}",
+                        sole_name, e
+                    ))
+                })?;
+        }
+
+        // For single-source maps, `current_table` starts as the sole source name
+        // (which is also accessible via the `"source"` alias). For multi-source
+        // maps, default to `"source"`; user SQL is expected to produce its own
+        // output table by joining the named sources, so the initial value is
+        // only meaningful for stages that pass through (e.g. aggregate-only on
+        // a single source).
+        let mut current_table = if sources.len() == 1 {
+            sources
+                .keys()
+                .next()
+                .expect("sources has 1 entry")
+                .clone()
+        } else {
+            "source".to_string()
+        };
 
         // Stage 1: SQL
         if let Some(ref sql_spec) = spec.sql {
@@ -156,6 +216,14 @@ mod tests {
         DataTable::from_rows(&sales_rows()).unwrap()
     }
 
+    /// Build a single-source map keyed by `"source"` — matches the behaviour of
+    /// callers that did not rename their default input.
+    fn source_map(data: DataTable) -> IndexMap<String, DataTable> {
+        let mut sources = IndexMap::new();
+        sources.insert("source".to_string(), data);
+        sources
+    }
+
     #[tokio::test]
     async fn test_full_pipeline_aggregate() {
         let data = sales_data();
@@ -181,7 +249,8 @@ mod tests {
 
         let transform = DataFusionTransform;
         let context = TransformContext::default();
-        let result = transform.transform(data, &spec, &context).await.unwrap();
+        let sources = source_map(data);
+        let result = transform.transform(&sources, &spec, &context).await.unwrap();
 
         assert_eq!(result.data.num_rows(), 3, "Should have 3 regions");
 
@@ -234,7 +303,8 @@ mod tests {
 
         let transform = DataFusionTransform;
         let context = TransformContext::default();
-        let result = transform.transform(data, &spec, &context).await.unwrap();
+        let sources = source_map(data);
+        let result = transform.transform(&sources, &spec, &context).await.unwrap();
 
         // Should have 20 historical + 5 forecast rows
         assert_eq!(
@@ -290,7 +360,8 @@ mod tests {
 
         let transform = DataFusionTransform;
         let context = TransformContext::default();
-        let result = transform.transform(data, &spec, &context).await.unwrap();
+        let sources = source_map(data);
+        let result = transform.transform(&sources, &spec, &context).await.unwrap();
 
         // Only rows with revenue > 100 should remain
         let result_rows = result.data.to_rows();
@@ -539,5 +610,184 @@ visualize:
         let data = sales_data();
         let result = chartml.render_from_yaml_with_data_async(yaml, data).await;
         assert!(result.is_ok(), "Aggregate-only async render should work without middleware: {:?}", result.err());
+    }
+
+    // --- Phase 1: multi-source map + alias behaviour ---
+
+    fn visitors_data() -> DataTable {
+        let rows = vec![
+            make_row(vec![
+                ("date", json!("2024-01-01")),
+                ("n", json!(100.0)),
+            ]),
+            make_row(vec![
+                ("date", json!("2024-01-02")),
+                ("n", json!(150.0)),
+            ]),
+            make_row(vec![
+                ("date", json!("2024-01-03")),
+                ("n", json!(200.0)),
+            ]),
+        ];
+        DataTable::from_rows(&rows).unwrap()
+    }
+
+    fn sessions_data() -> DataTable {
+        let rows = vec![
+            make_row(vec![
+                ("date", json!("2024-01-01")),
+                ("n", json!(10.0)),
+            ]),
+            make_row(vec![
+                ("date", json!("2024-01-02")),
+                ("n", json!(15.0)),
+            ]),
+            make_row(vec![
+                ("date", json!("2024-01-03")),
+                ("n", json!(20.0)),
+            ]),
+        ];
+        DataTable::from_rows(&rows).unwrap()
+    }
+
+    /// Acceptance test for the core bug: a multi-source map must support SQL
+    /// joins across the named tables.
+    #[tokio::test]
+    async fn test_multi_source_join() {
+        let mut sources = IndexMap::new();
+        sources.insert("visitors".to_string(), visitors_data());
+        sources.insert("sessions".to_string(), sessions_data());
+
+        let spec = TransformSpec {
+            sql: Some(SqlSpec::Single(
+                "SELECT v.date, v.n AS visitors, s.n AS sessions \
+                 FROM visitors v JOIN sessions s USING (date) \
+                 ORDER BY v.date"
+                    .to_string(),
+            )),
+            aggregate: None,
+            forecast: None,
+        };
+
+        let transform = DataFusionTransform;
+        let context = TransformContext::default();
+        let result = transform
+            .transform(&sources, &spec, &context)
+            .await
+            .expect("multi-source join should succeed");
+
+        assert_eq!(result.data.num_rows(), 3, "Joined result should have 3 rows");
+
+        let rows = result.data.to_rows();
+        assert_eq!(
+            rows[0].get("visitors").and_then(|v| v.as_f64()),
+            Some(100.0),
+            "First row's visitors column should be 100"
+        );
+        assert_eq!(
+            rows[0].get("sessions").and_then(|v| v.as_f64()),
+            Some(10.0),
+            "First row's sessions column should be 10"
+        );
+        assert_eq!(
+            rows[2].get("visitors").and_then(|v| v.as_f64()),
+            Some(200.0),
+        );
+        assert_eq!(
+            rows[2].get("sessions").and_then(|v| v.as_f64()),
+            Some(20.0),
+        );
+    }
+
+    /// Single-entry map with a custom name — SQL referencing `FROM source`
+    /// must still work because the alias is registered automatically.
+    #[tokio::test]
+    async fn test_single_source_alias() {
+        let mut sources = IndexMap::new();
+        sources.insert("revenue".to_string(), sales_data());
+
+        let spec = TransformSpec {
+            sql: Some(SqlSpec::Single(
+                "SELECT region, revenue FROM source WHERE revenue > 100".to_string(),
+            )),
+            aggregate: None,
+            forecast: None,
+        };
+
+        let transform = DataFusionTransform;
+        let context = TransformContext::default();
+        let result = transform
+            .transform(&sources, &spec, &context)
+            .await
+            .expect("single-source alias should resolve `FROM source`");
+
+        let rows = result.data.to_rows();
+        assert!(!rows.is_empty(), "Filter should leave at least one row");
+        for row in &rows {
+            let rev = row.get("revenue").and_then(|v| v.as_f64()).unwrap();
+            assert!(rev > 100.0, "Filter should leave only rev > 100, got {}", rev);
+        }
+    }
+
+    /// Single-entry map with a custom name — SQL referencing the actual
+    /// source name must work too.
+    #[tokio::test]
+    async fn test_single_source_own_name() {
+        let mut sources = IndexMap::new();
+        sources.insert("revenue".to_string(), sales_data());
+
+        let spec = TransformSpec {
+            sql: Some(SqlSpec::Single(
+                "SELECT region, revenue FROM revenue WHERE revenue > 100".to_string(),
+            )),
+            aggregate: None,
+            forecast: None,
+        };
+
+        let transform = DataFusionTransform;
+        let context = TransformContext::default();
+        let result = transform
+            .transform(&sources, &spec, &context)
+            .await
+            .expect("single-source own-name reference should resolve");
+
+        let rows = result.data.to_rows();
+        assert!(!rows.is_empty(), "Filter should leave at least one row");
+        for row in &rows {
+            let rev = row.get("revenue").and_then(|v| v.as_f64()).unwrap();
+            assert!(rev > 100.0, "Filter should leave only rev > 100, got {}", rev);
+        }
+    }
+
+    /// Multi-entry map: the `source` alias is NOT registered. SQL referencing
+    /// `FROM source` must fail with a clear "table not found" error.
+    #[tokio::test]
+    async fn test_multi_source_no_alias() {
+        let mut sources = IndexMap::new();
+        sources.insert("visitors".to_string(), visitors_data());
+        sources.insert("sessions".to_string(), sessions_data());
+
+        let spec = TransformSpec {
+            sql: Some(SqlSpec::Single(
+                "SELECT * FROM source".to_string(),
+            )),
+            aggregate: None,
+            forecast: None,
+        };
+
+        let transform = DataFusionTransform;
+        let context = TransformContext::default();
+        let result = transform.transform(&sources, &spec, &context).await;
+
+        assert!(
+            result.is_err(),
+            "Multi-source maps must NOT register a `source` alias",
+        );
+        let err = result.unwrap_err().to_string().to_lowercase();
+        assert!(
+            err.contains("source") || err.contains("table") || err.contains("not found"),
+            "Error should reference the missing table; got: {}",
+            err
+        );
     }
 }
