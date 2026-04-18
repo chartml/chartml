@@ -1,0 +1,1183 @@
+{
+  "children": [
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "class": "axis-line",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 0.0,
+              "x2": 723.0,
+              "y1": 332.0,
+              "y2": 332.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              47.0,
+              0.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "tick",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 77.97058823529412,
+              "x2": 77.97058823529412,
+              "y1": 332.0,
+              "y2": 337.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              47.0,
+              0.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "anchor": "middle",
+              "class": "tick-label axis-label",
+              "content": "Jan 01",
+              "data": null,
+              "dominantBaseline": null,
+              "fill": "#6b7280",
+              "fontSize": "12px",
+              "fontWeight": null,
+              "transform": null,
+              "type": "text",
+              "x": 77.97058823529412,
+              "y": 350.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              47.0,
+              0.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "tick",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 219.73529411764704,
+              "x2": 219.73529411764704,
+              "y1": 332.0,
+              "y2": 337.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              47.0,
+              0.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "anchor": "middle",
+              "class": "tick-label axis-label",
+              "content": "Jan 02",
+              "data": null,
+              "dominantBaseline": null,
+              "fill": "#6b7280",
+              "fontSize": "12px",
+              "fontWeight": null,
+              "transform": null,
+              "type": "text",
+              "x": 219.73529411764704,
+              "y": 350.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              47.0,
+              0.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "tick",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 361.5,
+              "x2": 361.5,
+              "y1": 332.0,
+              "y2": 337.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              47.0,
+              0.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "anchor": "middle",
+              "class": "tick-label axis-label",
+              "content": "Jan 03",
+              "data": null,
+              "dominantBaseline": null,
+              "fill": "#6b7280",
+              "fontSize": "12px",
+              "fontWeight": null,
+              "transform": null,
+              "type": "text",
+              "x": 361.5,
+              "y": 350.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              47.0,
+              0.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "tick",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 503.2647058823529,
+              "x2": 503.2647058823529,
+              "y1": 332.0,
+              "y2": 337.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              47.0,
+              0.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "anchor": "middle",
+              "class": "tick-label axis-label",
+              "content": "Jan 04",
+              "data": null,
+              "dominantBaseline": null,
+              "fill": "#6b7280",
+              "fontSize": "12px",
+              "fontWeight": null,
+              "transform": null,
+              "type": "text",
+              "x": 503.2647058823529,
+              "y": 350.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              47.0,
+              0.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "tick",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 645.0294117647057,
+              "x2": 645.0294117647057,
+              "y1": 332.0,
+              "y2": 337.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              47.0,
+              0.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "anchor": "middle",
+              "class": "tick-label axis-label",
+              "content": "Jan 05",
+              "data": null,
+              "dominantBaseline": null,
+              "fill": "#6b7280",
+              "fontSize": "12px",
+              "fontWeight": null,
+              "transform": null,
+              "type": "text",
+              "x": 645.0294117647057,
+              "y": 350.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              47.0,
+              0.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "axis-line",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 47.0,
+              "x2": 47.0,
+              "y1": 0.0,
+              "y2": 312.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "grid-line grid-line-y",
+              "stroke": "#e0e0e0",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 47.0,
+              "x2": 770.0,
+              "y1": 312.0,
+              "y2": 312.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "tick",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 42.0,
+              "x2": 47.0,
+              "y1": 312.0,
+              "y2": 312.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "anchor": "end",
+              "class": "tick-label tick-value",
+              "content": "0",
+              "data": null,
+              "dominantBaseline": "middle",
+              "fill": "#6b7280",
+              "fontSize": "12px",
+              "fontWeight": null,
+              "transform": null,
+              "type": "text",
+              "x": 39.0,
+              "y": 312.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "grid-line grid-line-y",
+              "stroke": "#e0e0e0",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 47.0,
+              "x2": 770.0,
+              "y1": 260.0,
+              "y2": 260.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "tick",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 42.0,
+              "x2": 47.0,
+              "y1": 260.0,
+              "y2": 260.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "anchor": "end",
+              "class": "tick-label tick-value",
+              "content": "500",
+              "data": null,
+              "dominantBaseline": "middle",
+              "fill": "#6b7280",
+              "fontSize": "12px",
+              "fontWeight": null,
+              "transform": null,
+              "type": "text",
+              "x": 39.0,
+              "y": 260.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "grid-line grid-line-y",
+              "stroke": "#e0e0e0",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 47.0,
+              "x2": 770.0,
+              "y1": 208.0,
+              "y2": 208.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "tick",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 42.0,
+              "x2": 47.0,
+              "y1": 208.0,
+              "y2": 208.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "anchor": "end",
+              "class": "tick-label tick-value",
+              "content": "1,000",
+              "data": null,
+              "dominantBaseline": "middle",
+              "fill": "#6b7280",
+              "fontSize": "12px",
+              "fontWeight": null,
+              "transform": null,
+              "type": "text",
+              "x": 39.0,
+              "y": 208.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "grid-line grid-line-y",
+              "stroke": "#e0e0e0",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 47.0,
+              "x2": 770.0,
+              "y1": 156.0,
+              "y2": 156.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "tick",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 42.0,
+              "x2": 47.0,
+              "y1": 156.0,
+              "y2": 156.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "anchor": "end",
+              "class": "tick-label tick-value",
+              "content": "1,500",
+              "data": null,
+              "dominantBaseline": "middle",
+              "fill": "#6b7280",
+              "fontSize": "12px",
+              "fontWeight": null,
+              "transform": null,
+              "type": "text",
+              "x": 39.0,
+              "y": 156.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "grid-line grid-line-y",
+              "stroke": "#e0e0e0",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 47.0,
+              "x2": 770.0,
+              "y1": 104.0,
+              "y2": 104.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "tick",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 42.0,
+              "x2": 47.0,
+              "y1": 104.0,
+              "y2": 104.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "anchor": "end",
+              "class": "tick-label tick-value",
+              "content": "2,000",
+              "data": null,
+              "dominantBaseline": "middle",
+              "fill": "#6b7280",
+              "fontSize": "12px",
+              "fontWeight": null,
+              "transform": null,
+              "type": "text",
+              "x": 39.0,
+              "y": 104.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "grid-line grid-line-y",
+              "stroke": "#e0e0e0",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 47.0,
+              "x2": 770.0,
+              "y1": 52.0,
+              "y2": 52.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "tick",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 42.0,
+              "x2": 47.0,
+              "y1": 52.0,
+              "y2": 52.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "anchor": "end",
+              "class": "tick-label tick-value",
+              "content": "2,500",
+              "data": null,
+              "dominantBaseline": "middle",
+              "fill": "#6b7280",
+              "fontSize": "12px",
+              "fontWeight": null,
+              "transform": null,
+              "type": "text",
+              "x": 39.0,
+              "y": 52.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "grid-line grid-line-y",
+              "stroke": "#e0e0e0",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 47.0,
+              "x2": 770.0,
+              "y1": 0.0,
+              "y2": 0.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "class": "tick",
+              "stroke": "#374151",
+              "strokeDasharray": null,
+              "strokeWidth": 1.0,
+              "type": "line",
+              "x1": 42.0,
+              "x2": 47.0,
+              "y1": 0.0,
+              "y2": 0.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        },
+        {
+          "children": [
+            {
+              "anchor": "end",
+              "class": "tick-label tick-value",
+              "content": "3,000",
+              "data": null,
+              "dominantBaseline": "middle",
+              "fill": "#6b7280",
+              "fontSize": "12px",
+              "fontWeight": null,
+              "transform": null,
+              "type": "text",
+              "x": 39.0,
+              "y": 0.0
+            }
+          ],
+          "class": "",
+          "transform": {
+            "translate": [
+              0.0,
+              20.0
+            ]
+          },
+          "type": "group"
+        }
+      ],
+      "class": "axes",
+      "transform": null,
+      "type": "group"
+    },
+    {
+      "children": [
+        {
+          "class": "legend-symbol legend-line",
+          "stroke": "#2E7D9A",
+          "strokeDasharray": null,
+          "strokeWidth": 2.5,
+          "type": "line",
+          "x1": 281.0,
+          "x2": 293.0,
+          "y1": 378.0,
+          "y2": 378.0
+        },
+        {
+          "anchor": "start",
+          "class": "legend-label",
+          "content": "Visitors",
+          "data": null,
+          "dominantBaseline": null,
+          "fill": "#6b7280",
+          "fontSize": "11px",
+          "fontWeight": null,
+          "transform": null,
+          "type": "text",
+          "x": 299.0,
+          "y": 382.0
+        },
+        {
+          "class": "legend-symbol legend-line",
+          "stroke": "#D4A445",
+          "strokeDasharray": null,
+          "strokeWidth": 2.5,
+          "type": "line",
+          "x1": 357.0,
+          "x2": 369.0,
+          "y1": 378.0,
+          "y2": 378.0
+        },
+        {
+          "anchor": "start",
+          "class": "legend-label",
+          "content": "Sessions",
+          "data": null,
+          "dominantBaseline": null,
+          "fill": "#6b7280",
+          "fontSize": "11px",
+          "fontWeight": null,
+          "transform": null,
+          "type": "text",
+          "x": 375.0,
+          "y": 382.0
+        },
+        {
+          "class": "legend-symbol legend-line",
+          "stroke": "#4A7C59",
+          "strokeDasharray": null,
+          "strokeWidth": 2.5,
+          "type": "line",
+          "x1": 440.0,
+          "x2": 452.0,
+          "y1": 378.0,
+          "y2": 378.0
+        },
+        {
+          "anchor": "start",
+          "class": "legend-label",
+          "content": "Revenue",
+          "data": null,
+          "dominantBaseline": null,
+          "fill": "#6b7280",
+          "fontSize": "11px",
+          "fontWeight": null,
+          "transform": null,
+          "type": "text",
+          "x": 458.0,
+          "y": 382.0
+        }
+      ],
+      "class": "legend",
+      "transform": null,
+      "type": "group"
+    },
+    {
+      "children": [
+        {
+          "class": "chartml-line-path series-line",
+          "d": "M77.970588,301.6C125.22549,299.866667 172.480392,298.133333 219.735294,296.4C266.990196,294.666667 314.245098,291.2 361.5,291.2C408.754902,291.2 456.009804,293.8 503.264706,293.8C550.519608,293.8 597.77451,290.333333 645.029412,288.6",
+          "data": {
+            "label": "Visitors",
+            "raw": {},
+            "series": "Visitors",
+            "value": ""
+          },
+          "fill": null,
+          "opacity": null,
+          "stroke": "#2E7D9A",
+          "strokeDasharray": null,
+          "strokeWidth": 2.0,
+          "type": "path"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 77.97058823529412,
+          "cy": 301.6,
+          "data": {
+            "label": "2024-01-01",
+            "raw": {},
+            "series": "Visitors",
+            "value": "100"
+          },
+          "fill": "#2E7D9A",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 219.73529411764704,
+          "cy": 296.4,
+          "data": {
+            "label": "2024-01-02",
+            "raw": {},
+            "series": "Visitors",
+            "value": "150"
+          },
+          "fill": "#2E7D9A",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 361.5,
+          "cy": 291.2,
+          "data": {
+            "label": "2024-01-03",
+            "raw": {},
+            "series": "Visitors",
+            "value": "200"
+          },
+          "fill": "#2E7D9A",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 503.2647058823529,
+          "cy": 293.8,
+          "data": {
+            "label": "2024-01-04",
+            "raw": {},
+            "series": "Visitors",
+            "value": "175"
+          },
+          "fill": "#2E7D9A",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 645.0294117647057,
+          "cy": 288.6,
+          "data": {
+            "label": "2024-01-05",
+            "raw": {},
+            "series": "Visitors",
+            "value": "225"
+          },
+          "fill": "#2E7D9A",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-path series-line",
+          "d": "M77.970588,310.96C125.22549,310.786667 172.480392,310.613333 219.735294,310.44C266.990196,310.266667 314.245098,309.92 361.5,309.92C408.754902,309.92 456.009804,310.128 503.264706,310.128C550.519608,310.128 597.77451,309.850667 645.029412,309.712",
+          "data": {
+            "label": "Sessions",
+            "raw": {},
+            "series": "Sessions",
+            "value": ""
+          },
+          "fill": null,
+          "opacity": null,
+          "stroke": "#D4A445",
+          "strokeDasharray": null,
+          "strokeWidth": 2.0,
+          "type": "path"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 77.97058823529412,
+          "cy": 310.96,
+          "data": {
+            "label": "2024-01-01",
+            "raw": {},
+            "series": "Sessions",
+            "value": "10"
+          },
+          "fill": "#D4A445",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 219.73529411764704,
+          "cy": 310.44,
+          "data": {
+            "label": "2024-01-02",
+            "raw": {},
+            "series": "Sessions",
+            "value": "15"
+          },
+          "fill": "#D4A445",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 361.5,
+          "cy": 309.92,
+          "data": {
+            "label": "2024-01-03",
+            "raw": {},
+            "series": "Sessions",
+            "value": "20"
+          },
+          "fill": "#D4A445",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 503.2647058823529,
+          "cy": 310.128,
+          "data": {
+            "label": "2024-01-04",
+            "raw": {},
+            "series": "Sessions",
+            "value": "18"
+          },
+          "fill": "#D4A445",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 645.0294117647057,
+          "cy": 309.712,
+          "data": {
+            "label": "2024-01-05",
+            "raw": {},
+            "series": "Sessions",
+            "value": "22"
+          },
+          "fill": "#D4A445",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-path series-line",
+          "d": "M77.970588,187.2C125.22549,164.666667 172.480392,140.4 219.735294,119.6C266.990196,98.8 314.245098,62.4 361.5,62.4C408.754902,62.4 456.009804,93.6 503.264706,93.6C550.519608,93.6 597.77451,48.533333 645.029412,26",
+          "data": {
+            "label": "Revenue",
+            "raw": {},
+            "series": "Revenue",
+            "value": ""
+          },
+          "fill": null,
+          "opacity": null,
+          "stroke": "#4A7C59",
+          "strokeDasharray": null,
+          "strokeWidth": 2.0,
+          "type": "path"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 77.97058823529412,
+          "cy": 187.2,
+          "data": {
+            "label": "2024-01-01",
+            "raw": {},
+            "series": "Revenue",
+            "value": "1,200"
+          },
+          "fill": "#4A7C59",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 219.73529411764704,
+          "cy": 119.6,
+          "data": {
+            "label": "2024-01-02",
+            "raw": {},
+            "series": "Revenue",
+            "value": "1,850"
+          },
+          "fill": "#4A7C59",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 361.5,
+          "cy": 62.39999999999998,
+          "data": {
+            "label": "2024-01-03",
+            "raw": {},
+            "series": "Revenue",
+            "value": "2,400"
+          },
+          "fill": "#4A7C59",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 503.2647058823529,
+          "cy": 93.60000000000002,
+          "data": {
+            "label": "2024-01-04",
+            "raw": {},
+            "series": "Revenue",
+            "value": "2,100"
+          },
+          "fill": "#4A7C59",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        },
+        {
+          "class": "chartml-line-dot dot-marker",
+          "cx": 645.0294117647057,
+          "cy": 26.0,
+          "data": {
+            "label": "2024-01-05",
+            "raw": {},
+            "series": "Revenue",
+            "value": "2,750"
+          },
+          "fill": "#4A7C59",
+          "r": 5.0,
+          "stroke": "#ffffff",
+          "type": "circle"
+        }
+      ],
+      "class": "lines",
+      "transform": {
+        "translate": [
+          47.0,
+          20.0
+        ]
+      },
+      "type": "group"
+    }
+  ],
+  "class": "chartml-line",
+  "height": 400.0,
+  "type": "svg",
+  "viewBox": {
+    "height": 400.0,
+    "width": 800.0,
+    "x": 0.0,
+    "y": 0.0
+  },
+  "width": 800.0
+}

@@ -1,0 +1,50 @@
+{
+  "axes": {
+    "x": {
+      "labels": [
+        "Echo",
+        "Alpha",
+        "Hotel",
+        "Charlie",
+        "Golf"
+      ]
+    },
+    "y": {
+      "format": "numeric",
+      "min": 0
+    }
+  },
+  "bars": [
+    {
+      "label": "Echo",
+      "value": 310
+    },
+    {
+      "label": "Alpha",
+      "value": 240
+    },
+    {
+      "label": "Hotel",
+      "value": 200
+    },
+    {
+      "label": "Charlie",
+      "value": 175
+    },
+    {
+      "label": "Golf",
+      "value": 145
+    }
+  ],
+  "scale": {
+    "proportional": true,
+    "y_min": 0,
+    "y_nice": true
+  },
+  "structure": {
+    "bars": 5,
+    "legend": false,
+    "root": "svg",
+    "title_in_svg": false
+  }
+}

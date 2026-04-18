@@ -17,6 +17,7 @@ use chartml_chart_pie::PieRenderer;
 use chartml_chart_scatter::ScatterRenderer;
 use chartml_chart_metric::MetricRenderer;
 use chartml_chart_table::TableRenderer;
+use chartml_datafusion::DataFusionTransform;
 use chartml_render::element_to_svg;
 use std::path::{Path, PathBuf};
 use std::fs;
@@ -32,6 +33,7 @@ fn create_chartml() -> ChartML {
     c.register_renderer("bubble", ScatterRenderer::new());
     c.register_renderer("metric", MetricRenderer::new());
     c.register_renderer("table", TableRenderer::new());
+    c.register_transform(DataFusionTransform);
     c
 }
 
@@ -179,6 +181,19 @@ struct RenderResult {
 }
 
 fn main() {
+    // DataFusionTransform is async and internally drives DataFusion futures
+    // that require a Tokio reactor (e.g. for `JoinSet::spawn`). The sync
+    // render path inside chartml-core uses `pollster::block_on` to await the
+    // middleware, which parks the current thread but does NOT drive Tokio
+    // tasks. Entering a multi-threaded Tokio runtime here gives DataFusion's
+    // spawned work somewhere to run on background worker threads while
+    // pollster blocks the main thread waiting for the top-level future.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to build Tokio runtime");
+    let _guard = runtime.enter();
+
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 2 {

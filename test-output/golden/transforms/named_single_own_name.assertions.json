@@ -1,0 +1,35 @@
+{
+  "axes": {
+    "x": {
+      "labels": [
+        "Week 4",
+        "Week 6"
+      ]
+    },
+    "y": {
+      "format": "currency",
+      "min": 0
+    }
+  },
+  "bars": [
+    {
+      "label": "Week 4",
+      "value": 51200
+    },
+    {
+      "label": "Week 6",
+      "value": 55300
+    }
+  ],
+  "scale": {
+    "proportional": true,
+    "y_min": 0,
+    "y_nice": true
+  },
+  "structure": {
+    "bars": 2,
+    "legend": false,
+    "root": "svg",
+    "title_in_svg": false
+  }
+}

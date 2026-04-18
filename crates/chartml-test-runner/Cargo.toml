@@ -18,9 +18,11 @@ chartml-chart-scatter = { path = "../chartml-chart-scatter", version = "4.0.0" }
 chartml-chart-metric = { path = "../chartml-chart-metric", version = "4.0.0" }
 chartml-chart-table = { path = "../chartml-chart-table", version = "4.0.0" }
 chartml-render = { path = "../chartml-render", version = "4.0.0" }
+chartml-datafusion = { path = "../chartml-datafusion", version = "4.0.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
+tokio = { version = "1", features = ["rt-multi-thread"] }
 
 [lints]
 workspace = true

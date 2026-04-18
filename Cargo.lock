@@ -714,10 +714,12 @@ dependencies = [
  "chartml-chart-scatter",
  "chartml-chart-table",
  "chartml-core",
+ "chartml-datafusion",
  "chartml-render",
  "serde",
  "serde_json",
  "serde_yaml",
+ "tokio",
 ]
 
 [[package]]

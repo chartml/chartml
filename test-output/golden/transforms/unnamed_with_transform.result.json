@@ -1,0 +1,11 @@
+{
+  "classification": null,
+  "eval_status": null,
+  "failures": [],
+  "fix_required": null,
+  "last_evaluated": null,
+  "render_status": "ok",
+  "spec": "unnamed_with_transform",
+  "svg_path": "test-output/golden/transforms/unnamed_with_transform.svg",
+  "tree_path": "test-output/golden/transforms/unnamed_with_transform.tree.json"
+}

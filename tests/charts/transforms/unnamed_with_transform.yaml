@@ -1,0 +1,72 @@
+name: "Unnamed inline source + SQL transform — `source` normalization"
+tags: [transforms, unnamed-source, inline, sql, filter, sort, bar]
+description: >
+  Flat inline `data: { provider: inline, rows: [...] }` paired with a SQL
+  transform. The chartml resolver normalizes the unnamed-with-transform
+  shape into a 1-entry `NamedMap { "source": flat }` before dispatch, so
+  the transform middleware always sees the same `IndexMap` shape regardless
+  of whether the spec used a named map or a flat data block.
+
+  The SQL filters to rows with `value > 100` and orders by value
+  descending. Of 8 input rows, exactly 5 survive the filter.
+
+chart:
+  type: chart
+  version: 1
+  title: "Categories with value > 100 (descending)"
+  data:
+    provider: inline
+    rows:
+      - category: "Alpha"
+        value: 240
+      - category: "Bravo"
+        value: 80
+      - category: "Charlie"
+        value: 175
+      - category: "Delta"
+        value: 95
+      - category: "Echo"
+        value: 310
+      - category: "Foxtrot"
+        value: 60
+      - category: "Golf"
+        value: 145
+      - category: "Hotel"
+        value: 200
+  transform:
+    sql: "SELECT category, value FROM source WHERE value > 100 ORDER BY value DESC"
+  visualize:
+    type: bar
+    columns: category
+    rows: value
+
+assertions:
+  structure:
+    root: svg
+    bars: 5
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Echo"
+      value: 310
+    - label: "Alpha"
+      value: 240
+    - label: "Hotel"
+      value: 200
+    - label: "Charlie"
+      value: 175
+    - label: "Golf"
+      value: 145
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Echo", "Alpha", "Hotel", "Charlie", "Golf"]
+    y:
+      min: 0
+      format: numeric
