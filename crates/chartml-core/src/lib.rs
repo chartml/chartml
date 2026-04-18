@@ -12,6 +12,8 @@ pub mod data;
 pub mod transform;
 pub mod params;
 pub mod theme;
+pub mod svg;
+pub mod pipeline;
 
 pub use error::ChartError;
 pub use spec::{parse, ChartMLSpec, Component};
@@ -19,8 +21,10 @@ pub use element::ChartElement;
 pub use plugin::{ChartConfig, ChartRenderer, DataSource, TransformMiddleware, DatasourceResolver};
 pub use registry::ChartMLRegistry;
 pub use theme::Theme;
+pub use pipeline::{FetchedChart, PreparedChart, FetchMetadata, PreparedMetadata, RenderOptions};
 
 use std::collections::HashMap;
+use std::time::SystemTime;
 use indexmap::IndexMap;
 use crate::data::{Row, DataTable};
 use crate::spec::{ChartSpec, DataRef, InlineData};
@@ -353,7 +357,9 @@ impl ChartML {
         // no middleware is registered AND the spec only uses an aggregate.
         let data = self.run_sync_transform_pipeline(chart_spec, &chart_sources)?;
 
-        self.build_and_render(chart_spec, &data, container_width, container_height)
+        let (element, _, _) =
+            self.build_and_render(chart_spec, &data, container_width, container_height)?;
+        Ok(element)
     }
 
     /// Run the transform stage on the sync render path, sharing dispatch logic
@@ -626,11 +632,145 @@ impl ChartML {
         }
     }
 
+    // --- Three-stage pipeline (chartml 5.0 phase 2) ---
+
+    /// Stage 1 of the chartml 5.0 pipeline: parse YAML, resolve params,
+    /// and produce a `FetchedChart` whose `sources` map contains every
+    /// named source the chart needs.
+    ///
+    /// Phase 2 reads sources from pre-registered `self.sources` only —
+    /// inline `rows:` are materialized at parse time, named refs are looked
+    /// up in the persistent registry, and named maps materialize each entry.
+    /// Phase 3 will replace the body with a provider/resolver dispatch
+    /// while keeping this exact public signature.
+    pub async fn fetch(
+        &self,
+        yaml: &str,
+        opts: &RenderOptions,
+    ) -> Result<FetchedChart, ChartError> {
+        // Param resolution + chart extraction is shared between fetch and the
+        // legacy async path; no I/O happens here in phase 2.
+        let (chart_spec, sources) =
+            self.parse_and_collect_sources(yaml, opts.params_ref())?;
+        let chart_sources = self.resolve_chart_data(&chart_spec, &sources)?;
+
+        Ok(FetchedChart {
+            spec: chart_spec,
+            sources: chart_sources,
+            metadata: FetchMetadata::empty_now(),
+        })
+    }
+
+    /// Stage 2: collapse the fetched sources into a single `DataTable` ready
+    /// for the renderer. Runs the registered `TransformMiddleware` when a
+    /// `transform:` block is present, falls back to the built-in
+    /// aggregate-only transform when no middleware is registered, or
+    /// passes the lone source through unchanged when no transform is
+    /// declared.
+    ///
+    /// Validation rules (error text begins with the React/JS-matching wording,
+    /// then appends extra source-count context for debuggability):
+    /// - 0 sources → internal invariant violation (`fetch` always produces ≥1 entry).
+    /// - 1 source, no transform → passthrough.
+    /// - >1 sources, no transform → error beginning with `"Named data sources require a transform block when multiple sources are defined"` followed by `(got N sources: …)` detail.
+    /// - Otherwise → middleware (or built-in fallback for aggregate-only).
+    pub async fn transform(
+        &self,
+        fetched: FetchedChart,
+        _opts: &RenderOptions,
+    ) -> Result<PreparedChart, ChartError> {
+        // `_opts` is reserved — phase 3 will thread params through TransformContext.
+        let FetchedChart { spec, sources, metadata: _ } = fetched;
+
+        if sources.is_empty() {
+            // Internal invariant: phase 2 fetch always produces ≥1 entry.
+            return Err(ChartError::InvalidSpec(
+                "Internal invariant violation: ChartML::fetch produced zero sources. \
+                 Every spec must resolve to at least one named source before transform.".into(),
+            ));
+        }
+
+        let sources_used: Vec<String> = sources.keys().cloned().collect();
+
+        let (data, transform_applied) = match spec.transform.as_ref() {
+            None => {
+                // No transform → passthrough requires exactly one source;
+                // multi-source maps without a transform have no defined
+                // merge semantics. Error text begins with the React-matching
+                // wording, then appends source-count context for debuggability.
+                let single = single_source_or_err_no_transform(&sources)?;
+                (single, false)
+            }
+            Some(transform_spec) => {
+                if let Some(middleware) = self.registry.get_transform() {
+                    let context = plugin::TransformContext::default();
+                    let result = middleware
+                        .transform(&sources, transform_spec, &context)
+                        .await?;
+                    (result.data, true)
+                } else {
+                    // No middleware — built-in fallback handles aggregate-only on a single table.
+                    let single_ref = single_source_or_err(&sources, transform_spec)?;
+                    let rows = single_ref.to_rows();
+                    let transformed_rows = transform::apply_transforms(rows, transform_spec)?;
+                    (DataTable::from_rows(&transformed_rows)?, true)
+                }
+            }
+        };
+
+        Ok(PreparedChart {
+            spec,
+            data,
+            metadata: PreparedMetadata {
+                refreshed_at: SystemTime::now(),
+                transform_applied,
+                sources_used,
+            },
+        })
+    }
+
+    /// Stage 3: render an already-prepared chart to an SVG string. Sync and
+    /// pure — no I/O, no async — so consumers can resize-render from the
+    /// same `PreparedChart` repeatedly without re-fetching or re-transforming.
+    pub fn render_prepared_to_svg(
+        &self,
+        prepared: &PreparedChart,
+        opts: &RenderOptions,
+    ) -> Result<String, ChartError> {
+        let (element, svg_width, svg_height) = self.build_and_render(
+            &prepared.spec,
+            &prepared.data,
+            opts.width,
+            opts.height,
+        )?;
+        Ok(svg::element_to_svg(&element, svg_width, svg_height))
+    }
+
+    /// Convenience: run the full async pipeline (fetch + transform +
+    /// render_prepared_to_svg) in one call. Equivalent to chaining the
+    /// three stages explicitly; use the explicit form when you need to
+    /// cache the intermediate `FetchedChart` / `PreparedChart`.
+    pub async fn render_to_svg_async(
+        &self,
+        yaml: &str,
+        opts: &RenderOptions,
+    ) -> Result<String, ChartError> {
+        let fetched = self.fetch(yaml, opts).await?;
+        let prepared = self.transform(fetched, opts).await?;
+        self.render_prepared_to_svg(&prepared, opts)
+    }
+
     // --- Async rendering (for use with TransformMiddleware, e.g. DataFusion) ---
 
     /// Async render with full parameter support — mirrors `render_from_yaml_with_params`
     /// but uses the registered TransformMiddleware for ALL transforms (sql, aggregate, forecast).
     /// Falls back to built-in sync transform only if no middleware is registered.
+    ///
+    /// Back-compat shim over the chartml 5.0 three-stage pipeline. Returns
+    /// `ChartElement` (not `String`) so existing internal callers
+    /// (`chartml-leptos`, `chartml-render`, npm wrappers) keep compiling
+    /// unchanged. Will be deprecated in phase 7 once every caller has
+    /// migrated to `render_to_svg_async`.
     pub async fn render_from_yaml_with_params_async(
         &self,
         yaml: &str,
@@ -638,7 +778,34 @@ impl ChartML {
         container_height: Option<f64>,
         param_overrides: Option<&params::ParamValues>,
     ) -> Result<ChartElement, ChartError> {
-        // Step 1: Resolve params (same as sync path)
+        let opts = RenderOptions {
+            width: container_width,
+            height: container_height,
+            params: param_overrides.cloned(),
+        };
+        let fetched = self.fetch(yaml, &opts).await?;
+        let prepared = self.transform(fetched, &opts).await?;
+        let (element, _, _) = self.build_and_render(
+            &prepared.spec,
+            &prepared.data,
+            opts.width,
+            opts.height,
+        )?;
+        Ok(element)
+    }
+
+    /// Shared step 1+2 for `fetch` and the legacy async path: resolve params
+    /// (including local `params:` blocks), parse the YAML, and collect every
+    /// inline-source component into a working `HashMap`. Returns the FIRST
+    /// chart spec found (matching the legacy single-chart contract; multi-
+    /// chart specs continue to flow through the sync `render_from_yaml`
+    /// path which already handles them).
+    fn parse_and_collect_sources(
+        &self,
+        yaml: &str,
+        param_overrides: Option<&params::ParamValues>,
+    ) -> Result<(ChartSpec, HashMap<String, DataTable>), ChartError> {
+        // Param resolution mirrors the sync path: defaults < inline defaults < overrides.
         let mut all_params = self.param_values.clone();
         let inline_defaults = params::extract_inline_param_defaults(yaml);
         all_params.extend(inline_defaults);
@@ -653,7 +820,7 @@ impl ChartML {
 
         let parsed = spec::parse(&resolved_yaml)?;
 
-        // Step 2: Collect sources
+        // Collect persistent + document-local inline sources.
         let mut sources: HashMap<String, DataTable> = self.sources.clone();
         if let ChartMLSpec::Array(ref components) = parsed {
             for component in components {
@@ -667,49 +834,24 @@ impl ChartML {
             }
         }
 
-        // Step 3: Extract chart spec
-        let chart_spec: &ChartSpec = match &parsed {
+        // Extract the chart spec — first chart wins, matching the legacy
+        // single-chart contract of `render_from_yaml_with_params_async`.
+        // Cloning is cheap (ChartSpec is mostly small fields + a few Vec/Option).
+        let chart_spec: ChartSpec = match &parsed {
             ChartMLSpec::Single(component) => match component.as_ref() {
-                Component::Chart(chart) => chart.as_ref(),
+                Component::Chart(chart) => chart.as_ref().clone(),
                 _ => return Err(ChartError::InvalidSpec("No chart component found".into())),
             },
-            ChartMLSpec::Array(components) => {
-                components.iter()
-                    .find_map(|c| match c {
-                        Component::Chart(chart) => Some(chart.as_ref()),
-                        _ => None,
-                    })
-                    .ok_or_else(|| ChartError::InvalidSpec("No chart component found".into()))?
-            }
+            ChartMLSpec::Array(components) => components
+                .iter()
+                .find_map(|c| match c {
+                    Component::Chart(chart) => Some(chart.as_ref().clone()),
+                    _ => None,
+                })
+                .ok_or_else(|| ChartError::InvalidSpec("No chart component found".into()))?,
         };
 
-        // Step 4: Resolve data — produces an IndexMap of all named sources so
-        // multi-source maps can flow into the transform middleware.
-        let chart_sources = self.resolve_chart_data(chart_spec, &sources)?;
-
-        // Step 5: Transform — use middleware for ALL transforms when registered
-        let transformed_data = if let Some(ref transform_spec) = chart_spec.transform {
-            if let Some(middleware) = self.registry.get_transform() {
-                let context = plugin::TransformContext::default();
-                let result = middleware.transform(&chart_sources, transform_spec, &context).await?;
-                result.data
-            } else {
-                // No middleware — fall back to built-in sync transform (aggregate only).
-                // The fallback only operates on a single table; multi-source maps
-                // require a registered TransformMiddleware to join.
-                let single = single_source_or_err(&chart_sources, transform_spec)?;
-                let rows = single.to_rows();
-                let transformed_rows = transform::apply_transforms(rows, transform_spec)?;
-                DataTable::from_rows(&transformed_rows)?
-            }
-        } else {
-            // No transform — passthrough requires exactly one source; multi-source
-            // maps without a transform have no defined merge semantics.
-            single_source_or_err_no_transform(&chart_sources)?
-        };
-
-        // Step 6: Render
-        self.build_and_render(chart_spec, &transformed_data, container_width, container_height)
+        Ok((chart_spec, sources))
     }
 
     /// Async render with external data — for integration tests and programmatic use.
@@ -797,7 +939,9 @@ impl ChartML {
             single_source_or_err_no_transform(&chart_sources)?
         };
 
-        self.build_and_render(chart_spec, &transformed_data, None, None)
+        let (element, _, _) =
+            self.build_and_render(chart_spec, &transformed_data, None, None)?;
+        Ok(element)
     }
 
     /// Resolve a chart spec's `data:` reference into a map of named source
@@ -847,13 +991,19 @@ impl ChartML {
     }
 
     /// Build chart config and render — shared by sync and async paths.
+    ///
+    /// Returns `(element, width, height)` so callers that need the resolved
+    /// SVG envelope (e.g. `render_prepared_to_svg`) can use the *same*
+    /// dimensions that were baked into the layout. This avoids a dual
+    /// source-of-truth — the renderer's `default_dimensions()` is consulted
+    /// exactly once, here.
     fn build_and_render(
         &self,
         chart_spec: &ChartSpec,
         data: &DataTable,
         container_width: Option<f64>,
         container_height: Option<f64>,
-    ) -> Result<ChartElement, ChartError> {
+    ) -> Result<(ChartElement, f64, f64), ChartError> {
         let chart_type = &chart_spec.visualize.chart_type;
         let renderer = self.registry.get_renderer(chart_type)
             .ok_or_else(|| ChartError::UnknownChartType(chart_type.clone()))?;
@@ -886,7 +1036,8 @@ impl ChartML {
             theme: self.theme.clone(),
         };
 
-        renderer.render(data, &config)
+        let element = renderer.render(data, &config)?;
+        Ok((element, width, height))
     }
 
     /// Get a reference to the internal registry.
