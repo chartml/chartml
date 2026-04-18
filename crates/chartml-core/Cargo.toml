@@ -34,13 +34,39 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 
 # WASM HTTP provider — reqwest auto-uses fetch() on wasm32; no TLS feature needed
 # since the browser handles TLS termination.
+#
+# `idb`, `js-sys`, and `wasm-bindgen` are optional WASM-only deps gated behind
+# the `wasm-indexeddb` feature so non-browser builds (CLI, SSR, native tests)
+# don't pull them in. The feature is only meaningful on `wasm32-unknown-unknown`
+# — enabling it on a native target compiles to an empty module via the
+# `target_arch = "wasm32"` cfg-gate inside `resolver/backends/indexeddb.rs`.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
+idb = { version = "0.6", optional = true }
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
 
+[features]
+# Persistent IndexedDB-backed `CacheBackend` for browser consumers. Pulls in
+# the `idb` crate plus the `js-sys` / `wasm-bindgen` glue it relies on. See
+# `crates/chartml-core/src/resolver/backends/indexeddb.rs`.
+wasm-indexeddb = ["dep:idb", "dep:js-sys", "dep:wasm-bindgen"]
+
+# `tokio` (with the small feature set used by `cancel.rs`'s inline tests)
+# compiles on `wasm32-unknown-unknown` so we keep it unconditional. The
+# `chartml-datafusion` and `wiremock` dev-deps pull in native I/O and DO
+# NOT compile on wasm32, so they stay native-only.
 [dev-dependencies]
-chartml-datafusion = { path = "../chartml-datafusion" }
 tokio = { version = "1", features = ["rt", "macros", "time", "sync"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+chartml-datafusion = { path = "../chartml-datafusion" }
 wiremock = "0.6"
+
+# `wasm-bindgen-test` only runs on the wasm32 target — guarding it keeps
+# the native build lean.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
 
 [lints]
 workspace = true

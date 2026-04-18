@@ -593,7 +593,9 @@ dependencies = [
  "chrono",
  "futures",
  "humantime",
+ "idb",
  "indexmap",
+ "js-sys",
  "pollster",
  "reqwest",
  "serde",
@@ -601,6 +603,8 @@ dependencies = [
  "serde_yaml",
  "thiserror 2.0.18",
  "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
  "wiremock",
  "xxhash-rust",
 ]
@@ -2354,6 +2358,21 @@ name = "id-arena"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
+
+[[package]]
+name = "idb"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6554f394e990a1af530a528a7fdcad6e01b29cb1b990f89df3ffd62cf15f7828"
+dependencies = [
+ "indexmap",
+ "js-sys",
+ "num-traits",
+ "thiserror 2.0.18",
+ "tokio",
+ "wasm-bindgen",
+ "web-sys",
+]
 
 [[package]]
 name = "idna"
