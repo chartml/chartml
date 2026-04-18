@@ -7,6 +7,12 @@
 //! point `render_from_yaml_with_params_async` is also smoke-tested to prove
 //! the back-compat shim still produces a `ChartElement` from the same
 //! pipeline.
+//!
+//! Native-only — depends on the multi-threaded `tokio` runtime and the
+//! `chartml-datafusion` dev-dep, neither of which compiles on
+//! `wasm32-unknown-unknown`.
+
+#![cfg(not(target_arch = "wasm32"))]
 
 use chartml_core::data::{DataTable, Row};
 use chartml_core::element::{ChartElement, Dimensions, ViewBox};

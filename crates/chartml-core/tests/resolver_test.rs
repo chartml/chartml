@@ -5,6 +5,13 @@
 //! The tests cover the design doc's "Phase 3: Tests to add" section line by
 //! line, plus an end-to-end render against a mock provider mirroring the
 //! KYO-79 multi-source-with-join shape.
+//!
+//! Native-only — uses the multi-threaded `tokio` runtime + `wiremock` HTTP
+//! fixtures, neither of which compiles on `wasm32-unknown-unknown`. The
+//! browser story is exercised by `tests/indexeddb_test.rs` via
+//! `wasm-bindgen-test`.
+
+#![cfg(not(target_arch = "wasm32"))]
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};

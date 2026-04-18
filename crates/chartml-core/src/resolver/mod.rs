@@ -111,6 +111,15 @@ pub mod builtin;
 pub mod cache;
 pub mod cancel;
 
+// Phase 3b: persistent cache backends. The container module is unconditional
+// because it hosts the pure-Rust `codec` submodule (shared blob framing) that
+// needs to compile + test on every target. Backend implementations themselves
+// (`indexeddb`, future `sqlite`/`fs`/…) carry their own `#[cfg(...)]` gates
+// inside `backends/mod.rs`, so non-browser builds and browser builds without
+// the `wasm-indexeddb` feature don't compile any of the IndexedDB-specific
+// code (which depends on the `idb` crate, brought in only by that feature).
+pub mod backends;
+
 pub use builtin::{HttpProvider, InlineProvider};
 pub use cache::{CacheBackend, CacheError, CachedEntry, MemoryBackend};
 pub use cancel::CancellationToken;

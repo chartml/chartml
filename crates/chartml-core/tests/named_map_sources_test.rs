@@ -9,6 +9,11 @@
 //! dependency — Rust dev-dependencies do not introduce compile cycles, so the
 //! test crate can pull in any concrete middleware without polluting the lib
 //! dependency graph.
+//!
+//! Native-only — `chartml-datafusion` doesn't compile on
+//! `wasm32-unknown-unknown`.
+
+#![cfg(not(target_arch = "wasm32"))]
 
 use chartml_core::data::{DataTable, Row};
 use chartml_core::element::{ChartElement, ViewBox};
