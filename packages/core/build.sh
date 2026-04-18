@@ -31,9 +31,19 @@ sed -i "s|new URL('chartml_wasm_bg.wasm', import.meta.url)|new URL('../wasm/char
 # Patch node JS to reference shared wasm
 sed -i 's|`${__dirname}/chartml_wasm_bg.wasm`|`${__dirname}/../wasm/chartml_wasm_bg.wasm`|' "$OUT_DIR/node/chartml_wasm.js"
 
-# Clean up generated package.json and gitignore from wasm-pack
+# Clean up generated package.json and gitignore from wasm-pack.
+# We replace the auto-generated node `package.json` with a minimal one that
+# pins `"type": "commonjs"` — wasm-pack's nodejs-target glue is CJS
+# (`exports.WasmChartML = ...`), but the parent `@chartml/core/package.json`
+# declares `"type": "module"`, which would otherwise make Node treat this
+# `.js` as ESM and crash with `exports is not defined`.
 rm -f "$OUT_DIR/web/package.json" "$OUT_DIR/web/.gitignore"
 rm -f "$OUT_DIR/node/package.json" "$OUT_DIR/node/.gitignore"
+cat > "$OUT_DIR/node/package.json" <<'EOF'
+{
+  "type": "commonjs"
+}
+EOF
 
 # Build TypeScript wrapper
 echo "Building TypeScript..."

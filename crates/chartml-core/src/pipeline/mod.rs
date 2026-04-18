@@ -20,7 +20,8 @@
 //!   use case (e.g. responsive layouts) without re-running upstream stages.
 
 use std::collections::HashMap;
-use std::time::SystemTime;
+// `web_time::SystemTime` is a wasm32-compatible drop-in for `std::time::SystemTime`.
+use web_time::SystemTime;
 
 use indexmap::IndexMap;
 

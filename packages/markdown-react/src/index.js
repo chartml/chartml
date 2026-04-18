@@ -1,187 +1,77 @@
 /**
- * @chartml/markdown-react
+ * @chartml/markdown-react — react-markdown plugin for ChartML code blocks.
  *
- * React-markdown plugin for rendering ChartML code blocks.
- * Handles multi-component documents (sources + charts) with proper two-pass rendering.
- *
- * Usage (standalone - creates its own ChartML instance):
- * ```jsx
- * import Markdown from 'react-markdown';
- * import { ChartMLCodeBlock } from '@chartml/markdown-react';
- *
- * const { code, pre } = ChartMLCodeBlock({});
- *
- * <Markdown components={{ code, pre }}>
- *   {markdown}
- * </Markdown>
- * ```
- *
- * Usage (with custom instance - for apps that register their own plugins):
- * ```jsx
- * import Markdown from 'react-markdown';
- * import { ChartMLCodeBlock } from '@chartml/markdown-react';
- * import { ChartML } from '@chartml/core';
- *
- * const chartmlInstance = new ChartML();
- * const { code, pre } = ChartMLCodeBlock({ chartmlInstance });
- *
- * <Markdown components={{ code, pre }}>
- *   {markdown}
- * </Markdown>
- * ```
- *
- * With custom code renderer:
- * ```jsx
- * import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
- * import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
- *
- * const { code, pre } = ChartMLCodeBlock({
- *   chartmlInstance,
- *   codeRenderer: ({ lang, inline, children }) => {
- *     if (inline) return <code>{children}</code>;
- *     return (
- *       <SyntaxHighlighter language={lang} style={vscDarkPlus}>
- *         {String(children)}
- *       </SyntaxHighlighter>
- *     );
- *   }
- * });
- * ```
+ * chartml 5.0: the resolver inside `chartmlInstance` handles fetch / cache /
+ * dispatch. We only walk the parsed YAML, split chart vs params blocks, and
+ * call `chartmlInstance.renderToSvgAsync` once per chart. Source pre-
+ * registration loops, two-pass orchestration, and the bespoke registry
+ * plumbing from chartml 4.x are all gone — providers live on the ChartML
+ * instance the host app constructs.
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import yaml from 'js-yaml';
-import { ChartML } from '@chartml/core';
 import { DefaultParamsRenderer } from './DefaultParamsRenderer.jsx';
-import { getExpectedDimensions, getColSpanClass } from '@chartml/markdown-common';
+import { getColSpanClass } from '@chartml/markdown-common';
 
-/**
- * Create ChartML components for react-markdown
- *
- * @param {Object} options - Configuration
- * @param {ChartML} [options.chartmlInstance] - Optional ChartML instance. If not provided, creates a new instance that uses plugins from the global registry.
- * @param {string} [options.containerClassName] - Optional custom className for chart container (defaults to 'chartml-chart-container')
- * @param {Function} [options.chartWrapper] - Optional wrapper component to add chrome (receives spec, chartmlInstance, onChartRender as props)
- * @param {Function} [options.paramsWrapper] - Optional wrapper component for params blocks (receives params from spec.params)
- * @param {Function} [options.codeRenderer] - Optional custom renderer for non-ChartML code blocks (receives { lang, inline, className, children, ...props })
- * @returns {Object} { code, pre } - React components for code blocks and pre wrapper
- */
-export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartml-chart-container', chartWrapper, paramsWrapper, codeRenderer } = {}) {
-  // Create a default ChartML instance if not provided
-  // This enables standalone usage - plugins auto-register via globalRegistry when imported
-  const instance = chartmlInstance || new ChartML();
+export function ChartMLCodeBlock({
+  chartmlInstance,
+  containerClassName = 'chartml-chart-container',
+  chartWrapper,
+  paramsWrapper,
+  codeRenderer,
+} = {}) {
+  if (!chartmlInstance) {
+    throw new Error(
+      '[ChartML react-markdown] ChartMLCodeBlock requires a `chartmlInstance` ' +
+        '(chartml-core 5.x). Construct it via `await ChartML.create()` and ' +
+        'register your providers before passing it in.'
+    );
+  }
 
-  // Track chart block index across all code blocks in the document
-  // This counter is scoped to this ChartMLCodeBlock() call
-  // When the parent re-creates this component (via useMemo dependencies), the counter resets naturally
-  let chartBlockIndex = 0;
+  // Param scopes shared across every chart in this Markdown render.
+  // `{ scope: { paramId: value } }`. paramsWrapper updates flow through
+  // `setParamValue`; charts read via `getFlatParams` on each render.
+  const paramsScopes = {};
+  const subscribers = new Set();
 
-  const code = function CodeBlock({ node, inline, className, children, ...props }) {
+  function setParamValue(scope, paramId, newValue) {
+    const current = paramsScopes[scope] || {};
+    if (current[paramId] === newValue) return;
+    paramsScopes[scope] = { ...current, [paramId]: newValue };
+    for (const fn of subscribers) fn();
+  }
+
+  function getFlatParams() {
+    // Flatten `{ scope: { name: value } }` into `{ "scope.name": value }` —
+    // the shape `renderToSvgAsync` expects under `opts.params`.
+    const out = {};
+    for (const [scope, values] of Object.entries(paramsScopes)) {
+      for (const [name, value] of Object.entries(values)) {
+        out[`${scope}.${name}`] = value;
+      }
+    }
+    return out;
+  }
+
+  function code({ inline, className, children, ...props }) {
     const match = /language-(\w+)/.exec(className || '');
     const lang = match ? match[1] : '';
 
-    // Only handle chartml code blocks - delegate to custom renderer or react-markdown's default
     if (lang !== 'chartml') {
-      // If a custom code renderer is provided, use it for non-ChartML blocks
-      if (codeRenderer) {
-        return codeRenderer({ lang, inline, className, children, ...props });
-      }
-      // Otherwise, let react-markdown handle it with its default renderer
-      return React.createElement('code', { className, ...props }, children);
+      return codeRenderer
+        ? codeRenderer({ lang, inline, className, children, ...props })
+        : React.createElement('code', { className, ...props }, children);
     }
 
-    // Get the YAML content
-    const codeString = String(children).replace(/\n$/, '');
-
-    // Capture the current block index and increment for next block
-    const currentBlockIndex = chartBlockIndex++;
-
+    let components;
     try {
-      // Parse YAML - could be single component or multi-component document
-      const parsed = yaml.loadAll(codeString);
-      const components = parsed.flat();
-
-      // Separate by component type
-      const sourceComponents = components.filter(c => c?.type?.toLowerCase() === 'source');
-      const chartComponents = components.filter(c => !c.type || c?.type?.toLowerCase() === 'chart');
-      const paramsComponents = components.filter(c => c?.type?.toLowerCase() === 'params');
-
-      // Register all sources with the ChartML instance
-      sourceComponents.forEach(sourceComp => {
-        if (!sourceComp.name) {
-          console.error('[ChartML react-markdown] Source component missing name:', sourceComp);
-          return;
-        }
-
-        try {
-          instance.registry.registerSource(sourceComp.name, sourceComp);
-        } catch (error) {
-          // Source might already be registered - that's OK
-        }
-      });
-
-      // Register all named params blocks with the ChartML instance
-      paramsComponents.forEach(paramsComp => {
-        if (!paramsComp.name) {
-          console.error('[ChartML react-markdown] Params component missing name:', paramsComp);
-          return;
-        }
-
-        try {
-          instance.registry.registerParams(paramsComp.name, paramsComp);
-        } catch (error) {
-          // Params might already be registered - that's OK
-        }
-      });
-
-      // Render params blocks - use custom wrapper or default renderer
-      if (paramsComponents.length > 0) {
-        const ParamsComponent = paramsWrapper || DefaultParamsRenderer;
-
-        return React.createElement(
-          React.Fragment,
-          null,
-          paramsComponents.map((paramsComp, idx) => {
-            return React.createElement(ParamsComponent, {
-              key: idx,
-              parameterDefinitions: paramsComp.params,
-              scope: paramsComp.name,  // Use params block name as scope
-              chartmlInstance: instance  // Pass instance for registry access
-            });
-          })
-        );
-      }
-
-      // Render charts - use wrapper if provided, otherwise render ChartMLChart directly
-      const ChartComponent = chartWrapper || ChartMLChart;
-
-      // Use shared utility from markdown-common
-      return React.createElement(
-        'div',
-        { className: 'grid grid-cols-12 gap-2', style: { margin: '0.5rem 0' } },
-        chartComponents.map((chart, idx) => {
-          // Get colSpan from chart layout (defaults to 12 for full width)
-          const colSpan = chart?.layout?.colSpan || 12;
-          const colSpanClass = getColSpanClass(colSpan);
-
-          // Wrap chart in grid item with col-span class
-          return React.createElement(
-            'div',
-            { key: idx, className: colSpanClass },
-            React.createElement(ChartComponent, {
-              spec: chart,
-              chartmlInstance: instance,
-              className: containerClassName,
-              chartBlockIndex: currentBlockIndex,
-              chartArrayIndex: idx
-            })
-          );
-        })
-      );
-
+      components = yaml
+        .loadAll(String(children).replace(/\n$/, ''))
+        .flat()
+        .filter(Boolean);
     } catch (error) {
-      console.error('[ChartML react-markdown] Parse error:', error);
-
+      console.error('[ChartML react-markdown] YAML parse error:', error);
       return React.createElement(
         'div',
         { className: 'chartml-error' },
@@ -189,152 +79,145 @@ export function ChartMLCodeBlock({ chartmlInstance, containerClassName = 'chartm
         error.message
       );
     }
-  };
 
-  const pre = function PreWrapper({ children }) {
-    // Check if the child is a code element with chartml language
-    const codeChild = React.Children.toArray(children).find(
-      child => child?.props?.className?.match(/language-chartml/)
-    );
+    const paramsBlocks = components.filter((c) => c?.type?.toLowerCase?.() === 'params');
+    const chartBlocks = components.filter((c) => !c.type || c.type.toLowerCase?.() === 'chart');
 
-    // If it's a chartml block, render without the <pre> wrapper (unwrap it)
-    if (codeChild) {
-      return React.createElement(React.Fragment, null, children);
+    if (paramsBlocks.length > 0) {
+      const ParamsComponent = paramsWrapper || DefaultParamsRendererBridge;
+      return React.createElement(
+        React.Fragment,
+        null,
+        paramsBlocks.map((paramsComp, idx) => {
+          if (!paramsComp.name) {
+            console.error('[ChartML react-markdown] Params block missing `name`:', paramsComp);
+            return null;
+          }
+          // Seed defaults the first time we see this scope so charts pick
+          // them up even before the user touches a control.
+          const scope = paramsComp.name;
+          const defs = paramsComp.params || [];
+          const seeded = paramsScopes[scope] || {};
+          for (const def of defs) {
+            if (!(def.id in seeded) && def.default !== undefined) seeded[def.id] = def.default;
+          }
+          paramsScopes[scope] = seeded;
+          return React.createElement(ParamsComponent, {
+            key: `${scope}-${idx}`,
+            parameterDefinitions: defs,
+            scope,
+            value: paramsScopes[scope],
+            onChange: (paramId, newValue) => setParamValue(scope, paramId, newValue),
+            chartmlInstance,
+          });
+        })
+      );
     }
 
-    // For normal code blocks, keep the pre wrapper
-    return React.createElement('pre', null, children);
-  };
+    const ChartComponent = chartWrapper || ChartMLChart;
+    return React.createElement(
+      'div',
+      { className: 'grid grid-cols-12 gap-2', style: { margin: '0.5rem 0' } },
+      chartBlocks.map((chart, idx) =>
+        React.createElement(
+          'div',
+          { key: idx, className: getColSpanClass(chart?.layout?.colSpan || 12) },
+          React.createElement(ChartComponent, {
+            yaml: yaml.dump(chart),
+            chartmlInstance,
+            className: containerClassName,
+            getParams: getFlatParams,
+            subscribe: (fn) => {
+              subscribers.add(fn);
+              return () => subscribers.delete(fn);
+            },
+          })
+        )
+      )
+    );
+  }
+
+  function pre({ children }) {
+    const codeChild = React.Children.toArray(children).find(
+      (child) => child?.props?.className?.match(/language-chartml/)
+    );
+    return codeChild
+      ? React.createElement(React.Fragment, null, children)
+      : React.createElement('pre', null, children);
+  }
 
   return { code, pre };
 }
 
 /**
- * ChartMLChart - Exported chart component for custom chrome
- *
- * Renders a ChartML chart with resize handling and layout shift prevention.
- * Use the onChartRender callback to access the Chart instance for adding chrome.
- *
- * @param {Object} props
- * @param {string} props.spec - ChartML YAML spec
- * @param {ChartML} props.chartmlInstance - ChartML instance
- * @param {string} [props.className] - CSS class for container
- * @param {Function} [props.onChartRender] - Callback with Chart instance
- * @param {Function} [props.onError] - Callback when chart rendering fails
- * @param {Object} [props.context] - Optional context object passed to ChartML (for error tracking, etc.)
+ * Adapts the chartml-4 `DefaultParamsRenderer` (which expects
+ * `chartmlInstance.registry.getParamValues/setParamValue`) to the
+ * chartml-5 `{ value, onChange }` contract. Wrapping is cheaper than
+ * forking the existing renderer + its styles.
  */
-export function ChartMLChart({ spec, chartmlInstance, className = '', onChartRender, onError, context }) {
+function DefaultParamsRendererBridge({ parameterDefinitions, scope, value, onChange }) {
+  const fakeInstance = React.useMemo(
+    () => ({
+      registry: {
+        getParamValues: () => value,
+        setParamValue: (_scope, paramId, newValue) => onChange(paramId, newValue),
+      },
+    }),
+    [value, onChange]
+  );
+  return React.createElement(DefaultParamsRenderer, {
+    parameterDefinitions,
+    scope,
+    chartmlInstance: fakeInstance,
+  });
+}
+
+/**
+ * Render a single ChartML YAML block. Calls `renderToSvgAsync` and injects
+ * the resulting SVG string. Subscribes to the parent's params change
+ * channel so paramsWrapper updates trigger a re-render with new params.
+ */
+export function ChartMLChart({ yaml: yamlText, chartmlInstance, className = '', getParams, subscribe }) {
   const containerRef = useRef(null);
-  const chartInstanceRef = useRef(null);
-  const [expectedHeight, setExpectedHeight] = React.useState(null);
-  const [renderError, setRenderError] = React.useState(null);
-
-  // Calculate expected height BEFORE rendering to prevent layout shift
-  // Uses shared utility from markdown-common
-  useEffect(() => {
-    if (spec && chartmlInstance) {
-      const { height } = getExpectedDimensions(spec, chartmlInstance);
-      setExpectedHeight(height);
-    }
-  }, [spec, chartmlInstance]);
+  const [renderError, setRenderError] = useState(null);
+  // Bumped on every params change to drive the render effect's dep list.
+  const [paramsVersion, setParamsVersion] = useState(0);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!subscribe) return undefined;
+    return subscribe(() => setParamsVersion((v) => v + 1));
+  }, [subscribe]);
 
-    let isInitialRender = true;
-    let ignoreResizeUntil = 0;
-
-    const renderChart = async () => {
-      if (containerRef.current && spec) {
-        try {
-          // Clear previous error on new render attempt
-          setRenderError(null);
-
-          // Render chart and get Chart instance
-          // Pass context and onError callback to ChartML core
-          const chartInstance = await chartmlInstance.render(spec, containerRef.current, {
-            context,  // Pass through context (e.g., chartId for error tracking)
-            onError: (error) => {
-              // Capture async errors from ChartML core (data sources, middleware)
-              setRenderError(error);
-              if (onError) {
-                onError(error);
-              }
-            }
-          });
-          chartInstanceRef.current = chartInstance;
-
-          // Update height from Chart instance metadata (in case it differs from pre-render calculation)
-          const metadata = chartInstance.getMetadata();
-          if (metadata?.dimensions?.height) {
-            setExpectedHeight(metadata.dimensions.height);
-          }
-
-          // Call optional callback with Chart instance (for chrome)
-          if (onChartRender) {
-            onChartRender(chartInstance);
-          }
-
-          // Mark initial render complete
-          if (isInitialRender) {
-            isInitialRender = false;
-            ignoreResizeUntil = Date.now() + 1000;
-          }
-        } catch (error) {
-          // Capture sync errors (YAML parsing, validation, etc.)
-          console.error('[ChartMLChart] Render error:', error);
-          setRenderError(error);
-          if (onError) {
-            onError(error);
-          }
-        }
-      }
-    };
-
-    // Watch for resize and re-render
-    let resizeTimeout;
-    const resizeObserver = new ResizeObserver(() => {
-      const now = Date.now();
-      if (isInitialRender || now < ignoreResizeUntil) return;
-
-      clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(() => {
-        renderChart();
-      }, 250);
-    });
-
-    resizeObserver.observe(containerRef.current);
-    renderChart();
-
+  useEffect(() => {
+    if (!containerRef.current || !yamlText) return undefined;
+    let cancelled = false;
+    const params = getParams ? getParams() : {};
+    const opts = Object.keys(params).length > 0 ? { params } : {};
+    setRenderError(null);
+    chartmlInstance
+      .renderToSvgAsync(yamlText, opts)
+      .then((svg) => {
+        if (cancelled || !containerRef.current) return;
+        containerRef.current.innerHTML = svg;
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error('[ChartMLChart] renderToSvgAsync failed:', error);
+        setRenderError(error);
+      });
     return () => {
-      resizeObserver.disconnect();
-      clearTimeout(resizeTimeout);
+      cancelled = true;
     };
-  }, [spec, chartmlInstance]); // NOTE: onChartRender NOT in deps to avoid infinite loop
+  }, [yamlText, chartmlInstance, paramsVersion, getParams]);
 
-  return React.createElement(React.Fragment, null, [
-    // Show error if chart failed to render
-    renderError && React.createElement('div', {
-      key: 'error',
-      className: 'chartml-error',
-      style: {
-        padding: '1rem',
-        background: '#fef2f2',
-        color: '#991b1b',
-        borderLeft: '4px solid #dc2626',
-        borderRadius: '4px',
-        marginBottom: '1rem'
-      }
-    }, [
-      React.createElement('strong', { key: 'label' }, 'Chart Error: '),
-      renderError.message || 'Failed to render chart'
-    ]),
-    // Chart container (always rendered so ref is valid)
-    React.createElement('div', {
-      key: 'container',
-      ref: containerRef,
-      className: `${className} relative`,  // Add relative positioning for loading indicator
-      style: expectedHeight ? { minHeight: `${expectedHeight}px` } : undefined
-    })
-  ]);
+  if (renderError) {
+    return React.createElement(
+      'div',
+      { className: 'chartml-error' },
+      React.createElement('strong', null, 'Chart Error: '),
+      renderError.message || String(renderError)
+    );
+  }
+
+  return React.createElement('div', { ref: containerRef, className });
 }
