@@ -19,6 +19,31 @@ pub type ChartMLRef = std::sync::Arc<chartml_core::ChartML>;
 #[cfg(target_arch = "wasm32")]
 pub type ChartMLRef = std::rc::Rc<chartml_core::ChartML>;
 
+/// Shared-ownership wrapper around a [`chartml_core::DataSourceProvider`].
+///
+/// `Arc<dyn DataSourceProvider>` on every target — the trait itself is
+/// `Send + Sync`, so a single `Arc` form works for native (where it can be
+/// shared across `tokio::spawn` task boundaries) and for WASM (where
+/// `wasm32-unknown-unknown` is single-threaded but the resolver's internal
+/// provider registry is also `Arc<dyn ...>`-typed).
+///
+/// Use this alias when threading a provider into [`ChartMLChart`] via the
+/// `provider` prop or via Leptos context.
+pub type ProviderRef = std::sync::Arc<dyn chartml_core::DataSourceProvider>;
+
+/// Shared-ownership wrapper around a [`chartml_core::CacheBackend`].
+/// Same shape as [`ProviderRef`] — `CacheBackend` is `Send + Sync`, so an
+/// `Arc` works on every target.
+pub type CacheBackendRef = std::sync::Arc<dyn chartml_core::CacheBackend>;
+
+/// Shared-ownership wrapper around a [`chartml_core::ResolverHooks`] impl.
+/// Mirrors [`chartml_core::HooksRef`] so consumers wiring hooks through
+/// Leptos context have a single, Leptos-flavored re-export to import.
+/// Cfg-gated `Arc`/`Rc` because hook impls don't need to satisfy `Send+Sync`
+/// on WASM (the trait is `?Send` there to match async closures used by
+/// callback-style host-app implementations).
+pub use chartml_core::HooksRef;
+
 /// Chart CSS for consumers who need it as a string (SSR, non-Leptos).
 /// The `ChartMLChart` component injects this automatically on mount.
 pub const CHARTML_CSS: &str = include_str!("../style/chartml.css");

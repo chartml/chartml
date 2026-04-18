@@ -22,3 +22,12 @@ wasm-bindgen-futures = "0.4"
 # wasm32-unknown-unknown is single-threaded — the wrapper would panic if
 # touched off-thread, which cannot happen on this target.
 send_wrapper = "0.6"
+# Phase 4 provider example deps: `async_trait` for the mock
+# `DataSourceProvider` impl, `serde_json` for inline rows, `wasm-bindgen` +
+# `js-sys` for the `Promise`-backed sleep that simulates network latency,
+# and `web-sys` for the periodic readout's DOM polling.
+async-trait = "0.1"
+serde_json = "1"
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement"] }

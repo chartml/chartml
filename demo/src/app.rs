@@ -11,6 +11,10 @@ use chartml_leptos::{ChartMLChart, ChartMLRef};
 use crate::editor::YamlEditor;
 use crate::gallery::{Gallery, DEFAULT_SPEC};
 use crate::examples::{ExamplesPage, register_page_sources};
+// `provider_example` is wasm-only — see its module declaration in main.rs
+// for why. The "Providers" tab below silently no-ops on native builds.
+#[cfg(target_arch = "wasm32")]
+use crate::provider_example::ProviderExamplesPage;
 
 fn setup_chartml() -> ChartMLRef {
     let mut c = ChartML::new();
@@ -54,40 +58,66 @@ pub fn App() -> impl IntoView {
                         class=move || if tab.get() == "editor" { "nav-btn active" } else { "nav-btn" }
                         on:click=move |_| set_tab.set("editor".to_string())
                     >"Editor"</button>
+                    <button
+                        class=move || if tab.get() == "providers" { "nav-btn active" } else { "nav-btn" }
+                        on:click=move |_| set_tab.set("providers".to_string())
+                    >"Providers"</button>
                 </nav>
             </header>
 
             {move || {
                 let chartml: ChartMLRef = (*chartml).clone();
-                if tab.get() == "examples" {
-                    view! {
+                match tab.get().as_str() {
+                    "examples" => view! {
                         <ExamplesPage chartml=chartml />
-                    }.into_any()
-                } else {
-                    let chartml_editor = chartml.clone();
-                    view! {
-                        <main class="app-main">
-                            <div class="editor-panel">
-                                <div class="panel-header">"YAML Editor"</div>
-                                <YamlEditor
-                                    value=spec
-                                    on_change=move |new_val: String| set_spec.set(new_val)
-                                />
-                            </div>
-                            <div class="preview-panel">
-                                <div class="panel-header">"Live Preview"</div>
-                                <div class="preview-content">
-                                    <ChartMLChart spec=spec chartml=chartml_editor />
+                    }.into_any(),
+                    "providers" => provider_examples_view(),
+                    _ => {
+                        let chartml_editor = chartml.clone();
+                        view! {
+                            <main class="app-main">
+                                <div class="editor-panel">
+                                    <div class="panel-header">"YAML Editor"</div>
+                                    <YamlEditor
+                                        value=spec
+                                        on_change=move |new_val: String| set_spec.set(new_val)
+                                    />
                                 </div>
-                            </div>
-                        </main>
-                        <section class="gallery-section">
-                            <div class="panel-header">"Gallery \u{2014} Click to load"</div>
-                            <Gallery on_select=move |yaml: String| set_spec.set(yaml) />
-                        </section>
-                    }.into_any()
+                                <div class="preview-panel">
+                                    <div class="panel-header">"Live Preview"</div>
+                                    <div class="preview-content">
+                                        <ChartMLChart spec=spec chartml=chartml_editor />
+                                    </div>
+                                </div>
+                            </main>
+                            <section class="gallery-section">
+                                <div class="panel-header">"Gallery \u{2014} Click to load"</div>
+                                <Gallery on_select=move |yaml: String| set_spec.set(yaml) />
+                            </section>
+                        }.into_any()
+                    }
                 }
             }}
         </div>
     }
+}
+
+/// Build the "Providers" tab content. Wasm builds mount the real
+/// `ProviderExamplesPage`; native builds (workspace `cargo check`) emit a
+/// stub explaining the page is browser-only. The match arm in `App()` calls
+/// this so neither branch references a wasm-only symbol unconditionally.
+#[cfg(target_arch = "wasm32")]
+fn provider_examples_view() -> AnyView {
+    view! { <ProviderExamplesPage /> }.into_any()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn provider_examples_view() -> AnyView {
+    view! {
+        <div style="padding: 24px; color: #666; font-family: monospace;">
+            "Provider examples are browser-only \u{2014} build this demo for \
+             wasm32-unknown-unknown via `trunk serve` to see them."
+        </div>
+    }
+    .into_any()
 }
