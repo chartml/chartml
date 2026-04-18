@@ -22,18 +22,29 @@ indexmap = { version = "2", features = ["serde"] }
 futures = "0.3"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 humantime = "2"
+# `tracing` is the standard Rust observability facade — used by the resolver to
+# log hook-spawn failures and cache-write errors without forcing consumers to
+# depend on a specific logger. Default features include `std`, which is fine
+# for both native and wasm32 targets.
+tracing = { version = "0.1", default-features = false, features = ["std"] }
 
 # Native-only: lets the sync `render_to_svg` / `render_from_yaml*` path
 # dispatch through a registered async `TransformMiddleware` (e.g. DataFusion)
 # so multi-source NamedMap + SQL joins work end-to-end on native targets.
 # WASM keeps the sync limitation: callers must use the async API there.
 # Native HTTP provider — uses rustls so we don't drag in openssl.
+# `tokio` (rt only) is required so the resolver can `tokio::spawn` hook
+# callbacks fire-and-forget on whatever runtime the consumer is running.
+# The resolver's hook emission helper falls back to inline `.await` when no
+# tokio runtime is current — see `resolver::hooks::spawn_hook`.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+tokio = { version = "1", default-features = false, features = ["rt"] }
 
 # WASM HTTP provider — reqwest auto-uses fetch() on wasm32; no TLS feature needed
-# since the browser handles TLS termination.
+# since the browser handles TLS termination. `wasm-bindgen-futures` provides
+# `spawn_local` for the resolver's fire-and-forget hook emission.
 #
 # `idb`, `js-sys`, and `wasm-bindgen` are optional WASM-only deps gated behind
 # the `wasm-indexeddb` feature so non-browser builds (CLI, SSR, native tests)
@@ -42,6 +53,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 # `target_arch = "wasm32"` cfg-gate inside `resolver/backends/indexeddb.rs`.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
+wasm-bindgen-futures = "0.4"
 idb = { version = "0.6", optional = true }
 js-sys = { version = "0.3", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
