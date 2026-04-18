@@ -17,9 +17,19 @@ let initPromise: Promise<any> | null = null;
 /**
  * Load and initialize the DataFusion WASM module.
  * Returns a transform function compatible with ChartML.registerTransform().
+ *
+ * The returned callback matches the chartml-wasm `JsTransformMiddleware`
+ * contract: it receives a `Record<string, object[]>` of named source rows
+ * (one entry per declared source name in YAML insertion order), the
+ * transform spec, and the transform context, and returns the transformed
+ * rows + metadata.
  */
 export async function createDataFusionTransform(): Promise<
-  (rows: Record<string, unknown>[], spec: Record<string, unknown>, context: Record<string, unknown>) => Promise<{ data: Record<string, unknown>[]; metadata: Record<string, unknown> }>
+  (
+    sources: Record<string, Record<string, unknown>[]>,
+    spec: Record<string, unknown>,
+    context: Record<string, unknown>,
+  ) => Promise<{ data: Record<string, unknown>[]; metadata: Record<string, unknown> }>
 > {
   if (!initPromise) {
     initPromise = import('../pkg/web/chartml_wasm_datafusion.js').then(async (m) => {
@@ -33,8 +43,8 @@ export async function createDataFusionTransform(): Promise<
   // Context is forwarded for interface consistency. For DataFusion specifically,
   // param substitution happens upstream (in YAML before parsing), so context
   // is typically empty. Custom JS transforms may use it for runtime params.
-  return async (rows, spec, context) => {
-    const result = await mod.transform(rows, spec, context);
+  return async (sources, spec, context) => {
+    const result = await mod.transform(sources, spec, context);
     return result;
   };
 }

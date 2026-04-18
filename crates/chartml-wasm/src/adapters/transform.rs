@@ -8,6 +8,7 @@ use chartml_core::plugin::transform::{TransformContext, TransformResult};
 use chartml_core::plugin::TransformMiddleware;
 use chartml_core::spec::TransformSpec;
 use serde::{Deserialize, Serialize};
+use serde_wasm_bindgen::Serializer;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
@@ -68,20 +69,31 @@ impl TransformMiddleware for JsTransformMiddleware {
         // Convert each source's DataTable into a JSON-row array, preserving
         // insertion order so JS callbacks see source names in the same order
         // they appear in the YAML `data:` map.
+        //
+        // Use the json-compatible serializer so the IndexMap and per-row
+        // HashMaps materialize as plain JS objects, matching the documented
+        // `Record<string, Array<Record<string, unknown>>>` contract. The
+        // default `to_value` would emit ES `Map`s, which third-party JS
+        // callbacks (and the chartml-wasm-datafusion bridge) cannot read as
+        // structured records.
+        let serializer = Serializer::json_compatible();
         let sources_js_map: IndexMap<String, Vec<chartml_core::data::Row>> = sources
             .iter()
             .map(|(name, table)| (name.clone(), table.to_rows()))
             .collect();
-        let sources_js = serde_wasm_bindgen::to_value(&sources_js_map)
+        let sources_js = sources_js_map
+            .serialize(&serializer)
             .map_err(|e| ChartError::DataError(e.to_string()))?;
 
         // TransformSpec already implements Serialize
-        let spec_js = serde_wasm_bindgen::to_value(spec)
+        let spec_js = spec
+            .serialize(&serializer)
             .map_err(|e| ChartError::DataError(e.to_string()))?;
 
         // TransformContext via our DTO
         let ctx_dto = TransformContextDto::from_context(context);
-        let ctx_js = serde_wasm_bindgen::to_value(&ctx_dto)
+        let ctx_js = ctx_dto
+            .serialize(&serializer)
             .map_err(|e| ChartError::DataError(e.to_string()))?;
 
         // Call the JS function with 3 args
