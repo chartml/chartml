@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use indexmap::IndexMap;
 use std::collections::HashMap;
 use crate::data::DataTable;
 use crate::error::ChartError;
@@ -19,13 +20,24 @@ pub struct TransformResult {
 }
 
 /// Transform middleware — processes data between fetch and render.
+///
+/// Receives a map of named source tables (insertion-ordered, matching the YAML
+/// `data:` map order) and produces a single result table that the renderer
+/// consumes. Implementations are expected to:
+///
+/// - Register every entry in `sources` so user-authored SQL can reference
+///   any source by its declared name.
+/// - For single-entry maps with a non-`"source"` key, additionally register
+///   the sole table under the alias `"source"` so legacy SQL referencing
+///   `FROM source` keeps working. Multi-entry maps are NOT aliased — the
+///   caller's SQL must use the explicit source names.
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 pub trait TransformMiddleware: Send + Sync {
     /// Transform input data according to the spec.
     async fn transform(
         &self,
-        data: DataTable,
+        sources: &IndexMap<String, DataTable>,
         spec: &TransformSpec,
         context: &TransformContext,
     ) -> Result<TransformResult, ChartError>;

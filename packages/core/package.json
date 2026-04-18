@@ -1,6 +1,6 @@
 {
   "name": "@chartml/core",
-  "version": "4.0.1",
+  "version": "5.0.0",
   "description": "ChartML chart rendering engine — Rust/WASM powered",
   "type": "module",
   "main": "dist/index.js",
@@ -20,7 +20,8 @@
   "scripts": {
     "build:wasm": "bash build.sh",
     "build:ts": "tsc",
-    "build": "bash build.sh"
+    "build": "bash build.sh",
+    "test": "vitest run"
   },
   "peerDependencies": {},
   "devDependencies": {

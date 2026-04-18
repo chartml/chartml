@@ -19,6 +19,74 @@ chrono = { version = "0.4", default-features = false, features = ["std"] }
 async-trait = "0.1"
 arrow = { version = "57", default-features = false, features = ["ipc"] }
 indexmap = { version = "2", features = ["serde"] }
+futures = "0.3"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+humantime = "2"
+# `tracing` is the standard Rust observability facade — used by the resolver to
+# log hook-spawn failures and cache-write errors without forcing consumers to
+# depend on a specific logger. Default features include `std`, which is fine
+# for both native and wasm32 targets.
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+# `std::time::SystemTime::now()` panics with "time not implemented on this
+# platform" on wasm32-unknown-unknown. `web-time` is a drop-in shim that
+# delegates to `js_sys::Date::now()` on wasm and `std::time::SystemTime` on
+# native — re-exporting `SystemTime` / `Duration` / `UNIX_EPOCH` with the
+# same API. Used by the resolver, cache, and pipeline for `fetched_at` /
+# `refreshed_at` stamping so Node-target wasm consumers (and browsers)
+# don't trap on the first cache write.
+web-time = "1"
+
+# Native-only: lets the sync `render_to_svg` / `render_from_yaml*` path
+# dispatch through a registered async `TransformMiddleware` (e.g. DataFusion)
+# so multi-source NamedMap + SQL joins work end-to-end on native targets.
+# WASM keeps the sync limitation: callers must use the async API there.
+# Native HTTP provider — uses rustls so we don't drag in openssl.
+# `tokio` (rt only) is required so the resolver can `tokio::spawn` hook
+# callbacks fire-and-forget on whatever runtime the consumer is running.
+# The resolver's hook emission helper falls back to inline `.await` when no
+# tokio runtime is current — see `resolver::hooks::spawn_hook`.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+pollster = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+tokio = { version = "1", default-features = false, features = ["rt"] }
+
+# WASM HTTP provider — reqwest auto-uses fetch() on wasm32; no TLS feature needed
+# since the browser handles TLS termination. `wasm-bindgen-futures` provides
+# `spawn_local` for the resolver's fire-and-forget hook emission.
+#
+# `idb`, `js-sys`, and `wasm-bindgen` are optional WASM-only deps gated behind
+# the `wasm-indexeddb` feature so non-browser builds (CLI, SSR, native tests)
+# don't pull them in. The feature is only meaningful on `wasm32-unknown-unknown`
+# — enabling it on a native target compiles to an empty module via the
+# `target_arch = "wasm32"` cfg-gate inside `resolver/backends/indexeddb.rs`.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+wasm-bindgen-futures = "0.4"
+idb = { version = "0.6", optional = true }
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+
+[features]
+# Persistent IndexedDB-backed `CacheBackend` for browser consumers. Pulls in
+# the `idb` crate plus the `js-sys` / `wasm-bindgen` glue it relies on. See
+# `crates/chartml-core/src/resolver/backends/indexeddb.rs`.
+wasm-indexeddb = ["dep:idb", "dep:js-sys", "dep:wasm-bindgen"]
+
+# `tokio` (with the small feature set used by `cancel.rs`'s inline tests)
+# compiles on `wasm32-unknown-unknown` so we keep it unconditional. The
+# `chartml-datafusion` and `wiremock` dev-deps pull in native I/O and DO
+# NOT compile on wasm32, so they stay native-only.
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros", "time", "sync"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+chartml-datafusion = { path = "../chartml-datafusion" }
+wiremock = "0.6"
+
+# `wasm-bindgen-test` only runs on the wasm32 target — guarding it keeps
+# the native build lean.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
 
 [lints]
 workspace = true

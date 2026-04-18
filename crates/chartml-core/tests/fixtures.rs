@@ -1,3 +1,7 @@
+// Native-only — these fixture tests read YAML from disk via `std::fs`, which
+// is meaningless on `wasm32-unknown-unknown` (no real filesystem).
+#![cfg(not(target_arch = "wasm32"))]
+
 use std::fs;
 use std::path::PathBuf;
 

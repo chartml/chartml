@@ -1,20 +1,32 @@
 use send_wrapper::SendWrapper;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use wasm_bindgen::prelude::*;
-use chartml_core::ChartML;
 use chartml_core::element::ElementData;
-use chartml_core::element::ChartElement;
 use chartml_core::params::ParamValues;
+use chartml_core::pipeline::{PreparedChart, RenderOptions};
+use chartml_core::resolver::Resolver;
+use chartml_core::spec::{
+    parse as parse_chartml_spec, ChartMLSpec, ChartSpec, Component, DataRef, InlineData,
+};
 use chartml_core::theme::Theme;
-use crate::element::render_element;
+
+use crate::{CacheBackendRef, ChartMLRef, HooksRef, ProviderRef};
 use crate::tooltip::{provide_tooltip_context, DefaultTooltip};
 
 /// Custom tooltip renderer type.
 pub type TooltipRenderer = Arc<dyn Fn(&ElementData) -> AnyView + Send + Sync>;
+
+/// Default TTL applied when an `autoRefresh: true` source omits an explicit
+/// `cache.ttl`. Mirrors `chartml_core::resolver::DEFAULT_TTL` (5 minutes) so
+/// we never spin the auto-refresh interval faster than the cache itself
+/// would.
+const DEFAULT_AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 /// Inject chart CSS into the document head (idempotent — checks for existing style tag).
 /// CSS is embedded at compile time from style/chartml.css.
@@ -106,28 +118,188 @@ pub(crate) fn build_title_style(theme: &Theme) -> String {
     style
 }
 
-/// Check if a YAML spec contains a transform section.
-fn has_transform_spec(yaml: &str) -> bool {
-    yaml.contains("\ntransform:") || yaml.starts_with("transform:")
+/// Parsed information from a chart spec needed for the auto-refresh loop.
+///
+/// Phase 4 component scans the spec's `data:` for any source with
+/// `cache.autoRefresh: true`, builds one `AutoRefreshSource` per matching
+/// entry, then spawns a single interval keyed off the SHORTEST positive TTL
+/// across all sources so multiple per-source intervals can't drift apart.
+///
+/// `name` is the user-chosen source key (or `"source"` for an unnamed flat
+/// `data:` block). It's surfaced both to the visibility-listener / tick
+/// callback (where it gets logged via `console.debug` for observability) and
+/// to host-app tests that want to assert which sources the parser picked up.
+#[derive(Clone, Debug)]
+struct AutoRefreshSource {
+    /// User-chosen source name (or `"source"` for unnamed flat data).
+    /// Logged on every refresh tick so consumers tailing the browser console
+    /// can see which sources are being invalidated.
+    name: String,
+    /// Inline spec for the source, used to recompute the resolver key on
+    /// each tick. Cloning is cheap (small struct of `Option<String>`).
+    inline: InlineData,
+    /// Parsed TTL. We parse `cache.ttl` once on collection rather than on
+    /// every tick.
+    ttl: Duration,
 }
 
+/// Scan a parsed `ChartSpec.data` for sources whose cache config requests
+/// auto-refresh. Both flat `Inline { cache: Some(...) }` and per-entry
+/// `NamedMap` sources are inspected; `Named` (string ref to a pre-registered
+/// source) cannot have a cache config and is skipped.
+fn collect_auto_refresh_sources(spec: &ChartSpec) -> Vec<AutoRefreshSource> {
+    let mut out = Vec::new();
+    match &spec.data {
+        DataRef::Inline(inline) => {
+            if let Some(src) = auto_refresh_from_inline("source".to_string(), inline) {
+                out.push(src);
+            }
+        }
+        DataRef::NamedMap(map) => {
+            for (name, inline) in map {
+                if let Some(src) = auto_refresh_from_inline(name.clone(), inline) {
+                    out.push(src);
+                }
+            }
+        }
+        DataRef::Named(_) => {
+            // Pre-registered named source — no cache config attached, no
+            // auto-refresh applicable. The host app should re-register the
+            // table directly when its data changes.
+        }
+    }
+    out
+}
+
+/// Build an `AutoRefreshSource` from one inline spec, returning `None`
+/// unless `cache.autoRefresh == true`. Falls back to
+/// [`DEFAULT_AUTO_REFRESH_INTERVAL`] when `cache.ttl` is missing — silently
+/// dropping `autoRefresh: true` because the user forgot a TTL would be a
+/// nasty surprise. Malformed `cache.ttl` strings ALSO fall back rather than
+/// erroring (the spec parses cleanly and the resolver will surface the same
+/// error during fetch).
+fn auto_refresh_from_inline(name: String, inline: &InlineData) -> Option<AutoRefreshSource> {
+    let cache = inline.cache.as_ref()?;
+    if cache.auto_refresh != Some(true) {
+        return None;
+    }
+    let ttl = cache
+        .ttl
+        .as_deref()
+        .and_then(|s| humantime::parse_duration(s).ok())
+        .unwrap_or(DEFAULT_AUTO_REFRESH_INTERVAL);
+    Some(AutoRefreshSource {
+        name,
+        inline: inline.clone(),
+        ttl,
+    })
+}
+
+/// Pick the shortest positive TTL across the auto-refresh sources, or
+/// `None` when there are no sources or every TTL is zero.
+fn shortest_interval(sources: &[AutoRefreshSource]) -> Option<Duration> {
+    sources
+        .iter()
+        .map(|s| s.ttl)
+        .filter(|d| !d.is_zero())
+        .min()
+}
+
+/// Collect every `InlineData` the parsed chart spec declares, so the
+/// imperative `refresh_trigger` effect can compute resolver keys for ALL
+/// sources (not just auto-refresh ones). Pre-registered named sources
+/// (`DataRef::Named`) are skipped because the resolver's
+/// `invalidate*` API operates on keys derived from inline shapes — host
+/// apps wanting to invalidate a registered named source should call the
+/// resolver's bulk APIs (`invalidate_by_slug`, `invalidate_by_namespace`)
+/// directly from the parent component.
+fn collect_invalidatable_sources(spec: &ChartSpec) -> Vec<InlineData> {
+    let mut out = Vec::new();
+    match &spec.data {
+        DataRef::Inline(inline) => out.push(inline.clone()),
+        DataRef::NamedMap(map) => {
+            for (_name, inline) in map {
+                out.push(inline.clone());
+            }
+        }
+        DataRef::Named(_) => {
+            // Pre-registered string-ref source — see fn-level docs for
+            // why we don't try to invalidate these here.
+        }
+    }
+    out
+}
+
+/// Extract the FIRST chart spec from a YAML string. Returns `None` for
+/// invalid YAML, multi-document specs without any chart, or specs that
+/// only declare params/sources (the auto-refresh wiring needs a `ChartSpec`
+/// to scan `.data` against). Errors during parsing are silently swallowed
+/// because the chart's main render path will surface the same error in the
+/// view layer with full context — the auto-refresh path doesn't have a UI
+/// surface to bubble parse errors into.
+fn first_chart_spec(yaml: &str) -> Option<ChartSpec> {
+    let parsed = parse_chartml_spec(yaml).ok()?;
+    match parsed {
+        ChartMLSpec::Single(component) => match *component {
+            Component::Chart(chart) => Some(*chart),
+            _ => None,
+        },
+        ChartMLSpec::Array(components) => components.into_iter().find_map(|c| match c {
+            Component::Chart(chart) => Some(*chart),
+            _ => None,
+        }),
+    }
+}
+
+/// Internal representation of a successful render. The `prepared` chart is
+/// cached alongside the rendered SVG so resize-only re-renders skip the
+/// fetch + transform stages entirely (the spec calls this out explicitly:
+/// "Resize: ... no re-fetch on resize").
+#[derive(Clone)]
+struct ResolvedChart {
+    prepared: PreparedChart,
+    svg: String,
+    width: f64,
+}
+
+/// Phase 4 props for [`ChartMLChart`]. Held in one struct so the docs stay
+/// close to the prop attributes and the new optional inputs are easy to
+/// spot among the legacy ones.
+///
 /// Main ChartML component for Leptos.
 ///
 /// Renders a ChartML YAML spec reactively. Responds to:
-/// - `spec` signal changes (YAML editing)
-/// - Container resize (via ResizeObserver)
-/// - `param_values` signal changes (interactive param controls)
+/// - `spec` signal changes (YAML editing) — re-runs fetch + transform.
+/// - `param_values` signal changes (interactive param controls) — re-runs.
+/// - `refresh_count` signal increments (manual + auto-refresh) — re-runs.
+/// - Container resize (via ResizeObserver) — re-renders synchronously
+///   from the cached `PreparedChart`, no re-fetch.
 ///
-/// Charts with `transform:` specs are rendered asynchronously via the
-/// registered TransformMiddleware (DataFusion). Charts without transforms
-/// render synchronously.
+/// Phase 4 additions:
+/// - `provider`: an optional [`ProviderRef`] registered on the inner
+///   `ChartML` instance under the `"datasource"` slug. Falls back to
+///   Leptos context when not supplied; props win over context.
+/// - `cache_backend`: an optional [`CacheBackendRef`] swapped in as the
+///   tier-1 cache. Falls back to context.
+/// - `hooks`: an optional [`HooksRef`] installed on the resolver.
+///   Falls back to context.
+/// - `refresh_trigger`: an optional `Signal<u32>` that, when its value
+///   changes, invalidates every spec source's resolver key and forces a
+///   re-fetch — the imperative equivalent of the internal `Retry` button.
+///   Pair with a `RwSignal<u32>` parent-side and `set.update(|c| *c += 1)`
+///   to drive a custom "Refresh" button. Auto-refresh handles the timer
+///   case; this is for manual user-driven refresh control.
+/// - Auto-refresh: when the parsed spec contains a source with
+///   `cache.autoRefresh: true`, a Leptos interval is spawned on mount.
+///   The interval is paused when the document's `visibilityState` is
+///   `"hidden"` and re-armed when it becomes `"visible"`.
 #[component]
 pub fn ChartMLChart(
     /// ChartML YAML specification string
     #[prop(into)]
     spec: Signal<String>,
     /// Pre-configured ChartML instance
-    chartml: Arc<ChartML>,
+    chartml: ChartMLRef,
     /// Optional CSS class for the container
     #[prop(optional)]
     class: &'static str,
@@ -137,6 +309,43 @@ pub fn ChartMLChart(
     /// Shared reactive param values — when updated by controls, charts re-render
     #[prop(optional)]
     param_values: Option<RwSignal<ParamValues>>,
+    /// Provider for `data: { datasource, query }` shapes. Registered on the
+    /// inner `ChartML` instance under the `"datasource"` slug. Falls back
+    /// to `use_context::<ProviderRef>()` when not supplied.
+    #[prop(optional, into)]
+    provider: Option<ProviderRef>,
+    /// Optional persistent cache backend. Replaces the tier-1 in-memory
+    /// cache (default `MemoryBackend`). Falls back to
+    /// `use_context::<CacheBackendRef>()` when not supplied.
+    #[prop(optional, into)]
+    cache_backend: Option<CacheBackendRef>,
+    /// Optional resolver hooks for observability. Falls back to
+    /// `use_context::<HooksRef>()` when not supplied.
+    #[prop(optional, into)]
+    hooks: Option<HooksRef>,
+    /// Optional imperative refresh trigger — when the wrapped `u32` value
+    /// changes, the chart invalidates every spec source's resolver cache
+    /// key (across both tier-1 and tier-2) and re-runs the fetch /
+    /// transform / render pipeline against the current YAML.
+    ///
+    /// Functionally equivalent to clicking the chart's internal `Retry`
+    /// button; use this when the parent owns its own `Refresh` UI (e.g. a
+    /// dashboard "Refresh now" button shared across many charts) and
+    /// doesn't want to round-trip through a YAML mutation. Auto-refresh
+    /// (the `cache.autoRefresh: true` path) covers the timer case
+    /// independently — this prop is purely for parent-driven manual
+    /// refresh.
+    ///
+    /// Pair with a parent-side `RwSignal<u32>`:
+    /// ```ignore
+    /// let refresh = RwSignal::new(0_u32);
+    /// view! {
+    ///     <button on:click=move |_| refresh.update(|c| *c += 1)>"Refresh"</button>
+    ///     <ChartMLChart spec chartml refresh_trigger=Some(refresh.into()) />
+    /// }
+    /// ```
+    #[prop(optional, into)]
+    refresh_trigger: Option<Signal<u32>>,
 ) -> impl IntoView {
     let chartml = chartml.clone();
     let tooltip_state = provide_tooltip_context();
@@ -144,9 +353,91 @@ pub fn ChartMLChart(
     // Inject chart CSS into document head on first mount (idempotent)
     inject_chartml_css();
 
+    // Prop-vs-context resolution: explicit prop wins, then Leptos context.
+    // Doing the lookup here once (rather than inside an effect) means a
+    // context hand-off after mount is intentionally NOT picked up — props
+    // and context are read at component construction time. Re-mounting
+    // (e.g. via a `Show` wrapper) re-runs this resolution.
+    let provider = provider.or_else(use_context::<ProviderRef>);
+    let cache_backend = cache_backend.or_else(use_context::<CacheBackendRef>);
+    let hooks = hooks.or_else(use_context::<HooksRef>);
+
+    // Wire the resolver-side configuration. The resolver's `register_provider`
+    // / `set_primary_cache` / `set_hooks` methods all use interior mutability
+    // so we don't need `&mut chartml` — the `ChartMLRef` (`Arc<ChartML>` /
+    // `Rc<ChartML>`) shares fine. Re-running this on every `ChartMLChart`
+    // mount is intentional: the host can swap providers between mounts
+    // without rebuilding the `ChartML` instance.
+    {
+        let resolver = chartml.resolver();
+        if let Some(p) = provider.as_ref() {
+            resolver.register_provider("datasource", p.clone());
+        }
+        if let Some(b) = cache_backend.as_ref() {
+            resolver.set_primary_cache(b.clone());
+        }
+        if let Some(h) = hooks.as_ref() {
+            resolver.set_hooks(h.clone());
+        }
+    }
+
     // Track container width — updated by ResizeObserver
     let (container_width, set_container_width) = signal(0.0_f64);
     let container_ref = NodeRef::<leptos::html::Div>::new();
+
+    // Refresh counter — bumped by manual refresh button, auto-refresh
+    // interval, and the optional external `refresh_trigger` prop. Feeds
+    // the Resource's input tuple so increments trigger a fresh fetch +
+    // transform pass (resize alone does NOT bump this).
+    let refresh_count = RwSignal::new(0_u32);
+
+    // External refresh trigger wiring. When the parent supplies a
+    // `refresh_trigger` signal and its value changes, we invalidate every
+    // spec source's resolver cache key (mirroring what the auto-refresh
+    // interval does on each tick) and bump `refresh_count` to drive the
+    // main fetch effect. The first run is skipped because the initial
+    // mount already triggers a fetch via the main effect — re-running for
+    // the initial value would double-fetch on first paint.
+    if let Some(trigger) = refresh_trigger {
+        let chartml_for_trigger = chartml.clone();
+        // `Cell<bool>` is fine here — this effect runs strictly on the
+        // single-threaded reactive owner. `Cell` keeps the closure
+        // `Send`-bound-clean in case Leptos's effect bound tightens.
+        let initial_seen = Rc::new(Cell::new(false));
+        let initial_seen_for_effect = initial_seen.clone();
+        Effect::new(move || {
+            // Subscribe to the trigger so future increments re-run this
+            // closure. The value itself isn't used — only the side
+            // effect of bumping `refresh_count` matters.
+            let _tick = trigger.get();
+
+            if !initial_seen_for_effect.get() {
+                initial_seen_for_effect.set(true);
+                return;
+            }
+
+            // Invalidate every source the parsed spec declares. We can't
+            // know what `namespace` the inner ChartML was configured with
+            // (it's set on the instance, not threaded into the component),
+            // so this fires `None` — matching the auto-refresh interval
+            // wiring above. Multi-tenant deployments that need namespaced
+            // invalidation can call `chartml.resolver().invalidate_by_namespace(...)`
+            // directly from the parent and skip this prop.
+            let yaml = spec.get_untracked();
+            if let Some(parsed) = first_chart_spec(&yaml) {
+                let resolver = chartml_for_trigger.resolver();
+                for source in collect_invalidatable_sources(&parsed) {
+                    let key = Resolver::key_for(&source, None);
+                    let resolver = resolver.clone();
+                    spawn_local(async move {
+                        resolver.invalidate(key).await;
+                    });
+                }
+            }
+
+            refresh_count.update(|c| *c = c.wrapping_add(1));
+        });
+    }
 
     // Set up ResizeObserver after mount; disconnect on disposal.
     // Debounce: only update container_width after resize activity stops for 200ms.
@@ -210,93 +501,233 @@ pub fn ChartMLChart(
         format!("chartml-container {}", class)
     };
 
-    // Unified chart state: title, element tree, error, loading.
-    // All view closures read from this single signal — no split-brain from
-    // multiple independent `spec.get()` subscriptions.
-    #[derive(Clone)]
-    struct ChartState {
-        title: Option<String>,
-        element: Option<ChartElement>,
-        error: Option<String>,
-        loading: bool,
-    }
-    let (chart_state, set_chart_state) = signal(ChartState {
-        title: None, element: None, error: None, loading: false,
-    });
+    // Cached `ResolvedChart` — produced asynchronously from the resource
+    // pipeline, then re-rendered synchronously on resize. `Option` until
+    // the first successful pass completes; cleared back to `None` whenever
+    // the resource transitions through loading/error.
+    let resolved: RwSignal<Option<ResolvedChart>> = RwSignal::new(None);
+    let last_error: RwSignal<Option<String>> = RwSignal::new(None);
+    let is_loading: RwSignal<bool> = RwSignal::new(false);
+    // Wall-clock timestamp (ms since unix epoch) of the last successful
+    // resolve. Surfaced in the demo's "last refreshed at" indicator;
+    // exposed as an attribute on the container for tests + telemetry.
+    let last_refreshed_ms: RwSignal<f64> = RwSignal::new(0.0);
 
-    // Generation counter to prevent stale async results from overwriting newer ones
-    let render_gen: Rc<std::cell::Cell<u32>> = Rc::new(std::cell::Cell::new(0));
+    // Pull a snapshot of the chart's title from the YAML synchronously so
+    // the title can render before the async pipeline completes.
+    let title_signal = Memo::new(move |_| extract_yaml_title(&spec.get()));
 
-    // Unified render effect: reads spec/width/params, produces ChartState.
-    // Sync charts are rendered inline; async charts spawn a task and set loading.
-    let chartml_for_effect = chartml.clone();
-    let render_gen_for_effect = render_gen.clone();
-    Effect::new(move || {
-        let yaml = spec.get();
-        let width = container_width.get();
-        let params = param_values.map(|pv| pv.get());
+    // Main fetch + transform effect. Reactive on `(spec, params, refresh_count)`.
+    // Runs the new chartml-5 pipeline (`fetch` → `transform` →
+    // `render_prepared_to_svg`) and writes results to `resolved` /
+    // `last_error` / `is_loading`. Width changes do NOT bump this — width
+    // is only consumed when synchronously re-rendering from a cached
+    // `PreparedChart` below.
+    {
+        let chartml = chartml.clone();
+        let render_gen: Rc<Cell<u32>> = Rc::new(Cell::new(0));
+        let render_gen_for_effect = render_gen.clone();
+        Effect::new(move || {
+            let yaml = spec.get();
+            // Subscribing to refresh_count without using its value — only
+            // the side effect (re-running this closure) matters.
+            let _refresh_tick = refresh_count.get();
+            let params = param_values.map(|pv| pv.get());
 
-        if yaml.trim().is_empty() {
-            set_chart_state.set(ChartState {
-                title: None, element: None,
-                error: Some("Enter a ChartML YAML spec".to_string()), loading: false,
-            });
-            return;
-        }
-        if width <= 0.0 {
-            return;
-        }
+            if yaml.trim().is_empty() {
+                resolved.set(None);
+                last_error.set(Some("Enter a ChartML YAML spec".to_string()));
+                is_loading.set(false);
+                return;
+            }
 
-        let title = extract_yaml_title(&yaml);
-
-        if has_transform_spec(&yaml) {
-            // Async path: set loading, bump generation, spawn task
-            set_chart_state.set(ChartState {
-                title: title.clone(), element: None, error: None, loading: true,
-            });
-            let my_gen = render_gen_for_effect.get() + 1;
+            // Bump the generation counter so a stale in-flight fetch can't
+            // overwrite a fresher one when it eventually resolves.
+            let my_gen = render_gen_for_effect.get().wrapping_add(1);
             render_gen_for_effect.set(my_gen);
             let gen_ref = render_gen_for_effect.clone();
 
-            let chartml_async = chartml_for_effect.clone();
+            is_loading.set(true);
+            last_error.set(None);
+
+            let chartml_async = chartml.clone();
             let yaml_owned = yaml.clone();
             let params_owned = params.clone();
+            // Snapshot the current width so the FIRST render after a fetch
+            // uses the same dimensions the user is currently looking at.
+            // Subsequent resize-only changes flow through the resize effect
+            // below (which calls `render_prepared_to_svg` synchronously).
+            let initial_width = container_width.get_untracked();
 
-            wasm_bindgen_futures::spawn_local(async move {
-                let result = chartml_async.render_from_yaml_with_params_async(
-                    &yaml_owned, Some(width), None, params_owned.as_ref(),
-                ).await;
-                // Only apply if no newer render has been started
+            spawn_local(async move {
+                let opts = RenderOptions {
+                    width: if initial_width > 0.0 { Some(initial_width) } else { None },
+                    height: None,
+                    params: params_owned,
+                };
+                let fetch_result = chartml_async.fetch(&yaml_owned, &opts).await;
                 if gen_ref.get() != my_gen { return; }
-                match result {
-                    Ok(el) => {
-                        set_chart_state.set(ChartState {
-                            title, element: Some(el), error: None, loading: false,
-                        });
+                let fetched = match fetch_result {
+                    Ok(f) => f,
+                    Err(err) => {
+                        resolved.set(None);
+                        last_error.set(Some(format!("{}", err)));
+                        is_loading.set(false);
+                        return;
                     }
-                    Err(e) => {
-                        set_chart_state.set(ChartState {
-                            title, element: None, error: Some(format!("{}", e)), loading: false,
-                        });
+                };
+                let transform_result = chartml_async.transform(fetched, &opts).await;
+                if gen_ref.get() != my_gen { return; }
+                let prepared = match transform_result {
+                    Ok(p) => p,
+                    Err(err) => {
+                        resolved.set(None);
+                        last_error.set(Some(format!("{}", err)));
+                        is_loading.set(false);
+                        return;
                     }
-                }
+                };
+                let svg = match chartml_async.render_prepared_to_svg(&prepared, &opts) {
+                    Ok(s) => s,
+                    Err(err) => {
+                        resolved.set(None);
+                        last_error.set(Some(format!("{}", err)));
+                        is_loading.set(false);
+                        return;
+                    }
+                };
+                resolved.set(Some(ResolvedChart {
+                    prepared,
+                    svg,
+                    width: initial_width,
+                }));
+                last_error.set(None);
+                is_loading.set(false);
+                last_refreshed_ms.set(now_ms());
             });
-        } else {
-            // Sync path: render immediately
-            match chartml_for_effect.render_from_yaml_with_params(&yaml, Some(width), None, params.as_ref()) {
-                Ok(element) => {
-                    set_chart_state.set(ChartState {
-                        title, element: Some(element), error: None, loading: false,
-                    });
+        });
+    }
+
+    // Resize-only re-render effect. Reactive on `container_width` AND
+    // `resolved`. When width changes (or a fresh prepared chart arrives),
+    // re-runs `render_prepared_to_svg` synchronously to produce a new SVG
+    // string sized to the current container width. Skips the work when
+    // the cached width already matches the current container width.
+    {
+        let chartml = chartml.clone();
+        Effect::new(move || {
+            let width = container_width.get();
+            if width <= 0.0 { return; }
+            let Some(current) = resolved.get() else { return; };
+            if (current.width - width).abs() < 0.5 {
+                // Already rendered at this width (within sub-pixel tolerance).
+                return;
+            }
+            let opts = RenderOptions::with_size(Some(width), None);
+            match chartml.render_prepared_to_svg(&current.prepared, &opts) {
+                Ok(svg) => {
+                    resolved.set(Some(ResolvedChart {
+                        prepared: current.prepared,
+                        svg,
+                        width,
+                    }));
                 }
                 Err(err) => {
-                    set_chart_state.set(ChartState {
-                        title, element: None, error: Some(format!("{}", err)), loading: false,
-                    });
+                    last_error.set(Some(format!("{}", err)));
                 }
             }
-        }
-    });
+        });
+    }
+
+    // Auto-refresh wiring. Reactive on `spec` only so that editing the
+    // YAML re-evaluates which sources need auto-refresh. Manual refresh
+    // (the "Retry" / "Refresh now" buttons that bump `refresh_count`)
+    // does NOT reset the interval phase — see the explanatory comment
+    // inside the effect for why.
+    //
+    // The interval handle and visibility-listener closure are stored in
+    // `Rc<RefCell<...>>` cells so the `on_cleanup` hook can drop them when
+    // the component unmounts. We also reset them when the spec changes
+    // (the inner effect clears the previous interval before installing
+    // a new one).
+    {
+        let chartml_for_refresh = chartml.clone();
+        // Holders for the active interval handle and visibility listener.
+        // Both are `SendWrapper<Rc<RefCell<...>>>` so they satisfy Leptos's
+        // `Send + 'static` reactive bound on wasm32-unknown-unknown
+        // (single-threaded; the wrapper is a noop guard).
+        type Holders = SendWrapper<Rc<RefCell<AutoRefreshState>>>;
+        let holders: Holders = SendWrapper::new(Rc::new(RefCell::new(AutoRefreshState {
+            interval: None,
+            visibility_listener: None,
+            sources: Vec::new(),
+            tick_period: Duration::ZERO,
+        })));
+
+        let holders_for_effect = holders.clone();
+        Effect::new(move || {
+            let yaml = spec.get();
+            // Auto-refresh setup is driven by spec changes only — we
+            // intentionally do NOT subscribe to `refresh_count` here.
+            //
+            // The interval tick callback (see `install_auto_refresh_interval`)
+            // bumps `refresh_count` to drive the main fetch effect. If this
+            // effect also subscribed to `refresh_count`, every tick would
+            // tear the interval down and re-create it (re-parsing YAML and
+            // re-registering the visibility listener each time), so the
+            // interval would never be stable.
+            //
+            // Trade-off: manual "Retry" / "Refresh now" no longer resets the
+            // auto-refresh interval phase. This matches the behavior most
+            // users expect — the cadence is set by the spec's `cache.ttl`
+            // and a manual refresh just slots in alongside it rather than
+            // restarting the clock.
+
+            // Reset previous timer + listener — every spec edit re-arms.
+            clear_auto_refresh(&holders_for_effect);
+
+            let Some(parsed_spec) = first_chart_spec(&yaml) else {
+                return;
+            };
+            let sources = collect_auto_refresh_sources(&parsed_spec);
+            if sources.is_empty() {
+                return;
+            }
+            let Some(period) = shortest_interval(&sources) else {
+                return;
+            };
+
+            // Cache the snapshot inside the holders so the interval
+            // closure (plus the visibility listener that re-arms it) can
+            // both read it. `tick_period` is what the listener uses when
+            // re-arming after a "hidden → visible" transition.
+            holders_for_effect.borrow_mut().sources = sources.clone();
+            holders_for_effect.borrow_mut().tick_period = period;
+
+            // Helper builds and installs the interval. Called both
+            // initially (here) and from the visibility listener when the
+            // tab becomes visible again. The closure invalidates every
+            // tracked source's resolver key, then bumps `refresh_count`
+            // which triggers the main fetch effect.
+            install_auto_refresh_interval(&chartml_for_refresh, &holders_for_effect, refresh_count);
+
+            // Install the visibility listener once. If `document` is
+            // unavailable (SSR), skip — auto-refresh is browser-only.
+            install_visibility_listener(
+                &chartml_for_refresh,
+                &holders_for_effect,
+                refresh_count,
+            );
+        });
+
+        // Drop both the interval and the visibility listener on unmount.
+        // SendWrapper drop on the wrong thread would panic, but
+        // wasm32-unknown-unknown is single-threaded, so we're safe.
+        let holders_for_cleanup = holders.clone();
+        on_cleanup(move || {
+            clear_auto_refresh(&holders_for_cleanup);
+        });
+    }
 
     // Build the title style string once from the theme. The theme is set on
     // the ChartML instance before it's handed to this component and does not
@@ -304,13 +735,22 @@ pub fn ChartMLChart(
     let title_style = build_title_style(chartml.theme());
 
     view! {
-        <div class=container_class style="position: relative;" node_ref=container_ref>
-            // Chart title
+        <div
+            class=container_class
+            style="position: relative;"
+            node_ref=container_ref
+            data-last-refreshed-ms=move || {
+                let ts = last_refreshed_ms.get();
+                if ts > 0.0 { Some(format!("{}", ts)) } else { None }
+            }
+        >
+            // Chart title (extracted synchronously from the YAML so it
+            // shows immediately, even before the async pipeline finishes).
             {
                 let title_style = title_style.clone();
                 move || {
                     let title_style = title_style.clone();
-                    chart_state.get().title.map(|t| view! {
+                    title_signal.get().map(|t| view! {
                         <div class="chart-title" style=title_style>
                             {t}
                         </div>
@@ -318,31 +758,54 @@ pub fn ChartMLChart(
                 }
             }
 
-            // Chart content — render_element() produces Leptos views with
-            // interactive tooltip wrappers, preserving ElementData mouse handlers.
+            // Chart content — the SVG string from `render_prepared_to_svg`,
+            // injected via `inner_html` so the renderer's typography /
+            // animation attributes survive. Re-runs synchronously when
+            // width changes (resize) and after every successful resource
+            // resolution.
             {move || {
-                chart_state.get().element.map(|el| render_element(&el))
+                resolved.get().map(|r| view! {
+                    <div class="chartml-svg-host" inner_html=r.svg></div>
+                })
             }}
 
-            // Error display
+            // Error display + retry button. The retry button bumps
+            // `refresh_count`, which the main fetch effect subscribes to
+            // and re-runs the pipeline against the current YAML.
             {move || {
-                chart_state.get().error.map(|msg| view! {
-                    <div class="chartml-error">
+                last_error.get().map(|msg| view! {
+                    <div class="chartml-error" role="alert">
                         <p style="color: #dc3545; font-family: monospace; padding: 12px; background: #fff5f5; border: 1px solid #dc3545; border-radius: 4px;">
                             {msg}
                         </p>
+                        <button
+                            class="chartml-retry-button"
+                            type="button"
+                            on:click=move |_| { refresh_count.update(|c| *c = c.wrapping_add(1)); }
+                        >
+                            "Retry"
+                        </button>
                     </div>
                 })
             }}
 
-            // Loading state
+            // Loading state — shown whenever the async pipeline is in
+            // flight, including during a re-fetch triggered by manual /
+            // auto refresh (so the user gets feedback even when an old
+            // SVG is still on screen).
             {move || {
-                chart_state.get().loading.then(|| view! {
-                    <div style="padding: 12px; color: #888;">"Loading..."</div>
+                is_loading.get().then(|| view! {
+                    <div class="chartml-loading" style="padding: 12px; color: #888;">
+                        "Loading..."
+                    </div>
                 })
             }}
 
-            // Tooltip overlay
+            // Tooltip overlay (legacy element-driven tooltip plumbing kept
+            // for backward compatibility — the new SVG-string render path
+            // doesn't fire per-element mouse events, so the tooltip layer
+            // only activates when host code populates `tooltip_state`
+            // through some other means).
             {
                 let tooltip = tooltip.clone();
                 move || {
@@ -372,6 +835,164 @@ pub fn ChartMLChart(
             }
         </div>
     }
+}
+
+/// Tear down the active interval + visibility listener. Safe to call
+/// multiple times — every field is `Option<...>` and `take()`-cleared.
+fn clear_auto_refresh(holders: &SendWrapper<Rc<RefCell<AutoRefreshState>>>) {
+    let mut state = holders.borrow_mut();
+    if let Some(handle) = state.interval.take() {
+        handle.clear();
+    }
+    if let Some((target, listener)) = state.visibility_listener.take() {
+        let _ = target.remove_event_listener_with_callback(
+            "visibilitychange",
+            listener.as_ref().unchecked_ref(),
+        );
+        // `listener` drops here, freeing the JS closure.
+    }
+}
+
+/// Install the interval that runs auto-refresh ticks. Called from the
+/// auto-refresh effect on initial setup, and from the visibility listener
+/// when the document goes hidden → visible. Replaces any previously
+/// installed interval (the caller must have cleared it first; we check via
+/// `is_some`).
+fn install_auto_refresh_interval(
+    chartml: &ChartMLRef,
+    holders: &SendWrapper<Rc<RefCell<AutoRefreshState>>>,
+    refresh_count: RwSignal<u32>,
+) {
+    let (period, sources) = {
+        let state = holders.borrow();
+        if state.interval.is_some() {
+            return;
+        }
+        (state.tick_period, state.sources.clone())
+    };
+    if period.is_zero() || sources.is_empty() {
+        return;
+    }
+
+    let chartml_for_tick = chartml.clone();
+    let cb = move || {
+        // Hidden tabs are an extra safety net: even if the visibility
+        // listener races the very-first tick we still skip refreshing
+        // when the document isn't visible.
+        if document_is_hidden() {
+            return;
+        }
+        let resolver = chartml_for_tick.resolver();
+        let namespace = None::<String>;
+        for src in &sources {
+            // Log per-source invalidation to the browser console so devs
+            // tailing the inspector can confirm the auto-refresh wiring
+            // fires on the cadence they expect. Surfaces the user-chosen
+            // source name rather than the opaque numeric resolver key.
+            log_auto_refresh_tick(&src.name);
+            let key = Resolver::key_for(&src.inline, namespace.as_deref());
+            let resolver = resolver.clone();
+            spawn_local(async move {
+                resolver.invalidate(key).await;
+            });
+        }
+        refresh_count.update(|c| *c = c.wrapping_add(1));
+    };
+
+    if let Ok(handle) = leptos::prelude::set_interval_with_handle(cb, period) {
+        holders.borrow_mut().interval = Some(handle);
+    }
+}
+
+/// Install the `visibilitychange` listener. Pauses the interval when the
+/// document is hidden and re-arms it when it becomes visible. Skipped if
+/// `web_sys::window().document()` is unavailable (SSR or detached doc).
+fn install_visibility_listener(
+    chartml: &ChartMLRef,
+    holders: &SendWrapper<Rc<RefCell<AutoRefreshState>>>,
+    refresh_count: RwSignal<u32>,
+) {
+    if holders.borrow().visibility_listener.is_some() {
+        return;
+    }
+    let Some(window) = web_sys::window() else { return };
+    let Some(document) = window.document() else { return };
+    let target: web_sys::EventTarget = document.clone().into();
+
+    let chartml_for_listener = chartml.clone();
+    let holders_for_listener = holders.clone();
+    let listener = Closure::<dyn FnMut()>::new(move || {
+        if document_is_hidden() {
+            // Pause: drop the interval handle, keep sources/period for
+            // the next "visible" transition to re-install from.
+            let mut state = holders_for_listener.borrow_mut();
+            if let Some(handle) = state.interval.take() {
+                handle.clear();
+            }
+        } else {
+            // Re-arm. If the interval is already installed (e.g. multiple
+            // visibility events fire in quick succession) `install` will
+            // no-op via the `is_some` guard.
+            install_auto_refresh_interval(
+                &chartml_for_listener,
+                &holders_for_listener,
+                refresh_count,
+            );
+        }
+    });
+
+    let _ = target.add_event_listener_with_callback(
+        "visibilitychange",
+        listener.as_ref().unchecked_ref(),
+    );
+    holders.borrow_mut().visibility_listener = Some((target, listener));
+}
+
+/// `true` when `document.visibilityState == "hidden"`. Used both by the
+/// per-tick guard and the visibility listener so the two can never
+/// disagree.
+fn document_is_hidden() -> bool {
+    let Some(window) = web_sys::window() else { return false };
+    let Some(document) = window.document() else { return false };
+    document.visibility_state() == web_sys::VisibilityState::Hidden
+}
+
+/// Wall-clock now in milliseconds since the unix epoch. Source: `Date.now()`
+/// because `SystemTime::now()` panics on `wasm32-unknown-unknown`.
+fn now_ms() -> f64 {
+    js_sys::Date::now()
+}
+
+/// Log an auto-refresh tick for a single source to the browser console at
+/// `debug` level. Browser-only AND debug-only — gated on
+/// `target_arch = "wasm32"` so native tests don't touch `web_sys::console`,
+/// and on `debug_assertions` so release builds don't pay the
+/// `format!` allocation + JS interop call on every tick. Release callers
+/// (and all native callers) get a no-op.
+fn log_auto_refresh_tick(source_name: &str) {
+    #[cfg(all(target_arch = "wasm32", debug_assertions))]
+    {
+        let msg = format!("[chartml-leptos] auto-refresh tick: source='{source_name}'");
+        web_sys::console::debug_1(&wasm_bindgen::JsValue::from_str(&msg));
+    }
+    #[cfg(not(all(target_arch = "wasm32", debug_assertions)))]
+    {
+        // Suppress the unused-variable lint on native targets and on
+        // release-mode wasm — `source_name` is meaningful but only
+        // consumed by the debug-mode wasm32 branch above.
+        let _ = source_name;
+    }
+}
+
+/// Reactive state shared between the auto-refresh effect, its interval
+/// callback, and its visibility-listener callback. Lives in a single
+/// `RefCell` so each callback can update or clear the others without
+/// cross-cell borrow conflicts.
+struct AutoRefreshState {
+    interval: Option<leptos::prelude::IntervalHandle>,
+    visibility_listener: Option<(web_sys::EventTarget, Closure<dyn FnMut()>)>,
+    sources: Vec<AutoRefreshSource>,
+    tick_period: Duration,
 }
 
 #[cfg(test)]
@@ -447,5 +1068,207 @@ mod title_style_tests {
         assert!(style.contains("font-weight: 600"));
         assert!(!style.contains("font-family:"));
         assert!(!style.contains("font-style:"));
+    }
+}
+
+#[cfg(test)]
+mod auto_refresh_tests {
+    use super::*;
+    use chartml_core::spec::source::CacheConfig as SpecCacheConfig;
+
+    fn empty_inline() -> InlineData {
+        InlineData {
+            provider: None,
+            rows: None,
+            url: None,
+            endpoint: None,
+            cache: None,
+            datasource: None,
+            query: None,
+        }
+    }
+
+    fn cache(ttl: Option<&str>, auto: Option<bool>) -> SpecCacheConfig {
+        SpecCacheConfig {
+            ttl: ttl.map(String::from),
+            auto_refresh: auto,
+        }
+    }
+
+    #[test]
+    fn auto_refresh_skips_sources_without_flag() {
+        let inline = InlineData {
+            cache: Some(cache(Some("30s"), None)),
+            ..empty_inline()
+        };
+        assert!(auto_refresh_from_inline("a".into(), &inline).is_none());
+
+        let inline = InlineData {
+            cache: Some(cache(Some("30s"), Some(false))),
+            ..empty_inline()
+        };
+        assert!(auto_refresh_from_inline("a".into(), &inline).is_none());
+    }
+
+    #[test]
+    fn auto_refresh_parses_explicit_ttl() {
+        let inline = InlineData {
+            cache: Some(cache(Some("45s"), Some(true))),
+            ..empty_inline()
+        };
+        let src = auto_refresh_from_inline("metric".into(), &inline).expect("auto-refresh");
+        assert_eq!(src.ttl, Duration::from_secs(45));
+        assert_eq!(src.name, "metric");
+    }
+
+    #[test]
+    fn auto_refresh_falls_back_to_default_ttl_when_missing() {
+        // A user that says "auto-refresh me" but forgets the TTL gets
+        // `DEFAULT_AUTO_REFRESH_INTERVAL` rather than a silent disable.
+        let inline = InlineData {
+            cache: Some(cache(None, Some(true))),
+            ..empty_inline()
+        };
+        let src = auto_refresh_from_inline("m".into(), &inline).expect("auto-refresh");
+        assert_eq!(src.ttl, DEFAULT_AUTO_REFRESH_INTERVAL);
+    }
+
+    #[test]
+    fn auto_refresh_falls_back_when_ttl_unparseable() {
+        // Same fallback for malformed TTL — the resolver will surface the
+        // parse error during fetch.
+        let inline = InlineData {
+            cache: Some(cache(Some("five seconds"), Some(true))),
+            ..empty_inline()
+        };
+        let src = auto_refresh_from_inline("m".into(), &inline).expect("auto-refresh");
+        assert_eq!(src.ttl, DEFAULT_AUTO_REFRESH_INTERVAL);
+    }
+
+    #[test]
+    fn shortest_interval_picks_smallest_positive_ttl() {
+        let sources = vec![
+            AutoRefreshSource {
+                name: "a".into(),
+                inline: empty_inline(),
+                ttl: Duration::from_secs(60),
+            },
+            AutoRefreshSource {
+                name: "b".into(),
+                inline: empty_inline(),
+                ttl: Duration::from_secs(15),
+            },
+            AutoRefreshSource {
+                name: "c".into(),
+                inline: empty_inline(),
+                ttl: Duration::from_secs(120),
+            },
+        ];
+        assert_eq!(shortest_interval(&sources), Some(Duration::from_secs(15)));
+    }
+
+    #[test]
+    fn shortest_interval_skips_zero_ttls() {
+        let sources = vec![
+            AutoRefreshSource {
+                name: "zero".into(),
+                inline: empty_inline(),
+                ttl: Duration::ZERO,
+            },
+            AutoRefreshSource {
+                name: "real".into(),
+                inline: empty_inline(),
+                ttl: Duration::from_secs(10),
+            },
+        ];
+        assert_eq!(shortest_interval(&sources), Some(Duration::from_secs(10)));
+    }
+
+    #[test]
+    fn shortest_interval_returns_none_when_all_zero_or_empty() {
+        assert_eq!(shortest_interval(&[]), None);
+        let sources = vec![AutoRefreshSource {
+            name: "z".into(),
+            inline: empty_inline(),
+            ttl: Duration::ZERO,
+        }];
+        assert_eq!(shortest_interval(&sources), None);
+    }
+
+    #[test]
+    fn collect_auto_refresh_sources_handles_named_map() {
+        let yaml = r#"
+type: chart
+version: 1
+data:
+  metric_a:
+    datasource: warehouse
+    query: SELECT 1
+    cache:
+      ttl: 30s
+      autoRefresh: true
+  metric_b:
+    datasource: warehouse
+    query: SELECT 2
+    cache:
+      ttl: 60s
+      autoRefresh: true
+  metric_c:
+    datasource: warehouse
+    query: SELECT 3
+transform:
+  sql: SELECT * FROM metric_a
+visualize:
+  type: bar
+  columns: a
+  rows: b
+"#;
+        let spec = first_chart_spec(yaml).expect("parse");
+        let sources = collect_auto_refresh_sources(&spec);
+        // metric_a + metric_b should be picked up; metric_c (no autoRefresh) skipped.
+        let names: Vec<String> = sources.iter().map(|s| s.name.clone()).collect();
+        assert!(names.contains(&"metric_a".to_string()));
+        assert!(names.contains(&"metric_b".to_string()));
+        assert!(!names.contains(&"metric_c".to_string()));
+        // Shortest TTL across the auto-refreshing entries.
+        assert_eq!(shortest_interval(&sources), Some(Duration::from_secs(30)));
+    }
+
+    #[test]
+    fn collect_auto_refresh_sources_handles_flat_inline() {
+        let yaml = r#"
+type: chart
+version: 1
+data:
+  datasource: warehouse
+  query: SELECT 1
+  cache:
+    ttl: 10s
+    autoRefresh: true
+visualize:
+  type: bar
+  columns: a
+  rows: b
+"#;
+        let spec = first_chart_spec(yaml).expect("parse");
+        let sources = collect_auto_refresh_sources(&spec);
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].name, "source");
+        assert_eq!(sources[0].ttl, Duration::from_secs(10));
+    }
+
+    #[test]
+    fn collect_auto_refresh_sources_skips_named_string_ref() {
+        let yaml = r#"
+type: chart
+version: 1
+data: registered_source
+visualize:
+  type: bar
+  columns: a
+  rows: b
+"#;
+        let spec = first_chart_spec(yaml).expect("parse");
+        assert!(collect_auto_refresh_sources(&spec).is_empty());
     }
 }

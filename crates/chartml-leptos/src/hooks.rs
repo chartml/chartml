@@ -1,8 +1,10 @@
-use std::sync::Arc;
 use chartml_core::ChartML;
 
+use crate::ChartMLRef;
+
 /// Create a bare ChartML instance with no renderers registered.
-/// Returns an Arc for sharing with components.
+/// Returns a `ChartMLRef` (`Arc<ChartML>` on native, `Rc<ChartML>` on WASM)
+/// for sharing with components.
 ///
 /// Users should register their own renderers after calling this,
 /// or use `use_chartml_configured` to set up in one step.
@@ -12,8 +14,8 @@ use chartml_core::ChartML;
 /// let chartml = use_chartml();
 /// view! { <ChartMLChart spec=yaml chartml=chartml /> }
 /// ```
-pub fn use_chartml() -> Arc<ChartML> {
-    Arc::new(ChartML::new())
+pub fn use_chartml() -> ChartMLRef {
+    ChartMLRef::new(ChartML::new())
 }
 
 /// Create a ChartML instance and configure it via the provided closure.
@@ -28,8 +30,8 @@ pub fn use_chartml() -> Arc<ChartML> {
 /// });
 /// view! { <ChartMLChart spec=yaml chartml=chartml /> }
 /// ```
-pub fn use_chartml_configured(configure: impl FnOnce(&mut ChartML)) -> Arc<ChartML> {
+pub fn use_chartml_configured(configure: impl FnOnce(&mut ChartML)) -> ChartMLRef {
     let mut chartml = ChartML::new();
     configure(&mut chartml);
-    Arc::new(chartml)
+    ChartMLRef::new(chartml)
 }
