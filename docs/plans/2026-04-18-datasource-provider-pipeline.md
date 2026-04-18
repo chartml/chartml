@@ -800,7 +800,7 @@ Built-in providers in `resolver/builtin.rs`:
 
 New `ChartML` methods:
 
-- `register_provider(kind: &str, provider: impl DataSourceProvider + 'static)` — dispatch key. Built-in `"inline"` + `"http"` + `"datasource"` slots pre-registered, but overridable.
+- `register_provider(kind: &str, provider: impl DataSourceProvider + 'static)` — dispatch key. Built-in `"inline"` + `"http"` slots pre-registered by default; `"datasource"` is a host-supplied convention slot (intentionally not pre-registered — host apps register their own implementation).
 - `set_cache(backend: impl CacheBackend + 'static)` — replaces `MemoryBackend` with the supplied one as tier 1. (Persistent/tier 2 added via `set_persistent_cache` in phase 3b.)
 - `with_cache(backend)` — builder variant.
 - `async fn shutdown(&self)` — iterates providers + cache backends, calls shutdown on each.

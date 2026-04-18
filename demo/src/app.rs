@@ -1,18 +1,18 @@
-use std::sync::Arc;
 use leptos::prelude::*;
+use send_wrapper::SendWrapper;
 use chartml_core::ChartML;
 use chartml_chart_cartesian::CartesianRenderer;
 use chartml_chart_pie::PieRenderer;
 use chartml_chart_scatter::ScatterRenderer;
 use chartml_chart_metric::MetricRenderer;
 use chartml_datafusion::DataFusionTransform;
-use chartml_leptos::ChartMLChart;
+use chartml_leptos::{ChartMLChart, ChartMLRef};
 
 use crate::editor::YamlEditor;
 use crate::gallery::{Gallery, DEFAULT_SPEC};
 use crate::examples::{ExamplesPage, register_page_sources};
 
-fn setup_chartml() -> Arc<ChartML> {
+fn setup_chartml() -> ChartMLRef {
     let mut c = ChartML::new();
     c.register_renderer("bar", CartesianRenderer::new());
     c.register_renderer("line", CartesianRenderer::new());
@@ -25,12 +25,18 @@ fn setup_chartml() -> Arc<ChartML> {
     c.register_transform(DataFusionTransform);
     // Register named sources from the examples page
     register_page_sources(&mut c);
-    Arc::new(c)
+    ChartMLRef::new(c)
 }
 
 #[component]
 pub fn App() -> impl IntoView {
-    let chartml = setup_chartml();
+    // `ChartMLRef` is `Rc<ChartML>` on WASM (where the chartml resolver is
+    // `?Send` because its inflight `Shared<LocalBoxFuture<...>>` map is
+    // single-threaded). Leptos's reactive function bound is `Send + 'static`,
+    // so we wrap the handle in `SendWrapper` before pushing it through the
+    // `view!` closure. wasm32-unknown-unknown is single-threaded, so the
+    // wrapper's "drop on the wrong thread = panic" rule cannot trigger.
+    let chartml = SendWrapper::new(setup_chartml());
     let (tab, set_tab) = signal("examples".to_string());
     let (spec, set_spec) = signal(DEFAULT_SPEC.to_string());
 
@@ -52,7 +58,7 @@ pub fn App() -> impl IntoView {
             </header>
 
             {move || {
-                let chartml = chartml.clone();
+                let chartml: ChartMLRef = (*chartml).clone();
                 if tab.get() == "examples" {
                     view! {
                         <ExamplesPage chartml=chartml />

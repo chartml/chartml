@@ -16,3 +16,9 @@ leptos = { version = "0.8", features = ["csr"] }
 console_error_panic_hook = "0.1"
 serde_yaml = "0.9"
 wasm-bindgen-futures = "0.4"
+# `ChartMLRef` is `Rc<ChartML>` on WASM (the resolver is inherently `?Send`
+# on single-threaded targets), so capturing it in a leptos reactive closure
+# requires SendWrapper to satisfy leptos's `Send` bound. Safe because
+# wasm32-unknown-unknown is single-threaded — the wrapper would panic if
+# touched off-thread, which cannot happen on this target.
+send_wrapper = "0.6"

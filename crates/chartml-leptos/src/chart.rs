@@ -5,11 +5,11 @@ use std::sync::Arc;
 
 use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
-use chartml_core::ChartML;
 use chartml_core::element::ElementData;
 use chartml_core::element::ChartElement;
 use chartml_core::params::ParamValues;
 use chartml_core::theme::Theme;
+use crate::ChartMLRef;
 use crate::element::render_element;
 use crate::tooltip::{provide_tooltip_context, DefaultTooltip};
 
@@ -127,7 +127,7 @@ pub fn ChartMLChart(
     #[prop(into)]
     spec: Signal<String>,
     /// Pre-configured ChartML instance
-    chartml: Arc<ChartML>,
+    chartml: ChartMLRef,
     /// Optional CSS class for the container
     #[prop(optional)]
     class: &'static str,

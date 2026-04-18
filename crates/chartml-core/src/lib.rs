@@ -14,6 +14,7 @@ pub mod params;
 pub mod theme;
 pub mod svg;
 pub mod pipeline;
+pub mod resolver;
 
 pub use error::ChartError;
 pub use spec::{parse, ChartMLSpec, Component};
@@ -22,8 +23,14 @@ pub use plugin::{ChartConfig, ChartRenderer, DataSource, TransformMiddleware, Da
 pub use registry::ChartMLRegistry;
 pub use theme::Theme;
 pub use pipeline::{FetchedChart, PreparedChart, FetchMetadata, PreparedMetadata, RenderOptions};
+pub use resolver::{
+    CacheBackend, CacheConfig, CacheError, CachedEntry, CancellationToken, DataSourceProvider,
+    FetchError, FetchRequest, FetchResult, HttpProvider, InlineProvider, MemoryBackend,
+    ResolveOutcome, Resolver, ResolverRef,
+};
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::SystemTime;
 use indexmap::IndexMap;
 use crate::data::{Row, DataTable};
@@ -35,7 +42,10 @@ use crate::spec::{ChartSpec, DataRef, InlineData};
 pub struct ChartML {
     registry: ChartMLRegistry,
     /// Named source data, registered via register_component() or
-    /// automatically collected from multi-document YAML specs.
+    /// automatically collected from multi-document YAML specs. Pre-registered
+    /// sources are the chartml 5.0 "fast path": `data: name` references and
+    /// `data: { name: ... }` map entries that match a registered name skip
+    /// the resolver entirely and use the registered table directly.
     sources: HashMap<String, DataTable>,
     /// Parameter default values, collected from type: params components.
     param_values: params::ParamValues,
@@ -45,17 +55,37 @@ pub struct ChartML {
     /// Theme colors for chart chrome (axes, grid, text).
     /// Defaults to light mode. Set via `set_theme()` to match your app's appearance.
     theme: theme::Theme,
+    /// Provider + cache + dedup orchestrator. Held behind `ResolverRef`
+    /// (`Arc` on native, `Rc` on WASM) so consumers can grab a handle for
+    /// the `invalidate*` API while ChartML keeps using it. Pre-registered
+    /// with built-in `inline` + `http` providers — the `datasource` slot is
+    /// intentionally empty so consumers must opt in.
+    resolver: resolver::ResolverRef,
+    /// Optional tenant / workspace namespace. When set, every `FetchRequest`
+    /// the resolver dispatches carries this string and the cache key includes
+    /// it — preventing cross-tenant cache collisions on shared deployments.
+    namespace: Option<String>,
 }
 
 impl ChartML {
-    /// Create a new empty ChartML instance.
+    /// Create a new empty ChartML instance with the built-in `inline` and
+    /// `http` providers pre-registered. The `datasource` provider slot is
+    /// intentionally empty — consumers using `data: { datasource: ... }`
+    /// shapes must register their own provider via `register_provider("datasource", ...)`.
     pub fn new() -> Self {
+        let resolver = resolver::ResolverRef::new(resolver::Resolver::new());
+        // Pre-register the two built-in providers. Consumers can override
+        // either by re-registering under the same kind key.
+        resolver.register_provider("inline", Arc::new(resolver::InlineProvider::new()));
+        resolver.register_provider("http", Arc::new(resolver::HttpProvider::new()));
         Self {
             registry: ChartMLRegistry::new(),
             sources: HashMap::new(),
             param_values: params::ParamValues::new(),
             default_palette: None,
             theme: theme::Theme::default(),
+            resolver,
+            namespace: None,
         }
     }
 
@@ -150,6 +180,72 @@ impl ChartML {
     /// Register a named source directly from a DataTable.
     pub fn register_source(&mut self, name: &str, data: DataTable) {
         self.sources.insert(name.to_string(), data);
+    }
+
+    // --- Provider / cache / namespace wiring (chartml 5.0 phase 3) ---
+
+    /// Register a `DataSourceProvider` under a dispatch key.
+    ///
+    /// Built-in kinds:
+    /// - `"inline"` — handles `data: { rows: [...] }`. Pre-registered;
+    ///   overridable.
+    /// - `"http"` — handles `data: { url: "..." }`. Pre-registered;
+    ///   overridable.
+    /// - `"datasource"` — handles `data: { datasource: "slug", query: "..." }`.
+    ///   NOT pre-registered. Consumers whose YAML uses the `datasource:`
+    ///   shape MUST register their own provider under this key (or under an
+    ///   explicit `provider: "..."` slug the spec also names).
+    ///
+    /// Re-registration replaces the provider for that kind; no merging.
+    pub fn register_provider(
+        &mut self,
+        kind: &str,
+        provider: impl resolver::DataSourceProvider + 'static,
+    ) {
+        self.resolver.register_provider(kind, Arc::new(provider));
+    }
+
+    /// Replace the tier-1 cache backend (default: `MemoryBackend`). The new
+    /// backend starts empty — entries in the old backend are not migrated.
+    /// Safe to call after `resolver()` handles have been handed out — the
+    /// swap is atomic on the shared resolver.
+    pub fn set_cache(&mut self, backend: impl resolver::CacheBackend + 'static) {
+        self.resolver.set_primary_cache(Arc::new(backend));
+    }
+
+    /// Builder-style variant of `set_cache`. Takes `self` by value so it can
+    /// chain off `ChartML::new()` in a single expression.
+    pub fn with_cache(mut self, backend: impl resolver::CacheBackend + 'static) -> Self {
+        self.set_cache(backend);
+        self
+    }
+
+    /// Set the tenant / workspace namespace threaded into every resolver
+    /// cache key. Multi-tenant deployments MUST set this so two tenants
+    /// sharing a slug name cannot collide in the cache.
+    pub fn set_namespace(&mut self, slug: impl Into<String>) {
+        self.namespace = Some(slug.into());
+    }
+
+    /// Builder-style variant of `set_namespace`.
+    pub fn with_namespace(mut self, slug: impl Into<String>) -> Self {
+        self.set_namespace(slug);
+        self
+    }
+
+    /// Get a clone of the `ResolverRef` handle (`Arc<Resolver>` on native,
+    /// `Rc<Resolver>` on WASM) so callers can drive the bulk `invalidate*`
+    /// API (or inspect registered provider kinds).
+    pub fn resolver(&self) -> resolver::ResolverRef {
+        self.resolver.clone()
+    }
+
+    /// Await graceful shutdown on every registered provider AND cache
+    /// backend. Called at SSR request end, browser tab close, or explicit
+    /// host-app lifecycle boundaries. Safe to call multiple times — every
+    /// provider's default `shutdown` is a no-op.
+    pub async fn shutdown(&self) {
+        self.resolver.shutdown().await;
     }
 
     // --- Rendering ---
@@ -638,27 +734,163 @@ impl ChartML {
     /// and produce a `FetchedChart` whose `sources` map contains every
     /// named source the chart needs.
     ///
-    /// Phase 2 reads sources from pre-registered `self.sources` only —
-    /// inline `rows:` are materialized at parse time, named refs are looked
-    /// up in the persistent registry, and named maps materialize each entry.
-    /// Phase 3 will replace the body with a provider/resolver dispatch
-    /// while keeping this exact public signature.
+    /// Phase 3 dispatch order, per source:
+    /// 1. `DataRef::Named(n)` → look up in pre-registered `self.sources`.
+    ///    No provider call (this is the chartml-5 fast path: callers that
+    ///    already own the data and registered it via `register_source` skip
+    ///    the resolver entirely).
+    /// 2. `DataRef::NamedMap` entry whose key matches a pre-registered
+    ///    source → use the registered table. Resolver bypassed for that
+    ///    entry. Other entries route through the resolver in parallel via
+    ///    `try_join_all`.
+    /// 3. `DataRef::Inline(flat)` without transform → single resolver call,
+    ///    wrapped in a 1-entry map keyed `"source"`.
+    /// 4. `DataRef::Inline(flat)` with transform → normalized to
+    ///    `NamedMap { "source": flat }` first, then taken through the
+    ///    NamedMap path so transforms see a uniform `IndexMap` shape.
+    ///
+    /// `FetchMetadata.cache_hits` / `cache_misses` / `per_source` are
+    /// populated from each resolver call's `ResolveOutcome`.
     pub async fn fetch(
         &self,
         yaml: &str,
         opts: &RenderOptions,
     ) -> Result<FetchedChart, ChartError> {
-        // Param resolution + chart extraction is shared between fetch and the
-        // legacy async path; no I/O happens here in phase 2.
-        let (chart_spec, sources) =
+        let (chart_spec, mut sources) =
             self.parse_and_collect_sources(yaml, opts.params_ref())?;
-        let chart_sources = self.resolve_chart_data(&chart_spec, &sources)?;
+
+        // Apply the unnamed-with-transform normalization: any flat `data:`
+        // shape with a `transform:` block is rewritten internally to a
+        // 1-entry `NamedMap { "source": flat }` so the downstream code path
+        // is uniform. Don't mutate `chart_spec` — local rewrite only.
+        let normalized_data = normalize_data_ref(&chart_spec.data, chart_spec.transform.is_some());
+
+        let mut cache_hits: Vec<String> = Vec::new();
+        let mut cache_misses: Vec<String> = Vec::new();
+        let mut per_source: HashMap<String, HashMap<String, serde_json::Value>> = HashMap::new();
+
+        let chart_sources: IndexMap<String, DataTable> = match &normalized_data {
+            DataRef::Named(name) => {
+                // Phase 1/2 fast path: pre-registered source REQUIRED. The
+                // `Named` shape is the "user named this source AND
+                // pre-registered the data" idiom; no provider call.
+                let table = sources.remove(name).ok_or_else(|| {
+                    ChartError::DataError(format!("Named data source '{name}' not found"))
+                })?;
+                let mut map = IndexMap::new();
+                map.insert(name.clone(), table);
+                map
+            }
+            DataRef::Inline(inline) => {
+                // Single inline source, no transform. Route through the
+                // resolver (which dispatches to InlineProvider / HttpProvider
+                // / the registered `datasource` provider as appropriate).
+                let request = self.build_fetch_request(None, inline)?;
+                let key = resolver::Resolver::key_for(inline, self.namespace.as_deref());
+                let outcome = self
+                    .resolver
+                    .fetch(key, request)
+                    .await
+                    .map_err(|e| context_fetch_error(e, "source"))?;
+                classify_outcome("source", &outcome, &mut cache_hits, &mut cache_misses);
+                if !outcome.result.metadata.is_empty() {
+                    per_source.insert("source".to_string(), outcome.result.metadata);
+                }
+                let mut map = IndexMap::new();
+                map.insert("source".to_string(), outcome.result.data);
+                map
+            }
+            DataRef::NamedMap(map) => {
+                // Per-entry routing: pre-registered names skip the resolver;
+                // everything else fans out through `try_join_all`. Pre-pass
+                // separates the two so the parallel batch only contains
+                // resolver-bound entries.
+                let mut prefetched: IndexMap<String, DataTable> = IndexMap::new();
+                let mut to_dispatch: Vec<(String, InlineData)> = Vec::new();
+                for (name, inline) in map {
+                    if let Some(table) = sources.remove(name) {
+                        // Pre-registered fast path — no provider call.
+                        prefetched.insert(name.clone(), table);
+                    } else {
+                        to_dispatch.push((name.clone(), inline.clone()));
+                    }
+                }
+
+                let resolver = self.resolver.clone();
+                let namespace = self.namespace.clone();
+                let dispatch_futures = to_dispatch.into_iter().map(|(name, inline)| {
+                    let resolver = resolver.clone();
+                    let namespace = namespace.clone();
+                    async move {
+                        let request = build_fetch_request_static(
+                            Some(name.clone()),
+                            &inline,
+                            namespace.as_deref(),
+                        )?;
+                        let key = resolver::Resolver::key_for(&inline, namespace.as_deref());
+                        let outcome = resolver
+                            .fetch(key, request)
+                            .await
+                            .map_err(|e| context_fetch_error(e, &name))?;
+                        Ok::<(String, resolver::ResolveOutcome), ChartError>((name, outcome))
+                    }
+                });
+
+                let dispatched: Vec<(String, resolver::ResolveOutcome)> =
+                    futures::future::try_join_all(dispatch_futures).await?;
+
+                // Re-assemble the map preserving the YAML's declared order.
+                // We iterate the original map keys — pre-registered entries
+                // come from `prefetched`, others from `dispatched`.
+                let mut dispatched_by_name: HashMap<String, resolver::ResolveOutcome> =
+                    dispatched.into_iter().collect();
+                let mut out: IndexMap<String, DataTable> = IndexMap::new();
+                for name in map.keys() {
+                    if let Some(table) = prefetched.shift_remove(name) {
+                        out.insert(name.clone(), table);
+                    } else if let Some(outcome) = dispatched_by_name.remove(name) {
+                        classify_outcome(name, &outcome, &mut cache_hits, &mut cache_misses);
+                        if !outcome.result.metadata.is_empty() {
+                            per_source.insert(name.clone(), outcome.result.metadata);
+                        }
+                        out.insert(name.clone(), outcome.result.data);
+                    } else {
+                        // Unreachable: every key was placed into one or the other.
+                        return Err(ChartError::DataError(format!(
+                            "Internal invariant violation: source '{name}' was neither pre-registered nor dispatched"
+                        )));
+                    }
+                }
+                out
+            }
+        };
 
         Ok(FetchedChart {
             spec: chart_spec,
             sources: chart_sources,
-            metadata: FetchMetadata::empty_now(),
+            metadata: FetchMetadata {
+                refreshed_at: SystemTime::now(),
+                cache_hits,
+                cache_misses,
+                per_source,
+            },
         })
+    }
+
+    /// Build a `FetchRequest` capturing the resolved spec, parsed cache
+    /// config, and current namespace. Headers default to empty — host apps
+    /// that need request-level headers thread them through their custom
+    /// provider implementation rather than `ChartML` itself (chartml-core
+    /// has no notion of "current request" outside the resolver).
+    ///
+    /// Returns `Err` when `spec.cache.ttl` is malformed; callers propagate
+    /// the error rather than silently fall back to `DEFAULT_TTL`.
+    fn build_fetch_request(
+        &self,
+        source_name: Option<String>,
+        spec: &InlineData,
+    ) -> Result<resolver::FetchRequest, ChartError> {
+        build_fetch_request_static(source_name, spec, self.namespace.as_deref())
     }
 
     /// Stage 2: collapse the fetched sources into a single `DataTable` ready
@@ -1055,6 +1287,64 @@ impl Default for ChartML {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Apply the design-doc's "normalize unnamed+transform → `{source: <original>}`"
+/// rewrite at the gate. Only the `Inline + has_transform` case rewrites; every
+/// other shape is passed through unchanged. Returns a borrowed-or-owned ref
+/// without `Cow` because the rewrite path needs to construct a new
+/// `IndexMap` anyway, so a clone is appropriate.
+fn normalize_data_ref(data: &DataRef, has_transform: bool) -> DataRef {
+    match (data, has_transform) {
+        (DataRef::Inline(inline), true) => {
+            let mut map = IndexMap::new();
+            map.insert("source".to_string(), inline.clone());
+            DataRef::NamedMap(map)
+        }
+        _ => data.clone(),
+    }
+}
+
+/// Free-function variant of `ChartML::build_fetch_request` so async closures
+/// can construct requests without borrowing `&self` across `.await` points.
+fn build_fetch_request_static(
+    source_name: Option<String>,
+    spec: &InlineData,
+    namespace: Option<&str>,
+) -> Result<resolver::FetchRequest, ChartError> {
+    Ok(resolver::FetchRequest {
+        source_name,
+        spec: spec.clone(),
+        cache: resolver::CacheConfig::from_spec(spec.cache.as_ref())?,
+        headers: HashMap::new(),
+        namespace: namespace.map(String::from),
+        cancel_token: None,
+    })
+}
+
+/// Bucket a `ResolveOutcome` into the appropriate `cache_hits` / `cache_misses`
+/// list. Source name is the user-chosen key (or `"source"` for unnamed).
+fn classify_outcome(
+    name: &str,
+    outcome: &resolver::ResolveOutcome,
+    cache_hits: &mut Vec<String>,
+    cache_misses: &mut Vec<String>,
+) {
+    if outcome.cache_hit {
+        cache_hits.push(name.to_string());
+    } else {
+        cache_misses.push(name.to_string());
+    }
+}
+
+/// Wrap a `FetchError` with the failing source name so the user-facing
+/// `ChartError` identifies which source (out of N in a map) actually failed.
+/// `try_join_all` only surfaces the FIRST error, so the per-source name in
+/// the message is the only thing that distinguishes "visitors failed" from
+/// "sessions failed" without hooks (phase 3c lands per-source ErrorEvents).
+fn context_fetch_error(err: resolver::FetchError, source_name: &str) -> ChartError {
+    let base: ChartError = err.into();
+    ChartError::DataError(format!("source '{source_name}' fetch failed: {base}"))
 }
 
 /// Helper: when no `TransformMiddleware` is registered, the sync fallback can

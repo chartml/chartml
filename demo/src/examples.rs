@@ -1,9 +1,8 @@
-use std::sync::Arc;
 use leptos::prelude::*;
 use chartml_core::ChartML;
 use chartml_core::params::ParamValues;
 use chartml_core::spec::ParamsSpec;
-use chartml_leptos::{ChartMLChart, ParamsControls};
+use chartml_leptos::{ChartMLChart, ChartMLRef, ParamsControls};
 
 /// The raw examples.md from the JS chartml docs — included at compile time.
 const EXAMPLES_MD: &str = include_str!("../examples_source.md");
@@ -156,7 +155,7 @@ fn parse_params_spec(yaml: &str) -> Option<ParamsSpec> {
 /// Params blocks render as interactive controls that write to a shared signal.
 /// Chart blocks read from the same signal so they re-render when params change.
 #[component]
-pub fn ExamplesPage(chartml: Arc<ChartML>) -> impl IntoView {
+pub fn ExamplesPage(chartml: ChartMLRef) -> impl IntoView {
     let blocks = parse_examples(EXAMPLES_MD);
     let mut chart_number = 0_usize;
 

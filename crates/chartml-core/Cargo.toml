@@ -19,17 +19,28 @@ chrono = { version = "0.4", default-features = false, features = ["std"] }
 async-trait = "0.1"
 arrow = { version = "57", default-features = false, features = ["ipc"] }
 indexmap = { version = "2", features = ["serde"] }
+futures = "0.3"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+humantime = "2"
 
 # Native-only: lets the sync `render_to_svg` / `render_from_yaml*` path
 # dispatch through a registered async `TransformMiddleware` (e.g. DataFusion)
 # so multi-source NamedMap + SQL joins work end-to-end on native targets.
 # WASM keeps the sync limitation: callers must use the async API there.
+# Native HTTP provider — uses rustls so we don't drag in openssl.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+# WASM HTTP provider — reqwest auto-uses fetch() on wasm32; no TLS feature needed
+# since the browser handles TLS termination.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
 
 [dev-dependencies]
 chartml-datafusion = { path = "../chartml-datafusion" }
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { version = "1", features = ["rt", "macros", "time", "sync"] }
+wiremock = "0.6"
 
 [lints]
 workspace = true
