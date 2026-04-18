@@ -209,27 +209,14 @@ pub fn ProviderExamplesPage() -> impl IntoView {
     let multi_spec = RwSignal::new(NAMED_MULTI_SPEC.to_string());
     let auto_spec = RwSignal::new(AUTO_REFRESH_SPEC.to_string());
 
-    // Manual refresh wiring (DEMO-ONLY workaround).
-    //
-    // Mutating the spec is the cheapest way to force a re-fetch from
-    // outside the component: we append a trailing YAML comment whose text
-    // changes each click — the spec stays semantically identical but the
-    // spec signal updates, which is what the chart's main effect
-    // subscribes to.
-    //
-    // This is intentionally NOT how production callers should trigger an
-    // imperative refresh. `ChartMLChart` does not yet expose a public
-    // refresh handle (e.g. an imperative `ChartMLChart::refresh()` method
-    // or a context-provided trigger signal). Phase 6 (Kyomi integration)
-    // should drive that API extension based on real consumer needs rather
-    // than introducing a half-baked surface here just to clean up the
-    // demo. Until then, this YAML-mutation trick is fine for the demo
-    // page because the chart re-parses cheaply and the auto-refresh
-    // effect (after the MAJOR fix) no longer tears its interval down on
-    // unrelated signal bumps.
+    // Manual refresh wiring. The parent owns a `RwSignal<u32>` that the
+    // "Refresh now" button increments; the chart subscribes via its
+    // `refresh_trigger` prop, invalidates every spec source's resolver
+    // key, and re-runs the fetch + transform + render pipeline. No YAML
+    // mutation, no double-parse — just one signal hop.
+    let manual_refresh_signal = RwSignal::new(0_u32);
     let manual_refresh = move || {
-        let now = js_sys::Date::now() as u64;
-        auto_spec.set(format!("{}# manual refresh: {}\n", AUTO_REFRESH_SPEC, now));
+        manual_refresh_signal.update(|c| *c = c.wrapping_add(1));
     };
 
     let provider_for_flat = provider.clone();
@@ -298,6 +285,7 @@ pub fn ProviderExamplesPage() -> impl IntoView {
                                 spec=Signal::derive(move || auto_spec.get())
                                 chartml=chartml
                                 provider=provider
+                                refresh_trigger=Signal::derive(move || manual_refresh_signal.get())
                             />
                         }
                     }

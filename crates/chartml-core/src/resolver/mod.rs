@@ -3,7 +3,7 @@
 //!
 //! The resolver owns:
 //! - **Tier-1 cache** — a `MemoryBackend` always present.
-//! - **Tier-2 cache** — optional `Arc<dyn CacheBackend>` (populated in
+//! - **Tier-2 cache** — optional [`CacheBackendRef`] (populated in
 //!   phase 3b by `IndexedDbBackend`; phase 3 leaves it `None`).
 //! - **In-flight tracker** — a `HashMap<u64, Shared<BoxFuture<...>>>` so two
 //!   concurrent fetches for the same key share one provider invocation.
@@ -13,7 +13,7 @@
 //! Phase 3 leaves `ResolverHooks` integration as a no-op stub; phase 3c will
 //! add hook dispatch without further changes to this file's structure.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 // `web_time::SystemTime` works on `wasm32-unknown-unknown` (where the std
 // version panics). On native it's a transparent alias for `std::time`.
@@ -40,10 +40,20 @@ type ResolverFuture<T> = futures::future::LocalBoxFuture<'static, T>;
 // inherently `?Send`, so wrapping it in `Arc<Mutex<...>>` would trip
 // `clippy::arc_with_non_send_sync`. Single-threaded `Rc<RefCell<...>>` is
 // the correct primitive for the wasm32-unknown-unknown target.
+/// Cfg-gated shared-ownership pointer. `Arc<T>` on native (so handles can
+/// move across `tokio::spawn` task boundaries), `Rc<T>` on WASM (where
+/// `wasm32-unknown-unknown` is single-threaded and the resolver's
+/// internals are `?Send`, so an `Arc` would be both incorrect and
+/// rejected by `clippy::arc_with_non_send_sync`).
+///
+/// Public so consumers wiring [`CacheBackend`] / [`DataSourceProvider`]
+/// trait objects through the resolver can use the same alias as the
+/// resolver's internal storage — their wasm32-unknown-unknown builds get
+/// the right primitive without a manual `cfg_attr` dance at every site.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) type SharedRef<T> = Arc<T>;
+pub type SharedRef<T> = Arc<T>;
 #[cfg(target_arch = "wasm32")]
-pub(crate) type SharedRef<T> = std::rc::Rc<T>;
+pub type SharedRef<T> = std::rc::Rc<T>;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) type Lock<T> = std::sync::Mutex<T>;
@@ -317,10 +327,14 @@ pub const TAG_NAMESPACE_PREFIX: &str = "namespace:";
 /// `clippy::arc_with_non_send_sync`). Returned by `ChartML::resolver()` and
 /// accepted by every host that wants a long-lived handle for the bulk
 /// `invalidate*` API.
-#[cfg(not(target_arch = "wasm32"))]
-pub type ResolverRef = std::sync::Arc<Resolver>;
-#[cfg(target_arch = "wasm32")]
-pub type ResolverRef = std::rc::Rc<Resolver>;
+pub type ResolverRef = SharedRef<Resolver>;
+
+/// Public alias for the shared-ownership wrapper around a [`CacheBackend`]
+/// trait object. `Arc<dyn CacheBackend>` on native, `Rc<dyn CacheBackend>`
+/// on WASM — mirrors the [`SharedRef`] story so wasm32 consumers can hand
+/// off `!Send` backends (e.g. [`backends::indexeddb::IndexedDbBackend`])
+/// without tripping `clippy::arc_with_non_send_sync`.
+pub type CacheBackendRef = SharedRef<dyn CacheBackend>;
 
 /// Provider dispatch + cache + dedup orchestration.
 ///
@@ -331,17 +345,24 @@ pub type ResolverRef = std::rc::Rc<Resolver>;
 pub struct Resolver {
     /// Default in-process cache (always present, never replaced — kept for
     /// the rare case a consumer wants to introspect the in-memory tier
-    /// directly even after swapping `primary`).
-    memory: Arc<MemoryBackend>,
+    /// directly even after swapping `primary`). Held as `SharedRef` so the
+    /// `MemoryBackend` clone the resolver hands itself the very first time
+    /// is the same single-threaded type the wasm32 backends need (clippy
+    /// rejects `Arc<MemoryBackend>` when other tier swaps land on
+    /// non-`Send` types in the same `Lock`).
+    memory: SharedRef<MemoryBackend>,
     /// Tier-1 cache. Defaults to the always-present in-memory backend; can
     /// be replaced via `ChartML::set_cache(...)` (e.g., a host's custom
-    /// process-wide LRU). Behind a `Lock<Arc<...>>` so swaps are atomic
-    /// and don't require `&mut self` (the resolver is held inside a
-    /// `SharedRef`).
-    primary: Lock<Arc<dyn CacheBackend>>,
+    /// process-wide LRU). Behind a `Lock<CacheBackendRef>` so swaps are
+    /// atomic and don't require `&mut self` (the resolver is held inside a
+    /// `SharedRef`). The `CacheBackendRef` alias is `Arc` on native and
+    /// `Rc` on WASM — wasm32 backends like `IndexedDbBackend` are `!Send`
+    /// and would trip `clippy::arc_with_non_send_sync` if forced into
+    /// `std::sync::Arc`.
+    primary: Lock<CacheBackendRef>,
     /// Tier-2 (persistent) cache. `None` in phase 3 — phase 3b populates it
     /// with `IndexedDbBackend` for browser consumers.
-    persistent: Lock<Option<Arc<dyn CacheBackend>>>,
+    persistent: Lock<Option<CacheBackendRef>>,
     inflight: SharedRef<Lock<HashMap<u64, SharedFetch>>>,
     providers: Lock<HashMap<String, Arc<dyn DataSourceProvider>>>,
     /// Optional hook impl. Wrapped in `Lock<Option<...>>` so `set_hooks`
@@ -349,6 +370,44 @@ pub struct Resolver {
     /// Snapshotted into a local clone before each instrumentation site so
     /// the hook lock is never held across an `await`.
     hooks: Lock<Option<HooksRef>>,
+    /// Tracker for which keys have been explicitly invalidated since their
+    /// last fetch, so the next cache-miss for that key can be reported as
+    /// [`hooks::MissReason::Invalidated`] instead of `NotFound`.
+    ///
+    /// **Per-key invalidation** (`invalidate(key)`) inserts into
+    /// [`InvalidationTracker::keys`] — the next miss for that exact key
+    /// reports `Invalidated` and removes the entry (so subsequent misses on
+    /// the same key without re-invalidating fall back to the regular
+    /// `NotFound` / `Expired` reasoning).
+    ///
+    /// **Bulk invalidation** (`invalidate_all` / `invalidate_by_slug` /
+    /// `invalidate_by_namespace`) sets [`InvalidationTracker::bulk_pending`]
+    /// to `true`. Enumerating every just-evicted key is impractical — the
+    /// `CacheBackend` trait doesn't expose iteration (and adding it would
+    /// be expensive on `IndexedDbBackend`, which would need a cursor sweep
+    /// per call) — so the resolver instead reports the *first* post-bulk
+    /// miss as `Invalidated` and clears the flag. Subsequent misses fall
+    /// back to `NotFound` / `Expired` until another invalidation happens.
+    /// This is a deliberate trade-off: documented below, mirrored in the
+    /// integration test `test_invalidate_emits_invalidated_miss_reason`.
+    recently_invalidated: SharedRef<Lock<InvalidationTracker>>,
+}
+
+/// Per-resolver tracker for invalidation events. Held inside a
+/// `Lock<...>` on the resolver so it survives across `&self` borrows
+/// (the resolver lives behind a `SharedRef` and uses interior mutability
+/// for every other piece of state too).
+#[derive(Debug, Default)]
+struct InvalidationTracker {
+    /// Specific keys invalidated via `Resolver::invalidate(key)`. Drained
+    /// on first observation by `consume_invalidation_reason`.
+    keys: HashSet<u64>,
+    /// Whether ANY bulk invalidate (`invalidate_all` /
+    /// `invalidate_by_slug` / `invalidate_by_namespace`) has fired since
+    /// the last bulk-pending consumption. Cleared the first time a miss
+    /// observes it — at most one post-bulk miss is reported as
+    /// `Invalidated`.
+    bulk_pending: bool,
 }
 
 /// Shared in-flight future type. Boxed for dyn-trait erasure; `Shared` lets
@@ -386,8 +445,8 @@ impl Resolver {
     /// and no providers registered. `ChartML::new()` registers the built-in
     /// `inline` + `http` providers immediately after construction.
     pub fn new() -> Self {
-        let memory = Arc::new(MemoryBackend::new());
-        let primary: Arc<dyn CacheBackend> = memory.clone();
+        let memory = SharedRef::new(MemoryBackend::new());
+        let primary: CacheBackendRef = memory.clone();
         Self {
             memory,
             primary: Lock::new(primary),
@@ -395,13 +454,14 @@ impl Resolver {
             inflight: SharedRef::new(Lock::new(HashMap::new())),
             providers: Lock::new(HashMap::new()),
             hooks: Lock::new(None),
+            recently_invalidated: SharedRef::new(Lock::new(InvalidationTracker::default())),
         }
     }
 
     /// Replace the tier-1 cache backend. Used by `ChartML::set_cache`.
     /// The fresh backend starts empty — entries in the old backend are not
     /// migrated (caller's responsibility if they want to).
-    pub fn set_primary_cache(&self, backend: Arc<dyn CacheBackend>) {
+    pub fn set_primary_cache(&self, backend: CacheBackendRef) {
         let mut guard = self.primary.write_lock("primary cache");
         *guard = backend;
     }
@@ -409,7 +469,7 @@ impl Resolver {
     /// Set the optional tier-2 (persistent) cache. Phase 3 leaves this
     /// public so phase 3b's `IndexedDbBackend` can wire in without further
     /// surface changes.
-    pub fn set_persistent_cache(&self, backend: Arc<dyn CacheBackend>) {
+    pub fn set_persistent_cache(&self, backend: CacheBackendRef) {
         let mut guard = self.persistent.write_lock("persistent cache");
         *guard = Some(backend);
     }
@@ -440,17 +500,17 @@ impl Resolver {
         self.hooks.read_lock("hooks").clone()
     }
 
-    /// Snapshot the tier-1 cache `Arc` so we can drop the lock before the
+    /// Snapshot the tier-1 cache handle so we can drop the lock before the
     /// async cache call. Always returns a backend (the field starts as
     /// `MemoryBackend` and `set_primary_cache` only replaces, never clears).
-    fn primary_snapshot(&self) -> Arc<dyn CacheBackend> {
+    fn primary_snapshot(&self) -> CacheBackendRef {
         self.primary.read_lock("primary cache").clone()
     }
 
-    /// Snapshot the optional tier-2 cache `Arc` (or `None`) for the same
+    /// Snapshot the optional tier-2 cache handle (or `None`) for the same
     /// reason `primary_snapshot` exists — release the sync lock before
     /// the async cache call.
-    fn persistent_snapshot(&self) -> Option<Arc<dyn CacheBackend>> {
+    fn persistent_snapshot(&self) -> Option<CacheBackendRef> {
         self.persistent.read_lock("persistent cache").clone()
     }
 
@@ -585,10 +645,14 @@ impl Resolver {
         }
 
         // Both tiers missed — emit one cache-miss with the most specific
-        // reason we can prove. `Expired` if either tier had an entry that
-        // had aged out; `NotFound` otherwise. (`Invalidated` is reserved
-        // for explicit invalidation flows wired later.)
-        let miss_reason = if tier1_expired || tier2_expired {
+        // reason we can prove. Precedence: `Invalidated` (most specific —
+        // an operator explicitly cleared this key or fired a bulk
+        // invalidate) wins over `Expired` (TTL elapsed naturally), which
+        // wins over `NotFound` (key was never cached or was evicted by
+        // some path the resolver doesn't track).
+        let miss_reason = if self.consume_invalidation_reason(key) {
+            hooks::MissReason::Invalidated
+        } else if tier1_expired || tier2_expired {
             hooks::MissReason::Expired
         } else {
             hooks::MissReason::NotFound
@@ -656,8 +720,8 @@ impl Resolver {
         &self,
         key: u64,
         request: FetchRequest,
-        primary: Arc<dyn CacheBackend>,
-        persistent: Option<Arc<dyn CacheBackend>>,
+        primary: CacheBackendRef,
+        persistent: Option<CacheBackendRef>,
     ) -> SharedFetch {
         let mut inflight = self.inflight.write_lock("inflight");
         if let Some(existing) = inflight.get(&key) {
@@ -717,7 +781,9 @@ impl Resolver {
 
     // ── Bulk invalidation API ──
 
-    /// Drop a single entry from every cache tier.
+    /// Drop a single entry from every cache tier. The next miss on `key`
+    /// will be reported via [`hooks::ResolverHooks::on_cache_miss`] with
+    /// [`hooks::MissReason::Invalidated`] rather than `NotFound`.
     pub async fn invalidate(&self, key: u64) {
         let primary = self.primary_snapshot();
         let persistent = self.persistent_snapshot();
@@ -725,9 +791,17 @@ impl Resolver {
         if let Some(p) = &persistent {
             let _ = p.invalidate(key).await;
         }
+        self.recently_invalidated
+            .write_lock("recently_invalidated")
+            .keys
+            .insert(key);
     }
 
-    /// Drop every cached entry across all tiers.
+    /// Drop every cached entry across all tiers. The very next miss on any
+    /// key will be reported as `Invalidated`; subsequent misses fall back
+    /// to the regular `NotFound` / `Expired` reasoning. See the field-level
+    /// docs on [`Resolver::recently_invalidated`] for why per-key tracking
+    /// isn't done here (would require a `keys()` method on every backend).
     pub async fn invalidate_all(&self) {
         let primary = self.primary_snapshot();
         let persistent = self.persistent_snapshot();
@@ -735,11 +809,13 @@ impl Resolver {
         if let Some(p) = &persistent {
             let _ = p.clear().await;
         }
+        self.mark_bulk_invalidated();
     }
 
     /// Drop every entry whose source spec carried the given `datasource`
     /// slug. Useful for "datasource X was edited; invalidate all queries
-    /// against it" workflows.
+    /// against it" workflows. Subject to the same single-shot
+    /// `Invalidated` reporting as [`Resolver::invalidate_all`].
     pub async fn invalidate_by_slug(&self, slug: &str) {
         let tag = format!("{TAG_SLUG_PREFIX}{slug}");
         let primary = self.primary_snapshot();
@@ -748,10 +824,13 @@ impl Resolver {
         if let Some(p) = &persistent {
             let _ = p.invalidate_by_tag(&tag).await;
         }
+        self.mark_bulk_invalidated();
     }
 
     /// Drop every entry tagged with the given namespace. Used for tenant
     /// isolation flows ("user logged out; clear their cached data").
+    /// Subject to the same single-shot `Invalidated` reporting as
+    /// [`Resolver::invalidate_all`].
     pub async fn invalidate_by_namespace(&self, namespace: &str) {
         let tag = format!("{TAG_NAMESPACE_PREFIX}{namespace}");
         let primary = self.primary_snapshot();
@@ -760,6 +839,36 @@ impl Resolver {
         if let Some(p) = &persistent {
             let _ = p.invalidate_by_tag(&tag).await;
         }
+        self.mark_bulk_invalidated();
+    }
+
+    /// Set the bulk-pending flag so the next post-bulk miss surfaces as
+    /// [`hooks::MissReason::Invalidated`]. Synchronous; the lock is never
+    /// held across an `.await`.
+    fn mark_bulk_invalidated(&self) {
+        self.recently_invalidated
+            .write_lock("recently_invalidated")
+            .bulk_pending = true;
+    }
+
+    /// Check whether a miss for `key` should be reported as
+    /// [`hooks::MissReason::Invalidated`]. Drains the per-key entry on
+    /// first observation and consumes the bulk-pending flag at most once
+    /// per bulk invalidation, so this returns `true` for at most one miss
+    /// per `invalidate*` call. Called from the hot fetch path so the lock
+    /// is taken briefly and never held across an `.await`.
+    fn consume_invalidation_reason(&self, key: u64) -> bool {
+        let mut tracker = self
+            .recently_invalidated
+            .write_lock("recently_invalidated");
+        if tracker.keys.remove(&key) {
+            return true;
+        }
+        if tracker.bulk_pending {
+            tracker.bulk_pending = false;
+            return true;
+        }
+        false
     }
 
     /// Iterate every registered provider AND cache backend, awaiting their

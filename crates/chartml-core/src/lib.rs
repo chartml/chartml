@@ -24,10 +24,11 @@ pub use registry::ChartMLRegistry;
 pub use theme::Theme;
 pub use pipeline::{FetchedChart, PreparedChart, FetchMetadata, PreparedMetadata, RenderOptions};
 pub use resolver::{
-    CacheBackend, CacheConfig, CacheError, CachedEntry, CacheHitEvent, CacheMissEvent, CacheTier,
-    CancellationToken, DataSourceProvider, ErrorEvent, FetchError, FetchRequest, FetchResult,
-    HooksRef, HttpProvider, InlineProvider, MemoryBackend, MissReason, NullHooks, Phase,
-    ProgressEvent, ResolveOutcome, Resolver, ResolverHooks, ResolverRef,
+    CacheBackend, CacheBackendRef, CacheConfig, CacheError, CachedEntry, CacheHitEvent,
+    CacheMissEvent, CacheTier, CancellationToken, DataSourceProvider, ErrorEvent, FetchError,
+    FetchRequest, FetchResult, HooksRef, HttpProvider, InlineProvider, MemoryBackend, MissReason,
+    NullHooks, Phase, ProgressEvent, ResolveOutcome, Resolver, ResolverHooks, ResolverRef,
+    SharedRef,
 };
 
 use std::collections::HashMap;
@@ -212,7 +213,8 @@ impl ChartML {
     /// Safe to call after `resolver()` handles have been handed out — the
     /// swap is atomic on the shared resolver.
     pub fn set_cache(&mut self, backend: impl resolver::CacheBackend + 'static) {
-        self.resolver.set_primary_cache(Arc::new(backend));
+        self.resolver
+            .set_primary_cache(resolver::SharedRef::new(backend));
     }
 
     /// Builder-style variant of `set_cache`. Takes `self` by value so it can

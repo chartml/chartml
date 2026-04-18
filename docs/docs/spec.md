@@ -336,6 +336,53 @@ data:
     ttl: 6h
 ```
 
+#### HTTP response decoding
+
+`HttpProvider` issues a `GET` against `url` and decodes the response body
+according to the `Content-Type` header.
+
+**Arrow IPC** — when `Content-Type` starts with
+`application/vnd.apache.arrow` (e.g. `application/vnd.apache.arrow.stream`),
+the body is parsed as Arrow IPC bytes via `DataTable::from_ipc_bytes`.
+
+**JSON** — every other content type is parsed as JSON. The provider accepts
+three top-level shapes so common API conventions work without a
+server-side adapter:
+
+1. **Bare array of objects** — used directly as rows.
+
+   ```json
+   [
+     {"month": "Jan", "revenue": 125000},
+     {"month": "Feb", "revenue": 138000}
+   ]
+   ```
+
+2. **Object with a wrapper key** — when the parsed value is an object, the
+   provider unwraps the first key it finds from this list, in this order:
+   `rows`, `data`, `results`. The unwrapped value must itself be an array
+   of objects.
+
+   ```json
+   { "rows": [ {"month": "Jan", "revenue": 125000} ] }
+   ```
+
+   ```json
+   { "data": [ {"month": "Jan", "revenue": 125000} ] }
+   ```
+
+   ```json
+   { "results": [ {"month": "Jan", "revenue": 125000} ] }
+   ```
+
+3. **Anything else** — the provider returns `FetchError::DecodeFailed`
+   with the discovered shape in the message. JSON arrays whose entries
+   are not objects are also rejected.
+
+The wrapper-key list is fixed (no configuration knob): if your API
+returns a different shape, wrap or transform the response server-side
+or register a custom provider via `register_provider("http", ...)`.
+
 ### Transform Layer (Optional)
 
 The transform layer contains data transformation stages. Currently the built-in stage is `aggregate`, which groups, filters, and calculates data.

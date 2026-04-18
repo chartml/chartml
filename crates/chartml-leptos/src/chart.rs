@@ -205,6 +205,31 @@ fn shortest_interval(sources: &[AutoRefreshSource]) -> Option<Duration> {
         .min()
 }
 
+/// Collect every `InlineData` the parsed chart spec declares, so the
+/// imperative `refresh_trigger` effect can compute resolver keys for ALL
+/// sources (not just auto-refresh ones). Pre-registered named sources
+/// (`DataRef::Named`) are skipped because the resolver's
+/// `invalidate*` API operates on keys derived from inline shapes — host
+/// apps wanting to invalidate a registered named source should call the
+/// resolver's bulk APIs (`invalidate_by_slug`, `invalidate_by_namespace`)
+/// directly from the parent component.
+fn collect_invalidatable_sources(spec: &ChartSpec) -> Vec<InlineData> {
+    let mut out = Vec::new();
+    match &spec.data {
+        DataRef::Inline(inline) => out.push(inline.clone()),
+        DataRef::NamedMap(map) => {
+            for (_name, inline) in map {
+                out.push(inline.clone());
+            }
+        }
+        DataRef::Named(_) => {
+            // Pre-registered string-ref source — see fn-level docs for
+            // why we don't try to invalidate these here.
+        }
+    }
+    out
+}
+
 /// Extract the FIRST chart spec from a YAML string. Returns `None` for
 /// invalid YAML, multi-document specs without any chart, or specs that
 /// only declare params/sources (the auto-refresh wiring needs a `ChartSpec`
@@ -258,6 +283,12 @@ struct ResolvedChart {
 ///   tier-1 cache. Falls back to context.
 /// - `hooks`: an optional [`HooksRef`] installed on the resolver.
 ///   Falls back to context.
+/// - `refresh_trigger`: an optional `Signal<u32>` that, when its value
+///   changes, invalidates every spec source's resolver key and forces a
+///   re-fetch — the imperative equivalent of the internal `Retry` button.
+///   Pair with a `RwSignal<u32>` parent-side and `set.update(|c| *c += 1)`
+///   to drive a custom "Refresh" button. Auto-refresh handles the timer
+///   case; this is for manual user-driven refresh control.
 /// - Auto-refresh: when the parsed spec contains a source with
 ///   `cache.autoRefresh: true`, a Leptos interval is spawned on mount.
 ///   The interval is paused when the document's `visibilityState` is
@@ -292,6 +323,29 @@ pub fn ChartMLChart(
     /// `use_context::<HooksRef>()` when not supplied.
     #[prop(optional, into)]
     hooks: Option<HooksRef>,
+    /// Optional imperative refresh trigger — when the wrapped `u32` value
+    /// changes, the chart invalidates every spec source's resolver cache
+    /// key (across both tier-1 and tier-2) and re-runs the fetch /
+    /// transform / render pipeline against the current YAML.
+    ///
+    /// Functionally equivalent to clicking the chart's internal `Retry`
+    /// button; use this when the parent owns its own `Refresh` UI (e.g. a
+    /// dashboard "Refresh now" button shared across many charts) and
+    /// doesn't want to round-trip through a YAML mutation. Auto-refresh
+    /// (the `cache.autoRefresh: true` path) covers the timer case
+    /// independently — this prop is purely for parent-driven manual
+    /// refresh.
+    ///
+    /// Pair with a parent-side `RwSignal<u32>`:
+    /// ```ignore
+    /// let refresh = RwSignal::new(0_u32);
+    /// view! {
+    ///     <button on:click=move |_| refresh.update(|c| *c += 1)>"Refresh"</button>
+    ///     <ChartMLChart spec chartml refresh_trigger=Some(refresh.into()) />
+    /// }
+    /// ```
+    #[prop(optional, into)]
+    refresh_trigger: Option<Signal<u32>>,
 ) -> impl IntoView {
     let chartml = chartml.clone();
     let tooltip_state = provide_tooltip_context();
@@ -331,10 +385,59 @@ pub fn ChartMLChart(
     let (container_width, set_container_width) = signal(0.0_f64);
     let container_ref = NodeRef::<leptos::html::Div>::new();
 
-    // Refresh counter — bumped by manual refresh button and auto-refresh
-    // interval. Feeds the Resource's input tuple so increments trigger a
-    // fresh fetch + transform pass (resize alone does NOT bump this).
+    // Refresh counter — bumped by manual refresh button, auto-refresh
+    // interval, and the optional external `refresh_trigger` prop. Feeds
+    // the Resource's input tuple so increments trigger a fresh fetch +
+    // transform pass (resize alone does NOT bump this).
     let refresh_count = RwSignal::new(0_u32);
+
+    // External refresh trigger wiring. When the parent supplies a
+    // `refresh_trigger` signal and its value changes, we invalidate every
+    // spec source's resolver cache key (mirroring what the auto-refresh
+    // interval does on each tick) and bump `refresh_count` to drive the
+    // main fetch effect. The first run is skipped because the initial
+    // mount already triggers a fetch via the main effect — re-running for
+    // the initial value would double-fetch on first paint.
+    if let Some(trigger) = refresh_trigger {
+        let chartml_for_trigger = chartml.clone();
+        // `Cell<bool>` is fine here — this effect runs strictly on the
+        // single-threaded reactive owner. `Cell` keeps the closure
+        // `Send`-bound-clean in case Leptos's effect bound tightens.
+        let initial_seen = Rc::new(Cell::new(false));
+        let initial_seen_for_effect = initial_seen.clone();
+        Effect::new(move || {
+            // Subscribe to the trigger so future increments re-run this
+            // closure. The value itself isn't used — only the side
+            // effect of bumping `refresh_count` matters.
+            let _tick = trigger.get();
+
+            if !initial_seen_for_effect.get() {
+                initial_seen_for_effect.set(true);
+                return;
+            }
+
+            // Invalidate every source the parsed spec declares. We can't
+            // know what `namespace` the inner ChartML was configured with
+            // (it's set on the instance, not threaded into the component),
+            // so this fires `None` — matching the auto-refresh interval
+            // wiring above. Multi-tenant deployments that need namespaced
+            // invalidation can call `chartml.resolver().invalidate_by_namespace(...)`
+            // directly from the parent and skip this prop.
+            let yaml = spec.get_untracked();
+            if let Some(parsed) = first_chart_spec(&yaml) {
+                let resolver = chartml_for_trigger.resolver();
+                for source in collect_invalidatable_sources(&parsed) {
+                    let key = Resolver::key_for(&source, None);
+                    let resolver = resolver.clone();
+                    spawn_local(async move {
+                        resolver.invalidate(key).await;
+                    });
+                }
+            }
+
+            refresh_count.update(|c| *c = c.wrapping_add(1));
+        });
+    }
 
     // Set up ResizeObserver after mount; disconnect on disposal.
     // Debounce: only update container_width after resize activity stops for 200ms.

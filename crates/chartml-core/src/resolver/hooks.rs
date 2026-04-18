@@ -65,10 +65,17 @@ pub enum MissReason {
     NotFound,
     /// Key was present but the entry's TTL had elapsed.
     Expired,
-    /// Key was explicitly invalidated (reserved — phase 3 doesn't emit this
-    /// today; included so consumers can match exhaustively without a
-    /// catch-all arm needing to grow when phase 4+ wires invalidation
-    /// notifications through the hook channel).
+    /// Key was explicitly invalidated via [`crate::resolver::Resolver::invalidate`]
+    /// (per-key) or one of the bulk APIs
+    /// ([`crate::resolver::Resolver::invalidate_all`],
+    /// [`crate::resolver::Resolver::invalidate_by_slug`],
+    /// [`crate::resolver::Resolver::invalidate_by_namespace`]).
+    /// Per-key invalidations report `Invalidated` for the next miss on that
+    /// exact key; bulk invalidations report `Invalidated` for the very next
+    /// miss on any key and then revert to `NotFound` / `Expired` reasoning
+    /// (the resolver doesn't enumerate every just-evicted key — see the
+    /// field-level docs on `Resolver::recently_invalidated` for the
+    /// rationale).
     Invalidated,
 }
 

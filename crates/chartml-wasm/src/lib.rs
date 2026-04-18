@@ -281,7 +281,7 @@ impl WasmChartML {
                                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
                         inner
                             .resolver()
-                            .set_persistent_cache(std::sync::Arc::new(backend));
+                            .set_persistent_cache(chartml_core::resolver::SharedRef::new(backend));
                         Ok(JsValue::UNDEFINED)
                     }))
                 }

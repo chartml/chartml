@@ -37,8 +37,9 @@
 //!
 //! IndexedDB lives on the browser's main thread; every `JsValue` op is
 //! `!Send`. The [`CacheBackend`](crate::resolver::cache::CacheBackend) trait
-//! is already declared `?Send` on `wasm32` via `cfg_attr`, so this struct
-//! matches that bound automatically.
+//! drops its `Send + Sync` supertrait on `wasm32`, so this struct's
+//! `Rc<RefCell<Option<Database>>>` field implements the trait directly with
+//! no `unsafe impl Send + Sync` workaround.
 //!
 //! ## Cross-user isolation
 //!
@@ -222,32 +223,6 @@ impl std::fmt::Debug for IndexedDbBackend {
             .finish()
     }
 }
-
-// SAFETY: `IndexedDbBackend` is only ever compiled for
-// `wasm32-unknown-unknown`, where the runtime is strictly single-threaded —
-// JavaScript on the main thread, no shared-memory worker access to these
-// values. The `Rc<RefCell<…>>` and `Rc<str>` fields therefore can never be
-// observed from a second thread, so the `Send + Sync` bound required by the
-// `CacheBackend` trait is trivially upheld. Removing these `unsafe impl`s
-// would force every browser consumer to hand-roll `Mutex<Database>` for no
-// observable benefit (the lock would never contend) and introduce poison
-// failure modes that don't exist in single-threaded WASM.
-//
-// If/when wasm32 gains a real threading model (`wasm32-wasip2`, the
-// shared-memory threads proposal, etc.) and chartml-core moves to it, these
-// impls will need to be replaced with proper `Arc<Mutex<…>>` wrappers — but
-// the `CacheBackend` trait itself would also need to relax its bound for
-// that target, which is out of scope for phase 3b.
-//
-// TODO: Phase X — loosen CacheBackend supertrait to cfg-gated bound.
-// Replace the unconditional `Send + Sync` requirement on `CacheBackend` (in
-// `resolver/cache.rs`) with a `cfg_attr(not(target_arch = "wasm32"), …)`
-// bound that mirrors the existing `?Send` async-trait split. Once that lands
-// these `unsafe impl`s can be deleted entirely (and the `unsafe` keyword can
-// leave the file along with them). Tracked as tech debt because `cache.rs`
-// is owned by phase 3, not 3b.
-unsafe impl Send for IndexedDbBackend {}
-unsafe impl Sync for IndexedDbBackend {}
 
 #[async_trait(?Send)]
 impl CacheBackend for IndexedDbBackend {

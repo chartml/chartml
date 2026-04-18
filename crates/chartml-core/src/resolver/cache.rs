@@ -72,9 +72,50 @@ pub enum CacheError {
 /// Pluggable cache backend trait. `?Send` on WASM mirrors the
 /// `DataSourceProvider` / `TransformMiddleware` story so single-threaded
 /// browser environments don't need `Send` bounds.
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+///
+/// The supertrait bound is cfg-gated:
+/// - **native** (`not(target_arch = "wasm32")`) — `Send + Sync` so the
+///   resolver can move backend handles across `tokio::spawn` task boundaries.
+/// - **WASM** — no Send/Sync requirement so backends backed by
+///   single-threaded handles (`Rc<RefCell<...>>` for `idb::Database`,
+///   `js_sys::Function` for callback bridges) implement the trait directly,
+///   without the `unsafe impl Send + Sync` workaround the previous
+///   unconditional bound forced.
+#[cfg(not(target_arch = "wasm32"))]
+#[async_trait]
 pub trait CacheBackend: Send + Sync {
+    /// Look up an entry. Backends may return `None` for "not present" OR
+    /// "present but failed to deserialize" — the resolver treats both as
+    /// cache miss and falls through to the next tier or the provider.
+    async fn get(&self, key: u64) -> Option<CachedEntry>;
+
+    /// Insert or replace an entry. Returns `Err` only on backend storage
+    /// failure (poisoned mutex, IndexedDB transaction failure, etc.) — TTL
+    /// math happens at `get` time, not `put`.
+    async fn put(&self, key: u64, entry: CachedEntry) -> Result<(), CacheError>;
+
+    /// Remove a single entry. No-op if the key is absent.
+    async fn invalidate(&self, key: u64) -> Result<(), CacheError>;
+
+    /// Remove every entry whose `tags` contain the given tag. Used by the
+    /// resolver's `invalidate_by_slug` / `invalidate_by_namespace` APIs.
+    async fn invalidate_by_tag(&self, tag: &str) -> Result<(), CacheError>;
+
+    /// Drop everything.
+    async fn clear(&self) -> Result<(), CacheError>;
+
+    /// Optional graceful shutdown (flush pending writes, close transactions).
+    /// Default no-op.
+    async fn shutdown(&self) {}
+}
+
+/// WASM variant of [`CacheBackend`] — same surface, no `Send + Sync`
+/// supertrait. See the native impl above for full docs (intentionally
+/// duplicated rather than aliased so the trait body is discoverable from
+/// either platform's rustdoc).
+#[cfg(target_arch = "wasm32")]
+#[async_trait(?Send)]
+pub trait CacheBackend {
     /// Look up an entry. Backends may return `None` for "not present" OR
     /// "present but failed to deserialize" — the resolver treats both as
     /// cache miss and falls through to the next tier or the provider.

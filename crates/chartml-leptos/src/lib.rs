@@ -32,9 +32,12 @@ pub type ChartMLRef = std::rc::Rc<chartml_core::ChartML>;
 pub type ProviderRef = std::sync::Arc<dyn chartml_core::DataSourceProvider>;
 
 /// Shared-ownership wrapper around a [`chartml_core::CacheBackend`].
-/// Same shape as [`ProviderRef`] — `CacheBackend` is `Send + Sync`, so an
-/// `Arc` works on every target.
-pub type CacheBackendRef = std::sync::Arc<dyn chartml_core::CacheBackend>;
+/// Re-exports [`chartml_core::CacheBackendRef`] (`Arc` on native, `Rc` on
+/// WASM) — the trait drops its `Send + Sync` supertrait on wasm32 to
+/// support backends like `IndexedDbBackend` whose `Rc<RefCell<Database>>`
+/// internals are `!Send`, so an unconditional `std::sync::Arc<dyn
+/// CacheBackend>` would trip `clippy::arc_with_non_send_sync` on wasm32.
+pub use chartml_core::CacheBackendRef;
 
 /// Shared-ownership wrapper around a [`chartml_core::ResolverHooks`] impl.
 /// Mirrors [`chartml_core::HooksRef`] so consumers wiring hooks through

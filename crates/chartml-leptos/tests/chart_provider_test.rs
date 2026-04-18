@@ -238,6 +238,40 @@ fn mount_chart_with_provider(
     })
 }
 
+/// Variant of `mount_chart_with_provider` that also threads a
+/// `refresh_trigger` signal through the new prop. Returns the
+/// `UnmountHandle` AND the `RwSignal<u32>` the test can bump to drive
+/// imperative refreshes.
+fn mount_chart_with_refresh_trigger(
+    root: &web_sys::HtmlDivElement,
+    chartml: ChartMLRef,
+    provider: ProviderRef,
+    yaml: &'static str,
+) -> (
+    leptos::mount::UnmountHandle<
+        <leptos::tachys::view::any_view::AnyView as leptos::tachys::view::Render>::State,
+    >,
+    RwSignal<u32>,
+) {
+    let parent: web_sys::HtmlElement = root.clone().into();
+    let spec = RwSignal::new(yaml.to_string());
+    let refresh = RwSignal::new(0_u32);
+    let handle = leptos::mount::mount_to(parent, move || {
+        let chartml = chartml.clone();
+        let provider = provider.clone();
+        view! {
+            <ChartMLChart
+                spec=Signal::derive(move || spec.get())
+                chartml=chartml
+                provider=provider
+                refresh_trigger=Signal::derive(move || refresh.get())
+            />
+        }
+        .into_any()
+    });
+    (handle, refresh)
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 /// Provider receives the fetch + the rendered SVG appears under
@@ -461,6 +495,52 @@ async fn test_chart_auto_refresh_paused_when_hidden() {
     // Tidy up the property override so subsequent tests in the same
     // browser session see the real visibility state.
     restore_document_visibility();
+}
+
+/// Imperative `refresh_trigger` prop fires a fresh provider call each
+/// time the parent bumps the trigger signal. The first mount also fires
+/// once (the initial fetch), so the call count progression is
+/// `1 → 2 → 3` across `(initial, bump #1, bump #2)`.
+#[wasm_bindgen_test]
+async fn test_chart_refresh_trigger_invalidates_and_refetches() {
+    let root = fresh_mount_root();
+    let provider = RecordingProvider::new(sample_table());
+    let calls = provider.calls_handle();
+    let provider_ref: ProviderRef = Arc::new(provider);
+
+    let (_handle, refresh) = mount_chart_with_refresh_trigger(
+        &root,
+        build_chartml(),
+        provider_ref,
+        datasource_spec(),
+    );
+
+    // Initial fetch settles within the same window the smoke test uses.
+    yield_to_event_loop(300).await;
+    assert_eq!(
+        *calls.lock().unwrap(),
+        1,
+        "initial mount must fetch once before any trigger bump",
+    );
+
+    // Bump #1 — the chart should invalidate the resolver key, re-run the
+    // fetch effect, and surface a second provider call.
+    refresh.update(|c| *c = c.wrapping_add(1));
+    yield_to_event_loop(300).await;
+    assert_eq!(
+        *calls.lock().unwrap(),
+        2,
+        "first refresh_trigger bump must fire one extra provider call",
+    );
+
+    // Bump #2 — same story.
+    refresh.update(|c| *c = c.wrapping_add(1));
+    yield_to_event_loop(300).await;
+    assert_eq!(
+        *calls.lock().unwrap(),
+        3,
+        "second refresh_trigger bump must fire one more provider call",
+    );
 }
 
 // ── Visibility-state shimming helpers ────────────────────────────────────

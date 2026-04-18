@@ -21,8 +21,10 @@ use chartml_core::error::ChartError;
 use chartml_core::plugin::{ChartConfig, ChartRenderer};
 use chartml_core::resolver::{
     CacheHitEvent, CacheMissEvent, CacheTier, DataSourceProvider, ErrorEvent, FetchError,
-    FetchRequest, FetchResult, MemoryBackend, MissReason, Phase, ProgressEvent, ResolverHooks,
+    FetchRequest, FetchResult, MemoryBackend, MissReason, Phase, ProgressEvent, Resolver,
+    ResolverHooks,
 };
+use chartml_core::spec::InlineData;
 use chartml_core::{ChartML, RenderOptions};
 use chartml_datafusion::DataFusionTransform;
 use serde_json::json;
@@ -506,5 +508,184 @@ visualize:
     assert!(
         !transform_progress.is_empty(),
         "expected at least one Transform-phase progress event; got: {events:?}"
+    );
+}
+
+/// Helper: build the same `InlineData` shape the resolver hashes for the
+/// per-key invalidation tests below. Mirrors what `ChartML::fetch` would
+/// produce for the YAML literal we hand it.
+fn datasource_inline(slug: &str, query: &str) -> InlineData {
+    InlineData {
+        provider: None,
+        rows: None,
+        url: None,
+        endpoint: None,
+        cache: None,
+        datasource: Some(slug.to_string()),
+        query: Some(query.to_string()),
+    }
+}
+
+/// Per-key `Resolver::invalidate(key)` followed by a re-fetch must surface
+/// `MissReason::Invalidated` (not `NotFound`). Exercises the
+/// `recently_invalidated.keys` path.
+#[tokio::test]
+async fn test_invalidate_emits_invalidated_miss_reason() {
+    let (hooks, events) = RecordingHooks::new();
+    let mut chartml = ChartML::new();
+    chartml.register_renderer("bar", MockRenderer);
+    chartml.register_provider("datasource", CountingProvider::new(visitors_table()));
+    chartml.set_hooks(hooks);
+
+    let yaml = r#"
+type: chart
+version: 1
+data:
+  datasource: warehouse
+  query: "SELECT 1"
+  cache:
+    ttl: "60s"
+visualize:
+  type: bar
+  columns: date
+  rows: n
+"#;
+    let opts = RenderOptions::default();
+
+    // First fetch primes the cache.
+    chartml.fetch(yaml, &opts).await.unwrap();
+    // Confirm a hit on second fetch (sanity — sets up the invalidate scenario).
+    chartml.fetch(yaml, &opts).await.unwrap();
+
+    // Invalidate the exact resolver key the spec would hash to. We
+    // recompute it via `Resolver::key_for` against the same `InlineData`
+    // shape `ChartML::fetch` builds internally.
+    let inline = datasource_inline("warehouse", "SELECT 1");
+    let key = Resolver::key_for(&inline, None);
+    chartml.resolver().invalidate(key).await;
+
+    // Drain previously-collected events so the assertion only sees the
+    // post-invalidate fetch. Flush FIRST so any in-flight fire-and-forget
+    // hook events from the priming fetches above settle before we clear,
+    // otherwise their late-arriving emissions would land in the "post"
+    // collector and skew the assertion.
+    flush_pending_hooks().await;
+    events.lock().unwrap().clear();
+
+    chartml.fetch(yaml, &opts).await.unwrap();
+    flush_pending_hooks().await;
+
+    {
+        let post_invalidate = events.lock().unwrap();
+        let misses: Vec<&CacheMissEvent> = post_invalidate
+            .iter()
+            .filter_map(|e| {
+                if let Event::CacheMiss(m) = e {
+                    Some(m)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(
+            misses.len(),
+            1,
+            "expected exactly one cache miss after the invalidated fetch; got: {post_invalidate:?}"
+        );
+        assert_eq!(
+            misses[0].reason,
+            MissReason::Invalidated,
+            "post-invalidate miss must report `Invalidated`, not `{:?}`",
+            misses[0].reason,
+        );
+    }
+
+    // Re-fetch a third time: now the cache is repopulated, so we should
+    // see a hit (NOT another `Invalidated` miss — the per-key entry was
+    // drained on first observation).
+    flush_pending_hooks().await;
+    events.lock().unwrap().clear();
+    chartml.fetch(yaml, &opts).await.unwrap();
+    flush_pending_hooks().await;
+
+    let post_refetch = events.lock().unwrap();
+    let third_misses: Vec<&CacheMissEvent> = post_refetch
+        .iter()
+        .filter_map(|e| {
+            if let Event::CacheMiss(m) = e {
+                Some(m)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert!(
+        third_misses.is_empty(),
+        "third fetch must hit the cache (no further misses); got: {post_refetch:?}"
+    );
+}
+
+/// Bulk `Resolver::invalidate_by_slug(slug)` followed by a re-fetch must
+/// surface `MissReason::Invalidated` for the FIRST post-bulk miss.
+/// Subsequent misses fall back to `NotFound` (documented one-shot bulk
+/// reporting — see `Resolver::recently_invalidated` field docs).
+#[tokio::test]
+async fn test_invalidate_by_slug_emits_invalidated() {
+    let (hooks, events) = RecordingHooks::new();
+    let mut chartml = ChartML::new();
+    chartml.register_renderer("bar", MockRenderer);
+    chartml.register_provider("datasource", CountingProvider::new(visitors_table()));
+    chartml.set_hooks(hooks);
+
+    let yaml = r#"
+type: chart
+version: 1
+data:
+  datasource: warehouse
+  query: "SELECT 1"
+  cache:
+    ttl: "60s"
+visualize:
+  type: bar
+  columns: date
+  rows: n
+"#;
+    let opts = RenderOptions::default();
+    chartml.fetch(yaml, &opts).await.unwrap();
+
+    // Bulk-invalidate the slug — this clears the cache and arms the
+    // bulk-pending flag so the very next miss surfaces as `Invalidated`.
+    chartml.resolver().invalidate_by_slug("warehouse").await;
+
+    // Flush late-arriving priming-fetch events BEFORE clearing the
+    // collector (see test_invalidate_emits_invalidated_miss_reason for
+    // the same coordination).
+    flush_pending_hooks().await;
+    events.lock().unwrap().clear();
+
+    chartml.fetch(yaml, &opts).await.unwrap();
+    flush_pending_hooks().await;
+
+    let events_snapshot = events.lock().unwrap();
+    let misses: Vec<&CacheMissEvent> = events_snapshot
+        .iter()
+        .filter_map(|e| {
+            if let Event::CacheMiss(m) = e {
+                Some(m)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(
+        misses.len(),
+        1,
+        "expected exactly one cache miss after invalidate_by_slug; got: {events_snapshot:?}"
+    );
+    assert_eq!(
+        misses[0].reason,
+        MissReason::Invalidated,
+        "first post-bulk-invalidate miss must report `Invalidated`, not `{:?}`",
+        misses[0].reason,
     );
 }
