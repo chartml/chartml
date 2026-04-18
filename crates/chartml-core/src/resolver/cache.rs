@@ -10,7 +10,13 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+// `web_time` re-exports `SystemTime`/`Duration` with the same API as `std::time`
+// but works on `wasm32-unknown-unknown` (where `std::time::SystemTime::now()`
+// panics with "time not implemented on this platform"). On native it is a
+// transparent alias for `std::time`. See chartml-core's Cargo.toml for the
+// rationale.
+use std::time::Duration;
+use web_time::SystemTime;
 
 use async_trait::async_trait;
 use thiserror::Error;

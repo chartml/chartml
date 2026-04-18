@@ -15,7 +15,10 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+// `web_time::SystemTime` works on `wasm32-unknown-unknown` (where the std
+// version panics). On native it's a transparent alias for `std::time`.
+use std::time::Duration;
+use web_time::SystemTime;
 
 use async_trait::async_trait;
 use futures::future::{FutureExt, Shared};

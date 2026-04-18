@@ -607,6 +607,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
+ "web-time",
  "wiremock",
  "xxhash-rust",
 ]
@@ -720,16 +721,19 @@ dependencies = [
  "chartml-chart-table",
  "chartml-core",
  "chartml-render",
+ "console_error_panic_hook",
  "getrandom 0.2.17",
  "indexmap",
  "js-sys",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
+ "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
+ "web-time",
 ]
 
 [[package]]

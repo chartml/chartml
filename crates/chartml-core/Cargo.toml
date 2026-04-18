@@ -27,6 +27,14 @@ humantime = "2"
 # depend on a specific logger. Default features include `std`, which is fine
 # for both native and wasm32 targets.
 tracing = { version = "0.1", default-features = false, features = ["std"] }
+# `std::time::SystemTime::now()` panics with "time not implemented on this
+# platform" on wasm32-unknown-unknown. `web-time` is a drop-in shim that
+# delegates to `js_sys::Date::now()` on wasm and `std::time::SystemTime` on
+# native — re-exporting `SystemTime` / `Duration` / `UNIX_EPOCH` with the
+# same API. Used by the resolver, cache, and pipeline for `fetched_at` /
+# `refreshed_at` stamping so Node-target wasm consumers (and browsers)
+# don't trap on the first cache write.
+web-time = "1"
 
 # Native-only: lets the sync `render_to_svg` / `render_from_yaml*` path
 # dispatch through a registered async `TransformMiddleware` (e.g. DataFusion)

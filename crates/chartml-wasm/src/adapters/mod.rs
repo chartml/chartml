@@ -2,7 +2,13 @@ pub mod renderer;
 
 // Async adapters use JsFuture which is !Send — only compile on wasm32
 #[cfg(target_arch = "wasm32")]
+pub mod cache_backend;
+#[cfg(target_arch = "wasm32")]
 pub mod data_source;
+#[cfg(target_arch = "wasm32")]
+pub mod hooks;
+#[cfg(target_arch = "wasm32")]
+pub mod provider;
 #[cfg(target_arch = "wasm32")]
 pub mod resolver;
 #[cfg(target_arch = "wasm32")]

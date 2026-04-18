@@ -31,7 +31,10 @@
 //! tail-json shape or the byte framing changes.
 
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+// `web_time::SystemTime` is a wasm32-compatible drop-in for `std::time::SystemTime`.
+// Must match the type used by `CachedEntry::fetched_at` (also `web_time`).
+use std::time::Duration;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 

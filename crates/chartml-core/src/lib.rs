@@ -32,7 +32,8 @@ pub use resolver::{
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::SystemTime;
+// `web_time::SystemTime` is a wasm32-compatible drop-in for `std::time::SystemTime`.
+use web_time::SystemTime;
 use indexmap::IndexMap;
 use crate::data::{Row, DataTable};
 use crate::spec::{ChartSpec, DataRef, InlineData};
