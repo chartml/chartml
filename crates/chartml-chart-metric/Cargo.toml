@@ -1,6 +1,6 @@
 [package]
 name = "chartml-chart-metric"
-version = "4.0.0"
+version = "5.0.0"
 edition = "2021"
 license = "MIT"
 description = "ChartML metric/KPI card renderer"
@@ -11,7 +11,7 @@ keywords = ["chartml", "chart", "metric", "kpi"]
 categories = ["visualization"]
 
 [dependencies]
-chartml-core = { path = "../chartml-core", version = "4.0.0" }
+chartml-core = { path = "../chartml-core", version = "5" }
 
 [dev-dependencies]
 serde_json = "1"

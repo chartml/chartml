@@ -1,6 +1,6 @@
 [package]
 name = "chartml-leptos"
-version = "4.0.2"
+version = "5.0.0"
 edition = "2021"
 license = "MIT"
 description = "Leptos components, hooks, and tooltip context for rendering ChartML charts in reactive Leptos apps"
@@ -11,7 +11,7 @@ keywords = ["chartml", "leptos", "chart", "visualization", "svg"]
 categories = ["visualization", "gui"]
 
 [dependencies]
-chartml-core = { path = "../chartml-core", version = "4.0.0" }
+chartml-core = { path = "../chartml-core", version = "5" }
 serde_json = "1"
 leptos = "0.8"
 # `Document`, `Event`, and `EventTarget` are needed for the `visibilitychange`
