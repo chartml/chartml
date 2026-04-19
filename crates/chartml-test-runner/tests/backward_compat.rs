@@ -23,6 +23,7 @@ use chartml_chart_pie::PieRenderer;
 use chartml_chart_scatter::ScatterRenderer;
 use chartml_core::element::ChartElement;
 use chartml_core::ChartML;
+use chartml_datafusion::DataFusionTransform;
 use chartml_render::element_to_svg;
 
 fn workspace_root() -> PathBuf {
@@ -58,6 +59,11 @@ fn create_chartml() -> ChartML {
     c.register_renderer("bubble", ScatterRenderer::new());
     c.register_renderer("metric", MetricRenderer::new());
     c.register_renderer("table", TableRenderer::new());
+    // Register DataFusion so transform-bearing fixtures (added in chartml 5.0
+    // for named-source coverage) can render. Specs without a baseline in
+    // snapshots/pre-theme-hooks/ are skipped automatically — we just need the
+    // render itself to succeed.
+    c.register_transform(DataFusionTransform);
     c
 }
 
@@ -96,8 +102,8 @@ struct Mismatch {
     reason: String,
 }
 
-#[test]
-fn backward_compat_goldens_byte_identical() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn backward_compat_goldens_byte_identical() {
     let specs_root = specs_dir();
     let snap_root = snapshot_dir();
 
