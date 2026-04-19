@@ -1,0 +1,96 @@
+name: "Multi-stage transform — SQL filter then aggregate (DAU pipeline)"
+tags: [transforms, named-source, multi-stage, sql, aggregate, line]
+description: >
+  Exercises the multi-stage transform pipeline by chaining BOTH `sql` and
+  `aggregate` on a single named source `events`. DataFusionTransform
+  always runs stages in fixed order — SQL → Aggregate → Forecast —
+  regardless of YAML key order. So this fixture's pipeline is:
+
+    1. SQL stage: filter raw events to `event_name = 'login'`, dropping
+       all "view" events. Output is registered as the next stage's input.
+    2. Aggregate stage: GROUP BY date, count_distinct(user_id) AS dau.
+
+  Filtering before aggregation means we count distinct LOGIN users per
+  day, not all distinct active users. Input has 12 rows; after the SQL
+  login filter, 7 rows remain. The aggregate then produces:
+    2024-01-01 -> {alice, bob, carol}      = 3 distinct login users
+    2024-01-02 -> {alice, dave}            = 2 distinct login users
+    2024-01-03 -> {alice, carol, eve}      = 3 distinct login users
+
+chart:
+  type: chart
+  version: 1
+  title: "Daily Active Login Users"
+  data:
+    events:
+      rows:
+        - date: "2024-01-01"
+          user_id: "alice"
+          event_name: "login"
+        - date: "2024-01-01"
+          user_id: "bob"
+          event_name: "login"
+        - date: "2024-01-01"
+          user_id: "alice"
+          event_name: "view"
+        - date: "2024-01-01"
+          user_id: "carol"
+          event_name: "login"
+        - date: "2024-01-02"
+          user_id: "alice"
+          event_name: "login"
+        - date: "2024-01-02"
+          user_id: "dave"
+          event_name: "login"
+        - date: "2024-01-02"
+          user_id: "alice"
+          event_name: "view"
+        - date: "2024-01-03"
+          user_id: "alice"
+          event_name: "login"
+        - date: "2024-01-03"
+          user_id: "bob"
+          event_name: "view"
+        - date: "2024-01-03"
+          user_id: "carol"
+          event_name: "login"
+        - date: "2024-01-03"
+          user_id: "dave"
+          event_name: "view"
+        - date: "2024-01-03"
+          user_id: "eve"
+          event_name: "login"
+  transform:
+    sql: "SELECT date, user_id FROM events WHERE event_name = 'login'"
+    aggregate:
+      dimensions: [date]
+      measures:
+        - column: user_id
+          aggregation: countDistinct
+          name: dau
+      sort:
+        - field: date
+          direction: asc
+  visualize:
+    type: line
+    columns: date
+    rows: dau
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    title_in_svg: false
+    legend: false
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan 01", "Jan 02", "Jan 03"]
+    y:
+      min: 0
+      format: numeric

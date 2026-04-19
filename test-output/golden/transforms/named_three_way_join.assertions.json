@@ -1,0 +1,32 @@
+{
+  "axes": {
+    "x": {
+      "labels": [
+        "Jan 01",
+        "Jan 02",
+        "Jan 03",
+        "Jan 04",
+        "Jan 05"
+      ]
+    },
+    "y": {
+      "format": "numeric",
+      "min": 0
+    }
+  },
+  "colors": {
+    "distinct": 3
+  },
+  "scale": {
+    "proportional": true,
+    "y_min": 0,
+    "y_nice": true
+  },
+  "structure": {
+    "legend": true,
+    "legend_entries": 3,
+    "lines": 3,
+    "root": "svg",
+    "title_in_svg": false
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "classification": null,
+  "eval_status": null,
+  "failures": [],
+  "fix_required": null,
+  "last_evaluated": null,
+  "render_status": "ok",
+  "spec": "aggregate_then_sql",
+  "svg_path": "test-output/golden/transforms/aggregate_then_sql.svg",
+  "tree_path": "test-output/golden/transforms/aggregate_then_sql.tree.json"
+}

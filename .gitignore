@@ -64,3 +64,4 @@ changed-packages.json
 
 # Claude agent definitions (contain signing keys — local only)
 .claude/agents/
+.gstack/

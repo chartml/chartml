@@ -1,0 +1,94 @@
+name: "Named multi-source — three-way SQL JOIN across visitors, sessions, revenue"
+tags: [transforms, named-source, multi-source, sql, three-way-join, line]
+description: >
+  Stress-tests parallel registration and multi-table SQL joins by wiring
+  three independently-named inline sources (`visitors`, `sessions`,
+  `revenue`) and joining all of them on `date` in a single SQL statement.
+  All three sources cover the same 5 days, so the intersection is 5 rows
+  and the rendered line chart has three series — one per measure column
+  produced by the SELECT.
+
+chart:
+  type: chart
+  version: 1
+  title: "Visitors, Sessions, Revenue (5-day overlap)"
+  data:
+    visitors:
+      rows:
+        - date: "2024-01-01"
+          n: 100
+        - date: "2024-01-02"
+          n: 150
+        - date: "2024-01-03"
+          n: 200
+        - date: "2024-01-04"
+          n: 175
+        - date: "2024-01-05"
+          n: 225
+    sessions:
+      rows:
+        - date: "2024-01-01"
+          n: 10
+        - date: "2024-01-02"
+          n: 15
+        - date: "2024-01-03"
+          n: 20
+        - date: "2024-01-04"
+          n: 18
+        - date: "2024-01-05"
+          n: 22
+    revenue:
+      rows:
+        - date: "2024-01-01"
+          amount: 1200
+        - date: "2024-01-02"
+          amount: 1850
+        - date: "2024-01-03"
+          amount: 2400
+        - date: "2024-01-04"
+          amount: 2100
+        - date: "2024-01-05"
+          amount: 2750
+  transform:
+    sql: >
+      SELECT v.date,
+             v.n AS visitors,
+             s.n AS sessions,
+             r.amount AS revenue
+      FROM visitors v
+      JOIN sessions s USING(date)
+      JOIN revenue  r USING(date)
+      ORDER BY date
+  visualize:
+    type: line
+    columns: date
+    rows:
+      - field: visitors
+        label: "Visitors"
+      - field: sessions
+        label: "Sessions"
+      - field: revenue
+        label: "Revenue"
+
+assertions:
+  structure:
+    root: svg
+    lines: 3
+    title_in_svg: false
+    legend: true
+    legend_entries: 3
+
+  colors:
+    distinct: 3
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan 01", "Jan 02", "Jan 03", "Jan 04", "Jan 05"]
+    y:
+      min: 0
+      format: numeric

@@ -315,6 +315,7 @@ section h2 .section-count{{color:#86868b;font-weight:400;font-size:16px}}
 </div>
 <script type="module">
 import init, {{ WasmChartML }} from '/pkg/web/chartml_wasm.js';
+import initDf, {{ transform as dfTransform }} from '/pkg-datafusion/web/chartml_wasm_datafusion.js';
 
 let renderedCount = 0;
 const totalCount = {total};
@@ -335,11 +336,14 @@ async function getYaml(id) {{
   return yaml;
 }}
 
-function renderChartAtSize(frame, yaml, width, aspectRatio, chartml) {{
+// Async render path — required so the registered TransformMiddleware (DataFusion)
+// drives `transform.sql` / `transform.forecast` specs. The sync `renderToSvg`
+// errors on WASM whenever middleware is needed.
+async function renderChartAtSize(frame, yaml, width, aspectRatio, chartml) {{
   const w = Math.round(width);
   const h = Math.round(w * aspectRatio);
   if (w <= 0) return;
-  const svg = chartml.renderToSvg(yaml, {{ width: w, height: h }});
+  const svg = await chartml.renderToSvgAsync(yaml, {{ width: w, height: h }});
   frame.innerHTML = svg;
 }}
 
@@ -358,7 +362,7 @@ async function renderChart(card, chartml) {{
     // Initial render at container width
     const containerWidth = frame.clientWidth - 24; // subtract padding
     const w = containerWidth > 0 ? containerWidth : specW;
-    renderChartAtSize(frame, yaml, w, aspectRatio, chartml);
+    await renderChartAtSize(frame, yaml, w, aspectRatio, chartml);
     renderedCount++;
     updateCount();
 
@@ -373,8 +377,16 @@ async function renderChart(card, chartml) {{
 }}
 
 async function main() {{
-  await init('/pkg/wasm/chartml_wasm_bg.wasm');
+  // Init both WASM modules in parallel — the .wasm fetches are independent.
+  await Promise.all([
+    init('/pkg/wasm/chartml_wasm_bg.wasm'),
+    initDf('/pkg-datafusion/wasm/chartml_wasm_datafusion_bg.wasm'),
+  ]);
   const chartml = new WasmChartML();
+  // Wire the DataFusion transform BEFORE any render call — the WasmChartML
+  // `register*` methods require unique access via `Rc::get_mut`, so they
+  // must run before any in-flight async pipeline holds an `Rc` clone.
+  chartml.registerTransform(dfTransform);
 
   // Render charts in batches to avoid blocking the UI
   const cards = Array.from(document.querySelectorAll('.card[data-id]'));
@@ -394,10 +406,9 @@ async function main() {{
         if (!frame._chartYaml) continue;
         const newWidth = Math.round(entry.contentRect.width - 24);
         if (newWidth > 0 && Math.abs(newWidth - frame._lastWidth) > 5) {{
-          try {{
-            renderChartAtSize(frame, frame._chartYaml, newWidth, frame._aspectRatio, chartml);
-            frame._lastWidth = newWidth;
-          }} catch (_) {{}}
+          renderChartAtSize(frame, frame._chartYaml, newWidth, frame._aspectRatio, chartml)
+            .then(() => {{ frame._lastWidth = newWidth; }})
+            .catch((err) => {{ console.warn('Chart resize render failed:', err); }});
         }}
       }}
     }}, 200);
@@ -446,7 +457,7 @@ document.querySelectorAll('.card').forEach(c => {{
         const lbWidth = lbc.clientWidth - 48; // subtract padding
         const w = Math.max(lbWidth, specW);
         const h = Math.round(w * aspectRatio);
-        const svg = chartml.renderToSvg(yaml, {{ width: w, height: h }});
+        const svg = await chartml.renderToSvgAsync(yaml, {{ width: w, height: h }});
         lbChart.innerHTML = svg;
       }} catch (err) {{
         document.getElementById('lb-chart').textContent = 'Render error: ' + err.message;
@@ -504,6 +515,35 @@ document.addEventListener('mousemove', e => {{
         nav = nav_html,
         sections = sections_html,
     )
+}
+
+/// Serve a static file from a wasm-pack output directory (e.g. `packages/core/pkg`
+/// or `packages/datafusion/pkg`). Rejects path traversal, picks the JS/WASM/JSON
+/// content type from the extension, and 404s on missing files.
+fn serve_pkg_file(stream: &mut TcpStream, pkg_dir: &Path, file_name: &str) {
+    if file_name.contains("..") {
+        let _ = stream.write_all(b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+        return;
+    }
+    let file_path = pkg_dir.join(file_name);
+    let Ok(data) = fs::read(&file_path) else {
+        let _ = stream
+            .write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\nPkg file not found");
+        return;
+    };
+    let content_type = match file_path.extension().and_then(|e| e.to_str()) {
+        Some("js") => "application/javascript",
+        Some("wasm") => "application/wasm",
+        Some("json") => "application/json",
+        _ => "application/octet-stream",
+    };
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+        content_type,
+        data.len()
+    );
+    let _ = stream.write_all(response.as_bytes());
+    let _ = stream.write_all(&data);
 }
 
 /// Handle a single HTTP request.
@@ -590,29 +630,11 @@ fn handle_request(mut stream: TcpStream) {
         let _ = stream.write_all(response.as_bytes());
         let _ = stream.write_all(json.as_bytes());
     } else if let Some(file_name) = path.strip_prefix("/pkg/") {
-        let pkg_dir = PathBuf::from("packages/core/pkg");
-        // Sanitize: reject path traversal, allow known subdirs (web/, node/, wasm/)
-        if file_name.contains("..") {
-            let _ = stream.write_all(b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
-        } else {
-            let file_path = pkg_dir.join(file_name);
-            if let Ok(data) = fs::read(&file_path) {
-                let content_type = match file_path.extension().and_then(|e| e.to_str()) {
-                    Some("js") => "application/javascript",
-                    Some("wasm") => "application/wasm",
-                    Some("json") => "application/json",
-                    _ => "application/octet-stream",
-                };
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
-                    content_type, data.len()
-                );
-                let _ = stream.write_all(response.as_bytes());
-                let _ = stream.write_all(&data);
-            } else {
-                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\nPkg file not found");
-            }
-        }
+        serve_pkg_file(&mut stream, &PathBuf::from("packages/core/pkg"), file_name);
+    } else if let Some(file_name) = path.strip_prefix("/pkg-datafusion/") {
+        // Mirrors the `/pkg/` handler but serves the DataFusion WASM bundle so
+        // gallery JS can `import` it and register the SQL transform middleware.
+        serve_pkg_file(&mut stream, &PathBuf::from("packages/datafusion/pkg"), file_name);
     } else {
         let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\nNot found");
     }

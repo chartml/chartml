@@ -1,0 +1,55 @@
+{
+  "axes": {
+    "x": {
+      "labels": [
+        "Week 1",
+        "Week 2",
+        "Week 3",
+        "Week 4",
+        "Week 5",
+        "Week 6"
+      ]
+    },
+    "y": {
+      "format": "numeric",
+      "min": 0
+    }
+  },
+  "bars": [
+    {
+      "label": "Week 1",
+      "value": 42000
+    },
+    {
+      "label": "Week 2",
+      "value": 45500
+    },
+    {
+      "label": "Week 3",
+      "value": 43800
+    },
+    {
+      "label": "Week 4",
+      "value": 51200
+    },
+    {
+      "label": "Week 5",
+      "value": 49700
+    },
+    {
+      "label": "Week 6",
+      "value": 55300
+    }
+  ],
+  "scale": {
+    "proportional": true,
+    "y_min": 0,
+    "y_nice": true
+  },
+  "structure": {
+    "bars": 6,
+    "legend": false,
+    "root": "svg",
+    "title_in_svg": false
+  }
+}

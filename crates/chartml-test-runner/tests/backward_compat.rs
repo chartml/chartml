@@ -135,6 +135,19 @@ fn backward_compat_goldens_byte_identical() {
             format!("{}/{}", chart_type, stem)
         };
 
+        // Early-skip fixtures with no baseline. Specs added after the
+        // pre-theme-hooks freeze (e.g. `transforms/*` introduced for chartml
+        // 5.0 named-source coverage) have no baseline by definition. Skip
+        // before the render call so we don't waste cycles parsing/rendering
+        // them — and crucially, so transform-bearing fixtures don't fail the
+        // test by erroring out for missing TransformMiddleware here. Their
+        // correctness is covered by the chart-evaluator-signed goldens under
+        // `test-output/golden/transforms/` and the resolver/pipeline unit tests.
+        let baseline_path = snap_root.join(&chart_type).join(format!("{}.svg", stem));
+        if !baseline_path.exists() {
+            continue;
+        }
+
         let yaml_text = match fs::read_to_string(yaml_path) {
             Ok(s) => s,
             Err(e) => {
@@ -201,14 +214,8 @@ fn backward_compat_goldens_byte_identical() {
         let (w, h) = extract_dimensions(&element);
         let actual_svg = element_to_svg(&element, w, h);
 
-        let baseline_path = snap_root.join(&chart_type).join(format!("{}.svg", stem));
-        // Specs added after the pre-theme-hooks freeze (e.g. new chart types
-        // like `table`) have no baseline by definition — skip them rather
-        // than reporting a regression. Their correctness is covered by the
-        // chart-evaluator goldens and per-crate unit tests.
-        if !baseline_path.exists() {
-            continue;
-        }
+        // baseline_path computed at the top of the loop — already verified
+        // exists (we early-skipped fixtures without a baseline).
         let baseline = match fs::read_to_string(&baseline_path) {
             Ok(s) => s,
             Err(e) => {

@@ -1,0 +1,63 @@
+name: "Named source — SQL references source by its declared name"
+tags: [transforms, named-source, sql, own-name, filter, bar]
+description: >
+  Single named source `revenue` with SQL that references the table by its
+  user-chosen name (`FROM revenue`) rather than the legacy `source` alias.
+  Both paths must work; this exercises the user-facing "name your source,
+  query by that name" idiom. The WHERE clause filters to weeks where
+  revenue is at least $50,000, leaving 2 of 6 weeks (Week 4 at $51,200
+  and Week 6 at $55,300) in chronological order.
+
+chart:
+  type: chart
+  version: 1
+  title: "High-Revenue Weeks (>= $50K)"
+  data:
+    revenue:
+      rows:
+        - week: "Week 1"
+          revenue: 42000
+        - week: "Week 2"
+          revenue: 45500
+        - week: "Week 3"
+          revenue: 43800
+        - week: "Week 4"
+          revenue: 51200
+        - week: "Week 5"
+          revenue: 49700
+        - week: "Week 6"
+          revenue: 55300
+  transform:
+    sql: "SELECT week, revenue FROM revenue WHERE revenue >= 50000 ORDER BY week"
+  visualize:
+    type: bar
+    columns: week
+    rows: revenue
+    axes:
+      left:
+        format: "$,.0f"
+
+assertions:
+  structure:
+    root: svg
+    bars: 2
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Week 4"
+      value: 51200
+    - label: "Week 6"
+      value: 55300
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Week 4", "Week 6"]
+    y:
+      min: 0
+      format: currency

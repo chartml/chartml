@@ -1,6 +1,6 @@
 [package]
 name = "chartml-chart-pie"
-version = "4.1.0"
+version = "5.0.0"
 edition = "2021"
 license = "MIT"
 description = "ChartML pie and doughnut chart renderers"
@@ -11,7 +11,7 @@ keywords = ["chartml", "chart", "pie", "doughnut"]
 categories = ["visualization"]
 
 [dependencies]
-chartml-core = { path = "../chartml-core", version = "4.1.0" }
+chartml-core = { path = "../chartml-core", version = "5" }
 
 [dev-dependencies]
 serde_yaml = "0.9"

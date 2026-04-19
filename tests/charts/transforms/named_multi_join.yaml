@@ -1,0 +1,85 @@
+name: "Named multi-source — SQL JOIN across two named tables (KYO-79 acceptance)"
+tags: [transforms, named-source, multi-source, sql, join, line]
+description: >
+  THE acceptance test for the chartml 5.0 named-sources release. Two
+  independently-named sources (`visitors` and `sessions`) are registered
+  side-by-side, each carrying its own inline rows keyed by `date`. The
+  SQL transform performs an INNER JOIN on the `date` column to align
+  the two series for plotting.
+
+  Date ranges are deliberately mismatched: `visitors` covers days 1-6,
+  `sessions` covers days 1-5. The INNER JOIN intersection is days 1-5,
+  so the rendered chart has exactly 5 data points per series — proving
+  the join semantics are correct and `visitors`'s extra day was dropped.
+
+  This is the test the entire 5.0 release exists for. Before Phase 1
+  fixed the multi-source registration bug, the second source was silently
+  dropped and SQL like the one below failed with "table not found".
+
+chart:
+  type: chart
+  version: 1
+  title: "Visitors vs Sessions (5-day overlap)"
+  data:
+    visitors:
+      rows:
+        - date: "2024-01-01"
+          n: 100
+        - date: "2024-01-02"
+          n: 150
+        - date: "2024-01-03"
+          n: 200
+        - date: "2024-01-04"
+          n: 175
+        - date: "2024-01-05"
+          n: 225
+        - date: "2024-01-06"
+          n: 260
+    sessions:
+      rows:
+        - date: "2024-01-01"
+          n: 10
+        - date: "2024-01-02"
+          n: 15
+        - date: "2024-01-03"
+          n: 20
+        - date: "2024-01-04"
+          n: 18
+        - date: "2024-01-05"
+          n: 22
+  transform:
+    sql: >
+      SELECT v.date, v.n AS visitors, s.n AS sessions
+      FROM visitors v JOIN sessions s USING (date)
+      ORDER BY date
+  visualize:
+    type: line
+    columns: date
+    rows:
+      - field: visitors
+        label: "Visitors"
+      - field: sessions
+        label: "Sessions"
+
+assertions:
+  structure:
+    root: svg
+    lines: 2
+    title_in_svg: false
+    legend: true
+    legend_entries: 2
+
+  colors:
+    distinct: 2
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Jan 01", "Jan 02", "Jan 03", "Jan 04", "Jan 05"]
+    y:
+      min: 0
+      format: numeric

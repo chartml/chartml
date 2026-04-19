@@ -1,0 +1,63 @@
+name: "Named source — back-compat `FROM source` alias on single named source"
+tags: [transforms, named-source, sql, alias, back-compat, bar]
+description: >
+  Single named source `revenue` paired with a SQL transform that references
+  `FROM source` (NOT the user-chosen name). DataFusionTransform's
+  single-source back-compat path auto-registers the sole table under the
+  alias `source`, so legacy SQL keeps working when a chart author renames
+  their source. The query selects the top 4 weeks by revenue descending.
+
+chart:
+  type: chart
+  version: 1
+  title: "Top 4 Weeks (Descending)"
+  data:
+    revenue:
+      rows:
+        - week: "Week 1"
+          revenue: 42000
+        - week: "Week 2"
+          revenue: 45500
+        - week: "Week 3"
+          revenue: 43800
+        - week: "Week 4"
+          revenue: 51200
+        - week: "Week 5"
+          revenue: 49700
+        - week: "Week 6"
+          revenue: 55300
+  transform:
+    sql: "SELECT week, revenue FROM source ORDER BY revenue DESC LIMIT 4"
+  visualize:
+    type: bar
+    columns: week
+    rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    bars: 4
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Week 6"
+      value: 55300
+    - label: "Week 4"
+      value: 51200
+    - label: "Week 5"
+      value: 49700
+    - label: "Week 2"
+      value: 45500
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels: ["Week 6", "Week 4", "Week 5", "Week 2"]
+    y:
+      min: 0
+      format: numeric
