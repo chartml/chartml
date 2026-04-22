@@ -227,4 +227,163 @@ mod tests {
         let data = DataTable::from_rows(&Vec::<Row>::new()).unwrap();
         assert!(renderer.render(&data, &make_metric_config()).is_err());
     }
+
+    #[test]
+    fn metric_cards_produce_consistent_grid_styles_for_alignment() {
+        // KYO-131: side-by-side metric cards on a dashboard row must align their
+        // labels and values vertically. Alignment holds because every card emits
+        // the same CSS grid template plus identical grid-row / clamp / align-self
+        // styles on the label and value spans. This test locks those style
+        // outputs in so the alignment contract can't drift silently.
+        let labels = [
+            "Users",
+            "Total Active Customers",
+            "Average Monthly Revenue Per Paying Account",
+            "Conversion Rate",
+        ];
+
+        let renderer = MetricRenderer::new();
+        let mut rendered: Vec<(String, HashMap<String, String>, Vec<ChartElement>)> = Vec::new();
+
+        for label in labels.iter() {
+            let viz: chartml_core::spec::VisualizeSpec = serde_yaml::from_str(&format!(
+                r#"
+                type: metric
+                value: current
+                label: "{label}"
+                format: "$,.0f"
+                "#
+            ))
+            .expect("metric VisualizeSpec YAML should parse");
+            let config = ChartConfig {
+                visualize: viz,
+                title: None,
+                width: 300.0,
+                height: 150.0,
+                colors: vec![],
+                theme: chartml_core::theme::Theme::default(),
+            };
+
+            let rows: Vec<Row> = vec![
+                [("current".to_string(), json!(1234567))].into_iter().collect(),
+            ];
+            let data = DataTable::from_rows(&rows).expect("DataTable::from_rows should succeed");
+
+            let element = renderer
+                .render(&data, &config)
+                .unwrap_or_else(|e| panic!("render failed for card {label:?}: {e:?}"));
+
+            match element {
+                ChartElement::Div { class, style, children } => {
+                    rendered.push((class, style, children));
+                }
+                other => panic!("card {label:?} must render as a Div, got {other:?}"),
+            }
+        }
+
+        // Extract the canonical grid template once from the first card.
+        let expected_grid_template = rendered[0]
+            .1
+            .get("grid-template-rows")
+            .expect("first card must have grid-template-rows")
+            .clone();
+        assert_eq!(
+            expected_grid_template,
+            "[label] minmax(2.5em, max-content) [value] 1fr",
+            "canonical grid-template-rows drifted from KYO-131 contract",
+        );
+
+        for (i, (class, style, children)) in rendered.iter().enumerate() {
+            let label = labels[i];
+
+            // Outer card: class + grid container styles that enable row-track alignment.
+            assert_eq!(
+                class, "chartml-metric-card",
+                "card {i} ({label:?}) outer class drifted",
+            );
+            assert_eq!(
+                style.get("display").map(String::as_str),
+                Some("grid"),
+                "card {i} ({label:?}) outer display drifted",
+            );
+            assert_eq!(
+                style.get("grid-template-rows"),
+                Some(&expected_grid_template),
+                "card {i} ({label:?}) outer grid-template-rows drifted",
+            );
+            assert_eq!(
+                style.get("height").map(String::as_str),
+                Some("100%"),
+                "card {i} ({label:?}) outer height drifted",
+            );
+            assert_eq!(
+                style.get("box-sizing").map(String::as_str),
+                Some("border-box"),
+                "card {i} ({label:?}) outer box-sizing drifted",
+            );
+
+            // Label span is always children[0]; value span always children[1].
+            let label_span = children
+                .first()
+                .unwrap_or_else(|| panic!("card {i} ({label:?}) missing label span"));
+            let value_span = children
+                .get(1)
+                .unwrap_or_else(|| panic!("card {i} ({label:?}) missing value span"));
+
+            match label_span {
+                ChartElement::Span { class, style, .. } => {
+                    assert_eq!(
+                        class, "chartml-metric-label",
+                        "card {i} ({label:?}) label class drifted",
+                    );
+                    assert_eq!(
+                        style.get("grid-row").map(String::as_str),
+                        Some("label"),
+                        "card {i} ({label:?}) label grid-row drifted",
+                    );
+                    assert_eq!(
+                        style.get("display").map(String::as_str),
+                        Some("-webkit-box"),
+                        "card {i} ({label:?}) label display drifted",
+                    );
+                    assert_eq!(
+                        style.get("-webkit-box-orient").map(String::as_str),
+                        Some("vertical"),
+                        "card {i} ({label:?}) label -webkit-box-orient drifted",
+                    );
+                    assert_eq!(
+                        style.get("-webkit-line-clamp").map(String::as_str),
+                        Some("2"),
+                        "card {i} ({label:?}) label -webkit-line-clamp drifted",
+                    );
+                    assert_eq!(
+                        style.get("overflow").map(String::as_str),
+                        Some("hidden"),
+                        "card {i} ({label:?}) label overflow drifted",
+                    );
+                }
+                other => panic!("card {i} ({label:?}) label child must be Span, got {other:?}"),
+            }
+
+            match value_span {
+                ChartElement::Span { class, style, .. } => {
+                    assert_eq!(
+                        class, "chartml-metric-value",
+                        "card {i} ({label:?}) value class drifted",
+                    );
+                    assert_eq!(
+                        style.get("grid-row").map(String::as_str),
+                        Some("value"),
+                        "card {i} ({label:?}) value grid-row drifted",
+                    );
+                    assert_eq!(
+                        style.get("align-self").map(String::as_str),
+                        Some("center"),
+                        "card {i} ({label:?}) value align-self drifted",
+                    );
+                }
+                other => panic!("card {i} ({label:?}) value child must be Span, got {other:?}"),
+            }
+        }
+    }
 }
