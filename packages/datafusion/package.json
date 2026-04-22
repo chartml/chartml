@@ -1,6 +1,6 @@
 {
   "name": "@chartml/datafusion",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "ChartML DataFusion transform plugin — SQL/aggregate/forecast",
   "type": "module",
   "main": "dist/index.js",

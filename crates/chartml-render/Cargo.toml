@@ -1,6 +1,6 @@
 [package]
 name = "chartml-render"
-version = "5.0.0"
+version = "5.0.1"
 edition = "2021"
 license = "MIT"
 description = "Server-side ChartML rendering: ChartElement tree → SVG → PNG"

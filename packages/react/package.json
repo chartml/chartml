@@ -1,6 +1,6 @@
 {
   "name": "@chartml/react",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "React component for ChartML — Rust/WASM powered chart rendering",
   "type": "module",
   "main": "dist/index.js",
