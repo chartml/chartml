@@ -51,6 +51,12 @@ impl ChartRenderer for MetricRenderer {
             style: HashMap::from([
                 ("font-size".to_string(), "14px".to_string()),
                 ("color".to_string(), config.theme.text_secondary.clone()),
+                ("grid-row".to_string(), "label".to_string()),
+                ("display".to_string(), "-webkit-box".to_string()),
+                ("-webkit-box-orient".to_string(), "vertical".to_string()),
+                ("-webkit-line-clamp".to_string(), "2".to_string()),
+                ("overflow".to_string(), "hidden".to_string()),
+                ("text-align".to_string(), "center".to_string()),
             ]),
             content: label,
         });
@@ -62,6 +68,9 @@ impl ChartRenderer for MetricRenderer {
                 ("font-size".to_string(), "36px".to_string()),
                 ("font-weight".to_string(), "bold".to_string()),
                 ("color".to_string(), config.theme.text.clone()),
+                ("grid-row".to_string(), "value".to_string()),
+                ("align-self".to_string(), "center".to_string()),
+                ("text-align".to_string(), "center".to_string()),
             ]),
             content: formatted_value,
         });
@@ -94,6 +103,9 @@ impl ChartRenderer for MetricRenderer {
                     style: HashMap::from([
                         ("font-size".to_string(), "14px".to_string()),
                         ("color".to_string(), trend_color),
+                        ("grid-row".to_string(), "value".to_string()),
+                        ("align-self".to_string(), "end".to_string()),
+                        ("text-align".to_string(), "center".to_string()),
                     ]),
                     content: trend_text,
                 });
@@ -103,11 +115,11 @@ impl ChartRenderer for MetricRenderer {
         Ok(ChartElement::Div {
             class: "chartml-metric-card".to_string(),
             style: HashMap::from([
-                ("display".to_string(), "flex".to_string()),
-                ("flex-direction".to_string(), "column".to_string()),
-                ("align-items".to_string(), "center".to_string()),
-                ("justify-content".to_string(), "center".to_string()),
+                ("display".to_string(), "grid".to_string()),
+                ("grid-template-rows".to_string(), "[label] minmax(2.5em, max-content) [value] 1fr".to_string()),
                 ("padding".to_string(), "20px".to_string()),
+                ("height".to_string(), "100%".to_string()),
+                ("box-sizing".to_string(), "border-box".to_string()),
             ]),
             children: card_children,
         })
