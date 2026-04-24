@@ -1,0 +1,48 @@
+name: "Grouped bar — single series per category (color == category)"
+tags: [bar, grouped, single-series-per-category]
+description: >
+  When the color field equals the category field, each category has exactly
+  one bar. The bars should render full-width and centered in each band,
+  not half-width and offset. Reproduces KYO-154.
+
+chart:
+  type: chart
+  version: 1
+  title: "Traffic Metrics: Yesterday vs 7-Day Average"
+  data:
+    provider: inline
+    rows:
+      - period: "Yesterday"
+        count: 9
+      - period: "7-Day Avg"
+        count: 8
+  visualize:
+    type: bar
+    mode: grouped
+    columns: period
+    rows: count
+    marks:
+      color: period
+
+assertions:
+  structure:
+    root: svg
+    bars: 2
+    legend: true
+    legend_entries: 2
+
+  bars:
+    - label: "Yesterday"
+      series: "Yesterday"
+      value: 9
+    - label: "7-Day Avg"
+      series: "7-Day Avg"
+      value: 8
+
+  grouped:
+    series_per_group: 1
+    bars_side_by_side: true
+
+  scale:
+    proportional: true
+    y_min: 0
