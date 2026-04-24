@@ -18,6 +18,8 @@ use chartml_core::theme::Theme;
 
 use crate::{CacheBackendRef, ChartMLRef, HooksRef, ProviderRef};
 use crate::tooltip::{provide_tooltip_context, DefaultTooltip};
+#[cfg(target_arch = "wasm32")]
+use crate::tooltip::TooltipState;
 
 /// Custom tooltip renderer type.
 pub type TooltipRenderer = Arc<dyn Fn(&ElementData) -> AnyView + Send + Sync>;
@@ -495,6 +497,132 @@ pub fn ChartMLChart(
         }
     });
 
+    // ── SVG tooltip delegation ───────────────────────────────────────────
+    //
+    // The SVG is injected as a raw string via `inner_html`, so Leptos never
+    // attaches per-element event handlers.  Instead we add a single pair of
+    // delegated listeners (pointermove / pointerleave) to the outer container
+    // div — already mounted in the DOM via `container_ref` — and walk upward
+    // from the event target to find the nearest element that carries
+    // `data-label` (written by `chartml_core::svg::write_data_attrs`).
+    //
+    // Lifecycle: the closures are stored in an `Rc<RefCell<...>>` cell so
+    // `on_cleanup` can remove them from the DOM when the component unmounts.
+    // Re-mounting a fresh `ChartMLChart` re-runs this `Effect::new` block and
+    // reinstalls fresh closures against the new container element.
+    #[cfg(target_arch = "wasm32")]
+    {
+        type TooltipListeners = SendWrapper<Rc<RefCell<Option<(
+            web_sys::EventTarget,
+            Closure<dyn Fn(web_sys::PointerEvent)>,
+            Closure<dyn Fn(web_sys::PointerEvent)>,
+        )>>>>;
+
+        let listeners: TooltipListeners =
+            SendWrapper::new(Rc::new(RefCell::new(None)));
+        let listeners_for_effect = listeners.clone();
+        let listeners_for_cleanup = listeners.clone();
+
+        Effect::new(move || {
+            let Some(el) = container_ref.get() else { return };
+
+            // If we already installed listeners for this element, skip.
+            if listeners_for_effect.borrow().is_some() {
+                return;
+            }
+
+            let target: web_sys::EventTarget = el.clone().into();
+
+            // pointermove — find the nearest ancestor-or-self with data-label
+            // inside the SVG host and populate the tooltip signal.
+            let tooltip_state_for_move = tooltip_state;
+            let on_move = Closure::<dyn Fn(web_sys::PointerEvent)>::new(
+                move |evt: web_sys::PointerEvent| {
+                    // Walk up from the event target through the DOM until we
+                    // find an element with `data-label`, or we leave the SVG.
+                    let mut current: Option<web_sys::Element> =
+                        evt.target()
+                           .and_then(|t| t.dyn_into::<web_sys::Element>().ok());
+
+                    let mut found_label: Option<String> = None;
+                    let mut found_value: Option<String> = None;
+                    let mut found_series: Option<String> = None;
+
+                    while let Some(ref el) = current {
+                        // Stop at the svg-host boundary — don't pick up labels
+                        // from the outer chartml-container itself.
+                        let class_name = el.get_attribute("class").unwrap_or_default();
+                        if class_name.contains("chartml-svg-host") {
+                            break;
+                        }
+
+                        let label = el.get_attribute("data-label");
+                        if label.is_some() {
+                            found_label = label;
+                            found_value = el.get_attribute("data-value");
+                            found_series = el.get_attribute("data-series");
+                            break;
+                        }
+
+                        current = el.parent_element();
+                    }
+
+                    if let Some(label) = found_label {
+                        let value = found_value.unwrap_or_default();
+                        let mut data = ElementData::new(label, value);
+                        if let Some(series) = found_series {
+                            data = data.with_series(series);
+                        }
+                        // Use clientX/clientY (viewport coords) so the
+                        // `position: fixed` tooltip renders in the right spot.
+                        tooltip_state_for_move.set(TooltipState::show(
+                            data,
+                            evt.client_x() as f64,
+                            evt.client_y() as f64,
+                        ));
+                    } else {
+                        tooltip_state_for_move.set(TooltipState::hide());
+                    }
+                },
+            );
+
+            // pointerleave — clear the tooltip when the mouse leaves the
+            // chart container entirely.
+            let tooltip_state_for_leave = tooltip_state;
+            let on_leave = Closure::<dyn Fn(web_sys::PointerEvent)>::new(
+                move |_evt: web_sys::PointerEvent| {
+                    tooltip_state_for_leave.set(TooltipState::hide());
+                },
+            );
+
+            let _ = target.add_event_listener_with_callback(
+                "pointermove",
+                on_move.as_ref().unchecked_ref(),
+            );
+            let _ = target.add_event_listener_with_callback(
+                "pointerleave",
+                on_leave.as_ref().unchecked_ref(),
+            );
+
+            *listeners_for_effect.borrow_mut() = Some((target, on_move, on_leave));
+        });
+
+        on_cleanup(move || {
+            if let Some((target, on_move, on_leave)) =
+                listeners_for_cleanup.borrow_mut().take()
+            {
+                let _ = target.remove_event_listener_with_callback(
+                    "pointermove",
+                    on_move.as_ref().unchecked_ref(),
+                );
+                let _ = target.remove_event_listener_with_callback(
+                    "pointerleave",
+                    on_leave.as_ref().unchecked_ref(),
+                );
+            }
+        });
+    }
+
     let container_class = if class.is_empty() {
         "chartml-container".to_string()
     } else {
@@ -801,11 +929,12 @@ pub fn ChartMLChart(
                 })
             }}
 
-            // Tooltip overlay (legacy element-driven tooltip plumbing kept
-            // for backward compatibility — the new SVG-string render path
-            // doesn't fire per-element mouse events, so the tooltip layer
-            // only activates when host code populates `tooltip_state`
-            // through some other means).
+            // Tooltip overlay — populated by the delegated pointermove/
+            // pointerleave listeners installed on the container (see the
+            // "SVG tooltip delegation" block above).  `tooltip_state` is
+            // written with viewport-relative clientX/clientY so the
+            // `position: fixed` tooltip renders at the correct screen
+            // position regardless of scroll or container transforms.
             {
                 let tooltip = tooltip.clone();
                 move || {

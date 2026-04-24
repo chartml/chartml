@@ -106,7 +106,9 @@ fn append_field_ref(out: &mut Vec<Column>, field_ref: &FieldRef) {
 
 /// Format a cell value. Numeric values go through `NumberFormatter` when a
 /// format string is present; otherwise both numeric and string values are
-/// rendered as plain text.
+/// rendered as plain text. A true null (both `get_f64` and `get_string` return
+/// `None`) renders as "—" (U+2014) so the table always has visible content.
+/// An actual empty string (`Some("")`) is preserved as-is.
 fn format_cell(data: &DataTable, row: usize, col: &Column) -> String {
     if let Some(n) = data.get_f64(row, &col.field) {
         if let Some(fmt) = &col.format {
@@ -114,7 +116,10 @@ fn format_cell(data: &DataTable, row: usize, col: &Column) -> String {
         }
         return format_number_plain(n);
     }
-    data.get_string(row, &col.field).unwrap_or_default()
+    match data.get_string(row, &col.field) {
+        Some(s) => s,
+        None => "\u{2014}".to_string(),
+    }
 }
 
 fn format_number_plain(n: f64) -> String {
@@ -453,6 +458,60 @@ style:
         let empty = DataTable::from_rows(&Vec::<Row>::new()).unwrap();
         // Empty DataTable → no fields → no columns → error.
         assert!(TableRenderer::new().render(&empty, &config).is_err());
+    }
+
+    #[test]
+    fn null_cell_renders_em_dash() {
+        // A JSON null in a numeric column must render "—" (U+2014) rather than
+        // an empty string, so the table always has visible, informative content.
+        let rows: Vec<Row> = vec![
+            [
+                ("month".to_string(), json!("Jan")),
+                ("revenue".to_string(), serde_json::Value::Null),
+            ]
+            .into_iter()
+            .collect(),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+        let config = cfg(
+            r#"
+type: table
+columns: month
+rows:
+  - field: revenue
+    label: Revenue
+    format: "$,.0f"
+"#,
+        );
+        let element = TableRenderer::new().render(&data, &config).unwrap();
+        let mut contents = Vec::new();
+        find_contents(&element, &mut contents);
+        assert!(
+            contents.iter().any(|c| c == "\u{2014}"),
+            "null cell must render em dash, got: {contents:?}"
+        );
+    }
+
+    #[test]
+    fn null_string_cell_renders_em_dash() {
+        // A JSON null in a string column must also render "—".
+        let rows: Vec<Row> = vec![
+            [
+                ("month".to_string(), serde_json::Value::Null),
+                ("revenue".to_string(), json!(1200.0)),
+            ]
+            .into_iter()
+            .collect(),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+        let config = cfg("type: table");
+        let element = TableRenderer::new().render(&data, &config).unwrap();
+        let mut contents = Vec::new();
+        find_contents(&element, &mut contents);
+        assert!(
+            contents.iter().any(|c| c == "\u{2014}"),
+            "null string cell must render em dash, got: {contents:?}"
+        );
     }
 
     #[test]

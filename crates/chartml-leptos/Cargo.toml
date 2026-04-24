@@ -16,7 +16,9 @@ serde_json = "1"
 leptos = "0.8"
 # `Document`, `Event`, and `EventTarget` are needed for the `visibilitychange`
 # listener that pauses the auto-refresh interval when the tab is hidden.
-web-sys = { version = "0.3", features = ["HtmlElement", "DomRect", "ResizeObserver", "ResizeObserverEntry", "ResizeObserverSize", "Document", "Event", "EventTarget", "VisibilityState"] }
+# `Element` and `PointerEvent` are needed for the delegated SVG tooltip
+# listeners (pointermove / pointerleave on the chart container div).
+web-sys = { version = "0.3", features = ["HtmlElement", "DomRect", "ResizeObserver", "ResizeObserverEntry", "ResizeObserverSize", "Document", "Element", "Event", "EventTarget", "MouseEvent", "Node", "PointerEvent", "VisibilityState"] }
 wasm-bindgen = "0.2"
 js-sys = "0.3"
 wasm-bindgen-futures = "0.4"
