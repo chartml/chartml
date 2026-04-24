@@ -1015,14 +1015,31 @@ fn render_multi_series_bars(
         let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
         let effective_max = if domain_max < f64::MAX { domain_max } else { value_max };
 
-        let num_series = series_names.len().max(1);
+        // Build per-category series presence map (unique, insertion-ordered).
+        // When color == category, each category has only 1 series; bars should
+        // be sized and centered based on that local count, not the global one.
+        let mut category_series: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+        for i in 0..data.num_rows() {
+            let cat = match data.get_string(i, category_field) {
+                Some(c) => c,
+                None => continue,
+            };
+            let series = match data.get_string(i, color_field) {
+                Some(s) => s,
+                None => continue,
+            };
+            let present = category_series.entry(cat).or_default();
+            if !present.contains(&series) {
+                present.push(series);
+            }
+        }
 
         if is_horizontal {
             // Horizontal grouped: band on y-axis (height), linear on x-axis (width)
             let band = ScaleBand::new(categories.to_vec(), (0.0, inner_height))
                 .padding(0.05);
             let linear = ScaleLinear::new((domain_min, effective_max), (0.0, inner_width));
-            let sub_band_height = band.bandwidth() / num_series as f64;
 
             for i in 0..data.num_rows() {
                 let cat = match data.get_string(i, category_field) {
@@ -1039,8 +1056,24 @@ fn render_multi_series_bars(
                     Some(y) => y,
                     None => continue,
                 };
+
+                // Per-category sizing: divide the band by how many series
+                // are actually present in this category.
+                let local_series = category_series.get(&cat);
+                let local_count = local_series.map_or(1, |v| v.len()).max(1);
+                let sub_band_height = band.bandwidth() / local_count as f64;
+
+                // Cap individual bar height (matches single-series horizontal
+                // capping at 40px) and center within sub-band.
+                let bar_render_height = sub_band_height.min(40.0);
+                let y_inset = (sub_band_height - bar_render_height) / 2.0;
+
+                let local_idx = local_series
+                    .and_then(|v| v.iter().position(|s| s == &series))
+                    .unwrap_or(0);
+                let y = y_base + local_idx as f64 * sub_band_height + y_inset;
+
                 let series_idx = series_names.iter().position(|s| s == &series).unwrap_or(0);
-                let y = y_base + series_idx as f64 * sub_band_height;
 
                 let bar_left = linear.map(0.0);
                 let bar_right = linear.map(val);
@@ -1057,7 +1090,7 @@ fn render_multi_series_bars(
                         x: bar_left.min(bar_right),
                         y,
                         width: bar_width,
-                        height: sub_band_height,
+                        height: bar_render_height,
                         is_horizontal: true,
                         is_negative: val < 0.0,
                         fill,
@@ -1075,7 +1108,9 @@ fn render_multi_series_bars(
             let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
                 .padding(0.05);
             let linear = ScaleLinear::new((domain_min, effective_max), (inner_height, 0.0));
-            let sub_band_width = band.bandwidth() / num_series as f64;
+
+            // Max bar width cap (matches single-series vertical path).
+            let max_bar_width = inner_width * 0.2;
 
             for i in 0..data.num_rows() {
                 let cat = match data.get_string(i, category_field) {
@@ -1092,8 +1127,23 @@ fn render_multi_series_bars(
                     Some(x) => x,
                     None => continue,
                 };
+
+                // Per-category sizing: divide the band by how many series
+                // are actually present in this category.
+                let local_series = category_series.get(&cat);
+                let local_count = local_series.map_or(1, |v| v.len()).max(1);
+                let sub_band_width = band.bandwidth() / local_count as f64;
+
+                // Cap individual bar width and center within sub-band.
+                let bar_render_width = sub_band_width.min(max_bar_width);
+                let x_inset = (sub_band_width - bar_render_width) / 2.0;
+
+                let local_idx = local_series
+                    .and_then(|v| v.iter().position(|s| s == &series))
+                    .unwrap_or(0);
+                let x = x_base + local_idx as f64 * sub_band_width + x_inset;
+
                 let series_idx = series_names.iter().position(|s| s == &series).unwrap_or(0);
-                let x = x_base + series_idx as f64 * sub_band_width;
 
                 let bar_top = linear.map(val);
                 let bar_bottom = linear.map(0.0);
@@ -1109,7 +1159,7 @@ fn render_multi_series_bars(
                     BarRectSpec {
                         x,
                         y: bar_top,
-                        width: sub_band_width,
+                        width: bar_render_width,
                         height: bar_height,
                         is_horizontal: false,
                         is_negative: val < 0.0,
