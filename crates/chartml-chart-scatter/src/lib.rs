@@ -73,11 +73,11 @@ impl ChartRenderer for ScatterRenderer {
         let inner_width = margins.inner_width(width);
         let inner_height = margins.inner_height(height);
 
-        // Compute domains
-        let x_extent = data.extent(&x_field)
-            .ok_or_else(|| ChartError::DataError(format!("No numeric data for field '{}'", x_field)))?;
-        let y_extent = data.extent(&y_field)
-            .ok_or_else(|| ChartError::DataError(format!("No numeric data for field '{}'", y_field)))?;
+        // Compute domains — fall back to (0.0, 1.0) when all values are null
+        // so we still render a valid (empty) chart area instead of erroring.
+        // Individual null points are already skipped in the data loop below.
+        let x_extent = data.extent(&x_field).unwrap_or((0.0, 1.0));
+        let y_extent = data.extent(&y_field).unwrap_or((0.0, 1.0));
 
         // Use actual data extent for axis domains so tightly-clustered data
         // fills the plot area instead of being crammed near a forced zero origin.
@@ -551,11 +551,114 @@ mod tests {
     }
 
     #[test]
-    fn scatter_empty_data_errors() {
+    fn scatter_empty_data_renders_empty_chart() {
+        // Zero rows: extent returns None → fallback domain (0.0, 1.0) → empty chart, no error.
         let renderer = ScatterRenderer::new();
         let data = DataTable::from_rows(&Vec::<Row>::new()).unwrap();
         let result = renderer.render(&data, &make_scatter_config());
-        assert!(result.is_err());
+        assert!(result.is_ok(), "empty data should render an empty chart, not error: {:?}", result.err());
+        let element = result.unwrap();
+        // No data-point circles — only legend circles if any.
+        let scatter_points = count_elements(&element, &|e| {
+            matches!(e, ChartElement::Circle { class, .. } if class.contains("chartml-scatter-point"))
+        });
+        assert_eq!(scatter_points, 0, "empty data should produce zero scatter points");
+    }
+
+    // ----- Null handling tests -----
+
+    fn make_null_config(x_field: &str, y_field: &str) -> ChartConfig {
+        ChartConfig {
+            visualize: VisualizeSpec {
+                chart_type: "scatter".to_string(),
+                mode: None,
+                orientation: None,
+                columns: Some(FieldRef::Simple(x_field.to_string())),
+                rows: Some(FieldRef::Simple(y_field.to_string())),
+                marks: None,
+                axes: None,
+                annotations: None,
+                style: None,
+                value: None,
+                label: None,
+                format: None,
+                compare_with: None,
+                invert_trend: None,
+                data_labels: None,
+            },
+            title: None,
+            width: 600.0,
+            height: 400.0,
+            colors: vec!["#2E7D9A".to_string()],
+            theme: chartml_core::theme::Theme::default(),
+        }
+    }
+
+    #[test]
+    fn scatter_all_x_null_renders_empty_chart() {
+        // All x values are null — extent(x) returns None → fallback (0.0, 1.0).
+        let rows = vec![
+            make_row(&[("x", serde_json::Value::Null), ("y", serde_json::json!(1.0))]),
+            make_row(&[("x", serde_json::Value::Null), ("y", serde_json::json!(2.0))]),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+        let result = ScatterRenderer::new().render(&data, &make_null_config("x", "y"));
+        assert!(result.is_ok(), "all-null x should render empty chart, not error: {:?}", result.err());
+        let scatter_points = count_elements(&result.unwrap(), &|e| {
+            matches!(e, ChartElement::Circle { class, .. } if class.contains("chartml-scatter-point"))
+        });
+        assert_eq!(scatter_points, 0, "no valid x values → no points plotted");
+    }
+
+    #[test]
+    fn scatter_all_y_null_renders_empty_chart() {
+        // All y values are null — extent(y) returns None → fallback (0.0, 1.0).
+        let rows = vec![
+            make_row(&[("x", serde_json::json!(1.0)), ("y", serde_json::Value::Null)]),
+            make_row(&[("x", serde_json::json!(2.0)), ("y", serde_json::Value::Null)]),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+        let result = ScatterRenderer::new().render(&data, &make_null_config("x", "y"));
+        assert!(result.is_ok(), "all-null y should render empty chart, not error: {:?}", result.err());
+        let scatter_points = count_elements(&result.unwrap(), &|e| {
+            matches!(e, ChartElement::Circle { class, .. } if class.contains("chartml-scatter-point"))
+        });
+        assert_eq!(scatter_points, 0, "no valid y values → no points plotted");
+    }
+
+    #[test]
+    fn scatter_all_xy_null_renders_empty_chart() {
+        // Both x and y are null for every row.
+        let rows = vec![
+            make_row(&[("x", serde_json::Value::Null), ("y", serde_json::Value::Null)]),
+            make_row(&[("x", serde_json::Value::Null), ("y", serde_json::Value::Null)]),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+        let result = ScatterRenderer::new().render(&data, &make_null_config("x", "y"));
+        assert!(result.is_ok(), "all-null x+y should render empty chart, not error: {:?}", result.err());
+        let scatter_points = count_elements(&result.unwrap(), &|e| {
+            matches!(e, ChartElement::Circle { class, .. } if class.contains("chartml-scatter-point"))
+        });
+        assert_eq!(scatter_points, 0);
+    }
+
+    #[test]
+    fn scatter_partial_null_renders_valid_points_only() {
+        // Some rows have valid values, some have nulls — only valid pairs are plotted.
+        let rows = vec![
+            make_row(&[("x", serde_json::json!(5.0)), ("y", serde_json::json!(10.0))]),
+            make_row(&[("x", serde_json::Value::Null), ("y", serde_json::json!(20.0))]),
+            make_row(&[("x", serde_json::json!(15.0)), ("y", serde_json::Value::Null)]),
+            make_row(&[("x", serde_json::json!(25.0)), ("y", serde_json::json!(30.0))]),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+        let result = ScatterRenderer::new().render(&data, &make_null_config("x", "y"));
+        assert!(result.is_ok(), "partial nulls should not error: {:?}", result.err());
+        let scatter_points = count_elements(&result.unwrap(), &|e| {
+            matches!(e, ChartElement::Circle { class, .. } if class.contains("chartml-scatter-point"))
+        });
+        // Only rows 0 and 3 have both x and y non-null.
+        assert_eq!(scatter_points, 2, "expected 2 valid points (rows with both x and y non-null)");
     }
 
     // ----- Phase 6: theme.grid_style gating -----

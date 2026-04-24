@@ -26,15 +26,21 @@ impl ChartRenderer for MetricRenderer {
             return Err(ChartError::DataError("No data for metric chart".into()));
         }
 
-        // Extract the value from the first row
-        let raw_value = data.get_f64(0, value_field)
-            .ok_or_else(|| ChartError::DataError(format!("No numeric value for field '{}'", value_field)))?;
+        // Extract the value from the first row. A null/missing value is not an
+        // error — the card renders "—" (U+2014) instead of a number, and trend
+        // calculation is skipped because there is no numeric base to compare.
+        let raw_value = data.get_f64(0, value_field);
 
         // Format the value
-        let formatted_value = if let Some(fmt_str) = &viz.format {
-            NumberFormatter::new(fmt_str).format(raw_value)
-        } else {
-            format!("{}", raw_value)
+        let formatted_value = match raw_value {
+            None => "\u{2014}".to_string(),
+            Some(n) => {
+                if let Some(fmt_str) = &viz.format {
+                    NumberFormatter::new(fmt_str).format(n)
+                } else {
+                    format!("{}", n)
+                }
+            }
         };
 
         // Get label (from viz.label, or config.title, or the field name)
@@ -75,8 +81,9 @@ impl ChartRenderer for MetricRenderer {
             content: formatted_value,
         });
 
-        // Comparison/trend (if compareWith is specified)
-        if let Some(compare_field) = &viz.compare_with {
+        // Comparison/trend (if compareWith is specified). Trend is only meaningful
+        // when the primary value is numeric — skip entirely when null.
+        if let (Some(raw_value), Some(compare_field)) = (raw_value, &viz.compare_with) {
             if let Some(compare_value) = data.get_f64(0, compare_field) {
                 let change = raw_value - compare_value;
                 let pct_change = if compare_value != 0.0 {
@@ -226,6 +233,85 @@ mod tests {
         let renderer = MetricRenderer::new();
         let data = DataTable::from_rows(&Vec::<Row>::new()).unwrap();
         assert!(renderer.render(&data, &make_metric_config()).is_err());
+    }
+
+    #[test]
+    fn metric_null_value_renders_em_dash() {
+        // A null value (JSON null) must render "—" (U+2014) instead of an error.
+        let rows: Vec<Row> = vec![
+            [("current".to_string(), serde_json::Value::Null)].into_iter().collect(),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+
+        let viz: chartml_core::spec::VisualizeSpec = serde_yaml::from_str(r#"
+            type: metric
+            value: current
+            label: "Revenue"
+            format: "$,.0f"
+        "#).unwrap();
+        let config = ChartConfig {
+            visualize: viz,
+            title: None,
+            width: 300.0,
+            height: 150.0,
+            colors: vec![],
+            theme: chartml_core::theme::Theme::default(),
+        };
+
+        let renderer = MetricRenderer::new();
+        let element = renderer.render(&data, &config)
+            .expect("null value must not error — should render em dash");
+
+        // The value span (children[1]) must contain the em dash.
+        let children = match &element {
+            ChartElement::Div { children, .. } => children,
+            other => panic!("root must be Div, got {other:?}"),
+        };
+        let value_span = children.get(1).expect("missing value span");
+        match value_span {
+            ChartElement::Span { content, .. } => {
+                assert_eq!(content, "\u{2014}", "null value span must show em dash, got {content:?}");
+            }
+            other => panic!("value child must be Span, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn metric_null_value_skips_trend() {
+        // When the primary value is null, the trend span must not be rendered
+        // even when compareWith is specified and the comparison field has a value.
+        let rows: Vec<Row> = vec![
+            [
+                ("current".to_string(), serde_json::Value::Null),
+                ("previous".to_string(), serde_json::json!(1000)),
+            ]
+            .into_iter()
+            .collect(),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+
+        let viz: chartml_core::spec::VisualizeSpec = serde_yaml::from_str(r#"
+            type: metric
+            value: current
+            label: "Revenue"
+            compareWith: previous
+        "#).unwrap();
+        let config = ChartConfig {
+            visualize: viz,
+            title: None,
+            width: 300.0,
+            height: 150.0,
+            colors: vec![],
+            theme: chartml_core::theme::Theme::default(),
+        };
+
+        let renderer = MetricRenderer::new();
+        let element = renderer.render(&data, &config)
+            .expect("null value must not error");
+
+        // Only label + value spans — no trend span.
+        let span_count = count_elements(&element, &|e| matches!(e, ChartElement::Span { .. }));
+        assert_eq!(span_count, 2, "null primary value must produce only label + value spans, got {span_count}");
     }
 
     #[test]
