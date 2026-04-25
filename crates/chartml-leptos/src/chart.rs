@@ -37,14 +37,22 @@ fn inject_chartml_css() {
     {
         const CSS: &str = include_str!("../style/chartml.css");
         const CSS_ID: &str = "chartml-injected-styles";
-        let document = web_sys::window().unwrap().document().unwrap();
+        let document = web_sys::window()
+            .expect("window must be available in WASM")
+            .document()
+            .expect("window must have a document in WASM");
         if document.get_element_by_id(CSS_ID).is_some() {
             return; // Already injected
         }
-        let style = document.create_element("style").unwrap();
-        style.set_attribute("id", CSS_ID).unwrap();
+        let style = document.create_element("style")
+            .expect("create_element must succeed for a valid tag name");
+        style.set_attribute("id", CSS_ID)
+            .expect("set_attribute must succeed for valid attribute names");
         style.set_text_content(Some(CSS));
-        document.head().unwrap().append_child(&style).unwrap();
+        document.head()
+            .expect("document must have a head element")
+            .append_child(&style)
+            .expect("append_child must succeed on a valid element");
     }
 }
 
@@ -466,13 +474,16 @@ pub fn ChartMLChart(
                     if w > 0.0 {
                         // Cancel any pending debounce
                         if let Some(tid) = dh.borrow_mut().take() {
-                            web_sys::window().unwrap().clear_timeout_with_handle(tid);
+                            web_sys::window()
+                                .expect("window must be available in WASM")
+                                .clear_timeout_with_handle(tid);
                         }
                         // Set new debounced timeout
                         let cb_js = Closure::once_into_js(move || {
                             set_container_width.set(w);
                         });
-                        let tid = web_sys::window().unwrap()
+                        let tid = web_sys::window()
+                            .expect("window must be available in WASM")
                             .set_timeout_with_callback_and_timeout_and_arguments_0(
                                 cb_js.unchecked_ref(), 200,
                             ).unwrap_or(0);
@@ -493,7 +504,9 @@ pub fn ChartMLChart(
             observer.disconnect();
         }
         if let Some(tid) = debounce_handle.borrow_mut().take() {
-            web_sys::window().unwrap().clear_timeout_with_handle(tid);
+            web_sys::window()
+                .expect("window must be available in WASM")
+                .clear_timeout_with_handle(tid);
         }
     });
 
@@ -950,7 +963,7 @@ pub fn ChartMLChart(
                     );
 
                     let content = if let Some(ref renderer) = tooltip {
-                        renderer(state.data.as_ref().unwrap())
+                        renderer(state.data.as_ref().expect("tooltip data is Some when state is visible"))
                     } else {
                         view! { <DefaultTooltip state=state.clone() /> }.into_any()
                     };

@@ -172,7 +172,7 @@ fn date_n_row(date: &str, n: f64) -> chartml_core::data::Row {
 async fn sleep_ms(ms: i32) {
     let promise = js_sys::Promise::new(&mut |resolve, _| {
         let _ = web_sys::window()
-            .unwrap()
+            .expect("window must be available in WASM")
             .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
     });
     let _ = wasm_bindgen_futures::JsFuture::from(promise).await;

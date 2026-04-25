@@ -57,7 +57,9 @@ fn discover_specs() -> Vec<SpecInfo> {
             Err(_) => continue,
         };
         let chart_type = rel.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
-        let name = rel.file_stem().unwrap().to_string_lossy().to_string();
+        let name = rel.file_stem()
+            .expect("spec path must have a file stem")
+            .to_string_lossy().to_string();
         let id = format!("{}/{}", chart_type, name);
 
         let svg_path = out_root.join(&chart_type).join(format!("{}.svg", name));
