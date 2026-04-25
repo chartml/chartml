@@ -3,7 +3,15 @@
 **Date:** 2026-04-18
 **Plan:** `docs/plans/2026-04-18-datasource-provider-pipeline.md`
 **Linear:** KYO-79 (consumer side)
-**Status:** Phases 1–5 + 4-of-11 deferred cleanups committed and merged on chartml branch `jason/phase-3-provider-trait-resolver`. Phase 6 + the Kyomi-side adoption of the new `refresh_trigger` API + a wasm32 build fix committed on Kyomi branch `jason/kyo-79-dashboard-port-reacts-duckdb-named-sources-pattern-to-leptos`. Phase 7 (publish 5.0.0) intentionally not started per orchestrator instructions.
+**Status:** All phases shipped. Phases 1–5 + 4-of-11 deferred cleanups merged to chartml/main. Phase 6 committed at `ea51f55` and merged to kyomi/main at `f298fe4` (PR #129) on 2026-04-19. Phase 7 shipped — chartml 5.0.0 published to crates.io and npm on 2026-04-19; chartml integration branch merged via PR #4 (merge commit `75b8f59`). Kyomi path deps swapped to version deps in commit `15a616d`.
+
+## Released
+
+- **chartml 5.0.0** published to crates.io and npm on 2026-04-19
+- Merge SHA on chartml/main: `75b8f59` (PR #4)
+- Publish workflow run IDs: `24625773455` (crates.io), `24625773467` (npm)
+- Kyomi adoption merged via PR #129 (merge commit `f298fe4`) on 2026-04-19
+- Path deps swapped to `version = "5"` in commit `15a616d`
 
 ---
 
@@ -18,11 +26,17 @@
 | 3c | jason/phase-3c-resolver-hooks | 6 | +1048 / -29 | Merged |
 | 4 | jason/phase-4-leptos-provider-integration | 9 | +1866 / -121 | Merged |
 | 5 | jason/phase-5-wasm-markdown-react | 27 | +4137 / -424 | Merged |
-| 6 | jason/kyo-79-dashboard-port-reacts-duckdb-named-sources-pattern-to-leptos (Kyomi) | 12 | +1188 / -1138 | Committed |
-| Deferral cleanup (chartml) | jason/phase-3-provider-trait-resolver (one bundled commit) | 12 | +635 / -99 | Committed |
-| Deferral cleanup (Kyomi) | jason/kyo-79-...-leptos | 3 | +126 / -45 | Committed |
+| 6 | jason/kyo-79-dashboard-port-reacts-duckdb-named-sources-pattern-to-leptos (Kyomi) | 12 | +1188 / -1138 | Merged (PR #129, `f298fe4`) |
+| Deferral cleanup (chartml) | jason/phase-3-provider-trait-resolver (one bundled commit) | 12 | +635 / -99 | Merged |
+| Deferral cleanup (Kyomi) | jason/kyo-79-...-leptos | 3 | +126 / -45 | Merged (PR #129, `f298fe4`) |
+| `678f6bf` | chartml-test-runner: register DataFusion + add 7 transform fixtures | — | — | Merged (PR #4) |
+| `66c97ad` | chartml-wasm-datafusion + gallery: wire DataFusion through the WASM render path | — | — | Merged (PR #4) |
+| `b3088de` | chore: bump chartml-* publishable crates to 5.0.0 | — | — | Merged (PR #4) |
+| `c54c524` | test(backward_compat): early-skip fixtures without a baseline | — | — | Merged (PR #4) |
+| PR #4 merge | chartml integration branch → main | — | — | Merged (`75b8f59`) |
+| Publish | chartml 5.0.0 on crates.io + npm | — | — | Released 2026-04-19 |
 
-The chartml integration branch carries 5 phase commits + 4 merge commits + 1 completion-report commit + 1 deferral-cleanup commit on top of the pre-existing design doc.
+The chartml integration branch carries 5 phase commits + 4 merge commits + 1 completion-report commit + 1 deferral-cleanup commit + 4 follow-up commits on top of the pre-existing design doc.
 
 ## Deferrals — closed
 
@@ -34,6 +48,7 @@ User reviewed the original 11-item deferral list and pushed back on 4 as not jus
 | 2 | Wire `MissReason::Invalidated` | ✅ Closed | `Resolver` now tracks recently-invalidated keys in a cfg-gated `SharedRef<Lock<HashSet<u64>>>`. Every `invalidate*` method populates it; `Resolver::fetch` drains the entry on first miss-after-invalidate and emits `MissReason::Invalidated`. Two new tests in `hooks_test.rs`. |
 | 4 | Document `HttpProvider` JSON wrapper-key support | ✅ Closed | `docs/docs/spec.md` documents the `rows` / `data` / `results` unwrap behavior with examples. |
 | 5 | Imperative `refresh_trigger` on `ChartMLChart` | ✅ Closed (chartml + Kyomi) | New `refresh_trigger: Option<Signal<u32>>` prop on `ChartMLChart`. Demo deletes its YAML-comment-mutation workaround. Kyomi adopts the prop (per-chart + dashboard-wide refresh both flow through it). |
+| 8 | chartml-* path deps in Kyomi → version deps | ✅ Closed | chartml 5.0.0 published (PR #4, `75b8f59`). Kyomi workspace `Cargo.toml` swapped to `version = "5"` in commit `15a616d` of KYO-79. |
 
 Bonus fix discovered during Kyomi #5 adoption: 16 wasm32 build errors in Kyomi's Phase 6 `open_indexeddb_backend` / `CacheBackendSignal` were caused by Leptos's default `SyncStorage` requiring `Send + Sync` on `Rc<dyn CacheBackend>` (which is unconditionally `!Send`). Switched to `LocalStorage` storage variant; wasm32 build is now clean.
 
@@ -44,7 +59,6 @@ Bonus fix discovered during Kyomi #5 adoption: 16 wasm32 build errors in Kyomi's
 | 3 | Hooks ordering guarantee | Spec didn't require it. Trait docs are honest about no ordering. Bounded-channel implementation is real complexity for zero current consumer benefit. |
 | 6 | `test_indexeddb_survives_remount` `it.skip(...)` in jsdom | Real coverage exists in `crates/chartml-core/tests/indexeddb_test.rs` (wasm-bindgen-test + headless Firefox). `fake-indexeddb` could provide shallow jsdom coverage (~1 line npm install) but the marginal value is debatable. |
 | 7 | Phase 6 `workspace_id` sentinel `"default"` for free-tier | No regression from prior code. Refuse-mount is a hypothetical future enterprise requirement. |
-| 8 | chartml-* path deps in Kyomi → version deps | Genuinely depends on Phase 7 publishing 5.0. |
 | 9 | Param substitution `{{key}}` text-level vs `$param.name` | Migrating every existing dashboard's stored YAML is a data migration. |
 | 10 | Phase 6 refresh button `invalidate_all()` | Per-chart resolver, scopes correctly. After deferral #5 closure, the `refresh_trigger` path replaces this anyway. |
 | 11 | Phase 6 `last_refreshed` off-by-one-frame | Cosmetic, invisible to users. |
@@ -86,7 +100,7 @@ Every chartml-side commit carries a `code-review-architect` cryptographic signat
 
 - **Deferral #1 fix surfaced a pre-existing Kyomi wasm32 bug**: Phase 6's `RwSignal<Option<CacheBackendRef>>` always required Send + Sync. The `unsafe impl Send + Sync for IndexedDbBackend` from Phase 3b made it appear to compile. Once #1 removed the `unsafe`, the compile error became visible. Fixed in the same Kyomi-side commit by switching to Leptos's `LocalStorage` storage variant.
 
-- **Phase 6 chartml-* path deps** in Kyomi's workspace `Cargo.toml`. Phase 7 must swap these to `version = "5"` after the chartml crates are published.
+- **Phase 6 chartml-* path deps** in Kyomi's workspace `Cargo.toml` were swapped to `version = "5"` in commit `15a616d` after chartml 5.0.0 published. No path deps remain.
 
 ## Compilation status
 
@@ -100,8 +114,9 @@ Every chartml-side commit carries a `code-review-architect` cryptographic signat
 - `cd packages/core && npm test` — all pass
 - `cd packages/markdown-react && npm test` — all pass + 1 explicit it.skip
 
-**Kyomi worktree (`jason/kyo-79-dashboard-port-reacts-duckdb-named-sources-pattern-to-leptos` HEAD = wasm-fix + #5-adoption commit):**
+**Kyomi branch (`jason/kyo-79-dashboard-port-reacts-duckdb-named-sources-pattern-to-leptos`) — pre-merge state (historical):**
 - `cargo check --workspace` — clean
 - `cargo clippy --workspace` — zero warnings
 - `cargo check --target wasm32-unknown-unknown --no-default-features --features hydrate -p kyomi-ui` — **clean (was 16 errors before the fix)**
 - `cargo test -p kyomi-ui` — pass; one pre-existing `chartml_completion::tests::existing_keys_filtered_at_root` failure exists on `main` too (unrelated)
+- Branch merged to kyomi/main via PR #129 (merge commit `f298fe4`) on 2026-04-19. Worktree no longer exists.
