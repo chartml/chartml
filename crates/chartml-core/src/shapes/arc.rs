@@ -117,6 +117,7 @@ fn angle_to_point(angle: f64, radius: f64) -> (f64, f64) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use std::f64::consts::FRAC_PI_2;
 

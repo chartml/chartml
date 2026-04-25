@@ -11,6 +11,7 @@ pub use resolver::{DatasourceResolver, ConnectionConfig};
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use std::collections::HashMap;
 

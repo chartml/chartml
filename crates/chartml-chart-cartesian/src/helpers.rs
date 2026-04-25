@@ -1352,6 +1352,7 @@ pub fn nice_domain(domain_min: f64, domain_max: f64, tick_count: usize) -> (f64,
 
 #[cfg(test)]
 mod tick_tests {
+    #![allow(clippy::unwrap_used)]
     use super::d3_ticks;
 
     #[test]
@@ -1391,6 +1392,7 @@ mod tick_tests {
 
 #[cfg(test)]
 mod zero_line_tests {
+    #![allow(clippy::unwrap_used)]
     use super::emit_zero_line_if_crosses;
     use chartml_core::element::ChartElement;
     use chartml_core::theme::{Theme, ZeroLineSpec};

@@ -43,7 +43,7 @@ pub fn use_tooltip() -> Option<RwSignal<TooltipState>> {
 /// Users can override by providing a custom `tooltip` prop to ChartMLChart.
 #[component]
 pub fn DefaultTooltip(state: TooltipState) -> impl IntoView {
-    let data = state.data.unwrap();
+    let data = state.data.expect("DefaultTooltip is only rendered when state.visible()");
     let series_text = data.series.as_ref().map(|s| format!("{}: ", s)).unwrap_or_default();
 
     view! {

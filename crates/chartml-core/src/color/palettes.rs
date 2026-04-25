@@ -63,6 +63,7 @@ pub fn palette_names() -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::color::utils::is_valid_hex_color;
 

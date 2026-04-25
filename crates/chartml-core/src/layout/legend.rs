@@ -283,6 +283,7 @@ pub fn generate_legend_elements(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     fn make_labels(names: &[&str]) -> Vec<String> {

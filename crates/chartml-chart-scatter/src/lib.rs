@@ -402,6 +402,7 @@ fn compute_tick_step(ticks: &[f64]) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use std::collections::HashMap;
     use chartml_core::data::Row;

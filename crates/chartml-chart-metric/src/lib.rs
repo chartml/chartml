@@ -139,6 +139,7 @@ impl ChartRenderer for MetricRenderer {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use chartml_core::data::Row;
     use chartml_core::element::count_elements;

@@ -310,6 +310,7 @@ fn apply_sort(data: &mut [Row], sorts: &[SortSpec]) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::spec::{AggregateSpec, Dimension, Measure, SortSpec, TransformSpec};
     use serde_json::json;

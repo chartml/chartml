@@ -32,7 +32,7 @@ pub fn element_to_svg(element: &ChartElement, width: f64, height: f64) -> String
                 &mut buf,
                 r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}" width="{}" height="{}">"#,
                 width, height, width, height,
-            ).unwrap();
+            ).expect("writing to String is infallible");
             buf.push_str(r#"<foreignObject x="0" y="0" width="100%" height="100%">"#);
             write_element(&mut buf, element);
             buf.push_str("</foreignObject>");
@@ -51,15 +51,15 @@ fn write_element(buf: &mut String, element: &ChartElement) {
                 buf,
                 r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="{}""##,
                 viewbox.to_svg_string(),
-            ).unwrap();
+            ).expect("writing to String is infallible");
             if let Some(w) = width {
-                write!(buf, r#" width="{}""#, w).unwrap();
+                write!(buf, r#" width="{}""#, w).expect("writing to String is infallible");
             }
             if let Some(h) = height {
-                write!(buf, r#" height="{}""#, h).unwrap();
+                write!(buf, r#" height="{}""#, h).expect("writing to String is infallible");
             }
             if !class.is_empty() {
-                write!(buf, r#" class="{}""#, xml_escape(class)).unwrap();
+                write!(buf, r#" class="{}""#, xml_escape(class)).expect("writing to String is infallible");
             }
             buf.push('>');
             for child in children {
@@ -71,10 +71,10 @@ fn write_element(buf: &mut String, element: &ChartElement) {
         ChartElement::Group { class, transform, children } => {
             buf.push_str("<g");
             if !class.is_empty() {
-                write!(buf, r#" class="{}""#, xml_escape(class)).unwrap();
+                write!(buf, r#" class="{}""#, xml_escape(class)).expect("writing to String is infallible");
             }
             if let Some(t) = transform {
-                write!(buf, r#" transform="{}""#, t.to_svg_string()).unwrap();
+                write!(buf, r#" transform="{}""#, t.to_svg_string()).expect("writing to String is infallible");
             }
             buf.push('>');
             for child in children {
@@ -109,25 +109,25 @@ fn write_element(buf: &mut String, element: &ChartElement) {
                 buf,
                 r#"<rect x="{}" y="{}" width="{}" height="{}" fill="{}" style="transform-origin: {}px {}px;""#,
                 x, y, width, height, xml_escape(fill), origin_x, origin_y,
-            ).unwrap();
+            ).expect("writing to String is infallible");
             if let Some(s) = stroke {
-                write!(buf, r#" stroke="{}""#, xml_escape(s)).unwrap();
+                write!(buf, r#" stroke="{}""#, xml_escape(s)).expect("writing to String is infallible");
             }
             if let Some(r) = rx {
-                write!(buf, r#" rx="{}""#, r).unwrap();
+                write!(buf, r#" rx="{}""#, r).expect("writing to String is infallible");
             }
             if let Some(r) = ry {
-                write!(buf, r#" ry="{}""#, r).unwrap();
+                write!(buf, r#" ry="{}""#, r).expect("writing to String is infallible");
             }
             if !class.is_empty() {
-                write!(buf, r#" class="{}""#, xml_escape(class)).unwrap();
+                write!(buf, r#" class="{}""#, xml_escape(class)).expect("writing to String is infallible");
             }
             write_data_attrs(buf, data);
             buf.push_str("/>");
         }
 
         ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, opacity, class, data, animation_origin } => {
-            write!(buf, r#"<path d="{}""#, xml_escape(d)).unwrap();
+            write!(buf, r#"<path d="{}""#, xml_escape(d)).expect("writing to String is infallible");
             // When the emitter populates `animation_origin` (top-rounded
             // bar paths from `build_bar_element`), inline the
             // `transform-origin` style so CSS keyframes animate from the
@@ -135,27 +135,27 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             // so the unconditional `style=` insertion below stays absent
             // for every pre-theme-hooks snapshot.
             if let Some((ox, oy)) = animation_origin {
-                write!(buf, r#" style="transform-origin: {}px {}px;""#, ox, oy).unwrap();
+                write!(buf, r#" style="transform-origin: {}px {}px;""#, ox, oy).expect("writing to String is infallible");
             }
             match fill.as_deref() {
-                Some(f) => write!(buf, r#" fill="{}""#, xml_escape(f)).unwrap(),
+                Some(f) => write!(buf, r#" fill="{}""#, xml_escape(f)).expect("writing to String is infallible"),
                 None => buf.push_str(r#" fill="none""#),
             }
             match stroke.as_deref() {
-                Some(s) => write!(buf, r#" stroke="{}""#, xml_escape(s)).unwrap(),
+                Some(s) => write!(buf, r#" stroke="{}""#, xml_escape(s)).expect("writing to String is infallible"),
                 None => buf.push_str(r#" stroke="none""#),
             }
             if let Some(sw) = stroke_width {
-                write!(buf, r#" stroke-width="{}""#, sw).unwrap();
+                write!(buf, r#" stroke-width="{}""#, sw).expect("writing to String is infallible");
             }
             if let Some(sda) = stroke_dasharray {
-                write!(buf, r#" stroke-dasharray="{}""#, xml_escape(sda)).unwrap();
+                write!(buf, r#" stroke-dasharray="{}""#, xml_escape(sda)).expect("writing to String is infallible");
             }
             if let Some(op) = opacity {
-                write!(buf, r#" opacity="{}""#, op).unwrap();
+                write!(buf, r#" opacity="{}""#, op).expect("writing to String is infallible");
             }
             if !class.is_empty() {
-                write!(buf, r#" class="{}""#, xml_escape(class)).unwrap();
+                write!(buf, r#" class="{}""#, xml_escape(class)).expect("writing to String is infallible");
             }
             write_data_attrs(buf, data);
             buf.push_str("/>");
@@ -166,12 +166,12 @@ fn write_element(buf: &mut String, element: &ChartElement) {
                 buf,
                 r#"<circle cx="{}" cy="{}" r="{}" fill="{}""#,
                 cx, cy, r, xml_escape(fill),
-            ).unwrap();
+            ).expect("writing to String is infallible");
             if let Some(s) = stroke {
-                write!(buf, r#" stroke="{}""#, xml_escape(s)).unwrap();
+                write!(buf, r#" stroke="{}""#, xml_escape(s)).expect("writing to String is infallible");
             }
             if !class.is_empty() {
-                write!(buf, r#" class="{}""#, xml_escape(class)).unwrap();
+                write!(buf, r#" class="{}""#, xml_escape(class)).expect("writing to String is infallible");
             }
             write_data_attrs(buf, data);
             buf.push_str("/>");
@@ -182,15 +182,15 @@ fn write_element(buf: &mut String, element: &ChartElement) {
                 buf,
                 r#"<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}""#,
                 x1, y1, x2, y2, xml_escape(stroke),
-            ).unwrap();
+            ).expect("writing to String is infallible");
             if let Some(sw) = stroke_width {
-                write!(buf, r#" stroke-width="{}""#, sw).unwrap();
+                write!(buf, r#" stroke-width="{}""#, sw).expect("writing to String is infallible");
             }
             if let Some(sda) = stroke_dasharray {
-                write!(buf, r#" stroke-dasharray="{}""#, xml_escape(sda)).unwrap();
+                write!(buf, r#" stroke-dasharray="{}""#, xml_escape(sda)).expect("writing to String is infallible");
             }
             if !class.is_empty() {
-                write!(buf, r#" class="{}""#, xml_escape(class)).unwrap();
+                write!(buf, r#" class="{}""#, xml_escape(class)).expect("writing to String is infallible");
             }
             buf.push_str("/>");
         }
@@ -208,30 +208,30 @@ fn write_element(buf: &mut String, element: &ChartElement) {
                 buf,
                 r#"<text x="{}" y="{}" text-anchor="{}" font-family="{}""#,
                 x, y, anchor, xml_escape(family),
-            ).unwrap();
+            ).expect("writing to String is infallible");
             if let Some(db) = dominant_baseline {
-                write!(buf, r#" dominant-baseline="{}""#, xml_escape(db)).unwrap();
+                write!(buf, r#" dominant-baseline="{}""#, xml_escape(db)).expect("writing to String is infallible");
             }
             if let Some(t) = transform {
-                write!(buf, r#" transform="{}""#, t.to_svg_string()).unwrap();
+                write!(buf, r#" transform="{}""#, t.to_svg_string()).expect("writing to String is infallible");
             }
             if let Some(fs) = font_size {
-                write!(buf, r#" font-size="{}""#, xml_escape(fs)).unwrap();
+                write!(buf, r#" font-size="{}""#, xml_escape(fs)).expect("writing to String is infallible");
             }
             if let Some(fw) = font_weight {
-                write!(buf, r#" font-weight="{}""#, xml_escape(fw)).unwrap();
+                write!(buf, r#" font-weight="{}""#, xml_escape(fw)).expect("writing to String is infallible");
             }
             if let Some(ls) = letter_spacing {
-                write!(buf, r#" letter-spacing="{}""#, xml_escape(ls)).unwrap();
+                write!(buf, r#" letter-spacing="{}""#, xml_escape(ls)).expect("writing to String is infallible");
             }
             if let Some(tt) = text_transform {
-                write!(buf, r#" text-transform="{}""#, xml_escape(tt)).unwrap();
+                write!(buf, r#" text-transform="{}""#, xml_escape(tt)).expect("writing to String is infallible");
             }
             if let Some(f) = fill {
-                write!(buf, r#" fill="{}""#, xml_escape(f)).unwrap();
+                write!(buf, r#" fill="{}""#, xml_escape(f)).expect("writing to String is infallible");
             }
             if !class.is_empty() {
-                write!(buf, r#" class="{}""#, xml_escape(class)).unwrap();
+                write!(buf, r#" class="{}""#, xml_escape(class)).expect("writing to String is infallible");
             }
             buf.push('>');
             buf.push_str(&xml_escape(content));
@@ -241,11 +241,11 @@ fn write_element(buf: &mut String, element: &ChartElement) {
         ChartElement::Div { class, style, children } => {
             buf.push_str(r#"<div xmlns="http://www.w3.org/1999/xhtml""#);
             if !class.is_empty() {
-                write!(buf, r#" class="{}""#, xml_escape(class)).unwrap();
+                write!(buf, r#" class="{}""#, xml_escape(class)).expect("writing to String is infallible");
             }
             let style_str = style_map_to_string(style);
             if !style_str.is_empty() {
-                write!(buf, r#" style="{}""#, xml_escape(&style_str)).unwrap();
+                write!(buf, r#" style="{}""#, xml_escape(&style_str)).expect("writing to String is infallible");
             }
             buf.push('>');
             for child in children {
@@ -257,11 +257,11 @@ fn write_element(buf: &mut String, element: &ChartElement) {
         ChartElement::Span { class, style, content } => {
             buf.push_str("<span");
             if !class.is_empty() {
-                write!(buf, r#" class="{}""#, xml_escape(class)).unwrap();
+                write!(buf, r#" class="{}""#, xml_escape(class)).expect("writing to String is infallible");
             }
             let style_str = style_map_to_string(style);
             if !style_str.is_empty() {
-                write!(buf, r#" style="{}""#, xml_escape(&style_str)).unwrap();
+                write!(buf, r#" style="{}""#, xml_escape(&style_str)).expect("writing to String is infallible");
             }
             buf.push('>');
             buf.push_str(&xml_escape(content));
@@ -284,13 +284,13 @@ fn style_map_to_string(style: &std::collections::HashMap<String, String>) -> Str
 fn write_data_attrs(buf: &mut String, data: &Option<ElementData>) {
     if let Some(d) = data {
         if !d.label.is_empty() {
-            write!(buf, r#" data-label="{}""#, xml_escape(&d.label)).unwrap();
+            write!(buf, r#" data-label="{}""#, xml_escape(&d.label)).expect("writing to String is infallible");
         }
         if !d.value.is_empty() {
-            write!(buf, r#" data-value="{}""#, xml_escape(&d.value)).unwrap();
+            write!(buf, r#" data-value="{}""#, xml_escape(&d.value)).expect("writing to String is infallible");
         }
         if let Some(ref s) = d.series {
-            write!(buf, r#" data-series="{}""#, xml_escape(s)).unwrap();
+            write!(buf, r#" data-series="{}""#, xml_escape(s)).expect("writing to String is infallible");
         }
     }
 }
@@ -313,6 +313,7 @@ fn xml_escape(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::element::{ViewBox, Transform, TextAnchor, ElementData};
     use std::collections::HashMap;

@@ -478,6 +478,7 @@ fn format_px(v: f32) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

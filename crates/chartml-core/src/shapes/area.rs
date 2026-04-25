@@ -75,6 +75,7 @@ impl Default for AreaGenerator {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

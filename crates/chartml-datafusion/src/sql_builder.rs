@@ -571,6 +571,7 @@ pub fn build_aggregate_sql(table_name: &str, spec: &AggregateSpec) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use chartml_core::spec::*;
 

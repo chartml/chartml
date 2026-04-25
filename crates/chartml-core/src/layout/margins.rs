@@ -156,6 +156,7 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

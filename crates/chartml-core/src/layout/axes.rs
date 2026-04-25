@@ -119,6 +119,7 @@ fn default_format(value: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

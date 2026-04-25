@@ -144,7 +144,7 @@ fn parse_spec(spec_str: &str) -> FormatSpec {
             i += 1;
         }
         if i > start {
-            width = Some(chars[start..i].iter().collect::<String>().parse().unwrap());
+            width = Some(chars[start..i].iter().collect::<String>().parse().expect("width slice contains only ASCII digits"));
         }
     }
 
@@ -162,7 +162,7 @@ fn parse_spec(spec_str: &str) -> FormatSpec {
             i += 1;
         }
         if i > start {
-            precision = Some(chars[start..i].iter().collect::<String>().parse().unwrap());
+            precision = Some(chars[start..i].iter().collect::<String>().parse().expect("precision slice contains only ASCII digits"));
         } else {
             precision = Some(0);
         }
@@ -493,6 +493,7 @@ fn format_default_si(value: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

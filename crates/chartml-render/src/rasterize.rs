@@ -136,6 +136,7 @@ pub fn svg_to_png(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     fn simple_svg() -> String {

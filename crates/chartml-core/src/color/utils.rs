@@ -127,6 +127,7 @@ pub fn generate_fallback_colors(base_colors: &[&str]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

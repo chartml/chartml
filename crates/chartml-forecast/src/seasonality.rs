@@ -145,6 +145,7 @@ fn autocorrelation_at_lag(values: &[f64], lag: usize, mean: f64, variance: f64) 
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

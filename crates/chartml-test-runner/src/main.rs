@@ -41,7 +41,9 @@ fn create_chartml() -> ChartML {
 /// In batch mode, uses `<parent_dir>/<stem>` relative to the batch root to avoid collisions.
 /// In single mode, uses just the stem.
 fn output_prefix(yaml_path: &Path, batch_root: Option<&Path>) -> String {
-    let stem = yaml_path.file_stem().unwrap().to_string_lossy();
+    let stem = yaml_path.file_stem()
+        .expect("spec path must have a file stem")
+        .to_string_lossy();
     if let Some(root) = batch_root {
         // Get the relative path from batch root, then use parent dir + stem
         if let Ok(relative) = yaml_path.strip_prefix(root) {
@@ -101,7 +103,7 @@ fn render_spec(yaml_path: &Path, output_dir: &Path, batch_root: Option<&Path>) -
                     "fix_required": null,
                     "last_evaluated": null
                 });
-                let _ = fs::write(&result_path, serde_json::to_string_pretty(&result_meta).unwrap());
+                let _ = fs::write(&result_path, serde_json::to_string_pretty(&result_meta).expect("serde_json::Value always serializes"));
                 Ok(RenderResult {
                     spec_name: prefix,
                     tree_path: PathBuf::new(),
@@ -127,7 +129,7 @@ fn render_spec(yaml_path: &Path, output_dir: &Path, batch_root: Option<&Path>) -
     // Write element tree as JSON
     let tree_json = tree::element_to_json(&element);
     let tree_path = output_dir.join(format!("{}.tree.json", prefix));
-    fs::write(&tree_path, serde_json::to_string_pretty(&tree_json).unwrap())
+    fs::write(&tree_path, serde_json::to_string_pretty(&tree_json).expect("serde_json::Value always serializes"))
         .map_err(|e| format!("Failed to write tree: {}", e))?;
 
     // Write SVG
@@ -143,7 +145,7 @@ fn render_spec(yaml_path: &Path, output_dir: &Path, batch_root: Option<&Path>) -
     if let Some(ref a) = assertions {
         let assertions_json: serde_json::Value = serde_yaml::from_value(a.clone())
             .unwrap_or(serde_json::Value::Null);
-        fs::write(&assertions_path, serde_json::to_string_pretty(&assertions_json).unwrap())
+        fs::write(&assertions_path, serde_json::to_string_pretty(&assertions_json).expect("serde_json::Value always serializes"))
             .map_err(|e| format!("Failed to write assertions: {}", e))?;
     }
 
@@ -160,7 +162,7 @@ fn render_spec(yaml_path: &Path, output_dir: &Path, batch_root: Option<&Path>) -
         "fix_required": null,
         "last_evaluated": null
     });
-    fs::write(&result_path, serde_json::to_string_pretty(&result_meta).unwrap())
+    fs::write(&result_path, serde_json::to_string_pretty(&result_meta).expect("serde_json::Value always serializes"))
         .map_err(|e| format!("Failed to write result: {}", e))?;
 
     Ok(RenderResult {
@@ -315,7 +317,9 @@ fn run_batch(specs_dir: &Path, output_dir: &Path) {
                 passed += 1;
             }
             Err(e) => {
-                let name = spec_path.file_stem().unwrap().to_string_lossy().to_string();
+                let name = spec_path.file_stem()
+                    .expect("spec path must have a file stem")
+                    .to_string_lossy().to_string();
                 eprintln!("FAIL {}: {}", name, e);
                 failures.push((name, e));
                 failed += 1;
@@ -331,7 +335,7 @@ fn run_batch(specs_dir: &Path, output_dir: &Path) {
         "render_failures": failures.iter().map(|(n, e)| serde_json::json!({"spec": n, "error": e})).collect::<Vec<_>>(),
     });
     let manifest_path = output_dir.join("manifest.json");
-    let _ = fs::write(&manifest_path, serde_json::to_string_pretty(&manifest).unwrap());
+    let _ = fs::write(&manifest_path, serde_json::to_string_pretty(&manifest).expect("serde_json::Value always serializes"));
 
     println!("\n--- Results ---");
     println!("Total: {}  Passed: {}  Failed: {}", total, passed, failed);

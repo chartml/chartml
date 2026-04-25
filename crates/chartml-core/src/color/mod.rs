@@ -42,6 +42,7 @@ pub fn get_color_at_index(index: usize, base_palette: &[&str]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

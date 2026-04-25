@@ -103,7 +103,7 @@ impl ScaleTime {
         chrono::DateTime::from_timestamp(secs, 0)
             .unwrap_or_else(|| {
                 // Fallback to epoch if somehow still out of range
-                chrono::DateTime::from_timestamp(0, 0).unwrap()
+                chrono::DateTime::from_timestamp(0, 0).expect("epoch timestamp 0 is always valid")
             })
             .naive_utc()
     }
@@ -111,6 +111,7 @@ impl ScaleTime {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use chrono::NaiveDate;
 

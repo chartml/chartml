@@ -113,6 +113,7 @@ impl Future for Cancelled<'_> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]
