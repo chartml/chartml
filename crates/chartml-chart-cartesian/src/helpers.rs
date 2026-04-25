@@ -571,36 +571,6 @@ pub fn generate_x_axis_with_display(
         LabelStrategy::Rotated { margin: _, skip_factor } => {
             // rotation margin handled by MarginConfig
 
-            // Compute the effective visible label count (after skip_factor thinning)
-            let visible_count = match skip_factor {
-                Some(factor) if *factor > 1 => {
-                    (0..display_labels.len()).filter(|i| i % factor == 0).count()
-                }
-                _ => display_labels.len(),
-            };
-
-            // Post-rotation truncation: a label of width W rotated -45deg projects
-            // W * cos(45deg) horizontally. To avoid overlap, this projection must fit
-            // in the space available per visible label.
-            let cos45 = std::f64::consts::FRAC_PI_4.cos(); // ~0.707
-            let available_per_visible = if visible_count > 0 {
-                available_width / visible_count as f64
-            } else {
-                available_width
-            };
-            // max_full_width: maximum unrotated label width such that the rotated
-            // horizontal projection fits: available_per_visible >= width * cos45 + spacing
-            let spacing = 6.0;
-            let overlap_width = (available_per_visible - spacing) / cos45;
-
-            // Cap label width at the overlap-free width. This mirrors
-            // LabelStrategy::determine() — no special-case boost needed.
-            let max_full_width = if overlap_width > 0.0 {
-                overlap_width
-            } else {
-                0.0
-            };
-
             for (i, label) in display_labels.iter().enumerate() {
                 let orig_label = &band_keys[i];
                 let x = match band.map(orig_label) {
@@ -619,17 +589,13 @@ pub fn generate_x_axis_with_display(
                     None => true,
                 };
                 if should_show {
-                    // Truncate the label if its rotated projection would cause overlap
-                    let display_text = if max_full_width > 0.0 {
-                        truncate_label_with_metrics(label, max_full_width, &TextMetrics::from_theme_axis_label(theme))
-                    } else {
-                        label.clone()
-                    };
-                    let is_truncated = display_text != *label;
+                    // Rotated labels preserve full text — the whole point of
+                    // rotation is to fit longer labels. Overflow/clipping is
+                    // handled by the SVG viewport, not by pre-truncation.
                     let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
                     elements.push(ChartElement::Text {
                         x, y: y_position + 10.0,
-                        content: display_text,
+                        content: label.clone(),
                         anchor: TextAnchor::End,
                         dominant_baseline: None,
                         transform: Some(Transform::Rotate(-45.0, x, y_position + 10.0)),
@@ -640,11 +606,7 @@ pub fn generate_x_axis_with_display(
                         text_transform: ts.text_transform,
                         fill: Some(theme.text_secondary.clone()),
                         class: "tick-label axis-label".to_string(),
-                        data: if is_truncated {
-                            Some(ElementData::new(label.clone(), ""))
-                        } else {
-                            None
-                        },
+                        data: None,
                     });
                 }
             }

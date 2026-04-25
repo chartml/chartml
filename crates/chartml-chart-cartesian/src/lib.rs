@@ -631,6 +631,50 @@ mod tests {
     }
 
     #[test]
+    fn x_axis_rotated_labels_preserve_full_text() {
+        use crate::helpers::{generate_x_axis, GridConfig};
+        // Long date-like labels matching the long_temporal_labels test case.
+        // These are 25+ chars and must NOT be truncated when rotated.
+        let labels: Vec<String> = vec![
+            "Monday, January 6th, 2025".into(),
+            "Monday, January 13th, 2025".into(),
+            "Monday, January 20th, 2025".into(),
+            "Monday, January 27th, 2025".into(),
+            "Monday, February 3rd, 2025".into(),
+            "Monday, February 10th, 2025".into(),
+            "Monday, February 17th, 2025".into(),
+            "Monday, February 24th, 2025".into(),
+            "Monday, March 3rd, 2025".into(),
+            "Monday, March 10th, 2025".into(),
+            "Monday, March 17th, 2025".into(),
+            "Monday, March 24th, 2025".into(),
+        ];
+        let result = generate_x_axis(&crate::helpers::XAxisParams {
+            labels: &labels, display_label_overrides: None,
+            range: (0.0, 600.0), y_position: 350.0, available_width: 600.0,
+            x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
+            theme: &chartml_core::theme::Theme::default(),
+        });
+        // Collect all visible tick-label text content
+        let tick_texts: Vec<&str> = result.elements.iter().filter_map(|e| {
+            if let ChartElement::Text { content, class, .. } = e {
+                if class.split_whitespace().any(|c| c == "tick-label") {
+                    return Some(content.as_str());
+                }
+            }
+            None
+        }).collect();
+        // Every visible label must contain its full original text — no ellipsis truncation
+        for text in &tick_texts {
+            assert!(!text.contains('\u{2026}'),
+                "Rotated label should NOT be truncated but got: {text:?}");
+        }
+        // Check that at least some of the full labels appear verbatim
+        assert!(tick_texts.iter().any(|t| *t == "Monday, January 6th, 2025"),
+            "Expected full label text in output, got: {:?}", tick_texts);
+    }
+
+    #[test]
     fn x_axis_sampled_100_labels() {
         use crate::helpers::{generate_x_axis, GridConfig};
         let labels: Vec<String> = (0..100).map(|i| format!("Long Category Name {}", i)).collect();

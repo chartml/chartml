@@ -82,9 +82,11 @@ pub fn accept() {
                 continue;
             }
 
-            // Content changed — remove stale .sig file
+            // Content changed — sig is now stale (hash won't match).
+            // Never delete sig files: if a bug caused the diff, fixing
+            // the bug restores the original SVG and the existing sig
+            // becomes valid again — no re-evaluation needed.
             if sig_path.exists() {
-                fs::remove_file(&sig_path).ok();
                 sigs_invalidated += 1;
             }
         }
