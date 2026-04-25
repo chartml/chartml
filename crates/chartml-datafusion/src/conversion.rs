@@ -172,7 +172,7 @@ fn arrow_value_to_json(array: &dyn arrow::array::Array, idx: usize) -> serde_jso
             let arr = array
                 .as_any()
                 .downcast_ref::<Float64Array>()
-                .unwrap();
+                .expect("DataType::Float64 arm guarantees Float64Array");
             let v = arr.value(idx);
             serde_json::json!(v)
         }
@@ -180,60 +180,68 @@ fn arrow_value_to_json(array: &dyn arrow::array::Array, idx: usize) -> serde_jso
             let arr = array
                 .as_any()
                 .downcast_ref::<arrow::array::Float32Array>()
-                .unwrap();
+                .expect("DataType::Float32 arm guarantees Float32Array");
             serde_json::json!(arr.value(idx) as f64)
         }
         DataType::Int8 => {
-            let arr = array.as_any().downcast_ref::<arrow::array::Int8Array>().unwrap();
+            let arr = array.as_any().downcast_ref::<arrow::array::Int8Array>()
+                .expect("DataType::Int8 arm guarantees Int8Array");
             serde_json::json!(arr.value(idx))
         }
         DataType::Int16 => {
-            let arr = array.as_any().downcast_ref::<arrow::array::Int16Array>().unwrap();
+            let arr = array.as_any().downcast_ref::<arrow::array::Int16Array>()
+                .expect("DataType::Int16 arm guarantees Int16Array");
             serde_json::json!(arr.value(idx))
         }
         DataType::Int32 => {
-            let arr = array.as_any().downcast_ref::<arrow::array::Int32Array>().unwrap();
+            let arr = array.as_any().downcast_ref::<arrow::array::Int32Array>()
+                .expect("DataType::Int32 arm guarantees Int32Array");
             serde_json::json!(arr.value(idx))
         }
         DataType::Int64 => {
-            let arr = array.as_any().downcast_ref::<arrow::array::Int64Array>().unwrap();
+            let arr = array.as_any().downcast_ref::<arrow::array::Int64Array>()
+                .expect("DataType::Int64 arm guarantees Int64Array");
             serde_json::json!(arr.value(idx))
         }
         DataType::UInt8 => {
-            let arr = array.as_any().downcast_ref::<arrow::array::UInt8Array>().unwrap();
+            let arr = array.as_any().downcast_ref::<arrow::array::UInt8Array>()
+                .expect("DataType::UInt8 arm guarantees UInt8Array");
             serde_json::json!(arr.value(idx))
         }
         DataType::UInt16 => {
-            let arr = array.as_any().downcast_ref::<arrow::array::UInt16Array>().unwrap();
+            let arr = array.as_any().downcast_ref::<arrow::array::UInt16Array>()
+                .expect("DataType::UInt16 arm guarantees UInt16Array");
             serde_json::json!(arr.value(idx))
         }
         DataType::UInt32 => {
-            let arr = array.as_any().downcast_ref::<arrow::array::UInt32Array>().unwrap();
+            let arr = array.as_any().downcast_ref::<arrow::array::UInt32Array>()
+                .expect("DataType::UInt32 arm guarantees UInt32Array");
             serde_json::json!(arr.value(idx))
         }
         DataType::UInt64 => {
-            let arr = array.as_any().downcast_ref::<arrow::array::UInt64Array>().unwrap();
+            let arr = array.as_any().downcast_ref::<arrow::array::UInt64Array>()
+                .expect("DataType::UInt64 arm guarantees UInt64Array");
             serde_json::json!(arr.value(idx))
         }
         DataType::Boolean => {
             let arr = array
                 .as_any()
                 .downcast_ref::<BooleanArray>()
-                .unwrap();
+                .expect("DataType::Boolean arm guarantees BooleanArray");
             serde_json::json!(arr.value(idx))
         }
         DataType::Utf8 => {
             let arr = array
                 .as_any()
                 .downcast_ref::<StringArray>()
-                .unwrap();
+                .expect("DataType::Utf8 arm guarantees StringArray");
             serde_json::json!(arr.value(idx))
         }
         DataType::LargeUtf8 => {
             let arr = array
                 .as_any()
                 .downcast_ref::<arrow::array::LargeStringArray>()
-                .unwrap();
+                .expect("DataType::LargeUtf8 arm guarantees LargeStringArray");
             serde_json::json!(arr.value(idx))
         }
         DataType::Date32 => {
@@ -241,7 +249,7 @@ fn arrow_value_to_json(array: &dyn arrow::array::Array, idx: usize) -> serde_jso
             let arr = array
                 .as_any()
                 .downcast_ref::<arrow::array::Date32Array>()
-                .unwrap();
+                .expect("DataType::Date32 arm guarantees Date32Array");
             let days = arr.value(idx);
             // Convert days since epoch to YYYY-MM-DD
             let naive = days_to_iso(days as i64);

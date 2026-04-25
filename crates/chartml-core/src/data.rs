@@ -490,7 +490,9 @@ impl DataTable {
                 }
                 let value = match col.data_type() {
                     DataType::Boolean => {
-                        let v = col.as_any().downcast_ref::<BooleanArray>().unwrap().value(row_idx);
+                        let v = col.as_any().downcast_ref::<BooleanArray>()
+                            .expect("DataType::Boolean arm guarantees BooleanArray")
+                            .value(row_idx);
                         serde_json::json!(v)
                     }
                     DataType::Float64 | DataType::Float32 |
@@ -534,68 +536,94 @@ impl DataTable {
 fn arrow_to_f64(col: &ArrayRef, idx: usize) -> Option<f64> {
     match col.data_type() {
         DataType::Float64 => {
-            Some(col.as_any().downcast_ref::<Float64Array>().unwrap().value(idx))
+            Some(col.as_any().downcast_ref::<Float64Array>()
+                .expect("DataType::Float64 arm guarantees Float64Array")
+                .value(idx))
         }
         DataType::Float32 => {
-            Some(col.as_any().downcast_ref::<Float32Array>().unwrap().value(idx) as f64)
+            Some(col.as_any().downcast_ref::<Float32Array>()
+                .expect("DataType::Float32 arm guarantees Float32Array")
+                .value(idx) as f64)
         }
         DataType::Int64 => {
-            Some(col.as_any().downcast_ref::<Int64Array>().unwrap().value(idx) as f64)
+            Some(col.as_any().downcast_ref::<Int64Array>()
+                .expect("DataType::Int64 arm guarantees Int64Array")
+                .value(idx) as f64)
         }
         DataType::Int32 => {
-            Some(col.as_any().downcast_ref::<Int32Array>().unwrap().value(idx) as f64)
+            Some(col.as_any().downcast_ref::<Int32Array>()
+                .expect("DataType::Int32 arm guarantees Int32Array")
+                .value(idx) as f64)
         }
         DataType::Int16 => {
-            Some(col.as_any().downcast_ref::<Int16Array>().unwrap().value(idx) as f64)
+            Some(col.as_any().downcast_ref::<Int16Array>()
+                .expect("DataType::Int16 arm guarantees Int16Array")
+                .value(idx) as f64)
         }
         DataType::Int8 => {
-            Some(col.as_any().downcast_ref::<Int8Array>().unwrap().value(idx) as f64)
+            Some(col.as_any().downcast_ref::<Int8Array>()
+                .expect("DataType::Int8 arm guarantees Int8Array")
+                .value(idx) as f64)
         }
         DataType::UInt64 => {
-            Some(col.as_any().downcast_ref::<UInt64Array>().unwrap().value(idx) as f64)
+            Some(col.as_any().downcast_ref::<UInt64Array>()
+                .expect("DataType::UInt64 arm guarantees UInt64Array")
+                .value(idx) as f64)
         }
         DataType::UInt32 => {
-            Some(col.as_any().downcast_ref::<UInt32Array>().unwrap().value(idx) as f64)
+            Some(col.as_any().downcast_ref::<UInt32Array>()
+                .expect("DataType::UInt32 arm guarantees UInt32Array")
+                .value(idx) as f64)
         }
         DataType::UInt16 => {
-            Some(col.as_any().downcast_ref::<UInt16Array>().unwrap().value(idx) as f64)
+            Some(col.as_any().downcast_ref::<UInt16Array>()
+                .expect("DataType::UInt16 arm guarantees UInt16Array")
+                .value(idx) as f64)
         }
         DataType::UInt8 => {
-            Some(col.as_any().downcast_ref::<UInt8Array>().unwrap().value(idx) as f64)
+            Some(col.as_any().downcast_ref::<UInt8Array>()
+                .expect("DataType::UInt8 arm guarantees UInt8Array")
+                .value(idx) as f64)
         }
         DataType::Boolean => {
-            let v = col.as_any().downcast_ref::<BooleanArray>().unwrap().value(idx);
+            let v = col.as_any().downcast_ref::<BooleanArray>()
+                .expect("DataType::Boolean arm guarantees BooleanArray")
+                .value(idx);
             Some(if v { 1.0 } else { 0.0 })
         }
         DataType::Date32 => {
             // Days since epoch
-            Some(col.as_any().downcast_ref::<Date32Array>().unwrap().value(idx) as f64)
+            Some(col.as_any().downcast_ref::<Date32Array>()
+                .expect("DataType::Date32 arm guarantees Date32Array")
+                .value(idx) as f64)
         }
         DataType::Date64 => {
             // Milliseconds since epoch
-            Some(col.as_any().downcast_ref::<Date64Array>().unwrap().value(idx) as f64)
+            Some(col.as_any().downcast_ref::<Date64Array>()
+                .expect("DataType::Date64 arm guarantees Date64Array")
+                .value(idx) as f64)
         }
         DataType::Timestamp(unit, _) => {
             let raw = match unit {
                 TimeUnit::Second => col
                     .as_any()
                     .downcast_ref::<TimestampSecondArray>()
-                    .unwrap()
+                    .expect("Timestamp(Second) arm guarantees TimestampSecondArray")
                     .value(idx),
                 TimeUnit::Millisecond => col
                     .as_any()
                     .downcast_ref::<TimestampMillisecondArray>()
-                    .unwrap()
+                    .expect("Timestamp(Millisecond) arm guarantees TimestampMillisecondArray")
                     .value(idx),
                 TimeUnit::Microsecond => col
                     .as_any()
                     .downcast_ref::<TimestampMicrosecondArray>()
-                    .unwrap()
+                    .expect("Timestamp(Microsecond) arm guarantees TimestampMicrosecondArray")
                     .value(idx),
                 TimeUnit::Nanosecond => col
                     .as_any()
                     .downcast_ref::<TimestampNanosecondArray>()
-                    .unwrap()
+                    .expect("Timestamp(Nanosecond) arm guarantees TimestampNanosecondArray")
                     .value(idx),
             };
             // Convert to epoch milliseconds for consistent f64 representation
@@ -611,14 +639,16 @@ fn arrow_to_f64(col: &ArrayRef, idx: usize) -> Option<f64> {
             let raw = col
                 .as_any()
                 .downcast_ref::<Decimal128Array>()
-                .unwrap()
+                .expect("DataType::Decimal128 arm guarantees Decimal128Array")
                 .value(idx);
             let divisor = 10_f64.powi(*scale as i32);
             Some(raw as f64 / divisor)
         }
         DataType::Utf8 => {
             // Try parsing string as number
-            let s = col.as_any().downcast_ref::<StringArray>().unwrap().value(idx);
+            let s = col.as_any().downcast_ref::<StringArray>()
+                .expect("DataType::Utf8 arm guarantees StringArray")
+                .value(idx);
             s.parse::<f64>().ok()
         }
         _ => None,
@@ -632,7 +662,7 @@ fn arrow_to_string(col: &ArrayRef, idx: usize) -> Option<String> {
             Some(
                 col.as_any()
                     .downcast_ref::<StringArray>()
-                    .unwrap()
+                    .expect("DataType::Utf8 arm guarantees StringArray")
                     .value(idx)
                     .to_string(),
             )
@@ -641,52 +671,78 @@ fn arrow_to_string(col: &ArrayRef, idx: usize) -> Option<String> {
             Some(
                 col.as_any()
                     .downcast_ref::<arrow::array::LargeStringArray>()
-                    .unwrap()
+                    .expect("DataType::LargeUtf8 arm guarantees LargeStringArray")
                     .value(idx)
                     .to_string(),
             )
         }
         DataType::Float64 => {
-            let v = col.as_any().downcast_ref::<Float64Array>().unwrap().value(idx);
+            let v = col.as_any().downcast_ref::<Float64Array>()
+                .expect("DataType::Float64 arm guarantees Float64Array")
+                .value(idx);
             Some(format_f64(v))
         }
         DataType::Float32 => {
-            let v = col.as_any().downcast_ref::<Float32Array>().unwrap().value(idx) as f64;
+            let v = col.as_any().downcast_ref::<Float32Array>()
+                .expect("DataType::Float32 arm guarantees Float32Array")
+                .value(idx) as f64;
             Some(format_f64(v))
         }
         DataType::Int64 => {
-            Some(col.as_any().downcast_ref::<Int64Array>().unwrap().value(idx).to_string())
+            Some(col.as_any().downcast_ref::<Int64Array>()
+                .expect("DataType::Int64 arm guarantees Int64Array")
+                .value(idx).to_string())
         }
         DataType::Int32 => {
-            Some(col.as_any().downcast_ref::<Int32Array>().unwrap().value(idx).to_string())
+            Some(col.as_any().downcast_ref::<Int32Array>()
+                .expect("DataType::Int32 arm guarantees Int32Array")
+                .value(idx).to_string())
         }
         DataType::Int16 => {
-            Some(col.as_any().downcast_ref::<Int16Array>().unwrap().value(idx).to_string())
+            Some(col.as_any().downcast_ref::<Int16Array>()
+                .expect("DataType::Int16 arm guarantees Int16Array")
+                .value(idx).to_string())
         }
         DataType::Int8 => {
-            Some(col.as_any().downcast_ref::<Int8Array>().unwrap().value(idx).to_string())
+            Some(col.as_any().downcast_ref::<Int8Array>()
+                .expect("DataType::Int8 arm guarantees Int8Array")
+                .value(idx).to_string())
         }
         DataType::UInt64 => {
-            Some(col.as_any().downcast_ref::<UInt64Array>().unwrap().value(idx).to_string())
+            Some(col.as_any().downcast_ref::<UInt64Array>()
+                .expect("DataType::UInt64 arm guarantees UInt64Array")
+                .value(idx).to_string())
         }
         DataType::UInt32 => {
-            Some(col.as_any().downcast_ref::<UInt32Array>().unwrap().value(idx).to_string())
+            Some(col.as_any().downcast_ref::<UInt32Array>()
+                .expect("DataType::UInt32 arm guarantees UInt32Array")
+                .value(idx).to_string())
         }
         DataType::UInt16 => {
-            Some(col.as_any().downcast_ref::<UInt16Array>().unwrap().value(idx).to_string())
+            Some(col.as_any().downcast_ref::<UInt16Array>()
+                .expect("DataType::UInt16 arm guarantees UInt16Array")
+                .value(idx).to_string())
         }
         DataType::UInt8 => {
-            Some(col.as_any().downcast_ref::<UInt8Array>().unwrap().value(idx).to_string())
+            Some(col.as_any().downcast_ref::<UInt8Array>()
+                .expect("DataType::UInt8 arm guarantees UInt8Array")
+                .value(idx).to_string())
         }
         DataType::Boolean => {
-            Some(col.as_any().downcast_ref::<BooleanArray>().unwrap().value(idx).to_string())
+            Some(col.as_any().downcast_ref::<BooleanArray>()
+                .expect("DataType::Boolean arm guarantees BooleanArray")
+                .value(idx).to_string())
         }
         DataType::Date32 => {
-            let days = col.as_any().downcast_ref::<Date32Array>().unwrap().value(idx);
+            let days = col.as_any().downcast_ref::<Date32Array>()
+                .expect("DataType::Date32 arm guarantees Date32Array")
+                .value(idx);
             Some(days_to_iso(days as i64))
         }
         DataType::Date64 => {
-            let millis = col.as_any().downcast_ref::<Date64Array>().unwrap().value(idx);
+            let millis = col.as_any().downcast_ref::<Date64Array>()
+                .expect("DataType::Date64 arm guarantees Date64Array")
+                .value(idx);
             // Convert millis to days, then to ISO
             let days = millis / 86_400_000;
             Some(days_to_iso(days))
@@ -696,22 +752,22 @@ fn arrow_to_string(col: &ArrayRef, idx: usize) -> Option<String> {
                 TimeUnit::Second => col
                     .as_any()
                     .downcast_ref::<TimestampSecondArray>()
-                    .unwrap()
+                    .expect("Timestamp(Second) arm guarantees TimestampSecondArray")
                     .value(idx),
                 TimeUnit::Millisecond => col
                     .as_any()
                     .downcast_ref::<TimestampMillisecondArray>()
-                    .unwrap()
+                    .expect("Timestamp(Millisecond) arm guarantees TimestampMillisecondArray")
                     .value(idx),
                 TimeUnit::Microsecond => col
                     .as_any()
                     .downcast_ref::<TimestampMicrosecondArray>()
-                    .unwrap()
+                    .expect("Timestamp(Microsecond) arm guarantees TimestampMicrosecondArray")
                     .value(idx),
                 TimeUnit::Nanosecond => col
                     .as_any()
                     .downcast_ref::<TimestampNanosecondArray>()
-                    .unwrap()
+                    .expect("Timestamp(Nanosecond) arm guarantees TimestampNanosecondArray")
                     .value(idx),
             };
             // Convert to seconds + subseconds using Euclidean division
@@ -742,7 +798,7 @@ fn arrow_to_string(col: &ArrayRef, idx: usize) -> Option<String> {
             let raw = col
                 .as_any()
                 .downcast_ref::<Decimal128Array>()
-                .unwrap()
+                .expect("DataType::Decimal128 arm guarantees Decimal128Array")
                 .value(idx);
             Some(format_decimal128(raw, *scale))
         }
