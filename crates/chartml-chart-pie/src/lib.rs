@@ -175,6 +175,7 @@ fn get_field_name(field_ref: &Option<FieldRef>) -> Result<String, ChartError> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use chartml_core::data::Row;
     use chartml_core::element::count_elements;

@@ -133,6 +133,7 @@ fn split_yaml_documents(input: &str) -> Vec<&str> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     /// Helper: unwrap a ChartMLSpec::Single into its inner Component.

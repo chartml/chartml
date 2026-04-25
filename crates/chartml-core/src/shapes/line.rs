@@ -195,6 +195,7 @@ fn generate_monotone_x(points: &[(f64, f64)]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

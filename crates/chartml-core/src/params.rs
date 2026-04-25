@@ -141,6 +141,7 @@ pub fn extract_param_references(yaml: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

@@ -106,6 +106,7 @@ pub fn forecast(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     /// Helper to create a TimeSeries with daily timestamps starting from day 1000.

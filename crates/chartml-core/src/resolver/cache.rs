@@ -204,6 +204,7 @@ impl CacheBackend for MemoryBackend {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::data::Row;
     use serde_json::json;

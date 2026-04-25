@@ -1456,6 +1456,7 @@ fn describe_transform(spec: &spec::TransformSpec) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::element::ViewBox;
 

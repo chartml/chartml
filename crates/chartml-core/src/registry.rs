@@ -70,6 +70,7 @@ impl Default for ChartMLRegistry {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::data::DataTable;
     use crate::element::{ChartElement, ViewBox};

@@ -227,6 +227,7 @@ fn discriminant_name(value: &serde_json::Value) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::resolver::FetchRequest;
     use crate::spec::InlineData;

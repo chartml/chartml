@@ -418,6 +418,7 @@ pub fn format_tick_value_si(value: f64, tick_step: f64) -> String {
 
 #[cfg(test)]
 mod si_tests {
+    #![allow(clippy::unwrap_used)]
     use super::format_tick_value_si;
 
     #[test]
@@ -578,6 +579,7 @@ pub fn truncate_label_with_metrics(label: &str, max_width: f64, metrics: &TextMe
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

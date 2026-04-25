@@ -1020,6 +1020,7 @@ fn dispatch_provider(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     fn empty_inline() -> InlineData {

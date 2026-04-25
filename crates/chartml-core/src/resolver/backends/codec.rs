@@ -261,6 +261,7 @@ pub(crate) fn duration_to_millis(d: Duration) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     //! Pure-Rust unit tests for the codec — run on native via
     //! `cargo test --workspace`. The browser-side `wasm-bindgen-test` suite
     //! lives in `crates/chartml-core/tests/indexeddb_test.rs` and exercises

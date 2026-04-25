@@ -1139,6 +1139,7 @@ struct AutoRefreshState {
 
 #[cfg(test)]
 mod title_style_tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use chartml_core::theme::Theme;
 
@@ -1215,6 +1216,7 @@ mod title_style_tests {
 
 #[cfg(test)]
 mod auto_refresh_tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use chartml_core::spec::source::CacheConfig as SpecCacheConfig;
 

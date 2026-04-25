@@ -44,6 +44,7 @@ unused_mut = "deny"
 too_many_arguments = "deny"
 large_enum_variant = "deny"
 wrong_self_convention = "deny"
+unwrap_used = "deny"
 
 # Optimize WASM release builds for size
 [profile.release]

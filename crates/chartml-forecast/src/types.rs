@@ -84,6 +84,7 @@ pub fn detect_interval(timestamps: &[i32]) -> i32 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

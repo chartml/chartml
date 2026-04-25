@@ -313,6 +313,7 @@ fn xml_escape(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::element::{ViewBox, Transform, TextAnchor, ElementData};
     use std::collections::HashMap;

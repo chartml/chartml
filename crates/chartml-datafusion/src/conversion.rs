@@ -301,6 +301,7 @@ fn merge_types(existing: InferredType, new: InferredType) -> InferredType {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use serde_json::json;
 

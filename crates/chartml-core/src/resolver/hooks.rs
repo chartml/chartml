@@ -239,6 +239,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     /// `NullHooks` is genuinely zero-cost — no allocation, no state.
