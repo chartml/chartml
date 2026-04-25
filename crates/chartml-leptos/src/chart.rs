@@ -936,8 +936,8 @@ pub fn ChartMLChart(
             // SVG is still on screen).
             {move || {
                 is_loading.get().then(|| view! {
-                    <div class="chartml-loading" style="padding: 12px; color: #888;">
-                        "Loading..."
+                    <div class="chartml-loading" style="display: flex; align-items: center; justify-content: center; padding: 48px 12px;">
+                        <img src="/kyomi_animated_logo.svg" alt="Loading" style="width: 32px; height: 32px;" />
                     </div>
                 })
             }}
