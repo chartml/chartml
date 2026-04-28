@@ -104,29 +104,22 @@ fn append_field_ref(out: &mut Vec<Column>, field_ref: &FieldRef) {
     }
 }
 
-/// Format a cell value. Numeric values go through `NumberFormatter` when a
-/// format string is present; otherwise both numeric and string values are
-/// rendered as plain text. A true null (both `get_f64` and `get_string` return
-/// `None`) renders as "—" (U+2014) so the table always has visible content.
-/// An actual empty string (`Some("")`) is preserved as-is.
+/// Format a cell value for display.
+///
+/// When an explicit format string is present, numeric values go through
+/// `NumberFormatter`. Otherwise `get_string` is used — it returns the
+/// type-aware representation for every Arrow type (ISO timestamps, dates,
+/// formatted numbers, etc.) so temporal columns are never shown as raw
+/// epoch millis.
 fn format_cell(data: &DataTable, row: usize, col: &Column) -> String {
-    if let Some(n) = data.get_f64(row, &col.field) {
-        if let Some(fmt) = &col.format {
+    if let Some(fmt) = &col.format {
+        if let Some(n) = data.get_f64(row, &col.field) {
             return NumberFormatter::new(fmt).format(n);
         }
-        return format_number_plain(n);
     }
     match data.get_string(row, &col.field) {
         Some(s) => s,
         None => "\u{2014}".to_string(),
-    }
-}
-
-fn format_number_plain(n: f64) -> String {
-    if n.fract() == 0.0 && n.abs() < 1e16 {
-        format!("{}", n as i64)
-    } else {
-        format!("{n}")
     }
 }
 
