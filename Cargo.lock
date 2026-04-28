@@ -576,7 +576,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-table"
-version = "5.0.1"
+version = "5.0.2"
 dependencies = [
  "chartml-core",
  "serde_json",
