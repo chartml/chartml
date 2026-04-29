@@ -299,6 +299,11 @@ impl DataTable {
         &self.batch
     }
 
+    /// Consume self and return the owned RecordBatch.
+    pub fn into_record_batch(self) -> RecordBatch {
+        self.batch
+    }
+
     /// Get the Arrow schema.
     pub fn schema(&self) -> Arc<Schema> {
         self.batch.schema()
