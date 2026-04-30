@@ -25,17 +25,21 @@ pub use theme::Theme;
 pub use pipeline::{FetchedChart, PreparedChart, FetchMetadata, PreparedMetadata, RenderOptions};
 pub use resolver::{
     CacheBackend, CacheBackendRef, CacheConfig, CacheError, CachedEntry, CacheHitEvent,
-    CacheMissEvent, CacheTier, CancellationToken, DataSourceProvider, ErrorEvent, FetchError,
-    FetchRequest, FetchResult, HooksRef, HttpProvider, InlineProvider, MemoryBackend, MissReason,
-    NullHooks, Phase, ProgressEvent, ResolveOutcome, Resolver, ResolverHooks, ResolverRef,
-    SharedRef,
+    CacheMissEvent, CacheTier, CancellationToken, DataSourceProvider, ErrorEvent, FetchBatchResult,
+    FetchError, FetchRequest, FetchResult, HooksRef, HttpProvider, InlineProvider, MemoryBackend,
+    MissReason, NullHooks, Phase, ProgressEvent, ResolveOutcome, Resolver, ResolverHooks,
+    ResolverRef, SharedRef,
 };
 
 use std::collections::HashMap;
 use std::sync::Arc;
 // `web_time::SystemTime` is a wasm32-compatible drop-in for `std::time::SystemTime`.
 use web_time::SystemTime;
+
+use arrow::array::RecordBatch;
+use arrow::datatypes::SchemaRef;
 use indexmap::IndexMap;
+
 use crate::data::{Row, DataTable};
 use crate::spec::{ChartSpec, DataRef, InlineData};
 
@@ -789,23 +793,23 @@ impl ChartML {
         let mut cache_hits: Vec<String> = Vec::new();
         let mut cache_misses: Vec<String> = Vec::new();
         let mut per_source: HashMap<String, HashMap<String, serde_json::Value>> = HashMap::new();
+        let mut batch_map: IndexMap<String, (SchemaRef, Vec<RecordBatch>)> = IndexMap::new();
+        let mut any_batch_source = false;
 
         let chart_sources: IndexMap<String, DataTable> = match &normalized_data {
             DataRef::Named(name) => {
-                // Phase 1/2 fast path: pre-registered source REQUIRED. The
-                // `Named` shape is the "user named this source AND
-                // pre-registered the data" idiom; no provider call.
                 let table = sources.remove(name).ok_or_else(|| {
                     ChartError::DataError(format!("Named data source '{name}' not found"))
                 })?;
+                let batch = table.record_batch().clone();
+                let schema = batch.schema();
+                batch_map.insert(name.clone(), (schema, vec![batch]));
+                any_batch_source = true;
                 let mut map = IndexMap::new();
                 map.insert(name.clone(), table);
                 map
             }
             DataRef::Inline(inline) => {
-                // Single inline source, no transform. Route through the
-                // resolver (which dispatches to InlineProvider / HttpProvider
-                // / the registered `datasource` provider as appropriate).
                 let request = self.build_fetch_request(None, inline)?;
                 let key = resolver::Resolver::key_for(inline, self.namespace.as_deref());
                 let outcome = self
@@ -813,7 +817,19 @@ impl ChartML {
                     .fetch(key, request)
                     .await
                     .map_err(|e| context_fetch_error(e, "source"))?;
-                classify_outcome("source", &outcome, &mut cache_hits, &mut cache_misses);
+                classify_outcome(
+                    "source",
+                    &outcome,
+                    &mut cache_hits,
+                    &mut cache_misses,
+                );
+                if let Some(batch_result) = outcome.batches {
+                    batch_map.insert(
+                        "source".to_string(),
+                        (batch_result.schema, batch_result.batches),
+                    );
+                    any_batch_source = true;
+                }
                 if !outcome.result.metadata.is_empty() {
                     per_source.insert("source".to_string(), outcome.result.metadata);
                 }
@@ -822,15 +838,10 @@ impl ChartML {
                 map
             }
             DataRef::NamedMap(map) => {
-                // Per-entry routing: pre-registered names skip the resolver;
-                // everything else fans out through `try_join_all`. Pre-pass
-                // separates the two so the parallel batch only contains
-                // resolver-bound entries.
                 let mut prefetched: IndexMap<String, DataTable> = IndexMap::new();
                 let mut to_dispatch: Vec<(String, InlineData)> = Vec::new();
                 for (name, inline) in map {
                     if let Some(table) = sources.remove(name) {
-                        // Pre-registered fast path — no provider call.
                         prefetched.insert(name.clone(), table);
                     } else {
                         to_dispatch.push((name.clone(), inline.clone()));
@@ -860,23 +871,35 @@ impl ChartML {
                 let dispatched: Vec<(String, resolver::ResolveOutcome)> =
                     futures::future::try_join_all(dispatch_futures).await?;
 
-                // Re-assemble the map preserving the YAML's declared order.
-                // We iterate the original map keys — pre-registered entries
-                // come from `prefetched`, others from `dispatched`.
                 let mut dispatched_by_name: HashMap<String, resolver::ResolveOutcome> =
                     dispatched.into_iter().collect();
                 let mut out: IndexMap<String, DataTable> = IndexMap::new();
                 for name in map.keys() {
                     if let Some(table) = prefetched.shift_remove(name) {
+                        let batch = table.record_batch().clone();
+                        let schema = batch.schema();
+                        batch_map.insert(name.clone(), (schema, vec![batch]));
+                        any_batch_source = true;
                         out.insert(name.clone(), table);
                     } else if let Some(outcome) = dispatched_by_name.remove(name) {
-                        classify_outcome(name, &outcome, &mut cache_hits, &mut cache_misses);
+                        classify_outcome(
+                            name,
+                            &outcome,
+                            &mut cache_hits,
+                            &mut cache_misses,
+                        );
+                        if let Some(batch_result) = outcome.batches {
+                            batch_map.insert(
+                                name.clone(),
+                                (batch_result.schema, batch_result.batches),
+                            );
+                            any_batch_source = true;
+                        }
                         if !outcome.result.metadata.is_empty() {
                             per_source.insert(name.clone(), outcome.result.metadata);
                         }
                         out.insert(name.clone(), outcome.result.data);
                     } else {
-                        // Unreachable: every key was placed into one or the other.
                         return Err(ChartError::DataError(format!(
                             "Internal invariant violation: source '{name}' was neither pre-registered nor dispatched"
                         )));
@@ -889,6 +912,7 @@ impl ChartML {
         Ok(FetchedChart {
             spec: chart_spec,
             sources: chart_sources,
+            batch_sources: if any_batch_source { Some(batch_map) } else { None },
             metadata: FetchMetadata {
                 refreshed_at: SystemTime::now(),
                 cache_hits,
@@ -933,7 +957,7 @@ impl ChartML {
         _opts: &RenderOptions,
     ) -> Result<PreparedChart, ChartError> {
         // `_opts` is reserved — phase 3 will thread params through TransformContext.
-        let FetchedChart { spec, sources, metadata: _ } = fetched;
+        let FetchedChart { spec, sources, batch_sources, metadata: _ } = fetched;
 
         // Snapshot hooks once so the lock is never held across `await`.
         let hooks = self.resolver.hooks_snapshot();
@@ -974,10 +998,17 @@ impl ChartML {
             Some(transform_spec) => {
                 if let Some(middleware) = self.registry.get_transform() {
                     let context = plugin::TransformContext::default();
-                    middleware
-                        .transform(&sources, transform_spec, &context)
-                        .await
-                        .map(|r| (r.data, true))
+                    if let Some(ref bs) = batch_sources {
+                        middleware
+                            .transform_batches(bs, transform_spec, &context)
+                            .await
+                            .map(|r| (r.data, true))
+                    } else {
+                        middleware
+                            .transform(&sources, transform_spec, &context)
+                            .await
+                            .map(|r| (r.data, true))
+                    }
                 } else {
                     // No middleware — built-in fallback handles aggregate-only on a single table.
                     single_source_or_err(&sources, transform_spec).and_then(|single_ref| {
@@ -1375,8 +1406,6 @@ fn build_fetch_request_static(
     })
 }
 
-/// Bucket a `ResolveOutcome` into the appropriate `cache_hits` / `cache_misses`
-/// list. Source name is the user-chosen key (or `"source"` for unnamed).
 fn classify_outcome(
     name: &str,
     outcome: &resolver::ResolveOutcome,

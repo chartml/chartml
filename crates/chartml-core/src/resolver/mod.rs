@@ -15,6 +15,9 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+
+use arrow::array::RecordBatch;
+use arrow::datatypes::SchemaRef;
 // `web_time::SystemTime` works on `wasm32-unknown-unknown` (where the std
 // version panics). On native it's a transparent alias for `std::time`.
 use std::time::Duration;
@@ -165,6 +168,23 @@ pub trait DataSourceProvider: Send + Sync {
     /// providers only see this single call per actual upstream invocation.
     async fn fetch(&self, request: FetchRequest) -> Result<FetchResult, FetchError>;
 
+    /// Batch-oriented fetch. Returns multiple RecordBatches with a shared
+    /// schema, allowing the transform layer to register them into MemTable
+    /// without concatenation.
+    ///
+    /// Default wraps `fetch()` into a single-batch result. Override to
+    /// stream batches from an HTTP endpoint (e.g. Arrow IPC stream).
+    async fn fetch_batches(&self, request: FetchRequest) -> Result<FetchBatchResult, FetchError> {
+        let result = self.fetch(request).await?;
+        let schema = result.data.schema();
+        let batch = result.data.into_record_batch();
+        Ok(FetchBatchResult {
+            schema,
+            batches: vec![batch],
+            metadata: result.metadata,
+        })
+    }
+
     /// Optional graceful shutdown hook. Called by `ChartML::shutdown()` on
     /// SSR request end / tab close. Default no-op so providers that hold no
     /// pooled resources don't have to implement it.
@@ -203,6 +223,16 @@ pub struct FetchResult {
     pub data: DataTable,
     /// Free-form per-provider metadata — `bytes_billed`, `rows_returned`,
     /// `server_refreshed_at`, `upstream_cache_hit`, `warnings`, etc.
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Batch-oriented provider response. Carries multiple RecordBatches with a
+/// shared schema, allowing the transform layer to register them into
+/// MemTable without concatenation.
+#[derive(Debug, Clone)]
+pub struct FetchBatchResult {
+    pub schema: SchemaRef,
+    pub batches: Vec<RecordBatch>,
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
@@ -311,6 +341,10 @@ impl CacheConfig {
 pub struct ResolveOutcome {
     pub result: FetchResult,
     pub cache_hit: bool,
+    /// Original provider batches. `Some` on cache miss (when the provider
+    /// returned via `fetch_batches`), `None` on cache hit. Allows the
+    /// transform layer to register batches into MemTable without concat.
+    pub batches: Option<FetchBatchResult>,
 }
 
 /// Tag prefix for source-slug-based bulk invalidation. Public so consumers
@@ -415,7 +449,16 @@ struct InvalidationTracker {
 /// inner `ResolverFuture` is `BoxFuture` (Send) on native and
 /// `LocalBoxFuture` (?Send) on WASM so we don't conflict with the
 /// `?Send` async traits the providers and cache backends use.
-type SharedFetch = Shared<ResolverFuture<Result<FetchResult, FetchError>>>;
+///
+/// Provider invocation result carried inside the in-flight dedup future.
+/// Holds the DataTable (for caching) plus optional original batches.
+#[derive(Debug, Clone)]
+struct FetchWithBatches {
+    result: FetchResult,
+    batches: Option<FetchBatchResult>,
+}
+
+type SharedFetch = Shared<ResolverFuture<Result<FetchWithBatches, FetchError>>>;
 
 impl Default for Resolver {
     fn default() -> Self {
@@ -607,6 +650,7 @@ impl Resolver {
                         metadata: entry.metadata,
                     },
                     cache_hit: true,
+                    batches: None,
                 });
             }
             // Expired — let it fall through; we'll overwrite on success.
@@ -636,6 +680,7 @@ impl Resolver {
                             metadata: entry.metadata,
                         },
                         cache_hit: true,
+                        batches: None,
                     });
                 }
                 // Expired — evict from tier-2 too.
@@ -687,8 +732,8 @@ impl Resolver {
         self.inflight.write_lock("inflight").remove(&key);
 
         match result {
-            Ok(fetch_result) => {
-                let row_count = fetch_result.data.num_rows();
+            Ok(fetched) => {
+                let row_count = fetched.result.data.num_rows();
                 emit_progress(
                     &hooks,
                     hooks::Phase::Fetch,
@@ -702,8 +747,9 @@ impl Resolver {
                     ),
                 );
                 Ok(ResolveOutcome {
-                    result: fetch_result,
+                    result: fetched.result,
                     cache_hit: false,
+                    batches: fetched.batches,
                 })
             }
             Err(err) => {
@@ -738,35 +784,52 @@ impl Resolver {
 
         let work = async move {
             let provider = dispatch_provider(&providers, &request.spec)?;
-            let result = provider.fetch(request).await?;
+            let batch_result = provider.fetch_batches(request).await?;
+
+            // Concat batches → DataTable for caching.
+            let data = if batch_result.batches.is_empty() {
+                DataTable::from_record_batch(RecordBatch::new_empty(
+                    Arc::clone(&batch_result.schema),
+                ))
+            } else {
+                let concat = arrow::compute::concat_batches(
+                    &batch_result.schema,
+                    &batch_result.batches,
+                )
+                .map_err(|e| FetchError::DecodeFailed(format!("concat batches: {e}")))?;
+                DataTable::from_record_batch(concat)
+            };
+
+            let fetch_result = FetchResult {
+                data: data.clone(),
+                metadata: batch_result.metadata.clone(),
+            };
 
             // Write-through: tier-1 always; tier-2 if configured.
             let entry = CachedEntry {
-                data: result.data.clone(),
+                data,
                 fetched_at: SystemTime::now(),
                 ttl: cache_cfg
                     .as_ref()
                     .and_then(|c| c.ttl_duration())
                     .unwrap_or(DEFAULT_TTL),
                 tags: build_tags(slug.as_deref(), namespace.as_deref()),
-                metadata: result.metadata.clone(),
+                metadata: batch_result.metadata.clone(),
             };
-            // Cache write failures must not poison the result — log via
-            // tracing in 3c, but for now just swallow (matches the design
-            // doc's `.ok()` guidance).
             let _ = primary.put(key, entry.clone()).await;
             if let Some(p) = &persistent {
                 let _ = p.put(key, entry).await;
             }
-            Ok(result)
+            Ok(FetchWithBatches {
+                result: fetch_result,
+                batches: Some(batch_result),
+            })
         };
 
-        // Pick the right Box variant for the target. `boxed()` is Send-only
-        // (native), `boxed_local()` is ?Send (WASM).
         #[cfg(not(target_arch = "wasm32"))]
-        let boxed: ResolverFuture<Result<FetchResult, FetchError>> = work.boxed();
+        let boxed: ResolverFuture<Result<FetchWithBatches, FetchError>> = work.boxed();
         #[cfg(target_arch = "wasm32")]
-        let boxed: ResolverFuture<Result<FetchResult, FetchError>> = work.boxed_local();
+        let boxed: ResolverFuture<Result<FetchWithBatches, FetchError>> = work.boxed_local();
 
         let future = boxed.shared();
         inflight.insert(key, future.clone());
