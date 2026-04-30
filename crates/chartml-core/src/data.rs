@@ -4,8 +4,10 @@ use std::sync::Arc;
 use arrow::array::{
     Array, ArrayRef, BooleanArray, Date32Array, Date64Array, Decimal128Array, Float32Array,
     Float64Array, Int8Array, Int16Array, Int32Array, Int64Array, RecordBatch, StringBuilder,
-    StringArray, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
-    TimestampSecondArray, UInt8Array, UInt16Array, UInt32Array, UInt64Array,
+    StringArray, Time64MicrosecondArray, Time64NanosecondArray, Time32MillisecondArray,
+    Time32SecondArray, TimestampMicrosecondArray, TimestampMillisecondArray,
+    TimestampNanosecondArray, TimestampSecondArray, UInt8Array, UInt16Array, UInt32Array,
+    UInt64Array,
 };
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 
@@ -794,6 +796,38 @@ fn arrow_to_string(col: &ArrayRef, idx: usize) -> Option<String> {
                 Some(iso)
             }
         }
+        DataType::Time64(TimeUnit::Microsecond) => {
+            let micros = col
+                .as_any()
+                .downcast_ref::<Time64MicrosecondArray>()
+                .expect("Time64(Microsecond) arm guarantees Time64MicrosecondArray")
+                .value(idx);
+            Some(micros_to_hms(micros))
+        }
+        DataType::Time64(TimeUnit::Nanosecond) => {
+            let nanos = col
+                .as_any()
+                .downcast_ref::<Time64NanosecondArray>()
+                .expect("Time64(Nanosecond) arm guarantees Time64NanosecondArray")
+                .value(idx);
+            Some(micros_to_hms(nanos / 1000))
+        }
+        DataType::Time32(TimeUnit::Second) => {
+            let secs = col
+                .as_any()
+                .downcast_ref::<Time32SecondArray>()
+                .expect("Time32(Second) arm guarantees Time32SecondArray")
+                .value(idx);
+            Some(micros_to_hms(secs as i64 * 1_000_000))
+        }
+        DataType::Time32(TimeUnit::Millisecond) => {
+            let millis = col
+                .as_any()
+                .downcast_ref::<Time32MillisecondArray>()
+                .expect("Time32(Millisecond) arm guarantees Time32MillisecondArray")
+                .value(idx);
+            Some(micros_to_hms(millis as i64 * 1000))
+        }
         DataType::Decimal128(_, scale) => {
             let raw = col
                 .as_any()
@@ -846,6 +880,18 @@ fn epoch_to_iso(secs: i64, nanos: u32) -> String {
             year, month, day, hours, minutes, seconds, millis
         )
     }
+}
+
+/// Convert microseconds since midnight to HH:MM:SS format.
+/// Sub-second precision is intentionally truncated — the rendering
+/// layer does not need fractional seconds for time-of-day columns.
+fn micros_to_hms(micros: i64) -> String {
+    let sign = if micros < 0 { "-" } else { "" };
+    let total_secs = micros.unsigned_abs() / 1_000_000;
+    let hours = total_secs / 3600;
+    let minutes = (total_secs % 3600) / 60;
+    let seconds = total_secs % 60;
+    format!("{sign}{:02}:{:02}:{:02}", hours, minutes, seconds)
 }
 
 /// Convert days since Unix epoch to (year, month, day).
@@ -1151,6 +1197,52 @@ mod tests {
         let dt = DataTable::from_rows(&rows).unwrap();
         assert!(dt.has_field("x"));
         assert!(!dt.has_field("y"));
+    }
+
+    #[test]
+    fn datatable_record_batch_with_time_columns() {
+        use arrow::array::{Time64MicrosecondArray, Time32SecondArray};
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("t64_us", DataType::Time64(TimeUnit::Microsecond), true),
+            Field::new("t32_s", DataType::Time32(TimeUnit::Second), false),
+        ]));
+
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![
+                // 10:30:45 = 10*3600 + 30*60 + 45 = 37845 seconds = 37_845_000_000 micros
+                // Also test midnight (0) and a value with sub-second micros (truncated)
+                Arc::new(Time64MicrosecondArray::from(vec![
+                    Some(37_845_000_000i64),
+                    Some(0i64),
+                    Some(37_845_123_456i64),
+                    None,
+                ])),
+                Arc::new(Time32SecondArray::from(vec![
+                    37845i32,
+                    0i32,
+                    86399i32,
+                    3661i32,
+                ])),
+            ],
+        )
+        .unwrap();
+
+        let dt = DataTable::from_record_batch(batch);
+
+        // Time64(Microsecond) formatting
+        assert_eq!(dt.get_string(0, "t64_us"), Some("10:30:45".to_string()));
+        assert_eq!(dt.get_string(1, "t64_us"), Some("00:00:00".to_string()));
+        // Sub-second precision is intentionally truncated
+        assert_eq!(dt.get_string(2, "t64_us"), Some("10:30:45".to_string()));
+        assert_eq!(dt.get_string(3, "t64_us"), None);
+
+        // Time32(Second) formatting
+        assert_eq!(dt.get_string(0, "t32_s"), Some("10:30:45".to_string()));
+        assert_eq!(dt.get_string(1, "t32_s"), Some("00:00:00".to_string()));
+        assert_eq!(dt.get_string(2, "t32_s"), Some("23:59:59".to_string()));
+        assert_eq!(dt.get_string(3, "t32_s"), Some("01:01:01".to_string()));
     }
 
     #[test]
