@@ -132,29 +132,33 @@ fn style(pairs: &[(&str, &str)]) -> HashMap<String, String> {
 
 /// Build a header <span> cell (header cells are flex children of the header row div).
 fn header_cell(label: &str, theme: &Theme) -> ChartElement {
+    let header_text_var = format!("var(--chartml-table-header-text, {})", theme.table_header_text);
+    let border_var = format!("1px solid var(--chartml-table-border, {})", theme.table_border);
     ChartElement::Span {
         class: "chartml-table-header-cell".to_string(),
         style: style(&[
             ("flex", "1 1 0"),
             ("padding", &theme.table_cell_padding),
             ("font-weight", "600"),
-            ("color", &theme.table_header_text),
+            ("color", &header_text_var),
             ("text-align", "left"),
-            ("border-bottom", &format!("1px solid {}", theme.table_border)),
+            ("border-bottom", &border_var),
         ]),
         content: label.to_string(),
     }
 }
 
 fn body_cell(content: &str, theme: &Theme) -> ChartElement {
+    let text_var = format!("var(--chartml-table-text, {})", theme.table_text);
+    let border_var = format!("1px solid var(--chartml-table-border, {})", theme.table_border);
     ChartElement::Span {
         class: "chartml-table-cell".to_string(),
         style: style(&[
             ("flex", "1 1 0"),
             ("padding", &theme.table_cell_padding),
-            ("color", &theme.table_text),
+            ("color", &text_var),
             ("text-align", "left"),
-            ("border-bottom", &format!("1px solid {}", theme.table_border)),
+            ("border-bottom", &border_var),
             ("overflow", "hidden"),
             ("text-overflow", "ellipsis"),
             ("white-space", "nowrap"),
@@ -188,11 +192,12 @@ impl ChartRenderer for TableRenderer {
         let end = total_rows.min(page_size);
 
         // ── Header row ──
+        let header_bg_var = format!("var(--chartml-table-header-bg, {})", theme.table_header_bg);
         let header_row = ChartElement::Div {
             class: "chartml-table-header".to_string(),
             style: style(&[
                 ("display", "flex"),
-                ("background", &theme.table_header_bg),
+                ("background", &header_bg_var),
                 ("font-size", &theme.table_font_size),
                 ("font-family", &theme.label_font_family),
             ]),
@@ -203,14 +208,12 @@ impl ChartRenderer for TableRenderer {
         };
 
         // ── Body rows ──
+        let row_bg_var = format!("var(--chartml-table-row-bg, {})", theme.table_row_bg);
+        let row_bg_alt_var = format!("var(--chartml-table-row-bg-alt, {})", theme.table_row_bg_alt);
         let mut body_children: Vec<ChartElement> = Vec::with_capacity(end);
         for row_idx in 0..end {
             let is_alt = row_idx % 2 == 1;
-            let bg = if is_alt {
-                &theme.table_row_bg_alt
-            } else {
-                &theme.table_row_bg
-            };
+            let bg = if is_alt { &row_bg_alt_var } else { &row_bg_var };
             let class = if is_alt {
                 "chartml-table-row chartml-table-row-alt"
             } else {
@@ -238,13 +241,15 @@ impl ChartRenderer for TableRenderer {
         };
 
         // ── Pager footer (shown when there are more rows than one page) ──
+        let pager_text_var = format!("var(--chartml-text-secondary, {})", theme.text_secondary);
+        let pager_border_var = format!("1px solid var(--chartml-table-border, {})", theme.table_border);
         let mut root_children: Vec<ChartElement> = vec![header_row, body];
         if total_rows > page_size {
             let page_count = total_rows.div_ceil(page_size);
             let info = ChartElement::Span {
                 class: "chartml-table-pager-info".to_string(),
                 style: style(&[
-                    ("color", &theme.text_secondary),
+                    ("color", &pager_text_var),
                     ("font-size", &theme.table_font_size),
                     ("font-family", &theme.label_font_family),
                 ]),
@@ -259,22 +264,24 @@ impl ChartRenderer for TableRenderer {
                     ("display", "flex"),
                     ("justify-content", "flex-end"),
                     ("padding", &theme.table_cell_padding),
-                    ("border-top", &format!("1px solid {}", theme.table_border)),
-                    ("background", &theme.table_header_bg),
+                    ("border-top", &pager_border_var),
+                    ("background", &header_bg_var),
                 ]),
                 children: vec![info],
             });
         }
 
+        let root_text_var = format!("var(--chartml-table-text, {})", theme.table_text);
+        let root_border_var = format!("1px solid var(--chartml-table-border, {})", theme.table_border);
         Ok(ChartElement::Div {
             class: "chartml-table".to_string(),
             style: style(&[
                 ("display", "flex"),
                 ("flex-direction", "column"),
                 ("width", "100%"),
-                ("background", &theme.table_row_bg),
-                ("color", &theme.table_text),
-                ("border", &format!("1px solid {}", theme.table_border)),
+                ("background", &row_bg_var),
+                ("color", &root_text_var),
+                ("border", &root_border_var),
                 ("border-radius", "4px"),
                 ("overflow", "hidden"),
                 ("box-sizing", "border-box"),

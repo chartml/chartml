@@ -56,7 +56,7 @@ impl ChartRenderer for MetricRenderer {
             class: "chartml-metric-label".to_string(),
             style: HashMap::from([
                 ("font-size".to_string(), "14px".to_string()),
-                ("color".to_string(), config.theme.text_secondary.clone()),
+                ("color".to_string(), format!("var(--chartml-text-secondary, {})", config.theme.text_secondary)),
                 ("grid-row".to_string(), "label".to_string()),
                 ("display".to_string(), "-webkit-box".to_string()),
                 ("-webkit-box-orient".to_string(), "vertical".to_string()),
@@ -73,7 +73,7 @@ impl ChartRenderer for MetricRenderer {
             style: HashMap::from([
                 ("font-size".to_string(), "36px".to_string()),
                 ("font-weight".to_string(), "bold".to_string()),
-                ("color".to_string(), config.theme.text.clone()),
+                ("color".to_string(), format!("var(--chartml-text, {})", config.theme.text)),
                 ("grid-row".to_string(), "value".to_string()),
                 ("align-self".to_string(), "center".to_string()),
                 ("text-align".to_string(), "center".to_string()),
@@ -95,7 +95,7 @@ impl ChartRenderer for MetricRenderer {
                 let invert = viz.invert_trend.unwrap_or(false);
                 let is_positive = if invert { change < 0.0 } else { change > 0.0 };
                 let trend_color = if change == 0.0 {
-                    config.theme.text_secondary.clone()
+                    format!("var(--chartml-text-secondary, {})", config.theme.text_secondary)
                 } else if is_positive {
                     "#34a853".to_string() // green
                 } else {
