@@ -244,6 +244,20 @@
 }
 .chartml-table-pager    { background: var(--chartml-table-header-bg, #f9fafb); }
 .chartml-table-pager-info { color: var(--chartml-text-secondary, #6b7280); }
+.chartml-table-body {
+    scrollbar-width: thin;
+    scrollbar-color: var(--chartml-table-border, #e5e7eb) transparent;
+}
+.chartml-table-body::-webkit-scrollbar {
+    width: 6px;
+}
+.chartml-table-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+.chartml-table-body::-webkit-scrollbar-thumb {
+    background: var(--chartml-table-border, #e5e7eb);
+    border-radius: 3px;
+}
 
 /* ── Generic keyframes ── */
 @keyframes chartml-fade-in {

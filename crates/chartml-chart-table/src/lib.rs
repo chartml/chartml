@@ -236,7 +236,13 @@ impl ChartRenderer for TableRenderer {
         }
         let body = ChartElement::Div {
             class: "chartml-table-body".to_string(),
-            style: style(&[("display", "flex"), ("flex-direction", "column")]),
+            style: style(&[
+                ("display", "flex"),
+                ("flex-direction", "column"),
+                ("flex", "1 1 0"),
+                ("min-height", "0"),
+                ("overflow-y", "auto"),
+            ]),
             children: body_children,
         };
 
@@ -279,6 +285,7 @@ impl ChartRenderer for TableRenderer {
                 ("display", "flex"),
                 ("flex-direction", "column"),
                 ("width", "100%"),
+                ("height", "100%"),
                 ("background", &row_bg_var),
                 ("color", &root_text_var),
                 ("border", &root_border_var),
@@ -561,6 +568,28 @@ rows:
             &serde_yaml::from_str::<VisualizeSpec>("type: table").unwrap(),
         );
         assert_eq!(dims.unwrap().height, 400.0);
+    }
+
+    #[test]
+    fn body_has_overflow_scroll() {
+        let config = cfg("type: table");
+        let element = TableRenderer::new().render(&data(), &config).unwrap();
+        // The second child of the root is the body div
+        match &element {
+            ChartElement::Div { children, .. } => {
+                let body = &children[1]; // [0]=header, [1]=body
+                match body {
+                    ChartElement::Div { class, style, .. } => {
+                        assert_eq!(class, "chartml-table-body");
+                        assert_eq!(style.get("overflow-y").map(|s| s.as_str()), Some("auto"));
+                        assert_eq!(style.get("flex").map(|s| s.as_str()), Some("1 1 0"));
+                        assert_eq!(style.get("min-height").map(|s| s.as_str()), Some("0"));
+                    }
+                    _ => panic!("body must be a Div"),
+                }
+            }
+            _ => panic!("root must be a Div"),
+        }
     }
 
     #[test]
