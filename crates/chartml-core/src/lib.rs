@@ -228,6 +228,32 @@ impl ChartML {
         self
     }
 
+    /// Set the tier-2 (persistent) cache to a lazy factory. The factory is
+    /// invoked on the first `fetch()` call; until then the slot stays
+    /// deferred. Delegates to `Resolver::set_persistent_cache_factory`.
+    ///
+    /// This exists because on WASM `IndexedDbBackend::new()` is async — it
+    /// can't be ready at `ChartML` construction time.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_persistent_cache_factory<F, Fut>(&mut self, factory: F)
+    where
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = Option<resolver::CacheBackendRef>> + Send + 'static,
+    {
+        self.resolver.set_persistent_cache_factory(factory);
+    }
+
+    /// Set the tier-2 (persistent) cache to a lazy factory (WASM variant).
+    /// See the native variant above for full docs.
+    #[cfg(target_arch = "wasm32")]
+    pub fn set_persistent_cache_factory<F, Fut>(&mut self, factory: F)
+    where
+        F: FnOnce() -> Fut + 'static,
+        Fut: std::future::Future<Output = Option<resolver::CacheBackendRef>> + 'static,
+    {
+        self.resolver.set_persistent_cache_factory(factory);
+    }
+
     /// Set the tenant / workspace namespace threaded into every resolver
     /// cache key. Multi-tenant deployments MUST set this so two tenants
     /// sharing a slug name cannot collide in the cache.
