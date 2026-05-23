@@ -584,6 +584,28 @@ impl Resolver {
         *guard = PersistentSlot::Deferred(Some(Box::new(move || Box::pin(factory()))));
     }
 
+    /// Enable IndexedDB-backed persistent caching. The database is opened
+    /// lazily on the first fetch. `db_name` is the IDB database name,
+    /// `namespace` isolates entries (e.g. per-workspace).
+    ///
+    /// This is a convenience wrapper around `set_persistent_cache_factory`
+    /// using the built-in `IndexedDbBackend`.
+    #[cfg(all(target_arch = "wasm32", feature = "wasm-indexeddb"))]
+    pub fn enable_indexeddb_cache(&self, db_name: &str, namespace: &str) {
+        let db = db_name.to_string();
+        let ns = namespace.to_string();
+        self.set_persistent_cache_factory(move || async move {
+            use crate::resolver::backends::indexeddb::IndexedDbBackend;
+            match IndexedDbBackend::new(&db, &ns).await {
+                Ok(backend) => Some(SharedRef::new(backend) as CacheBackendRef),
+                Err(e) => {
+                    tracing::warn!(error = %e, "IndexedDB cache unavailable");
+                    None
+                }
+            }
+        });
+    }
+
     /// Register a [`ResolverHooks`] impl. Replaces any previously registered
     /// hooks; passes the new impl in as a `HooksRef` (`Arc` on native, `Rc`
     /// on WASM). After this call every `Resolver::fetch` invocation emits
