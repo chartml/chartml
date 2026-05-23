@@ -254,6 +254,13 @@ impl ChartML {
         self.resolver.set_persistent_cache_factory(factory);
     }
 
+    /// Enable IndexedDB-backed persistent caching. Convenience wrapper
+    /// that delegates to `Resolver::enable_indexeddb_cache`.
+    #[cfg(all(target_arch = "wasm32", feature = "wasm-indexeddb"))]
+    pub fn enable_indexeddb_cache(&self, db_name: &str, namespace: &str) {
+        self.resolver.enable_indexeddb_cache(db_name, namespace);
+    }
+
     /// Set the tenant / workspace namespace threaded into every resolver
     /// cache key. Multi-tenant deployments MUST set this so two tenants
     /// sharing a slug name cannot collide in the cache.

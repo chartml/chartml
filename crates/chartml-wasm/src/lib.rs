@@ -289,6 +289,19 @@ impl WasmChartML {
         }
     }
 
+    /// Enable IndexedDB-backed persistent caching with the given database
+    /// name and namespace. The database opens lazily on the first fetch.
+    ///
+    /// This is a simpler alternative to `setCache("indexeddb")` — it lets
+    /// callers specify the database name and namespace explicitly.
+    #[cfg(all(target_arch = "wasm32", feature = "wasm-indexeddb"))]
+    #[wasm_bindgen(js_name = "enableIndexedDbCache")]
+    pub fn enable_indexeddb_cache(&self, db_name: &str, namespace: &str) {
+        with_inner(self, |chartml| {
+            chartml.enable_indexeddb_cache(db_name, namespace);
+        });
+    }
+
     /// Register a `ResolverHooks` impl. `hooks` is a plain JS object whose
     /// optional `onProgress` / `onCacheHit` / `onCacheMiss` / `onError`
     /// properties are invoked at the matching pipeline events. Missing
