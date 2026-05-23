@@ -43,6 +43,118 @@ impl LineGenerator {
             CurveType::Step => generate_step(points),
         }
     }
+
+    /// Generate an SVG path AND its total length (for animation dasharray).
+    ///
+    /// Returns `(path_d, length)`. The length is an upper-bound estimate
+    /// suitable for `stroke-dasharray`/`stroke-dashoffset` draw animation.
+    pub fn generate_with_length(&self, points: &[(f64, f64)]) -> (String, f64) {
+        let path = self.generate(points);
+        let length = self.compute_length(points);
+        (path, length)
+    }
+
+    /// Compute an upper-bound estimate of the path length for the given points.
+    fn compute_length(&self, points: &[(f64, f64)]) -> f64 {
+        if points.len() < 2 {
+            return 0.0;
+        }
+        match self.curve {
+            CurveType::Linear => {
+                points
+                    .windows(2)
+                    .map(|w| {
+                        let dx = w[1].0 - w[0].0;
+                        let dy = w[1].1 - w[0].1;
+                        (dx * dx + dy * dy).sqrt()
+                    })
+                    .sum()
+            }
+            CurveType::Step => {
+                // Step path traces: M(x0,y0), then for each subsequent point
+                // L(x_mid,prev_y) L(x_mid,y), ending with L(last_x,last_y).
+                // Track the cursor's x position to measure each horizontal.
+                let mut length = 0.0;
+                let mut cursor_x = points[0].0;
+                let mut prev_y = points[0].1;
+                let mut raw_prev_x = points[0].0;
+                for &(x, y) in &points[1..] {
+                    let x_mid = (raw_prev_x + x) * 0.5;
+                    length += (x_mid - cursor_x).abs();
+                    length += (y - prev_y).abs();
+                    cursor_x = x_mid;
+                    prev_y = y;
+                    raw_prev_x = x;
+                }
+                length += (points[points.len() - 1].0 - cursor_x).abs();
+                length
+            }
+            CurveType::MonotoneX => {
+                // Control polygon length approximation for cubic bezier segments.
+                // The true arc length <= control polygon length, so multiply
+                // by 1.05 safety factor to guarantee >= true length.
+                let n = points.len();
+                if n == 2 {
+                    // Falls back to linear for 2 points.
+                    let dx = points[1].0 - points[0].0;
+                    let dy = points[1].1 - points[0].1;
+                    return (dx * dx + dy * dy).sqrt();
+                }
+
+                // Reconstruct tangents (same algorithm as generate_monotone_x)
+                let mut secants = Vec::with_capacity(n - 1);
+                for i in 0..n - 1 {
+                    let dx = points[i + 1].0 - points[i].0;
+                    if dx == 0.0 {
+                        secants.push(0.0);
+                    } else {
+                        secants.push((points[i + 1].1 - points[i].1) / dx);
+                    }
+                }
+                let mut tangents = vec![0.0; n];
+                tangents[0] = secants[0];
+                tangents[n - 1] = secants[n - 2];
+                for i in 1..n - 1 {
+                    if secants[i - 1].signum() != secants[i].signum() {
+                        tangents[i] = 0.0;
+                    } else {
+                        tangents[i] = (secants[i - 1] + secants[i]) / 2.0;
+                    }
+                }
+                for i in 0..n - 1 {
+                    if secants[i] == 0.0 {
+                        tangents[i] = 0.0;
+                        tangents[i + 1] = 0.0;
+                    } else {
+                        let alpha = tangents[i] / secants[i];
+                        let beta = tangents[i + 1] / secants[i];
+                        let sum_sq = alpha * alpha + beta * beta;
+                        if sum_sq > 9.0 {
+                            let tau = 3.0 / sum_sq.sqrt();
+                            tangents[i] = tau * alpha * secants[i];
+                            tangents[i + 1] = tau * beta * secants[i];
+                        }
+                    }
+                }
+
+                // Sum control polygon lengths for each cubic segment
+                let mut total = 0.0;
+                for i in 0..n - 1 {
+                    let dx = points[i + 1].0 - points[i].0;
+                    let p0 = points[i];
+                    let p1 = (points[i].0 + dx / 3.0, points[i].1 + tangents[i] * dx / 3.0);
+                    let p2 = (points[i + 1].0 - dx / 3.0, points[i + 1].1 - tangents[i + 1] * dx / 3.0);
+                    let p3 = points[i + 1];
+
+                    let d01 = ((p1.0 - p0.0).powi(2) + (p1.1 - p0.1).powi(2)).sqrt();
+                    let d12 = ((p2.0 - p1.0).powi(2) + (p2.1 - p1.1).powi(2)).sqrt();
+                    let d23 = ((p3.0 - p2.0).powi(2) + (p3.1 - p2.1).powi(2)).sqrt();
+                    total += d01 + d12 + d23;
+                }
+                total * 1.05
+            }
+        }
+    }
 }
 
 impl Default for LineGenerator {
@@ -262,5 +374,68 @@ mod tests {
         ]);
         assert!(path.starts_with("M"), "Path should start with M, got: {}", path);
         assert!(path.contains("C"), "Path should contain C commands, got: {}", path);
+    }
+
+    // ── generate_with_length tests ──
+
+    #[test]
+    fn line_linear_length() {
+        // 3 points forming a right triangle: (0,0) -> (3,0) -> (3,4)
+        // Segment 1: horizontal 3, Segment 2: vertical 4, Total: 7
+        let gen = LineGenerator::new();
+        let (path, length) = gen.generate_with_length(&[(0.0, 0.0), (3.0, 0.0), (3.0, 4.0)]);
+        assert!(!path.is_empty());
+        assert!((length - 7.0).abs() < 1e-10, "expected 7.0, got {}", length);
+    }
+
+    #[test]
+    fn line_step_length() {
+        // Two points: (0, 10) -> (100, 20)
+        // Step path: M0,10 L50,10 L50,20 L100,20
+        // Segments: |50-0|=50 + |20-10|=10 + |100-50|=50 = 110
+        let gen = LineGenerator::new().curve(CurveType::Step);
+        let (path, length) = gen.generate_with_length(&[(0.0, 10.0), (100.0, 20.0)]);
+        assert!(!path.is_empty());
+        assert!((length - 110.0).abs() < 1e-10, "expected 110.0, got {}", length);
+
+        // Three points: (0, 10) -> (50, 20) -> (100, 5)
+        // Step path: M0,10 L25,10 L25,20 L75,20 L75,5 L100,5
+        // Segments: |25-0|=25 + |20-10|=10 + |75-25|=50 + |5-20|=15 + |100-75|=25 = 125
+        let (_, length3) = gen.generate_with_length(&[(0.0, 10.0), (50.0, 20.0), (100.0, 5.0)]);
+        assert!((length3 - 125.0).abs() < 1e-10, "expected 125.0, got {}", length3);
+    }
+
+    #[test]
+    fn line_monotone_length() {
+        // MonotoneX length should be >= chord length sum (straight-line between consecutive points)
+        let gen = LineGenerator::new().curve(CurveType::MonotoneX);
+        let points = [(0.0, 10.0), (50.0, 20.0), (100.0, 5.0), (150.0, 15.0)];
+        let (path, length) = gen.generate_with_length(&points);
+        assert!(!path.is_empty());
+
+        let chord_sum: f64 = points.windows(2).map(|w| {
+            let dx = w[1].0 - w[0].0;
+            let dy = w[1].1 - w[0].1;
+            (dx * dx + dy * dy).sqrt()
+        }).sum();
+        assert!(
+            length >= chord_sum,
+            "monotone length {} should be >= chord sum {}",
+            length, chord_sum
+        );
+    }
+
+    #[test]
+    fn line_single_point_length() {
+        let gen = LineGenerator::new();
+        let (_, length) = gen.generate_with_length(&[(42.0, 7.0)]);
+        assert!((length - 0.0).abs() < 1e-10, "single point should have length 0.0, got {}", length);
+    }
+
+    #[test]
+    fn line_empty_length() {
+        let gen = LineGenerator::new();
+        let (_, length) = gen.generate_with_length(&[]);
+        assert!((length - 0.0).abs() < 1e-10, "empty should have length 0.0, got {}", length);
     }
 }

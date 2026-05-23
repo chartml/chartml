@@ -50,7 +50,7 @@ pub fn element_to_json(element: &ChartElement) -> Value {
             })
         }
 
-        ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, opacity, class, data, animation_origin: _ } => {
+        ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, stroke_dashoffset: _, opacity, class, data, animation_origin: _ } => {
             json!({
                 "type": "path",
                 "d": d,

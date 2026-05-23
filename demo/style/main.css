@@ -187,8 +187,6 @@ body {
 
 /* Line drawing animation via stroke-dasharray */
 .chartml-line-path {
-    stroke-dasharray: 2000;
-    stroke-dashoffset: 2000;
     animation: chartml-line-draw 800ms ease-out forwards;
 }
 

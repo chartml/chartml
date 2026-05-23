@@ -203,6 +203,7 @@ pub(crate) fn build_bar_element(
         stroke: None,
         stroke_width: None,
         stroke_dasharray: None,
+        stroke_dashoffset: None,
         opacity: None,
         class,
         data,
@@ -1649,6 +1650,7 @@ fn render_combo(
                     mark_elements.push(ChartElement::Path {
                         d: path_d, fill: None, stroke: Some(color.clone()),
                         stroke_width: Some(config.theme.series_line_weight as f64), stroke_dasharray: None,
+                        stroke_dashoffset: None,
                         opacity: None,
                         class: "chartml-line-path series-line".to_string(),
                         data: Some(ElementData::new(&label, "").with_series(&label)),
