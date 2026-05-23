@@ -228,9 +228,9 @@ impl WasmChartML {
     /// The replacement starts empty — entries in the old backend are not
     /// migrated.
     ///
-    /// IndexedDB construction is async (the database has to open). When
-    /// `"indexeddb"` is passed this method returns a Promise that resolves
-    /// once the database is open.
+    /// When `"indexeddb"` is passed the database open is deferred — the
+    /// returned Promise resolves immediately and the IndexedDB backend is
+    /// lazily constructed on the first `fetch()` call.
     #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen(js_name = "setCache")]
     pub fn set_cache(&mut self, backend: JsValue) -> Result<js_sys::Promise, JsValue> {
@@ -260,30 +260,21 @@ impl WasmChartML {
             "indexeddb" => {
                 #[cfg(feature = "wasm-indexeddb")]
                 {
-                    // Capture an `Rc<ChartML>` clone for the async block. The
-                    // `IndexedDbBackend::new` future is the entire async work
-                    // here — once it resolves we install the backend on the
-                    // tier-2 slot, leaving tier-1 (`MemoryBackend`) intact so
-                    // memory hits short-circuit before the IndexedDB read.
-                    let inner = self.inner.clone();
                     let database_name = "chartml-cache".to_string();
-                    // Default namespace for the bare `setCache("indexeddb")`
-                    // form. Multi-tenant deployments should use the JS-object
-                    // backend overload (or call `setNamespace` first and then
-                    // pass the explicit `IndexedDbBackend` instance) so the
-                    // namespace varies per workspace/user.
                     let namespace = "default".to_string();
-                    Ok(wasm_bindgen_futures::future_to_promise(async move {
-                        use chartml_core::resolver::backends::indexeddb::IndexedDbBackend;
-                        let backend =
-                            IndexedDbBackend::new(&database_name, &namespace)
-                                .await
-                                .map_err(|e| JsValue::from_str(&e.to_string()))?;
-                        inner
-                            .resolver()
-                            .set_persistent_cache(chartml_core::resolver::SharedRef::new(backend));
-                        Ok(JsValue::UNDEFINED)
-                    }))
+                    with_inner_mut(self, |chartml| {
+                        chartml.resolver().set_persistent_cache_factory(move || async move {
+                            use chartml_core::resolver::backends::indexeddb::IndexedDbBackend;
+                            match IndexedDbBackend::new(&database_name, &namespace).await {
+                                Ok(backend) => Some(chartml_core::resolver::SharedRef::new(backend) as chartml_core::resolver::CacheBackendRef),
+                                Err(e) => {
+                                    web_sys::console::warn_1(&format!("IndexedDB cache unavailable: {e}").into());
+                                    None
+                                }
+                            }
+                        });
+                    });
+                    Ok(immediate_void_promise())
                 }
                 #[cfg(not(feature = "wasm-indexeddb"))]
                 {
