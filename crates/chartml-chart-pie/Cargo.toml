@@ -1,6 +1,6 @@
 [package]
 name = "chartml-chart-pie"
-version = "5.0.1"
+version = "5.0.2"
 edition = "2021"
 license = "MIT"
 description = "ChartML pie and doughnut chart renderers"

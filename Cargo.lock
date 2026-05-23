@@ -541,7 +541,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chartml-chart-cartesian"
-version = "5.0.2"
+version = "5.0.3"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -559,7 +559,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-pie"
-version = "5.0.1"
+version = "5.0.2"
 dependencies = [
  "chartml-core",
  "serde_json",
@@ -585,7 +585,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-core"
-version = "5.0.3"
+version = "5.1.0"
 dependencies = [
  "arrow",
  "async-trait",
@@ -673,7 +673,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-leptos"
-version = "5.0.4"
+version = "5.1.0"
 dependencies = [
  "async-trait",
  "chartml-chart-cartesian",
@@ -724,7 +724,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-wasm"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "async-trait",
  "chartml-chart-cartesian",
