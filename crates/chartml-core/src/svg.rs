@@ -126,7 +126,7 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             buf.push_str("/>");
         }
 
-        ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, opacity, class, data, animation_origin } => {
+        ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, stroke_dashoffset, opacity, class, data, animation_origin } => {
             write!(buf, r#"<path d="{}""#, xml_escape(d)).expect("writing to String is infallible");
             // When the emitter populates `animation_origin` (top-rounded
             // bar paths from `build_bar_element`), inline the
@@ -150,6 +150,9 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             }
             if let Some(sda) = stroke_dasharray {
                 write!(buf, r#" stroke-dasharray="{}""#, xml_escape(sda)).expect("writing to String is infallible");
+            }
+            if let Some(sdo) = stroke_dashoffset {
+                write!(buf, r#" stroke-dashoffset="{}""#, xml_escape(sdo)).expect("write stroke-dashoffset");
             }
             if let Some(op) = opacity {
                 write!(buf, r#" opacity="{}""#, op).expect("writing to String is infallible");
@@ -412,6 +415,7 @@ mod tests {
                     stroke: Some("#000".to_string()),
                     stroke_width: Some(2.0),
                     stroke_dasharray: Some("5,3".to_string()),
+                    stroke_dashoffset: None,
                     opacity: Some(0.5),
                     class: "line".to_string(),
                     data: None,

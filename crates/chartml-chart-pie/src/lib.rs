@@ -74,6 +74,7 @@ impl ChartRenderer for PieRenderer {
                 stroke: Some(config.theme.bg.clone()),
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
+                stroke_dashoffset: None,
                 opacity: None,
                 class: "chartml-pie-slice".to_string(),
                 data: Some(data),

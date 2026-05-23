@@ -85,12 +85,13 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             }
         }
 
-        ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, opacity, class, data, animation_origin } => {
+        ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, stroke_dashoffset, opacity, class, data, animation_origin } => {
             let d = d.clone();
             let fill_str = fill.clone().unwrap_or_else(|| "none".to_string());
             let stroke_str = stroke.clone().unwrap_or_else(|| "none".to_string());
             let sw = stroke_width.map(|w| w.to_string()).unwrap_or_default();
             let sda = stroke_dasharray.clone().unwrap_or_default();
+            let sdo = stroke_dashoffset.clone().unwrap_or_default();
             let op = opacity.map(|o| o.to_string()).unwrap_or_default();
             let class = class.clone();
             // Top-rounded bars are emitted as `Path` (SVG <rect> can't
@@ -109,7 +110,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
                     view! {
                         <path
                             d=d fill=fill_str stroke=stroke_str
-                            stroke-width=sw stroke-dasharray=sda opacity=op class=class
+                            stroke-width=sw stroke-dasharray=sda stroke-dashoffset=sdo opacity=op class=class
                             style=base_style.clone()
                         />
                     }.into_any(),
@@ -120,7 +121,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
                 view! {
                     <path
                         d=d fill=fill_str stroke=stroke_str
-                        stroke-width=sw stroke-dasharray=sda opacity=op class=class
+                        stroke-width=sw stroke-dasharray=sda stroke-dashoffset=sdo opacity=op class=class
                         style=base_style
                     />
                 }.into_any()
