@@ -83,27 +83,24 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             buf.push_str("</g>");
         }
 
-        ChartElement::Rect { x, y, width, height, fill, stroke, rx, ry, class, data, animation_origin: _ } => {
-            // Static SVG renders deliberately ignore `animation_origin` for
-            // `Rect`, keeping the legacy width-vs-height heuristic. The
-            // `backward_compat_goldens_byte_identical` test pins every
-            // pre-theme-hooks baseline byte-for-byte, and those baselines
-            // were captured with this exact (buggy-for-square-bars and
-            // negative-bars) heuristic emission. The heuristic only matters
-            // for animation, and animation is invisible in a static SVG
-            // snapshot — so freezing the legacy bytes here costs nothing
-            // visually. Live, animated renders go through
-            // `chartml-leptos/src/element.rs`, which honors `animation_origin`
-            // and produces the correct origin per orientation/sign.
+        ChartElement::Rect { x, y, width, height, fill, stroke, rx, ry, class, data, animation_origin } => {
+            // When the emitter populates `animation_origin` (e.g.
+            // `build_bar_element` sets it via `bar_animation_origin` or
+            // `stack_baseline`), use it directly so stacked bars, negative
+            // bars, and other edge cases animate from the correct baseline.
             //
-            // Top-rounded bars (`BarCornerRadius::Top`) are emitted as
-            // `ChartElement::Path` instead of `Rect` — the `Path` arm below
-            // honors `animation_origin` because no pre-theme-hooks baseline
-            // contains a Path bar (default theme uses `Uniform(0.0)`).
-            let (origin_x, origin_y) = if width > height {
-                (*x, y + height / 2.0)
-            } else {
-                (x + width / 2.0, y + height)
+            // Fall back to the legacy width-vs-height heuristic only when
+            // `animation_origin` is `None` (non-bar Rect elements that
+            // don't set an explicit origin).
+            let (origin_x, origin_y) = match animation_origin {
+                Some((ox, oy)) => (*ox, *oy),
+                None => {
+                    if width > height {
+                        (*x, y + height / 2.0)
+                    } else {
+                        (x + width / 2.0, y + height)
+                    }
+                }
             };
             write!(
                 buf,
