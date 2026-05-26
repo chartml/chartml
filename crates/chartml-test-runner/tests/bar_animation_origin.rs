@@ -336,3 +336,196 @@ fn bar_animation_origin_horizontal_negative() {
         run_case(corner, Direction::HorizontalNegative, HORIZONTAL_NEGATIVE_YAML);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Stacked bar animation origin tests
+//
+// In stacked bar charts, ALL bar segments in a column must share the same
+// axis-baseline animation origin so the stack grows uniformly from the axis.
+// The per-segment `bar_animation_origin` would give each segment its own
+// edge, causing upper segments to appear to float.
+// ---------------------------------------------------------------------------
+
+const STACKED_VERTICAL_YAML: &str = r#"
+type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - cat: "A"
+      v: 10
+      g: "X"
+    - cat: "A"
+      v: 20
+      g: "Y"
+    - cat: "B"
+      v: 15
+      g: "X"
+    - cat: "B"
+      v: 25
+      g: "Y"
+visualize:
+  type: bar
+  mode: stacked
+  columns: cat
+  rows: v
+  marks:
+    color: g
+"#;
+
+const STACKED_HORIZONTAL_YAML: &str = r#"
+type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - cat: "A"
+      v: 10
+      g: "X"
+    - cat: "A"
+      v: 20
+      g: "Y"
+    - cat: "B"
+      v: 15
+      g: "X"
+    - cat: "B"
+      v: 25
+      g: "Y"
+visualize:
+  type: bar
+  mode: stacked
+  orientation: horizontal
+  columns: cat
+  rows: v
+  marks:
+    color: g
+"#;
+
+/// Assert that every bar in a stacked chart shares the same axis-baseline
+/// animation origin coordinate (y for vertical, x for horizontal).
+fn run_stacked_case(corner: &BarCornerRadius, yaml: &str, is_horizontal: bool) {
+    let chartml = make_chartml(corner);
+    let el = chartml
+        .render_from_yaml(yaml)
+        .expect("render stacked bar fixture under test");
+    let bars = collect_bars(&el);
+    assert!(
+        !bars.is_empty(),
+        "{:?} / stacked {} — no bars emitted",
+        corner,
+        if is_horizontal { "horizontal" } else { "vertical" },
+    );
+
+    // Filter out degenerate zero-extent bars.
+    let real_bars: Vec<&BarBox> = bars.iter().filter(|b| b.w > 0.0 && b.h > 0.0).collect();
+    assert!(
+        real_bars.len() >= 2,
+        "{:?} / stacked {} — need at least 2 non-degenerate bars for \
+         a stacked test, got {}",
+        corner,
+        if is_horizontal { "horizontal" } else { "vertical" },
+        real_bars.len(),
+    );
+
+    // Every bar must have an animation_origin.
+    for b in &real_bars {
+        assert!(
+            b.origin.is_some(),
+            "{:?} / stacked {} — bar tag={} x={} y={} w={} h={} has \
+             animation_origin == None",
+            corner,
+            if is_horizontal { "horizontal" } else { "vertical" },
+            b.tag, b.x, b.y, b.w, b.h,
+        );
+    }
+
+    if is_horizontal {
+        // All bars must share the same x-origin (the y-axis baseline).
+        let baseline_x = real_bars[0].origin.unwrap().0;
+        for b in &real_bars {
+            let ox = b.origin.unwrap().0;
+            assert!(
+                (ox - baseline_x).abs() < 1e-6,
+                "{:?} / stacked horizontal — bar tag={} x={} y={} w={} h={} \
+                 has origin.x = {}, expected shared baseline {}. Upper \
+                 segments must NOT animate from their own left edge.",
+                corner, b.tag, b.x, b.y, b.w, b.h, ox, baseline_x,
+            );
+        }
+
+        // The y-component of the origin must still be each bar's own center.
+        for b in &real_bars {
+            let oy = b.origin.unwrap().1;
+            let expected_y = b.y + b.h / 2.0;
+            assert!(
+                (oy - expected_y).abs() < 1e-6,
+                "{:?} / stacked horizontal — bar y-origin {} != bar center {}",
+                corner, oy, expected_y,
+            );
+        }
+
+        // Verify this is NOT the per-segment edge: at least one upper
+        // segment must differ from what bar_animation_origin would produce.
+        let any_differs = real_bars.iter().any(|b| {
+            let per_segment_x = b.x; // horizontal positive: left edge
+            (b.origin.unwrap().0 - per_segment_x).abs() > 1e-6
+        });
+        assert!(
+            any_differs,
+            "{:?} / stacked horizontal — all bars have origin.x == their \
+             own left edge; the stack_baseline fix is not working",
+            corner,
+        );
+    } else {
+        // All bars must share the same y-origin (the x-axis baseline).
+        let baseline_y = real_bars[0].origin.unwrap().1;
+        for b in &real_bars {
+            let oy = b.origin.unwrap().1;
+            assert!(
+                (oy - baseline_y).abs() < 1e-6,
+                "{:?} / stacked vertical — bar tag={} x={} y={} w={} h={} \
+                 has origin.y = {}, expected shared baseline {}. Upper \
+                 segments must NOT animate from their own bottom edge.",
+                corner, b.tag, b.x, b.y, b.w, b.h, oy, baseline_y,
+            );
+        }
+
+        // The x-component of the origin must still be each bar's own center.
+        for b in &real_bars {
+            let ox = b.origin.unwrap().0;
+            let expected_x = b.x + b.w / 2.0;
+            assert!(
+                (ox - expected_x).abs() < 1e-6,
+                "{:?} / stacked vertical — bar x-origin {} != bar center {}",
+                corner, ox, expected_x,
+            );
+        }
+
+        // Verify this is NOT the per-segment edge: at least one upper
+        // segment must differ from what bar_animation_origin would produce.
+        let any_differs = real_bars.iter().any(|b| {
+            let per_segment_y = b.y + b.h; // vertical positive: bottom edge
+            (b.origin.unwrap().1 - per_segment_y).abs() > 1e-6
+        });
+        assert!(
+            any_differs,
+            "{:?} / stacked vertical — all bars have origin.y == their \
+             own bottom edge; the stack_baseline fix is not working",
+            corner,
+        );
+    }
+}
+
+#[test]
+fn bar_animation_origin_stacked_vertical() {
+    for corner in corner_variants().iter() {
+        run_stacked_case(corner, STACKED_VERTICAL_YAML, false);
+    }
+}
+
+#[test]
+fn bar_animation_origin_stacked_horizontal() {
+    for corner in corner_variants().iter() {
+        run_stacked_case(corner, STACKED_HORIZONTAL_YAML, true);
+    }
+}
