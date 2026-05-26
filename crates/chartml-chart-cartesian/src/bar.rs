@@ -37,6 +37,10 @@ pub(crate) struct BarRectSpec {
     pub fill: String,
     pub class: String,
     pub data: Option<ElementData>,
+    /// For stacked bars, the shared axis baseline coordinate.
+    /// When `Some(baseline)`, the animation origin uses this instead of the
+    /// segment's own edge so the entire stack grows uniformly from the axis.
+    pub stack_baseline: Option<f64>,
 }
 
 /// Compute the CSS `transform-origin` anchor for a bar's entrance animation.
@@ -82,8 +86,20 @@ pub(crate) fn build_bar_element(
     use chartml_core::theme::BarCornerRadius;
     let BarRectSpec {
         x, y, width, height, is_horizontal, is_negative, fill, class, data,
+        stack_baseline,
     } = spec;
-    let anim_origin = Some(bar_animation_origin(x, y, width, height, is_horizontal, is_negative));
+    let anim_origin = if let Some(baseline) = stack_baseline {
+        // Stacked bars: all segments share the axis baseline so the
+        // stack grows uniformly from the axis instead of each segment
+        // animating from its own edge.
+        if is_horizontal {
+            Some((baseline, y + height / 2.0))
+        } else {
+            Some((x + width / 2.0, baseline))
+        }
+    } else {
+        Some(bar_animation_origin(x, y, width, height, is_horizontal, is_negative))
+    };
 
     // Extract requested radius; short-circuit the zero case to emit a plain
     // Rect (byte-identical contract).
@@ -770,6 +786,7 @@ fn render_single_series_bars(
                     fill: fill_color.clone(),
                     class: "bar bar-rect".to_string(),
                     data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
+                    stack_baseline: None,
                 },
                 &config.theme,
             ));
@@ -813,6 +830,7 @@ fn render_single_series_bars(
                     fill: fill_color.clone(),
                     class: "bar bar-rect".to_string(),
                     data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
+                    stack_baseline: None,
                 },
                 &config.theme,
             ));
@@ -925,6 +943,7 @@ fn render_multi_series_bars(
             let linear = ScaleLinear::new((effective_min, effective_max), (0.0, inner_width));
             let bar_render_height = band.bandwidth().min(40.0);
             let y_inset = (band.bandwidth() - bar_render_height) / 2.0;
+            let baseline_x = linear.map(0.0);
 
             for point in &stacked_points {
                 let y = match band.map(&point.key) {
@@ -956,6 +975,7 @@ fn render_multi_series_bars(
                             ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
                                 .with_series(&point.series),
                         ),
+                        stack_baseline: Some(baseline_x),
                     },
                     &config.theme,
                 ));
@@ -969,6 +989,7 @@ fn render_multi_series_bars(
             let max_bar_width = inner_width * 0.2;
             let bar_render_width = band.bandwidth().min(max_bar_width);
             let x_inset = (band.bandwidth() - bar_render_width) / 2.0;
+            let baseline_y = linear.map(0.0);
 
             for point in &stacked_points {
                 let x = match band.map(&point.key) {
@@ -1000,6 +1021,7 @@ fn render_multi_series_bars(
                             ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
                                 .with_series(&point.series),
                         ),
+                        stack_baseline: Some(baseline_y),
                     },
                     &config.theme,
                 ));
@@ -1100,6 +1122,7 @@ fn render_multi_series_bars(
                             ElementData::new(&cat, format_value(val, y_fmt_ref))
                                 .with_series(&series),
                         ),
+                        stack_baseline: None,
                     },
                     &config.theme,
                 ));
@@ -1170,6 +1193,7 @@ fn render_multi_series_bars(
                             ElementData::new(&cat, format_value(val, y_fmt_ref))
                                 .with_series(&series),
                         ),
+                        stack_baseline: None,
                     },
                     &config.theme,
                 ));
@@ -1508,6 +1532,7 @@ fn render_combo(
 
             let bar_render_width = bandwidth.min(max_bar_width);
             let x_inset = (bandwidth - bar_render_width) / 2.0;
+            let combo_baseline_y = scale.map(0.0) + margins.top;
 
             for point in &stacked_points {
                 let x = match band.map(&point.key) { Some(x) => x, None => continue };
@@ -1532,6 +1557,7 @@ fn render_combo(
                             ElementData::new(&point.key, format_value(point.value, fmt_ref))
                                 .with_series(&point.series),
                         ),
+                        stack_baseline: Some(combo_baseline_y),
                     },
                     &config.theme,
                 ));
@@ -1605,6 +1631,7 @@ fn render_combo(
                                 ElementData::new(&cat, format_value(val, fmt_ref))
                                     .with_series(&label),
                             ),
+                            stack_baseline: None,
                         },
                         &config.theme,
                     ));

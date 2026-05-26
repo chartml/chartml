@@ -997,6 +997,7 @@ style:
                 fill: "#000".into(),
                 class: "bar bar-rect".into(),
                 data: None,
+                stack_baseline: None,
             },
             &theme,
         );
@@ -1007,6 +1008,7 @@ style:
                 fill: "#000".into(),
                 class: "bar bar-rect".into(),
                 data: None,
+                stack_baseline: None,
             },
             &theme,
         );
