@@ -985,7 +985,7 @@ style:
         // Drive build_bar_element directly so the test doesn't depend on a
         // chart spec that emits negative values.
         use chartml_core::theme::{BarCornerRadius, Theme};
-        use crate::bar::{build_bar_element, BarRectSpec};
+        use crate::bar::{build_bar_element, BarRectSpec, StackPosition};
 
         let mut theme = Theme::default();
         theme.bar_corner_radius = BarCornerRadius::Top(8.0);
@@ -998,6 +998,7 @@ style:
                 class: "bar bar-rect".into(),
                 data: None,
                 stack_baseline: None,
+                stack_position: StackPosition::None,
             },
             &theme,
         );
@@ -1009,6 +1010,7 @@ style:
                 class: "bar bar-rect".into(),
                 data: None,
                 stack_baseline: None,
+                stack_position: StackPosition::None,
             },
             &theme,
         );
@@ -1531,5 +1533,486 @@ style:
         config.theme = t;
         let element = renderer.render(&data, &config).unwrap();
         assert_eq!(count_zero_lines(&element), 1);
+    }
+
+    // ----- CHA-5: stacked bar corner rounding -----
+
+    /// Helper: build a BarRectSpec for testing build_bar_element directly.
+    fn test_bar_spec(stack_position: crate::bar::StackPosition) -> crate::bar::BarRectSpec {
+        crate::bar::BarRectSpec {
+            x: 100.0,
+            y: 50.0,
+            width: 40.0,
+            height: 200.0,
+            is_horizontal: false,
+            is_negative: false,
+            fill: "#000".into(),
+            class: "bar bar-rect".into(),
+            data: None,
+            stack_baseline: None,
+            stack_position,
+        }
+    }
+
+    /// Uniform radius + StackPosition::None → Rect with rx/ry (all 4 corners).
+    #[test]
+    fn cha5_uniform_radius_none_emits_rect_with_rx() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        use crate::bar::{build_bar_element, StackPosition};
+
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Uniform(8.0);
+
+        let el = build_bar_element(test_bar_spec(StackPosition::None), &theme);
+        match el {
+            ChartElement::Rect { rx, ry, .. } => {
+                assert_eq!(rx, Some(8.0), "Uniform + None must emit rx=8");
+                assert_eq!(ry, Some(8.0), "Uniform + None must emit ry=8");
+            }
+            other => panic!("Uniform + None must emit Rect, got {:?}", other),
+        }
+    }
+
+    /// Uniform radius + StackPosition::Only → Rect with rx/ry (all 4 corners).
+    #[test]
+    fn cha5_uniform_radius_only_emits_rect_with_rx() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        use crate::bar::{build_bar_element, StackPosition};
+
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Uniform(8.0);
+
+        let el = build_bar_element(test_bar_spec(StackPosition::Only), &theme);
+        match el {
+            ChartElement::Rect { rx, ry, .. } => {
+                assert_eq!(rx, Some(8.0));
+                assert_eq!(ry, Some(8.0));
+            }
+            other => panic!("Uniform + Only must emit Rect, got {:?}", other),
+        }
+    }
+
+    /// Uniform radius + StackPosition::Middle → plain Rect without rx/ry.
+    #[test]
+    fn cha5_uniform_radius_middle_emits_plain_rect() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        use crate::bar::{build_bar_element, StackPosition};
+
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Uniform(8.0);
+
+        let el = build_bar_element(test_bar_spec(StackPosition::Middle), &theme);
+        match el {
+            ChartElement::Rect { rx, ry, .. } => {
+                assert!(rx.is_none(), "Uniform + Middle must emit rx=None");
+                assert!(ry.is_none(), "Uniform + Middle must emit ry=None");
+            }
+            other => panic!("Uniform + Middle must emit plain Rect, got {:?}", other),
+        }
+    }
+
+    /// Uniform radius + StackPosition::Top → Path with 2 arcs at value-end
+    /// (y0 edge for vertical positive).
+    #[test]
+    fn cha5_uniform_radius_top_emits_value_end_path() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        use crate::bar::{build_bar_element, StackPosition};
+
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Uniform(8.0);
+
+        let el = build_bar_element(test_bar_spec(StackPosition::Top), &theme);
+        match el {
+            ChartElement::Path { d, .. } => {
+                assert_eq!(
+                    d.matches("A 8,8").count(),
+                    2,
+                    "Uniform + Top must produce 2 arcs, got d={d}"
+                );
+                // Vertical positive top: arcs at y0 edge → path starts at (x, y+r)
+                assert!(
+                    d.starts_with("M 100,58"),
+                    "value-end rounding for vertical positive should start at y+r=58, got {d}"
+                );
+            }
+            other => panic!("Uniform + Top must emit Path, got {:?}", other),
+        }
+    }
+
+    /// Uniform radius + StackPosition::Bottom → Path with 2 arcs at baseline-end
+    /// (y1 edge for vertical positive).
+    #[test]
+    fn cha5_uniform_radius_bottom_emits_baseline_end_path() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        use crate::bar::{build_bar_element, StackPosition};
+
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Uniform(8.0);
+
+        let el = build_bar_element(test_bar_spec(StackPosition::Bottom), &theme);
+        match el {
+            ChartElement::Path { d, .. } => {
+                assert_eq!(
+                    d.matches("A 8,8").count(),
+                    2,
+                    "Uniform + Bottom must produce 2 arcs, got d={d}"
+                );
+                // Vertical positive bottom: arcs at y1 edge → path starts at (x, y) = (100, 50)
+                // and references y1-r = 50+200-8 = 242
+                assert!(
+                    d.starts_with("M 100,50"),
+                    "baseline-end rounding for vertical positive should start at (x,y)=(100,50), got {d}"
+                );
+                assert!(
+                    d.contains(",242"),
+                    "baseline-end rounding should contain y1-r=242, got {d}"
+                );
+            }
+            other => panic!("Uniform + Bottom must emit Path, got {:?}", other),
+        }
+    }
+
+    /// Top radius + StackPosition::None → Path with 2 arcs at value-end
+    /// (unchanged from pre-CHA-5 behavior).
+    #[test]
+    fn cha5_top_radius_none_emits_value_end_path() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        use crate::bar::{build_bar_element, StackPosition};
+
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Top(8.0);
+
+        let el = build_bar_element(test_bar_spec(StackPosition::None), &theme);
+        match el {
+            ChartElement::Path { d, .. } => {
+                assert_eq!(d.matches("A 8,8").count(), 2);
+                assert!(d.starts_with("M 100,58"));
+            }
+            other => panic!("Top + None must emit Path, got {:?}", other),
+        }
+    }
+
+    /// Top radius + StackPosition::Top → same as None (value-end arcs).
+    #[test]
+    fn cha5_top_radius_top_emits_value_end_path() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        use crate::bar::{build_bar_element, StackPosition};
+
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Top(8.0);
+
+        let el = build_bar_element(test_bar_spec(StackPosition::Top), &theme);
+        match el {
+            ChartElement::Path { d, .. } => {
+                assert_eq!(d.matches("A 8,8").count(), 2);
+                assert!(d.starts_with("M 100,58"));
+            }
+            other => panic!("Top + Top must emit Path, got {:?}", other),
+        }
+    }
+
+    /// Top radius + StackPosition::Middle → plain Rect with no rounding.
+    #[test]
+    fn cha5_top_radius_middle_emits_plain_rect() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        use crate::bar::{build_bar_element, StackPosition};
+
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Top(8.0);
+
+        let el = build_bar_element(test_bar_spec(StackPosition::Middle), &theme);
+        match el {
+            ChartElement::Rect { rx, ry, .. } => {
+                assert!(rx.is_none());
+                assert!(ry.is_none());
+            }
+            other => panic!("Top + Middle must emit plain Rect, got {:?}", other),
+        }
+    }
+
+    /// Top radius + StackPosition::Bottom → Path with 2 arcs at baseline-end.
+    #[test]
+    fn cha5_top_radius_bottom_emits_baseline_end_path() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+        use crate::bar::{build_bar_element, StackPosition};
+
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Top(8.0);
+
+        let el = build_bar_element(test_bar_spec(StackPosition::Bottom), &theme);
+        match el {
+            ChartElement::Path { d, .. } => {
+                assert_eq!(d.matches("A 8,8").count(), 2);
+                // Vertical positive bottom: arcs at y1 edge
+                assert!(
+                    d.starts_with("M 100,50"),
+                    "Top + Bottom baseline-end should start at (100,50), got {d}"
+                );
+                assert!(
+                    d.contains(",242"),
+                    "Top + Bottom baseline-end should contain y1-r=242, got {d}"
+                );
+            }
+            other => panic!("Top + Bottom must emit Path, got {:?}", other),
+        }
+    }
+
+    /// Integration test: stacked bar chart with Top(8) corner radius.
+    /// - Top segments get Path with 2 arcs (value-end)
+    /// - Bottom segments get Path with 2 arcs (baseline-end)
+    /// - Non-stacked behavior is unchanged (all Paths from Top rounding)
+    #[test]
+    fn cha5_stacked_bar_top_rounding_positions() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+
+        let rows: Vec<Row> = vec![
+            [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(100)), ("product".to_string(), json!("A"))].into_iter().collect(),
+            [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(50)),  ("product".to_string(), json!("B"))].into_iter().collect(),
+            [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(200)), ("product".to_string(), json!("A"))].into_iter().collect(),
+            [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(80)),  ("product".to_string(), json!("B"))].into_iter().collect(),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+        let viz: VisualizeSpec = serde_yaml::from_str(r#"
+            type: bar
+            mode: stacked
+            columns: month
+            rows: revenue
+            marks:
+              color: product
+        "#).unwrap();
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Top(8.0);
+        let config = ChartConfig {
+            visualize: viz,
+            title: None,
+            width: 800.0,
+            height: 400.0,
+            colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string()],
+            theme,
+        };
+        let renderer = CartesianRenderer::new();
+        let element = renderer.render(&data, &config).unwrap();
+
+        // Collect all bar elements (could be Rect or Path)
+        let mut bars = Vec::new();
+        collect_bar_elements(&element, &mut bars);
+        // 2 categories x 2 series = 4 bars
+        assert_eq!(bars.len(), 4, "Should have 4 stacked bar segments, got {}", bars.len());
+
+        // With 2 non-zero series per category:
+        // - Bottom segments (product A, lower y0) should have arcs at baseline edge
+        // - Top segments (product B, higher y1) should have arcs at value edge
+        // All should be Path elements (since Top(8) always emits a Path for
+        // non-Middle positions)
+        let mut path_count = 0;
+        let mut rect_count = 0;
+        for b in &bars {
+            match b {
+                ChartElement::Path { d, .. } => {
+                    assert_eq!(
+                        d.matches("A 8,8").count(),
+                        2,
+                        "stacked bar Path must have exactly 2 arcs, got d={d}"
+                    );
+                    path_count += 1;
+                }
+                ChartElement::Rect { .. } => {
+                    rect_count += 1;
+                }
+                _ => panic!("unexpected bar element type"),
+            }
+        }
+        // All 4 should be Paths (2 top + 2 bottom, each with 2 arcs)
+        assert_eq!(path_count, 4, "all stacked segments should be Paths with arcs");
+        assert_eq!(rect_count, 0, "no plain Rects expected in 2-series stack with Top(8)");
+    }
+
+    /// Integration test: stacked bar chart with Uniform(8) corner radius.
+    /// - Top segments get value-end Path
+    /// - Bottom segments get baseline-end Path
+    /// - (If 3 series: middle segments would be plain Rect)
+    #[test]
+    fn cha5_stacked_bar_uniform_rounding_positions() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+
+        let rows: Vec<Row> = vec![
+            [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(100)), ("product".to_string(), json!("A"))].into_iter().collect(),
+            [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(50)),  ("product".to_string(), json!("B"))].into_iter().collect(),
+            [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(30)),  ("product".to_string(), json!("C"))].into_iter().collect(),
+            [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(200)), ("product".to_string(), json!("A"))].into_iter().collect(),
+            [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(80)),  ("product".to_string(), json!("B"))].into_iter().collect(),
+            [("month".to_string(), json!("Feb")), ("revenue".to_string(), json!(40)),  ("product".to_string(), json!("C"))].into_iter().collect(),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+        let viz: VisualizeSpec = serde_yaml::from_str(r#"
+            type: bar
+            mode: stacked
+            columns: month
+            rows: revenue
+            marks:
+              color: product
+        "#).unwrap();
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Uniform(8.0);
+        let config = ChartConfig {
+            visualize: viz,
+            title: None,
+            width: 800.0,
+            height: 400.0,
+            colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
+            theme,
+        };
+        let renderer = CartesianRenderer::new();
+        let element = renderer.render(&data, &config).unwrap();
+
+        let mut bars = Vec::new();
+        collect_bar_elements(&element, &mut bars);
+        // 2 categories x 3 series = 6 bars
+        assert_eq!(bars.len(), 6, "Should have 6 stacked bar segments, got {}", bars.len());
+
+        // With 3 non-zero series per category:
+        // - Bottom (A): Path with baseline-end arcs
+        // - Middle (B): plain Rect (no rounding)
+        // - Top (C): Path with value-end arcs
+        let mut path_count = 0;
+        let mut plain_rect_count = 0;
+        for b in &bars {
+            match b {
+                ChartElement::Path { d, .. } => {
+                    assert_eq!(d.matches("A 8,8").count(), 2);
+                    path_count += 1;
+                }
+                ChartElement::Rect { rx, ry, .. } => {
+                    assert!(rx.is_none(), "middle segment Rect must have rx=None");
+                    assert!(ry.is_none(), "middle segment Rect must have ry=None");
+                    plain_rect_count += 1;
+                }
+                _ => panic!("unexpected bar element type"),
+            }
+        }
+        // 2 categories: each has 1 bottom Path + 1 middle Rect + 1 top Path
+        assert_eq!(path_count, 4, "expected 4 Paths (2 top + 2 bottom)");
+        assert_eq!(plain_rect_count, 2, "expected 2 plain Rects (middle segments)");
+    }
+
+    /// Non-stacked (grouped) bar chart with Uniform(8) radius should not be
+    /// affected by stack position logic — all bars get rx/ry on all 4 corners.
+    #[test]
+    fn cha5_grouped_bar_uniform_radius_unchanged() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+
+        let rows: Vec<Row> = vec![
+            [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(100)), ("product".to_string(), json!("A"))].into_iter().collect(),
+            [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(50)),  ("product".to_string(), json!("B"))].into_iter().collect(),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+        let viz: VisualizeSpec = serde_yaml::from_str(r#"
+            type: bar
+            mode: grouped
+            columns: month
+            rows: revenue
+            marks:
+              color: product
+        "#).unwrap();
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Uniform(8.0);
+        let config = ChartConfig {
+            visualize: viz,
+            title: None,
+            width: 800.0,
+            height: 400.0,
+            colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string()],
+            theme,
+        };
+        let renderer = CartesianRenderer::new();
+        let element = renderer.render(&data, &config).unwrap();
+
+        let mut radii = Vec::new();
+        collect_bar_corner_radii(&element, &mut radii);
+        assert_eq!(radii.len(), 2, "grouped bar should have 2 bars");
+        for (rx, ry) in &radii {
+            assert_eq!(*rx, Some(8.0), "grouped bar must keep Uniform rx=8");
+            assert_eq!(*ry, Some(8.0), "grouped bar must keep Uniform ry=8");
+        }
+    }
+
+    /// Single-series bar chart with Uniform(8) radius is not affected by
+    /// stack position logic — all bars get rx/ry.
+    #[test]
+    fn cha5_single_series_uniform_radius_unchanged() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+
+        let renderer = CartesianRenderer::new();
+        let data = make_bar_data();
+        let mut config = make_bar_config();
+        let mut t = Theme::default();
+        t.bar_corner_radius = BarCornerRadius::Uniform(8.0);
+        config.theme = t;
+        let element = renderer.render(&data, &config).unwrap();
+
+        let mut radii = Vec::new();
+        collect_bar_corner_radii(&element, &mut radii);
+        assert!(!radii.is_empty());
+        for (rx, ry) in &radii {
+            assert_eq!(*rx, Some(8.0));
+            assert_eq!(*ry, Some(8.0));
+        }
+    }
+
+    /// Stacked bar where one category has a zero-value series.
+    /// The zero segment should be a plain Rect (Middle), while the non-zero
+    /// segment should be Only (both ends rounded).
+    #[test]
+    fn cha5_stacked_bar_zero_series_gets_only_position() {
+        use chartml_core::theme::{BarCornerRadius, Theme};
+
+        let rows: Vec<Row> = vec![
+            [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(100)), ("product".to_string(), json!("A"))].into_iter().collect(),
+            [("month".to_string(), json!("Jan")), ("revenue".to_string(), json!(0)),   ("product".to_string(), json!("B"))].into_iter().collect(),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+        let viz: VisualizeSpec = serde_yaml::from_str(r#"
+            type: bar
+            mode: stacked
+            columns: month
+            rows: revenue
+            marks:
+              color: product
+        "#).unwrap();
+        let mut theme = Theme::default();
+        theme.bar_corner_radius = BarCornerRadius::Uniform(8.0);
+        let config = ChartConfig {
+            visualize: viz,
+            title: None,
+            width: 800.0,
+            height: 400.0,
+            colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string()],
+            theme,
+        };
+        let renderer = CartesianRenderer::new();
+        let element = renderer.render(&data, &config).unwrap();
+
+        let mut bars = Vec::new();
+        collect_bar_elements(&element, &mut bars);
+        // 1 category x 2 series = 2 bars
+        assert_eq!(bars.len(), 2, "Should have 2 bar segments");
+
+        // The non-zero segment (A=100) should be StackPosition::Only → Rect with rx/ry
+        // The zero segment (B=0) should be StackPosition::Middle → plain Rect
+        let mut rx_count = 0;
+        let mut plain_count = 0;
+        for b in &bars {
+            if let ChartElement::Rect { rx, ry, .. } = b {
+                if rx.is_some() {
+                    assert_eq!(*rx, Some(8.0));
+                    assert_eq!(*ry, Some(8.0));
+                    rx_count += 1;
+                } else {
+                    plain_count += 1;
+                }
+            }
+        }
+        assert_eq!(rx_count, 1, "expected 1 bar with rx/ry (Only position)");
+        assert_eq!(plain_count, 1, "expected 1 plain bar (zero-height, Middle)");
     }
 }
