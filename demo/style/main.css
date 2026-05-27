@@ -151,6 +151,7 @@ body {
 .bars rect,
 .bar {
     animation: chartml-bar-grow 400ms ease-out both;
+    transform-box: fill-box;
     opacity: 0.9;
     transition: opacity 200ms ease, stroke 200ms ease;
 }

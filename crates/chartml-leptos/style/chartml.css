@@ -102,6 +102,7 @@
 .bars rect,
 .bar {
     animation: chartml-bar-grow 400ms ease-out both;
+    transform-box: fill-box;
     transform-origin: 50% 100%;
     opacity: 0.9;
     transition: opacity 200ms ease, stroke 200ms ease, stroke-width 200ms ease;
