@@ -1,6 +1,7 @@
 use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform};
 use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
+pub use chartml_core::format::format_value;
 use chartml_core::format::{detect_date_format, reformat_date_label};
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics, measure_text, truncate_label_with_metrics};
 use chartml_core::plugin::ChartConfig;
@@ -245,14 +246,6 @@ pub fn get_x_format(config: &ChartConfig) -> Option<String> {
     })
 }
 
-/// Format a numeric value using a format string, or a sensible default.
-pub fn format_value(value: f64, format_str: Option<&str>) -> String {
-    match format_str {
-        Some(fmt) => NumberFormatter::new(fmt).format(value),
-        None => default_format_value(value),
-    }
-}
-
 /// Format a tick label with SI suffix abbreviation when values are large.
 ///
 /// When `tick_step` is \>= 1_000_000_000 uses "B" suffix, \>= 1_000_000 uses "M",
@@ -376,64 +369,6 @@ fn compute_tick_step(ticks: &[f64], domain: (f64, f64)) -> f64 {
     } else {
         (domain.1 - domain.0).abs().max(1.0)
     }
-}
-
-/// Default numeric formatting: integers without decimals, floats with 1 decimal.
-fn default_format_value(value: f64) -> String {
-    if value == value.floor() && value.abs() < 1e15 {
-        // Use comma separator for large integers
-        let abs = value.abs() as u64;
-        let formatted = insert_commas(abs);
-        if value < 0.0 {
-            format!("-{}", formatted)
-        } else {
-            formatted
-        }
-    } else {
-        // Use enough decimal places to show significant digits.
-        // For values like 0.007, we need 3 decimals; for 1.5, 1 decimal suffices.
-        // Compute precision from the value's magnitude: at least 1, and for small
-        // values, enough to reveal the first significant fractional digit plus two.
-        let abs_val = value.abs();
-        let precision = if abs_val < 1e-15 {
-            1usize
-        } else if abs_val >= 1.0 {
-            // For values >= 1, one decimal is fine (e.g. 3.5 -> "3.5")
-            1usize
-        } else {
-            // For values < 1, compute digits needed: -floor(log10(abs)) gives the
-            // position of the first significant digit. Add 1 to show at least two
-            // significant fractional digits (e.g. 0.007 -> precision 3 -> "0.007").
-            let digits = -(abs_val.log10().floor()) as usize;
-            digits.max(1)
-        };
-        // Format and strip unnecessary trailing zeros after the decimal point,
-        // but keep at least one decimal digit.
-        let formatted = format!("{:.prec$}", value, prec = precision);
-        let trimmed = formatted.trim_end_matches('0');
-        // Ensure we don't end with just a decimal point (e.g. "3." -> "3.0")
-        if trimmed.ends_with('.') {
-            format!("{}0", trimmed)
-        } else {
-            trimmed.to_string()
-        }
-    }
-}
-
-fn insert_commas(n: u64) -> String {
-    let s = n.to_string();
-    let len = s.len();
-    if len <= 3 {
-        return s;
-    }
-    let mut result = String::with_capacity(len + len / 3);
-    for (i, ch) in s.chars().enumerate() {
-        if i > 0 && (len - i).is_multiple_of(3) {
-            result.push(',');
-        }
-        result.push(ch);
-    }
-    result
 }
 
 /// Format labels for display, applying the same date reformatting that
