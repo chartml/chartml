@@ -12,6 +12,7 @@ categories = ["visualization"]
 
 [dependencies]
 chartml-core = { path = "../chartml-core", version = "5" }
+indexmap = "2"
 serde_json = "1"
 
 [dev-dependencies]

@@ -1,6 +1,7 @@
 use chartml_core::data::DataTable;
 use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform, ViewBox, emit_dot_halo_if_enabled};
 use chartml_core::error::ChartError;
+use indexmap::IndexMap;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
@@ -1081,6 +1082,7 @@ fn render_multi_series_bars(
             let y_inset = (band.bandwidth() - bar_render_height) / 2.0;
             let baseline_x = linear.map(0.0);
 
+            let mut column_map: IndexMap<String, Vec<ChartElement>> = IndexMap::new();
             for point in &stacked_points {
                 let y = match band.map(&point.key) {
                     Some(y) => y,
@@ -1102,7 +1104,7 @@ fn render_multi_series_bars(
                     .copied()
                     .unwrap_or(StackPosition::None);
 
-                elements.push(build_bar_element(
+                column_map.entry(point.key.clone()).or_default().push(build_bar_element(
                     BarRectSpec {
                         x: x_left.min(x_right),
                         y: y + y_inset,
@@ -1122,6 +1124,13 @@ fn render_multi_series_bars(
                     &config.theme,
                 ));
             }
+            for (_key, category_bars) in column_map {
+                elements.push(ChartElement::Group {
+                    class: "bars-stacked-column".to_string(),
+                    transform: None,
+                    children: category_bars,
+                });
+            }
         } else {
             // Vertical stacked: band on x-axis (width), linear on y-axis (height)
             let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
@@ -1133,6 +1142,7 @@ fn render_multi_series_bars(
             let x_inset = (band.bandwidth() - bar_render_width) / 2.0;
             let baseline_y = linear.map(0.0);
 
+            let mut column_map: IndexMap<String, Vec<ChartElement>> = IndexMap::new();
             for point in &stacked_points {
                 let x = match band.map(&point.key) {
                     Some(x) => x,
@@ -1154,7 +1164,7 @@ fn render_multi_series_bars(
                     .copied()
                     .unwrap_or(StackPosition::None);
 
-                elements.push(build_bar_element(
+                column_map.entry(point.key.clone()).or_default().push(build_bar_element(
                     BarRectSpec {
                         x: x + x_inset,
                         y: y_top,
@@ -1173,6 +1183,13 @@ fn render_multi_series_bars(
                     },
                     &config.theme,
                 ));
+            }
+            for (_key, category_bars) in column_map {
+                elements.push(ChartElement::Group {
+                    class: "bars-stacked-column".to_string(),
+                    transform: None,
+                    children: category_bars,
+                });
             }
         }
 
