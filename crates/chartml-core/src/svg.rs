@@ -92,6 +92,12 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             // Fall back to the legacy width-vs-height heuristic only when
             // `animation_origin` is `None` (non-bar Rect elements that
             // don't set an explicit origin).
+            // Bar elements carry fill-box-relative animation_origin
+            // (set by build_bar_element), consumed with
+            // `transform-box: fill-box` in the CSS. Non-bar Rects
+            // (legend symbols etc.) fall through to the legacy heuristic
+            // which stays in absolute coordinates — those elements don't
+            // have `transform-box: fill-box` in CSS.
             let (origin_x, origin_y) = match animation_origin {
                 Some((ox, oy)) => (*ox, *oy),
                 None => {
