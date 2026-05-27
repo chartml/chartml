@@ -172,19 +172,19 @@ body {
     to   { transform: scaleX(1); }
 }
 
-/* Stacked bars: clip-path reveal on the group */
-.bars-stacked {
+/* Stacked bars: clip-path reveal on per-column groups */
+.bars-stacked-column {
     animation: chartml-bars-reveal 400ms ease-out both;
 }
-.bars-stacked rect,
-.bars-stacked .bar {
+.bars-stacked-column rect,
+.bars-stacked-column .bar {
     animation: none;
 }
 @keyframes chartml-bars-reveal {
     from { clip-path: inset(100% 0 0 0); }
     to   { clip-path: inset(0); }
 }
-.chartml-horizontal .bars-stacked {
+.chartml-horizontal .bars-stacked-column {
     animation-name: chartml-bars-reveal-x;
 }
 @keyframes chartml-bars-reveal-x {

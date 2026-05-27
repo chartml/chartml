@@ -544,6 +544,7 @@ name = "chartml-chart-cartesian"
 version = "5.0.6"
 dependencies = [
  "chartml-core",
+ "indexmap",
  "serde_json",
  "serde_yaml",
 ]
