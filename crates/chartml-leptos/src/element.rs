@@ -58,7 +58,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             // 50% 100%; }`) cover the common vertical-positive case as a
             // safety net.
             let base_style = match animation_origin {
-                Some((ox, oy)) => format!("transform-origin: {}px {}px;", ox, oy),
+                Some((ox, oy)) => format!("transform-box: fill-box; transform-origin: {}% {}%;", ox, oy),
                 None => String::new(),
             };
 
@@ -101,7 +101,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             // the path's geometric center. All non-bar Paths leave the
             // field `None` → no inline style emitted.
             let base_style = match animation_origin {
-                Some((ox, oy)) => format!("transform-origin: {}px {}px;", ox, oy),
+                Some((ox, oy)) => format!("transform-box: fill-box; transform-origin: {}% {}%;", ox, oy),
                 None => String::new(),
             };
 

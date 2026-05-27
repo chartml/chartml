@@ -181,27 +181,19 @@ pub(crate) fn build_bar_element(
         x, y, width, height, is_horizontal, is_negative, fill, class, data,
         stack_baseline, stack_position,
     } = spec;
-    // Compute the animation origin in absolute local coordinates first,
-    // then convert to fill-box-relative coordinates (i.e. relative to the
-    // element's own top-left corner) by subtracting (x, y). This is
-    // required because the consuming CSS applies `transform-box: fill-box`,
-    // meaning `transform-origin` pixel values are resolved against the
-    // element's own bounding box — NOT the SVG viewport or parent group.
-    let (abs_ox, abs_oy) = if let Some(baseline) = stack_baseline {
-        // Stacked bars: all segments share the axis baseline so the
-        // stack grows uniformly from the axis instead of each segment
-        // animating from its own edge.
-        if is_horizontal {
-            (baseline, y + height / 2.0)
-        } else {
-            (x + width / 2.0, baseline)
-        }
+    // Stacked bars use group-level clip-path animation (no per-element
+    // transform needed). Non-stacked bars use fill-box percentages so the
+    // origin is always correct regardless of group transforms or viewport.
+    let anim_origin = if stack_baseline.is_some() {
+        None
     } else {
-        bar_animation_origin(x, y, width, height, is_horizontal, is_negative)
+        Some(match (is_horizontal, is_negative) {
+            (false, false) => (50.0, 100.0), // vertical positive: bottom-center
+            (false, true)  => (50.0, 0.0),   // vertical negative: top-center
+            (true,  false) => (0.0, 50.0),   // horizontal positive: left-center
+            (true,  true)  => (100.0, 50.0), // horizontal negative: right-center
+        })
     };
-    // Express relative to the element's own top-left corner, for use with
-    // transform-box: fill-box in the consuming CSS.
-    let anim_origin = Some((abs_ox - x, abs_oy - y));
 
     // Extract requested radius; short-circuit the zero case to emit a plain
     // Rect (byte-identical contract).
@@ -803,8 +795,9 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         children: axis_elements,
     });
 
+    let bars_class = if is_stacked { "bars bars-stacked" } else { "bars" };
     children.push(ChartElement::Group {
-        class: "bars".to_string(),
+        class: bars_class.to_string(),
         transform: Some(Transform::Translate(margins.left, margins.top)),
         children: bar_elements,
     });

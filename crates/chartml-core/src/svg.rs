@@ -84,35 +84,32 @@ fn write_element(buf: &mut String, element: &ChartElement) {
         }
 
         ChartElement::Rect { x, y, width, height, fill, stroke, rx, ry, class, data, animation_origin } => {
-            // When the emitter populates `animation_origin` (e.g.
-            // `build_bar_element` sets it via `bar_animation_origin` or
-            // `stack_baseline`), use it directly so stacked bars, negative
-            // bars, and other edge cases animate from the correct baseline.
-            //
-            // Fall back to the legacy width-vs-height heuristic only when
-            // `animation_origin` is `None` (non-bar Rect elements that
-            // don't set an explicit origin).
-            // Bar elements carry fill-box-relative animation_origin
-            // (set by build_bar_element), consumed with
-            // `transform-box: fill-box` in the CSS. Non-bar Rects
-            // (legend symbols etc.) fall through to the legacy heuristic
-            // which stays in absolute coordinates — those elements don't
-            // have `transform-box: fill-box` in CSS.
-            let (origin_x, origin_y) = match animation_origin {
-                Some((ox, oy)) => (*ox, *oy),
+            // Bar elements carry fill-box percentage origins (e.g. 50, 100
+            // for bottom-center). Emit with transform-box: fill-box so the
+            // browser resolves against the element's own bounding box.
+            // Non-bar Rects (animation_origin: None) get the legacy
+            // absolute-pixel heuristic for backward compat.
+            match animation_origin {
+                Some((ox, oy)) => {
+                    write!(
+                        buf,
+                        r#"<rect x="{}" y="{}" width="{}" height="{}" fill="{}" style="transform-box: fill-box; transform-origin: {}% {}%;""#,
+                        x, y, width, height, xml_escape(fill), ox, oy,
+                    ).expect("writing to String is infallible");
+                }
                 None => {
-                    if width > height {
+                    let (origin_x, origin_y) = if width > height {
                         (*x, y + height / 2.0)
                     } else {
                         (x + width / 2.0, y + height)
-                    }
+                    };
+                    write!(
+                        buf,
+                        r#"<rect x="{}" y="{}" width="{}" height="{}" fill="{}" style="transform-origin: {}px {}px;""#,
+                        x, y, width, height, xml_escape(fill), origin_x, origin_y,
+                    ).expect("writing to String is infallible");
                 }
-            };
-            write!(
-                buf,
-                r#"<rect x="{}" y="{}" width="{}" height="{}" fill="{}" style="transform-origin: {}px {}px;""#,
-                x, y, width, height, xml_escape(fill), origin_x, origin_y,
-            ).expect("writing to String is infallible");
+            }
             if let Some(s) = stroke {
                 write!(buf, r#" stroke="{}""#, xml_escape(s)).expect("writing to String is infallible");
             }
@@ -138,7 +135,7 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             // so the unconditional `style=` insertion below stays absent
             // for every pre-theme-hooks snapshot.
             if let Some((ox, oy)) = animation_origin {
-                write!(buf, r#" style="transform-origin: {}px {}px;""#, ox, oy).expect("writing to String is infallible");
+                write!(buf, r#" style="transform-box: fill-box; transform-origin: {}% {}%;""#, ox, oy).expect("writing to String is infallible");
             }
             match fill.as_deref() {
                 Some(f) => write!(buf, r#" fill="{}""#, xml_escape(f)).expect("writing to String is infallible"),
