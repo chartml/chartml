@@ -127,6 +127,29 @@
     to   { transform: scaleX(1); }
 }
 
+/* Stacked bars: clip-path reveal on the group instead of per-element
+ * scaleY. Per-element scaling creates gaps between segments during the
+ * animation because each segment shrinks toward the baseline independently.
+ * A group-level clip-path reveal grows the entire stack as a unit. */
+.bars-stacked {
+    animation: chartml-bars-reveal 400ms ease-out both;
+}
+.bars-stacked rect,
+.bars-stacked .bar {
+    animation: none;
+}
+@keyframes chartml-bars-reveal {
+    from { clip-path: inset(100% 0 0 0); }
+    to   { clip-path: inset(0); }
+}
+.chartml-horizontal .bars-stacked {
+    animation-name: chartml-bars-reveal-x;
+}
+@keyframes chartml-bars-reveal-x {
+    from { clip-path: inset(0 100% 0 0); }
+    to   { clip-path: inset(0); }
+}
+
 /* Bar hover */
 .bars rect:hover,
 .bar:hover {

@@ -154,14 +154,13 @@ enum Direction {
 }
 
 impl Direction {
-    /// Expected fill-box-relative animation origin (relative to the
-    /// element's own top-left corner).
-    fn expected_origin(self, b: &BarBox) -> (f64, f64) {
+    /// Expected fill-box percentage origin.
+    fn expected_origin(self, _b: &BarBox) -> (f64, f64) {
         match self {
-            Direction::VerticalPositive => (b.w / 2.0, b.h),
-            Direction::VerticalNegative => (b.w / 2.0, 0.0),
-            Direction::HorizontalPositive => (0.0, b.h / 2.0),
-            Direction::HorizontalNegative => (b.w, b.h / 2.0),
+            Direction::VerticalPositive => (50.0, 100.0),
+            Direction::VerticalNegative => (50.0, 0.0),
+            Direction::HorizontalPositive => (0.0, 50.0),
+            Direction::HorizontalNegative => (100.0, 50.0),
         }
     }
     fn label(self) -> &'static str {
@@ -405,124 +404,30 @@ visualize:
     color: g
 "#;
 
-/// Assert that every bar in a stacked chart has the correct fill-box-relative
-/// animation origin. Stacked bars share an absolute axis-baseline, so when
-/// converted to fill-box coords (by subtracting the element's own position),
-/// the baseline coordinate differs per segment — but converting back to
-/// absolute coords must yield the same shared baseline.
+/// Stacked bars use group-level clip-path animation, so individual bar
+/// segments must have `animation_origin == None` (no per-element transform).
 fn run_stacked_case(corner: &BarCornerRadius, yaml: &str, is_horizontal: bool) {
     let chartml = make_chartml(corner);
     let el = chartml
         .render_from_yaml(yaml)
         .expect("render stacked bar fixture under test");
     let bars = collect_bars(&el);
-    assert!(
-        !bars.is_empty(),
-        "{:?} / stacked {} — no bars emitted",
-        corner,
-        if is_horizontal { "horizontal" } else { "vertical" },
-    );
-
-    // Filter out degenerate zero-extent bars.
     let real_bars: Vec<&BarBox> = bars.iter().filter(|b| b.w > 0.0 && b.h > 0.0).collect();
     assert!(
         real_bars.len() >= 2,
-        "{:?} / stacked {} — need at least 2 non-degenerate bars for \
-         a stacked test, got {}",
+        "{:?} / stacked {} — need at least 2 non-degenerate bars, got {}",
         corner,
         if is_horizontal { "horizontal" } else { "vertical" },
         real_bars.len(),
     );
-
-    // Every bar must have an animation_origin.
     for b in &real_bars {
         assert!(
-            b.origin.is_some(),
+            b.origin.is_none(),
             "{:?} / stacked {} — bar tag={} x={} y={} w={} h={} has \
-             animation_origin == None",
+             animation_origin = {:?}, expected None (clip-path handles animation)",
             corner,
             if is_horizontal { "horizontal" } else { "vertical" },
-            b.tag, b.x, b.y, b.w, b.h,
-        );
-    }
-
-    if is_horizontal {
-        // Convert fill-box-relative x-origin back to absolute by adding b.x.
-        // All bars must share the same absolute x-baseline.
-        let abs_baseline_x = real_bars[0].origin.unwrap().0 + real_bars[0].x;
-        for b in &real_bars {
-            let abs_ox = b.origin.unwrap().0 + b.x;
-            assert!(
-                (abs_ox - abs_baseline_x).abs() < 1e-6,
-                "{:?} / stacked horizontal — bar tag={} x={} y={} w={} h={} \
-                 has absolute origin.x = {}, expected shared baseline {}. Upper \
-                 segments must NOT animate from their own left edge.",
-                corner, b.tag, b.x, b.y, b.w, b.h, abs_ox, abs_baseline_x,
-            );
-        }
-
-        // The fill-box y-component must be each bar's own center (h/2).
-        for b in &real_bars {
-            let oy = b.origin.unwrap().1;
-            let expected_y = b.h / 2.0;
-            assert!(
-                (oy - expected_y).abs() < 1e-6,
-                "{:?} / stacked horizontal — bar fill-box y-origin {} != h/2 {}",
-                corner, oy, expected_y,
-            );
-        }
-
-        // Verify this is NOT the per-segment edge: at least one upper
-        // segment must have fill-box x-origin != 0.0 (which would be
-        // its own left edge in fill-box coords).
-        let any_differs = real_bars.iter().any(|b| {
-            let per_segment_x = 0.0; // horizontal positive: fill-box left edge
-            (b.origin.unwrap().0 - per_segment_x).abs() > 1e-6
-        });
-        assert!(
-            any_differs,
-            "{:?} / stacked horizontal — all bars have fill-box origin.x == 0 \
-             (their own left edge); the stack_baseline fix is not working",
-            corner,
-        );
-    } else {
-        // Convert fill-box-relative y-origin back to absolute by adding b.y.
-        // All bars must share the same absolute y-baseline.
-        let abs_baseline_y = real_bars[0].origin.unwrap().1 + real_bars[0].y;
-        for b in &real_bars {
-            let abs_oy = b.origin.unwrap().1 + b.y;
-            assert!(
-                (abs_oy - abs_baseline_y).abs() < 1e-6,
-                "{:?} / stacked vertical — bar tag={} x={} y={} w={} h={} \
-                 has absolute origin.y = {}, expected shared baseline {}. Upper \
-                 segments must NOT animate from their own bottom edge.",
-                corner, b.tag, b.x, b.y, b.w, b.h, abs_oy, abs_baseline_y,
-            );
-        }
-
-        // The fill-box x-component must be each bar's own center (w/2).
-        for b in &real_bars {
-            let ox = b.origin.unwrap().0;
-            let expected_x = b.w / 2.0;
-            assert!(
-                (ox - expected_x).abs() < 1e-6,
-                "{:?} / stacked vertical — bar fill-box x-origin {} != w/2 {}",
-                corner, ox, expected_x,
-            );
-        }
-
-        // Verify this is NOT the per-segment edge: at least one upper
-        // segment must have fill-box y-origin != b.h (which would be
-        // its own bottom edge in fill-box coords).
-        let any_differs = real_bars.iter().any(|b| {
-            let per_segment_y = b.h; // vertical positive: fill-box bottom edge
-            (b.origin.unwrap().1 - per_segment_y).abs() > 1e-6
-        });
-        assert!(
-            any_differs,
-            "{:?} / stacked vertical — all bars have fill-box origin.y == h \
-             (their own bottom edge); the stack_baseline fix is not working",
-            corner,
+            b.tag, b.x, b.y, b.w, b.h, b.origin,
         );
     }
 }

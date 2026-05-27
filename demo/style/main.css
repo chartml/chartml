@@ -172,6 +172,26 @@ body {
     to   { transform: scaleX(1); }
 }
 
+/* Stacked bars: clip-path reveal on the group */
+.bars-stacked {
+    animation: chartml-bars-reveal 400ms ease-out both;
+}
+.bars-stacked rect,
+.bars-stacked .bar {
+    animation: none;
+}
+@keyframes chartml-bars-reveal {
+    from { clip-path: inset(100% 0 0 0); }
+    to   { clip-path: inset(0); }
+}
+.chartml-horizontal .bars-stacked {
+    animation-name: chartml-bars-reveal-x;
+}
+@keyframes chartml-bars-reveal-x {
+    from { clip-path: inset(0 100% 0 0); }
+    to   { clip-path: inset(0); }
+}
+
 /* Bar hover: opacity 0.9 → 1 + darker stroke border (matches D3 exactly).
    stroke color uses brightness filter on a separate outline. */
 .bars rect,

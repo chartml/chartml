@@ -1105,9 +1105,9 @@ fn assert_origin_matches_baseline(
 fn phase12_kyomi_bar_origin_positive_vertical() {
     let el = render_with_kyomi(KYOMI_BAR_POSITIVE_VERTICAL_YAML);
     let bars = collect_bar_animation_origins(&el);
-    // Vertical positive: bottom-center (fill-box relative)
-    assert_origin_matches_baseline("positive_vertical", &bars, |_x, _y, w, h| {
-        (w / 2.0, h)
+    // Vertical positive: fill-box percentage (50%, 100%) = bottom-center
+    assert_origin_matches_baseline("positive_vertical", &bars, |_x, _y, _w, _h| {
+        (50.0, 100.0)
     });
 }
 
@@ -1115,10 +1115,9 @@ fn phase12_kyomi_bar_origin_positive_vertical() {
 fn phase12_kyomi_bar_origin_negative_vertical() {
     let el = render_with_kyomi(KYOMI_BAR_NEGATIVE_VERTICAL_YAML);
     let bars = collect_bar_animation_origins(&el);
-    // Vertical negative: top-center in fill-box coords (0 relative to
-    // the element's own top edge).
-    assert_origin_matches_baseline("negative_vertical", &bars, |_x, _y, w, _h| {
-        (w / 2.0, 0.0)
+    // Vertical negative: fill-box percentage (50%, 0%) = top-center
+    assert_origin_matches_baseline("negative_vertical", &bars, |_x, _y, _w, _h| {
+        (50.0, 0.0)
     });
 }
 
@@ -1126,9 +1125,9 @@ fn phase12_kyomi_bar_origin_negative_vertical() {
 fn phase12_kyomi_bar_origin_horizontal() {
     let el = render_with_kyomi(KYOMI_BAR_HORIZONTAL_YAML);
     let bars = collect_bar_animation_origins(&el);
-    // Horizontal positive: left-center (fill-box relative)
-    assert_origin_matches_baseline("horizontal", &bars, |_x, _y, _w, h| {
-        (0.0, h / 2.0)
+    // Horizontal positive: fill-box percentage (0%, 50%) = left-center
+    assert_origin_matches_baseline("horizontal", &bars, |_x, _y, _w, _h| {
+        (0.0, 50.0)
     });
 }
 
@@ -1136,9 +1135,9 @@ fn phase12_kyomi_bar_origin_horizontal() {
 fn phase12_kyomi_bar_origin_grouped() {
     let el = render_with_kyomi(KYOMI_BAR_GROUPED_YAML);
     let bars = collect_bar_animation_origins(&el);
-    // Grouped bars: each bar is vertical positive (fill-box relative)
-    assert_origin_matches_baseline("grouped", &bars, |_x, _y, w, h| {
-        (w / 2.0, h)
+    // Grouped bars: each bar is vertical positive (50%, 100%)
+    assert_origin_matches_baseline("grouped", &bars, |_x, _y, _w, _h| {
+        (50.0, 100.0)
     });
 }
 
@@ -1146,41 +1145,23 @@ fn phase12_kyomi_bar_origin_grouped() {
 fn phase12_kyomi_bar_origin_stacked() {
     let el = render_with_kyomi(KYOMI_BAR_STACKED_YAML);
     let bars = collect_bar_animation_origins(&el);
-    // Stacked vertical bars: fill-box x-origin is w/2, y-origin converts
-    // back to a shared absolute baseline when adding the element's y position.
-    assert!(
-        !bars.is_empty(),
-        "stacked: expected at least one bar-rect element"
-    );
+    // Stacked bars use group-level clip-path animation — individual
+    // segments must have animation_origin == None.
     let real_bars: Vec<_> = bars.iter().filter(|b| b.2 > 0.0 && b.3 > 0.0).collect();
     assert!(real_bars.len() >= 2, "stacked: need at least 2 real bars");
-    // All bars should convert back to the same absolute y-baseline.
-    let first_abs_y = real_bars[0].4.unwrap().1 + real_bars[0].1;
-    for (x, y, w, h, origin, tag) in &real_bars {
-        let (ox, oy) = origin.unwrap();
-        // Fill-box x must be w/2
+    for (_x, _y, _w, _h, origin, tag) in &real_bars {
         assert!(
-            (ox - w / 2.0).abs() < 1e-6,
-            "stacked: bar (tag={tag}) fill-box x-origin {ox} != w/2={}",
-            w / 2.0
-        );
-        // Convert fill-box y back to absolute and verify shared baseline
-        let abs_y = oy + y;
-        assert!(
-            (abs_y - first_abs_y).abs() < 1e-6,
-            "stacked: bar (tag={tag}) at x={x} y={y} w={w} h={h} \
-             absolute y-baseline {abs_y} != shared baseline {first_abs_y}"
+            origin.is_none(),
+            "stacked: bar (tag={tag}) has origin {:?}, expected None",
+            origin
         );
     }
 }
 
 #[test]
 fn phase12_kyomi_bar_origin_crosses_zero() {
-    // The crosses-zero fixture mixes positive and negative values. In
-    // fill-box-relative coords:
-    //   - positive bar: origin y = h (bottom of element)
-    //   - negative bar: origin y = 0 (top of element)
-    // x origin is always w/2 (center).
+    // Crosses-zero mixes positive and negative values.
+    // Positive bars: (50%, 100%), negative bars: (50%, 0%)
     let el = render_with_kyomi(BAR_CROSSING_ZERO_YAML);
     let bars = collect_bar_animation_origins(&el);
     assert!(!bars.is_empty(), "crosses_zero: expected bars");
@@ -1193,19 +1174,17 @@ fn phase12_kyomi_bar_origin_crosses_zero() {
         let (ox, oy) = origin.unwrap_or_else(|| {
             panic!("crosses_zero: bar (tag={tag}) has None origin")
         });
-        // Fill-box x component must be w/2.
-        let ex = w / 2.0;
+        // Percentage x must be 50%.
         assert!(
-            (ox - ex).abs() < 1e-6,
-            "crosses_zero: x mismatch — expected {ex}, got {ox}"
+            (ox - 50.0).abs() < 1e-6,
+            "crosses_zero: x mismatch — expected 50, got {ox}"
         );
-        // Fill-box y component must be either 0 (negative bar → top edge)
-        // or h (positive bar → bottom edge).
+        // Percentage y: 0 (negative bar → top) or 100 (positive bar → bottom).
         let at_top = oy.abs() < 1e-6;
-        let at_bottom = (oy - h).abs() < 1e-6;
+        let at_bottom = (oy - 100.0).abs() < 1e-6;
         assert!(
             at_top || at_bottom,
-            "crosses_zero: y origin {oy} is neither 0 (top) nor {h} (bottom)"
+            "crosses_zero: y origin {oy} is neither 0% (top) nor 100% (bottom)"
         );
         if at_top {
             saw_negative_anchor = true;

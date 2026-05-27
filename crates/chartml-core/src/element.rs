@@ -39,13 +39,11 @@ pub enum ChartElement {
         ry: Option<f64>,
         class: String,
         data: Option<ElementData>,
-        /// CSS `transform-origin` anchor for entrance animations, in the
-        /// element's own coordinate space (absolute SVG coords). Populated
-        /// by bar emission sites in `chartml-chart-cartesian/src/bar.rs` so
-        /// the renderer never has to guess orientation/sign. `None` for
-        /// every non-bar Rect — the renderer falls back to its legacy
-        /// behavior, preserving byte-identical SVG output for all
-        /// pre-existing baselines (see `backward_compat_goldens_byte_identical`).
+        /// Fill-box percentage origin for entrance animations (e.g. 50, 100
+        /// for bottom-center). Emitted with `transform-box: fill-box` so the
+        /// browser resolves against the element's own bounding box. `None`
+        /// for non-bar Rects and stacked bar segments (which use group-level
+        /// clip-path animation instead).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         animation_origin: Option<(f64, f64)>,
     },
@@ -61,10 +59,9 @@ pub enum ChartElement {
         opacity: Option<f64>,
         class: String,
         data: Option<ElementData>,
-        /// See [`ChartElement::Rect::animation_origin`]. Populated by
-        /// `build_bar_element` for top-rounded bars (`BarCornerRadius::Top`),
-        /// which are emitted as `Path` instead of `Rect` because SVG `<rect>`
-        /// can't round only two corners. `None` for every other Path.
+        /// See [`ChartElement::Rect::animation_origin`]. Same fill-box
+        /// percentage semantics. Populated for top-rounded bars emitted as
+        /// `Path`. `None` for non-bar Paths and stacked bar segments.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         animation_origin: Option<(f64, f64)>,
     },
