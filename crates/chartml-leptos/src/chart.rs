@@ -1,11 +1,16 @@
+#[cfg(target_arch = "wasm32")]
 use send_wrapper::SendWrapper;
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
+#[cfg(target_arch = "wasm32")]
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+#[cfg(target_arch = "wasm32")]
 use std::time::Duration;
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use chartml_core::element::ElementData;
 use chartml_core::params::ParamValues;
@@ -24,6 +29,7 @@ use crate::tooltip::TooltipState;
 /// Custom tooltip renderer type.
 pub type TooltipRenderer = Arc<dyn Fn(&ElementData) -> AnyView + Send + Sync>;
 
+#[cfg(target_arch = "wasm32")]
 /// Default TTL applied when an `autoRefresh: true` source omits an explicit
 /// `cache.ttl`. Mirrors `chartml_core::resolver::DEFAULT_TTL` (5 minutes) so
 /// we never spin the auto-refresh interval faster than the cache itself
@@ -139,6 +145,7 @@ pub(crate) fn build_title_style(theme: &Theme) -> String {
 /// `data:` block). It's surfaced both to the visibility-listener / tick
 /// callback (where it gets logged via `console.debug` for observability) and
 /// to host-app tests that want to assert which sources the parser picked up.
+#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Debug)]
 struct AutoRefreshSource {
     /// User-chosen source name (or `"source"` for unnamed flat data).
@@ -153,6 +160,7 @@ struct AutoRefreshSource {
     ttl: Duration,
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Scan a parsed `ChartSpec.data` for sources whose cache config requests
 /// auto-refresh. Both flat `Inline { cache: Some(...) }` and per-entry
 /// `NamedMap` sources are inspected; `Named` (string ref to a pre-registered
@@ -181,6 +189,7 @@ fn collect_auto_refresh_sources(spec: &ChartSpec) -> Vec<AutoRefreshSource> {
     out
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Build an `AutoRefreshSource` from one inline spec, returning `None`
 /// unless `cache.autoRefresh == true`. Falls back to
 /// [`DEFAULT_AUTO_REFRESH_INTERVAL`] when `cache.ttl` is missing — silently
@@ -205,6 +214,7 @@ fn auto_refresh_from_inline(name: String, inline: &InlineData) -> Option<AutoRef
     })
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Pick the shortest positive TTL across the auto-refresh sources, or
 /// `None` when there are no sources or every TTL is zero.
 fn shortest_interval(sources: &[AutoRefreshSource]) -> Option<Duration> {
@@ -391,8 +401,13 @@ pub fn ChartMLChart(
         }
     }
 
-    // Track container width — updated by ResizeObserver
+    // Track container width — updated by ResizeObserver (wasm32 only).
+    // The read half (`container_width`) drives the resize re-render effect
+    // on both targets; the write half is only used by the ResizeObserver
+    // block which is gated behind `#[cfg(target_arch = "wasm32")]`.
     let (container_width, set_container_width) = signal(0.0_f64);
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = set_container_width;
     let container_ref = NodeRef::<leptos::html::Div>::new();
 
     // Refresh counter — bumped by manual refresh button, auto-refresh
@@ -452,63 +467,66 @@ pub fn ChartMLChart(
     // Set up ResizeObserver after mount; disconnect on disposal.
     // Debounce: only update container_width after resize activity stops for 200ms.
     // Matches the markdown-react plugin pattern (250ms debounce + initial grace).
-    type RoEntry = SendWrapper<Rc<RefCell<Option<(web_sys::ResizeObserver, Closure<dyn Fn(js_sys::Array)>)>>>>;
-    let resize_observer: RoEntry = SendWrapper::new(Rc::new(RefCell::new(None)));
-    let debounce_handle: SendWrapper<Rc<RefCell<Option<i32>>>> = SendWrapper::new(Rc::new(RefCell::new(None)));
+    #[cfg(target_arch = "wasm32")]
+    {
+        type RoEntry = SendWrapper<Rc<RefCell<Option<(web_sys::ResizeObserver, Closure<dyn Fn(js_sys::Array)>)>>>>;
+        let resize_observer: RoEntry = SendWrapper::new(Rc::new(RefCell::new(None)));
+        let debounce_handle: SendWrapper<Rc<RefCell<Option<i32>>>> = SendWrapper::new(Rc::new(RefCell::new(None)));
 
-    let ro_clone = resize_observer.clone();
-    let debounce_clone = debounce_handle.clone();
-    Effect::new(move || {
-        if let Some(el) = container_ref.get() {
-            // Set initial width immediately (no debounce for first measurement)
-            let width = el.client_width() as f64;
-            if width > 0.0 {
-                set_container_width.set(width);
-            }
-
-            let dh = debounce_clone.clone();
-            let cb = Closure::<dyn Fn(js_sys::Array)>::new(move |entries: js_sys::Array| {
-                if let Some(entry) = entries.get(0).dyn_ref::<web_sys::ResizeObserverEntry>() {
-                    let rect = entry.content_rect();
-                    let w = rect.width();
-                    if w > 0.0 {
-                        // Cancel any pending debounce
-                        if let Some(tid) = dh.borrow_mut().take() {
-                            web_sys::window()
-                                .expect("window must be available in WASM")
-                                .clear_timeout_with_handle(tid);
-                        }
-                        // Set new debounced timeout
-                        let cb_js = Closure::once_into_js(move || {
-                            set_container_width.set(w);
-                        });
-                        let tid = web_sys::window()
-                            .expect("window must be available in WASM")
-                            .set_timeout_with_callback_and_timeout_and_arguments_0(
-                                cb_js.unchecked_ref(), 200,
-                            ).unwrap_or(0);
-                        *dh.borrow_mut() = Some(tid);
-                    }
+        let ro_clone = resize_observer.clone();
+        let debounce_clone = debounce_handle.clone();
+        Effect::new(move || {
+            if let Some(el) = container_ref.get() {
+                // Set initial width immediately (no debounce for first measurement)
+                let width = el.client_width() as f64;
+                if width > 0.0 {
+                    set_container_width.set(width);
                 }
-            });
 
-            if let Ok(observer) = web_sys::ResizeObserver::new(cb.as_ref().unchecked_ref()) {
-                observer.observe(&el);
-                *ro_clone.borrow_mut() = Some((observer, cb));
+                let dh = debounce_clone.clone();
+                let cb = Closure::<dyn Fn(js_sys::Array)>::new(move |entries: js_sys::Array| {
+                    if let Some(entry) = entries.get(0).dyn_ref::<web_sys::ResizeObserverEntry>() {
+                        let rect = entry.content_rect();
+                        let w = rect.width();
+                        if w > 0.0 {
+                            // Cancel any pending debounce
+                            if let Some(tid) = dh.borrow_mut().take() {
+                                web_sys::window()
+                                    .expect("window must be available in WASM")
+                                    .clear_timeout_with_handle(tid);
+                            }
+                            // Set new debounced timeout
+                            let cb_js = Closure::once_into_js(move || {
+                                set_container_width.set(w);
+                            });
+                            let tid = web_sys::window()
+                                .expect("window must be available in WASM")
+                                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                                    cb_js.unchecked_ref(), 200,
+                                ).unwrap_or(0);
+                            *dh.borrow_mut() = Some(tid);
+                        }
+                    }
+                });
+
+                if let Ok(observer) = web_sys::ResizeObserver::new(cb.as_ref().unchecked_ref()) {
+                    observer.observe(&el);
+                    *ro_clone.borrow_mut() = Some((observer, cb));
+                }
             }
-        }
-    });
+        });
 
-    on_cleanup(move || {
-        if let Some((observer, _cb)) = resize_observer.borrow_mut().take() {
-            observer.disconnect();
-        }
-        if let Some(tid) = debounce_handle.borrow_mut().take() {
-            web_sys::window()
-                .expect("window must be available in WASM")
-                .clear_timeout_with_handle(tid);
-        }
-    });
+        on_cleanup(move || {
+            if let Some((observer, _cb)) = resize_observer.borrow_mut().take() {
+                observer.disconnect();
+            }
+            if let Some(tid) = debounce_handle.borrow_mut().take() {
+                web_sys::window()
+                    .expect("window must be available in WASM")
+                    .clear_timeout_with_handle(tid);
+            }
+        });
+    }
 
     // ── SVG tooltip delegation ───────────────────────────────────────────
     //
@@ -791,6 +809,7 @@ pub fn ChartMLChart(
     // the component unmounts. We also reset them when the spec changes
     // (the inner effect clears the previous interval before installing
     // a new one).
+    #[cfg(target_arch = "wasm32")]
     {
         let chartml_for_refresh = chartml.clone();
         // Holders for the active interval handle and visibility listener.
@@ -979,6 +998,7 @@ pub fn ChartMLChart(
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Tear down the active interval + visibility listener. Safe to call
 /// multiple times — every field is `Option<...>` and `take()`-cleared.
 fn clear_auto_refresh(holders: &SendWrapper<Rc<RefCell<AutoRefreshState>>>) {
@@ -995,6 +1015,7 @@ fn clear_auto_refresh(holders: &SendWrapper<Rc<RefCell<AutoRefreshState>>>) {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Install the interval that runs auto-refresh ticks. Called from the
 /// auto-refresh effect on initial setup, and from the visibility listener
 /// when the document goes hidden → visible. Replaces any previously
@@ -1046,6 +1067,7 @@ fn install_auto_refresh_interval(
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Install the `visibilitychange` listener. Pauses the interval when the
 /// document is hidden and re-arms it when it becomes visible. Skipped if
 /// `web_sys::window().document()` is unavailable (SSR or detached doc).
@@ -1090,6 +1112,7 @@ fn install_visibility_listener(
     holders.borrow_mut().visibility_listener = Some((target, listener));
 }
 
+#[cfg(target_arch = "wasm32")]
 /// `true` when `document.visibilityState == "hidden"`. Used both by the
 /// per-tick guard and the visibility listener so the two can never
 /// disagree.
@@ -1099,12 +1122,22 @@ fn document_is_hidden() -> bool {
     document.visibility_state() == web_sys::VisibilityState::Hidden
 }
 
-/// Wall-clock now in milliseconds since the unix epoch. Source: `Date.now()`
-/// because `SystemTime::now()` panics on `wasm32-unknown-unknown`.
+/// Wall-clock now in milliseconds since the unix epoch. On wasm32, uses
+/// `Date.now()` because `SystemTime::now()` panics on `wasm32-unknown-unknown`.
+/// On native targets, uses `SystemTime::now()`.
 fn now_ms() -> f64 {
-    js_sys::Date::now()
+    #[cfg(target_arch = "wasm32")]
+    { js_sys::Date::now() }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as f64)
+            .unwrap_or(0.0)
+    }
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Log an auto-refresh tick for a single source to the browser console at
 /// `debug` level. Browser-only AND debug-only — gated on
 /// `target_arch = "wasm32"` so native tests don't touch `web_sys::console`,
@@ -1126,6 +1159,7 @@ fn log_auto_refresh_tick(source_name: &str) {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Reactive state shared between the auto-refresh effect, its interval
 /// callback, and its visibility-listener callback. Lives in a single
 /// `RefCell` so each callback can update or clear the others without
@@ -1214,7 +1248,7 @@ mod title_style_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_arch = "wasm32"))]
 mod auto_refresh_tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
