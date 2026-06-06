@@ -782,10 +782,12 @@ impl Resolver {
             if !entry.is_expired() {
                 let age = entry.age();
                 emit_cache_hit(&hooks, key, &source_name, hooks::CacheTier::Memory, age);
+                let mut metadata = entry.metadata;
+                inject_fetched_at(&mut metadata, &entry.fetched_at);
                 return Ok(ResolveOutcome {
                     result: FetchResult {
                         data: entry.data,
-                        metadata: entry.metadata,
+                        metadata,
                     },
                     cache_hit: true,
                     batches: None,
@@ -812,10 +814,12 @@ impl Resolver {
                         hooks::CacheTier::Persistent,
                         age,
                     );
+                    let mut metadata = entry.metadata;
+                    inject_fetched_at(&mut metadata, &entry.fetched_at);
                     return Ok(ResolveOutcome {
                         result: FetchResult {
                             data: entry.data,
-                            metadata: entry.metadata,
+                            metadata,
                         },
                         cache_hit: true,
                         batches: None,
@@ -1172,6 +1176,17 @@ pub(crate) fn emit_error(
     hooks::spawn_hook(async move {
         h.on_error(event).await;
     });
+}
+
+/// Inject `fetched_at_ms` into provider metadata on cache hits so consumers
+/// can display the actual data age rather than "just now."
+fn inject_fetched_at(metadata: &mut HashMap<String, serde_json::Value>, fetched_at: &SystemTime) {
+    if let Ok(d) = fetched_at.duration_since(SystemTime::UNIX_EPOCH) {
+        metadata.insert(
+            "fetched_at_ms".to_string(),
+            serde_json::Value::from(d.as_millis() as f64),
+        );
+    }
 }
 
 /// Build the tag list applied to `CachedEntry` on write. `slug` and

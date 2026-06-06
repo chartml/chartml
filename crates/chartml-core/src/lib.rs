@@ -942,12 +942,27 @@ impl ChartML {
             }
         };
 
+        let refreshed_at = if cache_misses.is_empty() && !cache_hits.is_empty() {
+            per_source
+                .values()
+                .filter_map(|meta| meta.get("fetched_at_ms"))
+                .filter_map(|v| v.as_f64())
+                .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .and_then(|ms| {
+                    SystemTime::UNIX_EPOCH
+                        .checked_add(std::time::Duration::from_millis(ms as u64))
+                })
+                .unwrap_or_else(SystemTime::now)
+        } else {
+            SystemTime::now()
+        };
+
         Ok(FetchedChart {
             spec: chart_spec,
             sources: chart_sources,
             batch_sources: if any_batch_source { Some(batch_map) } else { None },
             metadata: FetchMetadata {
-                refreshed_at: SystemTime::now(),
+                refreshed_at,
                 cache_hits,
                 cache_misses,
                 per_source,
@@ -990,7 +1005,7 @@ impl ChartML {
         _opts: &RenderOptions,
     ) -> Result<PreparedChart, ChartError> {
         // `_opts` is reserved — phase 3 will thread params through TransformContext.
-        let FetchedChart { spec, sources, batch_sources, metadata: _ } = fetched;
+        let FetchedChart { spec, sources, batch_sources, metadata: fetch_meta } = fetched;
 
         // Snapshot hooks once so the lock is never held across `await`.
         let hooks = self.resolver.hooks_snapshot();
@@ -1071,7 +1086,7 @@ impl ChartML {
             spec,
             data,
             metadata: PreparedMetadata {
-                refreshed_at: SystemTime::now(),
+                refreshed_at: fetch_meta.refreshed_at,
                 transform_applied,
                 sources_used,
             },

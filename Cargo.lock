@@ -586,7 +586,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-core"
-version = "5.1.4"
+version = "5.1.5"
 dependencies = [
  "arrow",
  "async-trait",
@@ -674,7 +674,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-leptos"
-version = "5.1.4"
+version = "5.1.5"
 dependencies = [
  "async-trait",
  "chartml-chart-cartesian",

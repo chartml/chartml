@@ -366,6 +366,12 @@ pub fn ChartMLChart(
     /// ```
     #[prop(optional, into)]
     refresh_trigger: Option<Signal<u32>>,
+    /// Fires after a successful fetch + transform + render with the
+    /// `refreshed_at` timestamp (ms since epoch). On cache hits this
+    /// reflects when the data was originally fetched from the server,
+    /// not the current time.
+    #[prop(optional, into)]
+    on_refreshed: Option<Callback<f64>>,
 ) -> impl IntoView {
     let chartml = chartml.clone();
     let tooltip_state = provide_tooltip_context();
@@ -746,6 +752,11 @@ pub fn ChartMLChart(
                         return;
                     }
                 };
+                let refreshed_at_ms = {
+                    let age = prepared.metadata.refreshed_at.elapsed()
+                        .unwrap_or(std::time::Duration::ZERO);
+                    now_ms() - (age.as_millis() as f64)
+                };
                 let svg = match chartml_async.render_prepared_to_svg(&prepared, &opts) {
                     Ok(s) => s,
                     Err(err) => {
@@ -762,7 +773,10 @@ pub fn ChartMLChart(
                 }));
                 last_error.set(None);
                 is_loading.set(false);
-                last_refreshed_ms.set(now_ms());
+                last_refreshed_ms.set(refreshed_at_ms);
+                if let Some(cb) = on_refreshed {
+                    cb.run(refreshed_at_ms);
+                }
             });
         });
     }
