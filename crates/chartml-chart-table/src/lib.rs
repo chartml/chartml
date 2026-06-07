@@ -133,13 +133,35 @@ fn style(pairs: &[(&str, &str)]) -> HashMap<String, String> {
 /// Build a header <span> cell (header cells are flex children of the header row div).
 fn header_cell(label: &str, theme: &Theme) -> ChartElement {
     let header_text_var = format!("var(--chartml-table-header-text, {})", theme.table_header_text);
-    let border_var = format!("1px solid var(--chartml-table-border, {})", theme.table_border);
+    let header_border_color = if theme.table_header_border.is_empty() {
+        &theme.table_border
+    } else {
+        &theme.table_header_border
+    };
+    let border_var = format!(
+        "1px solid var(--chartml-table-header-border, var(--chartml-table-border, {}))",
+        header_border_color,
+    );
+    let weight_var = format!(
+        "var(--chartml-table-header-font-weight, {})",
+        theme.table_header_font_weight,
+    );
+    let spacing_var = format!(
+        "var(--chartml-table-header-letter-spacing, {})",
+        theme.table_header_letter_spacing,
+    );
+    let transform_var = format!(
+        "var(--chartml-table-header-text-transform, {})",
+        theme.table_header_text_transform,
+    );
     ChartElement::Span {
         class: "chartml-table-header-cell".to_string(),
         style: style(&[
             ("flex", "1 1 0"),
             ("padding", &theme.table_cell_padding),
-            ("font-weight", "600"),
+            ("font-weight", &weight_var),
+            ("letter-spacing", &spacing_var),
+            ("text-transform", &transform_var),
             ("color", &header_text_var),
             ("text-align", "left"),
             ("border-bottom", &border_var),
@@ -279,6 +301,10 @@ impl ChartRenderer for TableRenderer {
 
         let root_text_var = format!("var(--chartml-table-text, {})", theme.table_text);
         let root_border_var = format!("1px solid var(--chartml-table-border, {})", theme.table_border);
+        let radius_var = format!(
+            "var(--chartml-table-border-radius, {})",
+            theme.table_border_radius,
+        );
         Ok(ChartElement::Div {
             class: "chartml-table".to_string(),
             style: style(&[
@@ -289,7 +315,7 @@ impl ChartRenderer for TableRenderer {
                 ("background", &row_bg_var),
                 ("color", &root_text_var),
                 ("border", &root_border_var),
-                ("border-radius", "4px"),
+                ("border-radius", &radius_var),
                 ("overflow", "hidden"),
                 ("box-sizing", "border-box"),
             ]),
