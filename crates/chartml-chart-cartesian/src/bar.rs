@@ -948,7 +948,7 @@ fn render_single_series_bars(
                 None => continue,
             };
             let bar_val_y = linear.map(val);
-            let bar_zero_y = linear.map(0.0);
+            let bar_zero_y = linear.map(domain_min.max(0.0));
             let bar_height = (bar_zero_y - bar_val_y).abs();
             // For positive bars, rect y is at the value (above zero line).
             // For negative bars, rect y is at zero line (bar extends downward).
@@ -1080,7 +1080,7 @@ fn render_multi_series_bars(
             let linear = ScaleLinear::new((effective_min, effective_max), (0.0, inner_width));
             let bar_render_height = band.bandwidth().min(40.0);
             let y_inset = (band.bandwidth() - bar_render_height) / 2.0;
-            let baseline_x = linear.map(0.0);
+            let baseline_x = linear.map(effective_min.max(0.0));
 
             let mut column_map: IndexMap<String, Vec<ChartElement>> = IndexMap::new();
             for point in &stacked_points {
@@ -1140,7 +1140,7 @@ fn render_multi_series_bars(
             let max_bar_width = inner_width * 0.2;
             let bar_render_width = band.bandwidth().min(max_bar_width);
             let x_inset = (band.bandwidth() - bar_render_width) / 2.0;
-            let baseline_y = linear.map(0.0);
+            let baseline_y = linear.map(effective_min.max(0.0));
 
             let mut column_map: IndexMap<String, Vec<ChartElement>> = IndexMap::new();
             for point in &stacked_points {
@@ -1263,7 +1263,7 @@ fn render_multi_series_bars(
 
                 let series_idx = series_names.iter().position(|s| s == &series).unwrap_or(0);
 
-                let bar_left = linear.map(0.0);
+                let bar_left = linear.map(domain_min.max(0.0));
                 let bar_right = linear.map(val);
                 let bar_width = (bar_right - bar_left).abs();
 
@@ -1336,7 +1336,7 @@ fn render_multi_series_bars(
                 let series_idx = series_names.iter().position(|s| s == &series).unwrap_or(0);
 
                 let bar_top = linear.map(val);
-                let bar_bottom = linear.map(0.0);
+                let bar_bottom = linear.map(domain_min.max(0.0));
                 let bar_height = (bar_bottom - bar_top).abs();
 
                 let fill = config
@@ -1700,7 +1700,7 @@ fn render_combo(
 
             let bar_render_width = bandwidth.min(max_bar_width);
             let x_inset = (bandwidth - bar_render_width) / 2.0;
-            let combo_baseline_y = scale.map(0.0) + margins.top;
+            let combo_baseline_y = scale.map(left_domain_min.max(0.0)) + margins.top;
 
             for point in &stacked_points {
                 let x = match band.map(&point.key) { Some(x) => x, None => continue };
@@ -1787,7 +1787,12 @@ fn render_combo(
                     let x = match band.map(&cat) { Some(x) => x, None => continue };
                     let bar_x = x + combo_x_inset + this_bar_idx as f64 * (sub_bar_width + sub_bar_padding);
                     let bar_val_y = scale.map(val);
-                    let bar_zero_y = scale.map(0.0);
+                    let domain_floor = if is_right {
+                        right_scale.as_ref().map(|s| s.domain().0).unwrap_or(0.0)
+                    } else {
+                        left_domain_min
+                    };
+                    let bar_zero_y = scale.map(domain_floor.max(0.0));
                     let bar_height = (bar_zero_y - bar_val_y).abs();
                     let rect_y = bar_val_y.min(bar_zero_y);
 

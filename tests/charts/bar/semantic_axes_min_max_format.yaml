@@ -1,0 +1,30 @@
+type: chart
+version: 1
+title: "Retention Rate by Plan"
+layout:
+  colSpan: 12
+data:
+  provider: inline
+  rows:
+    - plan_name: "enterprise"
+      retention_pct: 94.6
+    - plan_name: "professional"
+      retention_pct: 93.8
+    - plan_name: "free"
+      retention_pct: 92.0
+    - plan_name: "starter"
+      retention_pct: 91.9
+visualize:
+  type: bar
+  columns: plan_name
+  rows: retention_pct
+  axes:
+    columns:
+      label: "Plan"
+    rows:
+      label: "Retention Rate (%)"
+      format: ".1f"
+      min: 90
+      max: 100
+  style:
+    height: 300

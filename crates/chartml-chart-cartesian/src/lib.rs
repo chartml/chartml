@@ -2015,4 +2015,90 @@ style:
         assert_eq!(rx_count, 1, "expected 1 bar with rx/ry (Only position)");
         assert_eq!(plain_count, 1, "expected 1 plain bar (zero-height, Middle)");
     }
+
+    /// When axes.rows.min is set above 0 (e.g. 90..100 for retention %),
+    /// bars must grow from the visible domain minimum — not from 0.
+    /// Without the fix, `scale.map(0.0)` produces a pixel coordinate
+    /// thousands of pixels off-screen, creating absurdly tall bars.
+    #[test]
+    fn bar_chart_min_max_baseline_clamps_to_domain_min() {
+        let rows: Vec<Row> = vec![
+            [("plan".to_string(), json!("enterprise")), ("pct".to_string(), json!(94.6))].into_iter().collect(),
+            [("plan".to_string(), json!("professional")), ("pct".to_string(), json!(93.8))].into_iter().collect(),
+            [("plan".to_string(), json!("free")), ("pct".to_string(), json!(92.0))].into_iter().collect(),
+            [("plan".to_string(), json!("starter")), ("pct".to_string(), json!(91.9))].into_iter().collect(),
+        ];
+        let data = DataTable::from_rows(&rows).unwrap();
+
+        let viz: VisualizeSpec = serde_yaml::from_str(r#"
+            type: bar
+            columns: plan
+            rows: pct
+            axes:
+              rows:
+                min: 90
+                max: 100
+                format: ".1f"
+        "#).unwrap();
+        let config = ChartConfig {
+            visualize: viz,
+            title: Some("Retention".to_string()),
+            width: 800.0,
+            height: 300.0,
+            colors: vec!["#2E7D9A".to_string()],
+            theme: chartml_core::theme::Theme::default(),
+        };
+
+        let renderer = CartesianRenderer::new();
+        let element = renderer.render(&data, &config).unwrap();
+
+        // Collect all bar-rect elements
+        let mut bars: Vec<&ChartElement> = Vec::new();
+        collect_bar_elements(&element, &mut bars);
+        assert_eq!(bars.len(), 4, "Should have 4 bars for 4 data points, got {}", bars.len());
+
+        // The chart is 300px tall. inner_height is roughly 300 - margins (~220px).
+        // All bar heights must be within inner_height — never thousands of pixels.
+        let inner_height = 300.0; // conservative upper bound (actual inner_height is smaller)
+        for bar in &bars {
+            if let ChartElement::Rect { height, .. } = bar {
+                assert!(
+                    *height <= inner_height,
+                    "Bar height {} exceeds chart inner height {}; baseline is off-screen",
+                    height, inner_height
+                );
+                assert!(
+                    *height > 0.0,
+                    "Bar height should be positive, got {}",
+                    height
+                );
+            }
+        }
+
+        // Verify proportionality: the tallest bar (94.6 - 90 = 4.6 above domain_min)
+        // should be taller than the shortest bar (91.9 - 90 = 1.9 above domain_min).
+        let heights: Vec<f64> = bars.iter().filter_map(|b| {
+            if let ChartElement::Rect { height, .. } = b {
+                Some(*height)
+            } else {
+                None
+            }
+        }).collect();
+        let max_h = heights.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let min_h = heights.iter().cloned().fold(f64::INFINITY, f64::min);
+        assert!(
+            max_h > min_h,
+            "Tallest bar ({}) should be taller than shortest bar ({})",
+            max_h, min_h
+        );
+        // Ratio of heights should approximate ratio of (value - domain_min):
+        // max_h / min_h ~ (94.6 - 90) / (91.9 - 90) = 4.6 / 1.9 ~ 2.42
+        let expected_ratio = 4.6 / 1.9;
+        let actual_ratio = max_h / min_h;
+        assert!(
+            (actual_ratio - expected_ratio).abs() < 0.5,
+            "Height ratio {:.2} should be close to expected {:.2}",
+            actual_ratio, expected_ratio
+        );
+    }
 }
