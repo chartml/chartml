@@ -1,6 +1,6 @@
 [package]
 name = "chartml-core"
-version = "5.1.7"
+version = "5.1.8"
 edition = "2021"
 license = "MIT"
 description = "ChartML core library: YAML parser, plugin system, element tree, data model"

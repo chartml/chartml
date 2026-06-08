@@ -586,7 +586,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-core"
-version = "5.1.7"
+version = "5.1.8"
 dependencies = [
  "arrow",
  "async-trait",
