@@ -440,7 +440,7 @@ pub fn ChartMLChart(
             // Subscribe to the trigger so future increments re-run this
             // closure. The value itself isn't used — only the side
             // effect of bumping `refresh_count` matters.
-            let _tick = trigger.get();
+            trigger.try_get();
 
             if !initial_seen_for_effect.get() {
                 initial_seen_for_effect.set(true);
@@ -680,7 +680,7 @@ pub fn ChartMLChart(
 
     // Pull a snapshot of the chart's title from the YAML synchronously so
     // the title can render before the async pipeline completes.
-    let title_signal = Memo::new(move |_| extract_yaml_title(&spec.get()));
+    let title_signal = Memo::new(move |_| extract_yaml_title(&spec.try_get().unwrap_or_default()));
 
     // Main fetch + transform effect. Reactive on `(spec, params, refresh_count)`.
     // Runs the new chartml-5 pipeline (`fetch` → `transform` →
@@ -693,11 +693,11 @@ pub fn ChartMLChart(
         let render_gen: Rc<Cell<u32>> = Rc::new(Cell::new(0));
         let render_gen_for_effect = render_gen.clone();
         Effect::new(move || {
-            let yaml = spec.get();
+            let Some(yaml) = spec.try_get() else { return };
             // Subscribing to refresh_count without using its value — only
             // the side effect (re-running this closure) matters.
-            let _refresh_tick = refresh_count.get();
-            let params = param_values.map(|pv| pv.get());
+            refresh_count.try_get();
+            let params = param_values.and_then(|pv| pv.try_get());
 
             if yaml.trim().is_empty() {
                 resolved.set(None);
@@ -789,9 +789,9 @@ pub fn ChartMLChart(
     {
         let chartml = chartml.clone();
         Effect::new(move || {
-            let width = container_width.get();
+            let Some(width) = container_width.try_get() else { return };
             if width <= 0.0 { return; }
-            let Some(current) = resolved.get() else { return; };
+            let Some(current) = resolved.try_get().flatten() else { return; };
             if (current.width - width).abs() < 0.5 {
                 // Already rendered at this width (within sub-pixel tolerance).
                 return;
@@ -840,7 +840,7 @@ pub fn ChartMLChart(
 
         let holders_for_effect = holders.clone();
         Effect::new(move || {
-            let yaml = spec.get();
+            let Some(yaml) = spec.try_get() else { return };
             // Auto-refresh setup is driven by spec changes only — we
             // intentionally do NOT subscribe to `refresh_count` here.
             //
@@ -914,7 +914,7 @@ pub fn ChartMLChart(
             style="position: relative;"
             node_ref=container_ref
             data-last-refreshed-ms=move || {
-                let ts = last_refreshed_ms.get();
+                let ts = last_refreshed_ms.try_get().unwrap_or(0.0);
                 if ts > 0.0 { Some(format!("{}", ts)) } else { None }
             }
         >
@@ -924,7 +924,7 @@ pub fn ChartMLChart(
                 let title_style = title_style.clone();
                 move || {
                     let title_style = title_style.clone();
-                    title_signal.get().map(|t| view! {
+                    title_signal.try_get().flatten().map(|t| view! {
                         <div class="chart-title" style=title_style>
                             {t}
                         </div>
@@ -938,7 +938,7 @@ pub fn ChartMLChart(
             // width changes (resize) and after every successful resource
             // resolution.
             {move || {
-                resolved.get().map(|r| view! {
+                resolved.try_get().flatten().map(|r| view! {
                     <div class="chartml-svg-host" inner_html=r.svg></div>
                 })
             }}
@@ -947,7 +947,7 @@ pub fn ChartMLChart(
             // `refresh_count`, which the main fetch effect subscribes to
             // and re-runs the pipeline against the current YAML.
             {move || {
-                last_error.get().map(|msg| view! {
+                last_error.try_get().flatten().map(|msg| view! {
                     <div class="chartml-error" role="alert">
                         <p style="color: #dc3545; font-family: monospace; padding: 12px; background: #fff5f5; border: 1px solid #dc3545; border-radius: 4px;">
                             {msg}
@@ -968,7 +968,7 @@ pub fn ChartMLChart(
             // auto refresh (so the user gets feedback even when an old
             // SVG is still on screen).
             {move || {
-                is_loading.get().then(|| view! {
+                is_loading.try_get().unwrap_or(false).then(|| view! {
                     <div class="chartml-loading">
                         <div class="chartml-spinner" />
                     </div>
@@ -984,7 +984,7 @@ pub fn ChartMLChart(
             {
                 let tooltip = tooltip.clone();
                 move || {
-                    let state = tooltip_state.get();
+                    let state = tooltip_state.try_get().unwrap_or_default();
                     if !state.visible() {
                         return view! { <div style="display:none;" /> }.into_any();
                     }

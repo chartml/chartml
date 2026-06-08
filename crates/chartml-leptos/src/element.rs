@@ -289,7 +289,7 @@ fn render_interactive(
             }
             on:mousemove=move |ev| {
                 if let Some(sig) = tooltip_signal {
-                    if hovered.get() {
+                    if hovered.try_get().unwrap_or(false) {
                         sig.update(|s| {
                             s.x = ev.client_x() as f64;
                             s.y = ev.client_y() as f64;
