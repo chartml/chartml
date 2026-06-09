@@ -775,7 +775,7 @@ pub fn ChartMLChart(
                 is_loading.set(false);
                 last_refreshed_ms.set(refreshed_at_ms);
                 if let Some(cb) = on_refreshed {
-                    cb.run(refreshed_at_ms);
+                    cb.try_run(refreshed_at_ms);
                 }
             });
         });
