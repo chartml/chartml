@@ -52,6 +52,42 @@ use chartml_core::ChartML;
 #[cfg(feature = "rasterize")]
 const DEFAULT_PADDING: u32 = 16;
 
+/// Strip `stroke-dashoffset` attributes from an SVG string before static
+/// rasterization.
+///
+/// Line charts set both `stroke-dasharray` and `stroke-dashoffset` to the
+/// path length for the CSS draw animation — a browser animates the offset
+/// to 0, progressively revealing the stroke. In a static rasterizer (resvg)
+/// the animation never runs, leaving every line fully offset and invisible;
+/// only the circle dot markers remain.
+///
+/// Removing `stroke-dashoffset` leaves `stroke-dasharray` set to a single
+/// number ≥ the path length, which SVG renders as one unbroken dash — a
+/// fully visible solid line. Legitimately dashed lines (`"8 4"` etc.) never
+/// set `stroke-dashoffset` in chartml, so they are unaffected.
+#[cfg(feature = "rasterize")]
+fn strip_dashoffset_for_static(svg: &str) -> String {
+    const ATTR: &str = " stroke-dashoffset=\"";
+    if !svg.contains(ATTR) {
+        return svg.to_owned();
+    }
+    let mut out = String::with_capacity(svg.len());
+    let mut rest = svg;
+    while let Some(pos) = rest.find(ATTR) {
+        out.push_str(&rest[..pos]);
+        let after = &rest[pos + ATTR.len()..];
+        match after.find('"') {
+            Some(end) => rest = &after[end + 1..],
+            None => {
+                rest = after;
+                break;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 /// White background color.
 #[cfg(feature = "rasterize")]
 const WHITE: [u8; 3] = [255, 255, 255];
@@ -82,6 +118,7 @@ pub fn render_to_png(
     )?;
 
     let svg_str = element_to_svg(&element, width as f64, height as f64);
+    let svg_str = strip_dashoffset_for_static(&svg_str);
     svg_to_png(&svg_str, width, height, density, DEFAULT_PADDING, WHITE)
 }
 
@@ -112,6 +149,7 @@ pub async fn render_to_png_async(
     ).await?;
 
     let svg_str = element_to_svg(&element, width as f64, height as f64);
+    let svg_str = strip_dashoffset_for_static(&svg_str);
     svg_to_png(&svg_str, width, height, density, DEFAULT_PADDING, WHITE)
 }
 
@@ -126,5 +164,42 @@ pub fn element_to_png(
     density: u32,
 ) -> Result<Vec<u8>, RenderError> {
     let svg_str = element_to_svg(element, width as f64, height as f64);
+    let svg_str = strip_dashoffset_for_static(&svg_str);
     svg_to_png(&svg_str, width, height, density, DEFAULT_PADDING, WHITE)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_dashoffset_removes_animation_attrs() {
+        let svg = r##"<path d="M0,0L100,50" stroke="#D97706" stroke-width="2" stroke-dasharray="112" stroke-dashoffset="112" class="series-line"/>"##;
+        let result = strip_dashoffset_for_static(svg);
+        assert!(!result.contains("stroke-dashoffset"));
+        assert!(result.contains(r#"stroke-dasharray="112""#));
+        assert!(result.contains(r##"stroke="#D97706""##));
+    }
+
+    #[test]
+    fn strip_dashoffset_preserves_dashed_lines() {
+        let svg = r#"<path d="M0,0L100,50" stroke-dasharray="8 4" class="dashed"/>"#;
+        let result = strip_dashoffset_for_static(svg);
+        assert_eq!(result, svg);
+    }
+
+    #[test]
+    fn strip_dashoffset_handles_multiple_paths() {
+        let svg = r#"<path stroke-dashoffset="200"/><path stroke-dashoffset="300"/>"#;
+        let result = strip_dashoffset_for_static(svg);
+        assert!(!result.contains("stroke-dashoffset"));
+        assert_eq!(result, r#"<path/><path/>"#);
+    }
+
+    #[test]
+    fn strip_dashoffset_no_op_without_attr() {
+        let svg = r#"<circle cx="50" cy="50" r="4" fill="red"/>"#;
+        let result = strip_dashoffset_for_static(svg);
+        assert_eq!(result, svg);
+    }
 }

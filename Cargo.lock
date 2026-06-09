@@ -694,7 +694,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-render"
-version = "5.0.1"
+version = "5.0.2"
 dependencies = [
  "chartml-core",
  "fontdb",
