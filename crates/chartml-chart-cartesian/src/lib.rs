@@ -675,6 +675,52 @@ mod tests {
     }
 
     #[test]
+    fn x_axis_title_below_rotated_labels() {
+        use crate::helpers::{generate_x_axis, GridConfig};
+        use chartml_core::layout::labels::{measure_text, TextMetrics};
+        // Regression: the x-axis title was pinned at a fixed offset below the
+        // axis line, so rotated tick labels descended straight through it.
+        let labels: Vec<String> = vec![
+            "UNKNOWN".into(), "GOOGLE".into(), "DIRECT".into(), "LINKEDIN".into(),
+            "PRODUCTHUNT".into(), "TWITTER".into(), "OTHER".into(),
+        ];
+        let y_position = 350.0;
+        let theme = chartml_core::theme::Theme::default();
+        let result = generate_x_axis(&crate::helpers::XAxisParams {
+            labels: &labels, display_label_overrides: None,
+            range: (0.0, 300.0), y_position, available_width: 300.0,
+            x_format: None, chart_height: None, grid: &GridConfig::default(),
+            axis_label: Some("Traffic Source"),
+            theme: &theme,
+        });
+        let metrics = TextMetrics::from_theme_axis_label(&theme);
+        let sin45 = 45.0_f64.to_radians().sin();
+        let mut max_label_bottom = f64::MIN;
+        let mut saw_rotated = false;
+        let mut title_y = None;
+        for e in &result.elements {
+            if let ChartElement::Text { y, content, class, transform, .. } = e {
+                let classes: Vec<&str> = class.split_whitespace().collect();
+                if classes.contains(&"tick-label") {
+                    if transform.is_some() {
+                        saw_rotated = true;
+                        // Lowest point of a -45° rotated, end-anchored label:
+                        // anchor y plus the vertical projection of its width.
+                        let bottom = *y + measure_text(content, &metrics) * sin45;
+                        max_label_bottom = max_label_bottom.max(bottom);
+                    }
+                } else if classes.contains(&"axis-label") {
+                    title_y = Some(*y);
+                }
+            }
+        }
+        assert!(saw_rotated, "Expected rotated tick labels for this fixture");
+        let title_y = title_y.expect("x-axis title should be rendered");
+        assert!(title_y >= max_label_bottom + 10.0,
+            "X-axis title (baseline y={title_y}) overlaps rotated tick labels (bottom y={max_label_bottom})");
+    }
+
+    #[test]
     fn x_axis_sampled_100_labels() {
         use crate::helpers::{generate_x_axis, GridConfig};
         let labels: Vec<String> = (0..100).map(|i| format!("Long Category Name {}", i)).collect();

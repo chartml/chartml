@@ -1,0 +1,101 @@
+name: "Rotated x-axis labels with axis title"
+tags: [bar, label-rotation, axis-title, single-series]
+description: >
+  7 traffic-source categories on a 400px-wide chart force -45° label
+  rotation, combined with an x-axis title. Regression test for the
+  title overlapping rotated tick labels: the title must be pushed
+  below the full descent of the rotated labels, and the bottom margin
+  must reserve room for both.
+
+chart:
+  type: chart
+  version: 1
+  title: "Sessions by Traffic Source"
+  data:
+    provider: inline
+    rows:
+      - source: "Unknown"
+        sessions: 8100
+      - source: "Google"
+        sessions: 4200
+      - source: "Direct"
+        sessions: 2900
+      - source: "LinkedIn"
+        sessions: 1700
+      - source: "ProductHunt"
+        sessions: 1100
+      - source: "Twitter"
+        sessions: 1050
+      - source: "Other"
+        sessions: 600
+  visualize:
+    type: bar
+    columns: source
+    rows: sessions
+    style:
+      width: 400
+      height: 400
+    axes:
+      columns:
+        label: "Traffic Source"
+      rows:
+        label: "Sessions"
+
+assertions:
+  structure:
+    root: svg
+    svg_width: 400
+    svg_height: 400
+    bars: 7
+    title_in_svg: false
+    legend: false
+
+  bars:
+    - label: "Unknown"
+      value: 8100
+    - label: "Google"
+      value: 4200
+    - label: "Direct"
+      value: 2900
+    - label: "LinkedIn"
+      value: 1700
+    - label: "ProductHunt"
+      value: 1100
+    - label: "Twitter"
+      value: 1050
+    - label: "Other"
+      value: 600
+
+  label_rotation:
+    x_labels_rotated: true
+    transform_exists: true
+
+  scale:
+    proportional: true
+    y_min: 0
+    y_nice: true
+
+  axes:
+    x:
+      labels:
+        - "Unknown"
+        - "Google"
+        - "Direct"
+        - "LinkedIn"
+        - "ProductHunt"
+        - "Twitter"
+        - "Other"
+      orientation: horizontal
+      rotation: true
+      label: "Traffic Source"
+    y:
+      min: 0
+      format: numeric
+      label: "Sessions"
+
+  layout:
+    no_overlap:
+      - between: ["x-axis tick labels", "x-axis title"]
+        description: >
+          The x-axis title "Traffic Source" must render fully below the
+          lowest point of the rotated tick labels — no overlap.
