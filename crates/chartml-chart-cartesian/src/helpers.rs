@@ -643,8 +643,14 @@ pub fn generate_x_axis_with_display(
     // Axis label (centered below the tick labels)
     if let Some(label_text) = axis_label {
         let mid_x = (range.0 + range.1) / 2.0;
-        // Position below the tick labels: y_position + tick offset + label height + gap
-        let label_y = y_position + 38.0;
+        // Position below the tick labels: y_position + tick offset + label height + gap.
+        // Rotated labels descend past the base offset; their strategy margin
+        // reserves exactly that extra space, so the title shifts down with it.
+        let strategy_margin = match &strategy {
+            LabelStrategy::Rotated { margin, .. } => *margin,
+            _ => 0.0,
+        };
+        let label_y = y_position + 38.0 + strategy_margin;
         let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
         elements.push(ChartElement::Text {
             x: mid_x,
