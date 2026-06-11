@@ -111,6 +111,33 @@ pub fn render_to_png(
     height: u32,
     density: u32,
 ) -> Result<Vec<u8>, RenderError> {
+    render_to_png_with_background(chartml, yaml, width, height, density, WHITE)
+}
+
+/// Render a ChartML YAML spec to PNG bytes (synchronous) with an explicit
+/// canvas background color.
+///
+/// Identical to [`render_to_png`] except the pixmap is filled with
+/// `background` instead of white. Use this when the PNG will be placed on
+/// a non-white surface (e.g. a dark-mode email card) — the theme set on
+/// `chartml` should use matching colors or chart text will be illegible.
+///
+/// # Arguments
+/// * `chartml` — configured ChartML instance with renderers registered
+/// * `yaml` — ChartML YAML specification string
+/// * `width` — chart width in CSS pixels
+/// * `height` — chart height in CSS pixels
+/// * `density` — DPI (72 = 1x, 144 = 2x for PDF)
+/// * `background` — canvas fill color as `[r, g, b]`
+#[cfg(feature = "rasterize")]
+pub fn render_to_png_with_background(
+    chartml: &ChartML,
+    yaml: &str,
+    width: u32,
+    height: u32,
+    density: u32,
+    background: [u8; 3],
+) -> Result<Vec<u8>, RenderError> {
     let element = chartml.render_from_yaml_with_size(
         yaml,
         Some(width as f64),
@@ -119,7 +146,7 @@ pub fn render_to_png(
 
     let svg_str = element_to_svg(&element, width as f64, height as f64);
     let svg_str = strip_dashoffset_for_static(&svg_str);
-    svg_to_png(&svg_str, width, height, density, DEFAULT_PADDING, WHITE)
+    svg_to_png(&svg_str, width, height, density, DEFAULT_PADDING, background)
 }
 
 /// Render a ChartML YAML spec to PNG bytes (async).
@@ -141,6 +168,31 @@ pub async fn render_to_png_async(
     height: u32,
     density: u32,
 ) -> Result<Vec<u8>, RenderError> {
+    render_to_png_with_background_async(chartml, yaml, width, height, density, WHITE).await
+}
+
+/// Render a ChartML YAML spec to PNG bytes (async) with an explicit canvas
+/// background color.
+///
+/// Identical to [`render_to_png_async`] except the pixmap is filled with
+/// `background` instead of white. See [`render_to_png_with_background`].
+///
+/// # Arguments
+/// * `chartml` — configured ChartML instance with renderers and transform middleware registered
+/// * `yaml` — ChartML YAML specification string
+/// * `width` — chart width in CSS pixels
+/// * `height` — chart height in CSS pixels
+/// * `density` — DPI (72 = 1x, 144 = 2x for PDF)
+/// * `background` — canvas fill color as `[r, g, b]`
+#[cfg(feature = "rasterize")]
+pub async fn render_to_png_with_background_async(
+    chartml: &ChartML,
+    yaml: &str,
+    width: u32,
+    height: u32,
+    density: u32,
+    background: [u8; 3],
+) -> Result<Vec<u8>, RenderError> {
     let element = chartml.render_from_yaml_with_params_async(
         yaml,
         Some(width as f64),
@@ -150,7 +202,7 @@ pub async fn render_to_png_async(
 
     let svg_str = element_to_svg(&element, width as f64, height as f64);
     let svg_str = strip_dashoffset_for_static(&svg_str);
-    svg_to_png(&svg_str, width, height, density, DEFAULT_PADDING, WHITE)
+    svg_to_png(&svg_str, width, height, density, DEFAULT_PADDING, background)
 }
 
 /// Render a pre-built ChartElement tree to PNG bytes.
@@ -163,9 +215,22 @@ pub fn element_to_png(
     height: u32,
     density: u32,
 ) -> Result<Vec<u8>, RenderError> {
+    element_to_png_with_background(element, width, height, density, WHITE)
+}
+
+/// Render a pre-built ChartElement tree to PNG bytes with an explicit
+/// canvas background color. See [`render_to_png_with_background`].
+#[cfg(feature = "rasterize")]
+pub fn element_to_png_with_background(
+    element: &chartml_core::ChartElement,
+    width: u32,
+    height: u32,
+    density: u32,
+    background: [u8; 3],
+) -> Result<Vec<u8>, RenderError> {
     let svg_str = element_to_svg(element, width as f64, height as f64);
     let svg_str = strip_dashoffset_for_static(&svg_str);
-    svg_to_png(&svg_str, width, height, density, DEFAULT_PADDING, WHITE)
+    svg_to_png(&svg_str, width, height, density, DEFAULT_PADDING, background)
 }
 
 #[cfg(test)]
@@ -201,5 +266,67 @@ mod tests {
         let svg = r#"<circle cx="50" cy="50" r="4" fill="red"/>"#;
         let result = strip_dashoffset_for_static(svg);
         assert_eq!(result, svg);
+    }
+
+    #[cfg(feature = "rasterize")]
+    #[test]
+    fn element_to_png_with_background_fills_canvas() {
+        let element = chartml_core::ChartElement::Svg {
+            viewbox: chartml_core::element::ViewBox {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 50.0,
+            },
+            width: Some(100.0),
+            height: Some(50.0),
+            class: String::new(),
+            children: vec![],
+        };
+
+        let bg = [36u8, 32, 30]; // #24201E — a dark surface
+        let png_bytes =
+            element_to_png_with_background(&element, 100, 50, 72, bg).expect("render succeeds");
+
+        let decoder = png::Decoder::new(&png_bytes[..]);
+        let mut reader = decoder.read_info().expect("valid PNG");
+        let mut buf = vec![0u8; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).expect("decodable frame");
+
+        // Canvas = chart size + DEFAULT_PADDING on each side at 1x density.
+        assert_eq!(info.width, 100 + 2 * DEFAULT_PADDING);
+        assert_eq!(info.height, 50 + 2 * DEFAULT_PADDING);
+
+        // The empty chart draws nothing, so every pixel is the background.
+        // Check the first and last pixels (RGBA output).
+        assert_eq!(&buf[0..3], &bg);
+        let last = buf.len() - 4;
+        assert_eq!(&buf[last..last + 3], &bg);
+    }
+
+    #[cfg(feature = "rasterize")]
+    #[test]
+    fn element_to_png_defaults_to_white_background() {
+        let element = chartml_core::ChartElement::Svg {
+            viewbox: chartml_core::element::ViewBox {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 50.0,
+            },
+            width: Some(100.0),
+            height: Some(50.0),
+            class: String::new(),
+            children: vec![],
+        };
+
+        let png_bytes = element_to_png(&element, 100, 50, 72).expect("render succeeds");
+
+        let decoder = png::Decoder::new(&png_bytes[..]);
+        let mut reader = decoder.read_info().expect("valid PNG");
+        let mut buf = vec![0u8; reader.output_buffer_size()];
+        reader.next_frame(&mut buf).expect("decodable frame");
+
+        assert_eq!(&buf[0..3], &WHITE);
     }
 }
