@@ -33,7 +33,18 @@ pub fn element_to_svg(element: &ChartElement, width: f64, height: f64) -> String
                 r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}" width="{}" height="{}">"#,
                 width, height, width, height,
             ).expect("writing to String is infallible");
-            buf.push_str(r#"<foreignObject x="0" y="0" width="100%" height="100%">"#);
+            // Emit definite pixel dimensions on the foreignObject rather than
+            // width/height="100%". WebKit treats a 100%-sized foreignObject as
+            // an indefinite containing block, so flex children that resolve
+            // their height against it (e.g. `.chartml-table` at height:100%)
+            // collapse to their intrinsic height and the table body shrinks to
+            // 0px. Definite px dimensions give WebKit a concrete containing
+            // block, matching Chrome/Firefox behavior and fixing Safari.
+            write!(
+                &mut buf,
+                r#"<foreignObject x="0" y="0" width="{}" height="{}">"#,
+                width, height,
+            ).expect("writing to String is infallible");
             write_element(&mut buf, element);
             buf.push_str("</foreignObject>");
             buf.push_str("</svg>");
@@ -498,6 +509,12 @@ mod tests {
         assert!(svg.contains("<foreignObject"));
         assert!(svg.contains(r#"<div xmlns="http://www.w3.org/1999/xhtml""#));
         assert!(svg.contains("$1,234"));
+        // Regression (Safari/WebKit table collapse): the foreignObject must
+        // carry definite pixel dimensions, not width/height="100%", or WebKit
+        // treats it as an indefinite containing block and flex children with
+        // height:100% collapse to 0px. See element_to_svg.
+        assert!(svg.contains(r#"<foreignObject x="0" y="0" width="200" height="100">"#));
+        assert!(!svg.contains(r#"width="100%""#));
     }
 
     #[test]
