@@ -63,20 +63,14 @@ fn inject_chartml_css() {
 }
 
 fn extract_yaml_title(yaml: &str) -> Option<String> {
-    for line in yaml.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("title:") {
-            let t = rest.trim().trim_matches('"').trim_matches('\'').to_string();
-            if !t.is_empty() {
-                return Some(t);
-            }
-        }
-        // Stop scanning once we hit the visualize section
-        if trimmed.starts_with("visualize:") || trimmed.starts_with("data:") {
-            break;
-        }
-    }
-    None
+    // Use the real YAML parser rather than scanning lines. The previous
+    // line-scan broke out of the loop on the first `data:`/`visualize:` line,
+    // so any spec whose `title:` key was ordered after those blocks (e.g.
+    // alphabetically-keyed specs) silently lost its title.
+    first_chart_spec(yaml)
+        .and_then(|s| s.title)
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
 }
 
 /// Build the inline `style` attribute for the HTML `<div class="chart-title">`
@@ -1259,6 +1253,65 @@ mod title_style_tests {
         assert!(style.contains("font-weight: 600"));
         assert!(!style.contains("font-family:"));
         assert!(!style.contains("font-style:"));
+    }
+}
+
+#[cfg(test)]
+mod extract_title_tests {
+    use super::*;
+
+    #[test]
+    fn title_before_data_is_extracted() {
+        let yaml = "\
+title: My Chart
+type: chart
+version: 1
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+visualize:
+  type: line
+  columns: day
+";
+        assert_eq!(extract_yaml_title(yaml).as_deref(), Some("My Chart"));
+    }
+
+    #[test]
+    fn title_after_data_block_is_still_extracted() {
+        // Regression: the previous line-scan broke on the first `data:` line and
+        // never reached an alphabetically-later `title:` key, dropping the title.
+        let yaml = "\
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+layout:
+  colSpan: 8
+title: Daily Visitors & Sessions
+type: chart
+version: 1
+visualize:
+  type: line
+  columns: day
+";
+        assert_eq!(
+            extract_yaml_title(yaml).as_deref(),
+            Some("Daily Visitors & Sessions"),
+        );
+    }
+
+    #[test]
+    fn missing_title_returns_none() {
+        let yaml = "\
+type: chart
+version: 1
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+visualize:
+  type: line
+  columns: day
+";
+        assert_eq!(extract_yaml_title(yaml), None);
     }
 }
 

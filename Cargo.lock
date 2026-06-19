@@ -674,7 +674,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-leptos"
-version = "5.1.7"
+version = "5.1.8"
 dependencies = [
  "async-trait",
  "chartml-chart-cartesian",
