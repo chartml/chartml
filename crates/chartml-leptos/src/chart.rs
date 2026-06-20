@@ -62,6 +62,34 @@ fn inject_chartml_css() {
     }
 }
 
+/// Default SVG render height (px) for charts without an explicit
+/// `visualize.style.height`. Mirrors each renderer's `default_dimensions()`:
+/// metric cards are 150px, every other chart type is 400px. Keep in sync with
+/// the per-crate `default_dimensions()` impls in chartml-chart-*.
+const DEFAULT_CHART_HEIGHT: f64 = 400.0;
+const METRIC_CHART_HEIGHT: f64 = 150.0;
+
+/// Resolve the height (px) chartml will render the SVG at, derived
+/// synchronously from the YAML so the loading placeholder reserves the same
+/// in-flow space the SVG will occupy (preventing the loading→rendered layout
+/// shift). Mirrors `ChartML::build_and_render` in chartml-core: an explicit
+/// `visualize.style.height` wins; otherwise the renderer's per-type default
+/// (metric 150, everything else 400) applies. The renderer reads
+/// `visualize.style.height` (NOT the top-level `style:` block), so we do the
+/// same to stay aligned with the rendered SVG height.
+fn resolve_render_height(yaml: &str) -> f64 {
+    let Some(spec) = first_chart_spec(yaml) else {
+        return DEFAULT_CHART_HEIGHT;
+    };
+    if let Some(h) = spec.visualize.style.as_ref().and_then(|s| s.height) {
+        return h;
+    }
+    match spec.visualize.chart_type.as_str() {
+        "metric" => METRIC_CHART_HEIGHT,
+        _ => DEFAULT_CHART_HEIGHT,
+    }
+}
+
 fn extract_yaml_title(yaml: &str) -> Option<String> {
     // Use the real YAML parser rather than scanning lines. The previous
     // line-scan broke out of the loop on the first `data:`/`visualize:` line,
@@ -676,6 +704,11 @@ pub fn ChartMLChart(
     // the title can render before the async pipeline completes.
     let title_signal = Memo::new(move |_| extract_yaml_title(&spec.try_get().unwrap_or_default()));
 
+    // Height the SVG will render at, resolved synchronously so the loading
+    // placeholder can reserve matching in-flow space (no layout shift).
+    let reserved_height_signal =
+        Memo::new(move |_| resolve_render_height(&spec.try_get().unwrap_or_default()));
+
     // Main fetch + transform effect. Reactive on `(spec, params, refresh_count)`.
     // Runs the new chartml-5 pipeline (`fetch` → `transform` →
     // `render_prepared_to_svg`) and writes results to `resolved` /
@@ -962,8 +995,22 @@ pub fn ChartMLChart(
             // auto refresh (so the user gets feedback even when an old
             // SVG is still on screen).
             {move || {
-                is_loading.try_get().unwrap_or(false).then(|| view! {
-                    <div class="chartml-loading">
+                if !is_loading.try_get().unwrap_or(false) {
+                    return None;
+                }
+                // Initial load: no SVG on screen yet, so reserve in-flow height = H below
+                // the title. Re-fetch: an old SVG already holds the box open — overlay the
+                // spinner (zero flow height) so we don't reserve a SECOND H.
+                let style = if resolved.try_get().flatten().is_none() {
+                    format!(
+                        "min-height: {}px; box-sizing: border-box;",
+                        reserved_height_signal.try_get().unwrap_or(DEFAULT_CHART_HEIGHT),
+                    )
+                } else {
+                    "position: absolute; inset: 0;".to_string()
+                };
+                Some(view! {
+                    <div class="chartml-loading" style=style>
                         <div class="chartml-spinner" />
                     </div>
                 })
@@ -1312,6 +1359,73 @@ visualize:
   columns: day
 ";
         assert_eq!(extract_yaml_title(yaml), None);
+    }
+}
+
+#[cfg(test)]
+mod resolve_height_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_visualize_style_height_wins() {
+        // An explicit `visualize.style.height` overrides the per-type default.
+        let yaml = "\
+type: chart
+version: 1
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+visualize:
+  type: line
+  columns: day
+  style:
+    height: 300
+";
+        assert_eq!(resolve_render_height(yaml), 300.0);
+    }
+
+    #[test]
+    fn line_chart_without_style_height_uses_default() {
+        // No explicit height -> cartesian renderer's 400px default.
+        let yaml = "\
+type: chart
+version: 1
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+visualize:
+  type: line
+  columns: day
+";
+        assert_eq!(resolve_render_height(yaml), 400.0);
+    }
+
+    #[test]
+    fn metric_chart_without_style_height_uses_metric_default() {
+        // Metric cards render at 150px when no explicit height is given.
+        let yaml = "\
+type: chart
+version: 1
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+visualize:
+  type: metric
+  value: total
+";
+        assert_eq!(resolve_render_height(yaml), 150.0);
+    }
+
+    #[test]
+    fn invalid_yaml_falls_back_to_default() {
+        // Unparseable YAML can't yield a spec — fall back to the safe default
+        // rather than panicking.
+        assert_eq!(resolve_render_height("not: [valid"), 400.0);
+    }
+
+    #[test]
+    fn empty_yaml_falls_back_to_default() {
+        assert_eq!(resolve_render_height(""), 400.0);
     }
 }
 
