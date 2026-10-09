@@ -59,9 +59,7 @@ test-output/manifest.json
 changed-packages.json
 *.tgz
 
-# Review approval (cryptographic signature file)
-.review-approval
 
-# Claude agent definitions (contain signing keys — local only)
+# Claude agent definitions (local only)
 .claude/agents/
 .gstack/
