@@ -20,6 +20,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Test pre-commit hook outcomes
+        run: bash scripts/test-pre-commit.sh
+
       - name: Reject new lint suppressions
         run: |
           BASE="${{ github.event.pull_request.base.sha }}"
