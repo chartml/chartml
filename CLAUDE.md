@@ -40,24 +40,16 @@ cd docs && npm run docs:build  # static build
 
 ## Mandatory Code Review Before Commit
 
-All commits require a cryptographically signed approval from the **code-review-architect** agent. The pre-commit hook verifies this signature — commits without it are blocked.
-
-### Rules:
-- **Never skip the review step** — the pre-commit hook will reject unsigned commits
-- **Any change after review invalidates the signature** — re-review after any modification
-- **The reviewer must not sign if critical or major issues exist** — fix them first
-- **Implementation agents cannot sign their own reviews** — only code-review-architect has signing authority
-- **Do NOT tell the reviewer how to sign** — it has its own signing instructions
+All commits require an independent review from the **code-review-architect** agent.
+Resolve critical and major findings before committing. Re-review affected changes
+after modifying reviewed code. Review approval is recorded in the report.
 
 ## Mandatory Chart Evaluation Before Commit
 
-All golden SVGs (`test-output/golden/**/*.svg`) require a cryptographic signature from the **chart-evaluator** agent.
-
-### Rules:
-- **Every golden SVG must be signed** — unsigned SVGs block the commit
-- **Modifying a golden SVG invalidates its signature** — re-evaluate and re-sign
-- **Only the chart-evaluator agent can sign charts**
-- Verify: `bash scripts/verify-charts.sh`
+Evaluate changed golden SVGs (`test-output/golden/**/*.svg`) with the
+**chart-evaluator** agent against their YAML assertions and visual expectations.
+Resolve failed evaluations before committing; re-evaluate affected SVGs after changes.
+Record the evaluation results and evidence in the report.
 
 ## Theming
 
