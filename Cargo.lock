@@ -551,7 +551,7 @@ dependencies = [
 
 [[package]]
 name = "chartml-chart-metric"
-version = "5.0.3"
+version = "5.0.4"
 dependencies = [
  "chartml-core",
  "serde_json",
