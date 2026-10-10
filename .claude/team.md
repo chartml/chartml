@@ -2,7 +2,7 @@
 
 - **Team key:** CHA
 - **Team name:** ChartML
-- **GitHub repo:** kyomi-ai/chartml
+- **GitHub repo:** chartml/chartml
 
 ## Versioning
 
