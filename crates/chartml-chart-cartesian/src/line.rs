@@ -427,6 +427,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                             stroke: None,
                             stroke_width: None,
                             stroke_dasharray: None,
+                            stroke_dashoffset: None,
                             opacity: Some(fill_opacity),
                             class: "range-area".to_string(),
                             data: None,
@@ -486,14 +487,25 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             // Only emit a line path when there are 2+ points (a single point
             // produces a degenerate M-only path with no visible line).
             if points.len() > 1 {
-                let path_d = line_gen.generate(&points);
+                let (path_d, path_length) = line_gen.generate_with_length(&points);
+                // When an explicit lineStyle dasharray is set (dashed/dotted),
+                // keep it and skip animation attributes. Otherwise, set
+                // dasharray + dashoffset to the computed path length so the
+                // CSS draw animation reveals the full line.
+                let (final_dasharray, final_dashoffset) = if dasharray.is_some() {
+                    (dasharray, None)
+                } else {
+                    let len = format!("{}", path_length.ceil() as i64);
+                    (Some(len.clone()), Some(len))
+                };
 
                 line_elements.push(ChartElement::Path {
                     d: path_d,
                     fill: None,
                     stroke: Some(color.clone()),
                     stroke_width: Some(config.theme.series_line_weight as f64),
-                    stroke_dasharray: dasharray,
+                    stroke_dasharray: final_dasharray,
+                    stroke_dashoffset: final_dashoffset,
                     opacity: None,
                     class: "chartml-line-path series-line".to_string(),
                     data: Some(ElementData::new(&label, "").with_series(&label)),
@@ -607,13 +619,15 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 .unwrap_or_else(|| "#2E7D9A".to_string());
 
             if points.len() > 1 {
-                let path_d = line_gen.generate(&points);
+                let (path_d, path_length) = line_gen.generate_with_length(&points);
+                let len = format!("{}", path_length.ceil() as i64);
                 line_elements.push(ChartElement::Path {
                     d: path_d,
                     fill: None,
                     stroke: Some(color.clone()),
                     stroke_width: Some(config.theme.series_line_weight as f64),
-                    stroke_dasharray: None,
+                    stroke_dasharray: Some(len.clone()),
+                    stroke_dashoffset: Some(len),
                     opacity: None,
                     class: "chartml-line-path series-line".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
@@ -687,13 +701,15 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 .unwrap_or_else(|| "#2E7D9A".to_string());
 
             if points.len() > 1 {
-                let path_d = line_gen.generate(&points);
+                let (path_d, path_length) = line_gen.generate_with_length(&points);
+                let len = format!("{}", path_length.ceil() as i64);
                 line_elements.push(ChartElement::Path {
                     d: path_d,
                     fill: None,
                     stroke: Some(color.clone()),
                     stroke_width: Some(config.theme.series_line_weight as f64),
-                    stroke_dasharray: None,
+                    stroke_dasharray: Some(len.clone()),
+                    stroke_dashoffset: Some(len),
                     opacity: None,
                     class: "chartml-line-path series-line".to_string(),
                     data: None,

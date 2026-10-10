@@ -1,6 +1,7 @@
 use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform};
 use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
+pub use chartml_core::format::format_value;
 use chartml_core::format::{detect_date_format, reformat_date_label};
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics, measure_text, truncate_label_with_metrics};
 use chartml_core::plugin::ChartConfig;
@@ -245,14 +246,6 @@ pub fn get_x_format(config: &ChartConfig) -> Option<String> {
     })
 }
 
-/// Format a numeric value using a format string, or a sensible default.
-pub fn format_value(value: f64, format_str: Option<&str>) -> String {
-    match format_str {
-        Some(fmt) => NumberFormatter::new(fmt).format(value),
-        None => default_format_value(value),
-    }
-}
-
 /// Format a tick label with SI suffix abbreviation when values are large.
 ///
 /// When `tick_step` is \>= 1_000_000_000 uses "B" suffix, \>= 1_000_000 uses "M",
@@ -376,64 +369,6 @@ fn compute_tick_step(ticks: &[f64], domain: (f64, f64)) -> f64 {
     } else {
         (domain.1 - domain.0).abs().max(1.0)
     }
-}
-
-/// Default numeric formatting: integers without decimals, floats with 1 decimal.
-fn default_format_value(value: f64) -> String {
-    if value == value.floor() && value.abs() < 1e15 {
-        // Use comma separator for large integers
-        let abs = value.abs() as u64;
-        let formatted = insert_commas(abs);
-        if value < 0.0 {
-            format!("-{}", formatted)
-        } else {
-            formatted
-        }
-    } else {
-        // Use enough decimal places to show significant digits.
-        // For values like 0.007, we need 3 decimals; for 1.5, 1 decimal suffices.
-        // Compute precision from the value's magnitude: at least 1, and for small
-        // values, enough to reveal the first significant fractional digit plus two.
-        let abs_val = value.abs();
-        let precision = if abs_val < 1e-15 {
-            1usize
-        } else if abs_val >= 1.0 {
-            // For values >= 1, one decimal is fine (e.g. 3.5 -> "3.5")
-            1usize
-        } else {
-            // For values < 1, compute digits needed: -floor(log10(abs)) gives the
-            // position of the first significant digit. Add 1 to show at least two
-            // significant fractional digits (e.g. 0.007 -> precision 3 -> "0.007").
-            let digits = -(abs_val.log10().floor()) as usize;
-            digits.max(1)
-        };
-        // Format and strip unnecessary trailing zeros after the decimal point,
-        // but keep at least one decimal digit.
-        let formatted = format!("{:.prec$}", value, prec = precision);
-        let trimmed = formatted.trim_end_matches('0');
-        // Ensure we don't end with just a decimal point (e.g. "3." -> "3.0")
-        if trimmed.ends_with('.') {
-            format!("{}0", trimmed)
-        } else {
-            trimmed.to_string()
-        }
-    }
-}
-
-fn insert_commas(n: u64) -> String {
-    let s = n.to_string();
-    let len = s.len();
-    if len <= 3 {
-        return s;
-    }
-    let mut result = String::with_capacity(len + len / 3);
-    for (i, ch) in s.chars().enumerate() {
-        if i > 0 && (len - i).is_multiple_of(3) {
-            result.push(',');
-        }
-        result.push(ch);
-    }
-    result
 }
 
 /// Format labels for display, applying the same date reformatting that
@@ -571,36 +506,6 @@ pub fn generate_x_axis_with_display(
         LabelStrategy::Rotated { margin: _, skip_factor } => {
             // rotation margin handled by MarginConfig
 
-            // Compute the effective visible label count (after skip_factor thinning)
-            let visible_count = match skip_factor {
-                Some(factor) if *factor > 1 => {
-                    (0..display_labels.len()).filter(|i| i % factor == 0).count()
-                }
-                _ => display_labels.len(),
-            };
-
-            // Post-rotation truncation: a label of width W rotated -45deg projects
-            // W * cos(45deg) horizontally. To avoid overlap, this projection must fit
-            // in the space available per visible label.
-            let cos45 = std::f64::consts::FRAC_PI_4.cos(); // ~0.707
-            let available_per_visible = if visible_count > 0 {
-                available_width / visible_count as f64
-            } else {
-                available_width
-            };
-            // max_full_width: maximum unrotated label width such that the rotated
-            // horizontal projection fits: available_per_visible >= width * cos45 + spacing
-            let spacing = 6.0;
-            let overlap_width = (available_per_visible - spacing) / cos45;
-
-            // Cap label width at the overlap-free width. This mirrors
-            // LabelStrategy::determine() — no special-case boost needed.
-            let max_full_width = if overlap_width > 0.0 {
-                overlap_width
-            } else {
-                0.0
-            };
-
             for (i, label) in display_labels.iter().enumerate() {
                 let orig_label = &band_keys[i];
                 let x = match band.map(orig_label) {
@@ -619,17 +524,13 @@ pub fn generate_x_axis_with_display(
                     None => true,
                 };
                 if should_show {
-                    // Truncate the label if its rotated projection would cause overlap
-                    let display_text = if max_full_width > 0.0 {
-                        truncate_label_with_metrics(label, max_full_width, &TextMetrics::from_theme_axis_label(theme))
-                    } else {
-                        label.clone()
-                    };
-                    let is_truncated = display_text != *label;
+                    // Rotated labels preserve full text — the whole point of
+                    // rotation is to fit longer labels. Overflow/clipping is
+                    // handled by the SVG viewport, not by pre-truncation.
                     let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
                     elements.push(ChartElement::Text {
                         x, y: y_position + 10.0,
-                        content: display_text,
+                        content: label.clone(),
                         anchor: TextAnchor::End,
                         dominant_baseline: None,
                         transform: Some(Transform::Rotate(-45.0, x, y_position + 10.0)),
@@ -640,11 +541,7 @@ pub fn generate_x_axis_with_display(
                         text_transform: ts.text_transform,
                         fill: Some(theme.text_secondary.clone()),
                         class: "tick-label axis-label".to_string(),
-                        data: if is_truncated {
-                            Some(ElementData::new(label.clone(), ""))
-                        } else {
-                            None
-                        },
+                        data: None,
                     });
                 }
             }
@@ -746,8 +643,14 @@ pub fn generate_x_axis_with_display(
     // Axis label (centered below the tick labels)
     if let Some(label_text) = axis_label {
         let mid_x = (range.0 + range.1) / 2.0;
-        // Position below the tick labels: y_position + tick offset + label height + gap
-        let label_y = y_position + 38.0;
+        // Position below the tick labels: y_position + tick offset + label height + gap.
+        // Rotated labels descend past the base offset; their strategy margin
+        // reserves exactly that extra space, so the title shifts down with it.
+        let strategy_margin = match &strategy {
+            LabelStrategy::Rotated { margin, .. } => *margin,
+            _ => 0.0,
+        };
+        let label_y = y_position + 38.0 + strategy_margin;
         let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
         elements.push(ChartElement::Text {
             x: mid_x,

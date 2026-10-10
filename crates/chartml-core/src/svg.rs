@@ -33,7 +33,18 @@ pub fn element_to_svg(element: &ChartElement, width: f64, height: f64) -> String
                 r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}" width="{}" height="{}">"#,
                 width, height, width, height,
             ).expect("writing to String is infallible");
-            buf.push_str(r#"<foreignObject x="0" y="0" width="100%" height="100%">"#);
+            // Emit definite pixel dimensions on the foreignObject rather than
+            // width/height="100%". WebKit treats a 100%-sized foreignObject as
+            // an indefinite containing block, so flex children that resolve
+            // their height against it (e.g. `.chartml-table` at height:100%)
+            // collapse to their intrinsic height and the table body shrinks to
+            // 0px. Definite px dimensions give WebKit a concrete containing
+            // block, matching Chrome/Firefox behavior and fixing Safari.
+            write!(
+                &mut buf,
+                r#"<foreignObject x="0" y="0" width="{}" height="{}">"#,
+                width, height,
+            ).expect("writing to String is infallible");
             write_element(&mut buf, element);
             buf.push_str("</foreignObject>");
             buf.push_str("</svg>");
@@ -83,33 +94,33 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             buf.push_str("</g>");
         }
 
-        ChartElement::Rect { x, y, width, height, fill, stroke, rx, ry, class, data, animation_origin: _ } => {
-            // Static SVG renders deliberately ignore `animation_origin` for
-            // `Rect`, keeping the legacy width-vs-height heuristic. The
-            // `backward_compat_goldens_byte_identical` test pins every
-            // pre-theme-hooks baseline byte-for-byte, and those baselines
-            // were captured with this exact (buggy-for-square-bars and
-            // negative-bars) heuristic emission. The heuristic only matters
-            // for animation, and animation is invisible in a static SVG
-            // snapshot — so freezing the legacy bytes here costs nothing
-            // visually. Live, animated renders go through
-            // `chartml-leptos/src/element.rs`, which honors `animation_origin`
-            // and produces the correct origin per orientation/sign.
-            //
-            // Top-rounded bars (`BarCornerRadius::Top`) are emitted as
-            // `ChartElement::Path` instead of `Rect` — the `Path` arm below
-            // honors `animation_origin` because no pre-theme-hooks baseline
-            // contains a Path bar (default theme uses `Uniform(0.0)`).
-            let (origin_x, origin_y) = if width > height {
-                (*x, y + height / 2.0)
-            } else {
-                (x + width / 2.0, y + height)
-            };
-            write!(
-                buf,
-                r#"<rect x="{}" y="{}" width="{}" height="{}" fill="{}" style="transform-origin: {}px {}px;""#,
-                x, y, width, height, xml_escape(fill), origin_x, origin_y,
-            ).expect("writing to String is infallible");
+        ChartElement::Rect { x, y, width, height, fill, stroke, rx, ry, class, data, animation_origin } => {
+            // Bar elements carry fill-box percentage origins (e.g. 50, 100
+            // for bottom-center). Emit with transform-box: fill-box so the
+            // browser resolves against the element's own bounding box.
+            // Non-bar Rects (animation_origin: None) get the legacy
+            // absolute-pixel heuristic for backward compat.
+            match animation_origin {
+                Some((ox, oy)) => {
+                    write!(
+                        buf,
+                        r#"<rect x="{}" y="{}" width="{}" height="{}" fill="{}" style="transform-box: fill-box; transform-origin: {}% {}%;""#,
+                        x, y, width, height, xml_escape(fill), ox, oy,
+                    ).expect("writing to String is infallible");
+                }
+                None => {
+                    let (origin_x, origin_y) = if width > height {
+                        (*x, y + height / 2.0)
+                    } else {
+                        (x + width / 2.0, y + height)
+                    };
+                    write!(
+                        buf,
+                        r#"<rect x="{}" y="{}" width="{}" height="{}" fill="{}" style="transform-origin: {}px {}px;""#,
+                        x, y, width, height, xml_escape(fill), origin_x, origin_y,
+                    ).expect("writing to String is infallible");
+                }
+            }
             if let Some(s) = stroke {
                 write!(buf, r#" stroke="{}""#, xml_escape(s)).expect("writing to String is infallible");
             }
@@ -126,7 +137,7 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             buf.push_str("/>");
         }
 
-        ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, opacity, class, data, animation_origin } => {
+        ChartElement::Path { d, fill, stroke, stroke_width, stroke_dasharray, stroke_dashoffset, opacity, class, data, animation_origin } => {
             write!(buf, r#"<path d="{}""#, xml_escape(d)).expect("writing to String is infallible");
             // When the emitter populates `animation_origin` (top-rounded
             // bar paths from `build_bar_element`), inline the
@@ -135,7 +146,7 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             // so the unconditional `style=` insertion below stays absent
             // for every pre-theme-hooks snapshot.
             if let Some((ox, oy)) = animation_origin {
-                write!(buf, r#" style="transform-origin: {}px {}px;""#, ox, oy).expect("writing to String is infallible");
+                write!(buf, r#" style="transform-box: fill-box; transform-origin: {}% {}%;""#, ox, oy).expect("writing to String is infallible");
             }
             match fill.as_deref() {
                 Some(f) => write!(buf, r#" fill="{}""#, xml_escape(f)).expect("writing to String is infallible"),
@@ -150,6 +161,9 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             }
             if let Some(sda) = stroke_dasharray {
                 write!(buf, r#" stroke-dasharray="{}""#, xml_escape(sda)).expect("writing to String is infallible");
+            }
+            if let Some(sdo) = stroke_dashoffset {
+                write!(buf, r#" stroke-dashoffset="{}""#, xml_escape(sdo)).expect("write stroke-dashoffset");
             }
             if let Some(op) = opacity {
                 write!(buf, r#" opacity="{}""#, op).expect("writing to String is infallible");
@@ -412,6 +426,7 @@ mod tests {
                     stroke: Some("#000".to_string()),
                     stroke_width: Some(2.0),
                     stroke_dasharray: Some("5,3".to_string()),
+                    stroke_dashoffset: None,
                     opacity: Some(0.5),
                     class: "line".to_string(),
                     data: None,
@@ -494,6 +509,12 @@ mod tests {
         assert!(svg.contains("<foreignObject"));
         assert!(svg.contains(r#"<div xmlns="http://www.w3.org/1999/xhtml""#));
         assert!(svg.contains("$1,234"));
+        // Regression (Safari/WebKit table collapse): the foreignObject must
+        // carry definite pixel dimensions, not width/height="100%", or WebKit
+        // treats it as an indefinite containing block and flex children with
+        // height:100% collapse to 0px. See element_to_svg.
+        assert!(svg.contains(r#"<foreignObject x="0" y="0" width="200" height="100">"#));
+        assert!(!svg.contains(r#"width="100%""#));
     }
 
     #[test]

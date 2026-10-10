@@ -8,15 +8,36 @@ pub mod sql_builder;
 pub mod stages;
 
 use async_trait::async_trait;
+use arrow::array::RecordBatch;
+use arrow::datatypes::SchemaRef;
 use chartml_core::data::DataTable;
 use chartml_core::error::ChartError;
 use chartml_core::plugin::transform::{TransformContext, TransformMiddleware, TransformResult};
 use chartml_core::spec::TransformSpec;
 use datafusion::prelude::*;
-use arrow::array::RecordBatch;
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+fn build_session_context() -> Result<SessionContext, ChartError> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use datafusion::execution::disk_manager::DiskManagerBuilder;
+        let runtime = datafusion::execution::runtime_env::RuntimeEnvBuilder::new()
+            .with_memory_limit(512 * 1024 * 1024, 0.8)
+            .with_disk_manager_builder(DiskManagerBuilder::default())
+            .build_arc()
+            .map_err(|e| {
+                ChartError::DataError(format!("Failed to build DataFusion runtime: {}", e))
+            })?;
+        Ok(SessionContext::new_with_config_rt(SessionConfig::new(), runtime))
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        Ok(SessionContext::new_with_config(SessionConfig::new()))
+    }
+}
 
 /// DataFusion-backed transform middleware.
 ///
@@ -31,6 +52,115 @@ use std::sync::Arc;
 /// referencing `FROM source` keeps working. Multi-entry maps are NOT aliased —
 /// user SQL must reference each source by its own name.
 pub struct DataFusionTransform;
+
+impl DataFusionTransform {
+    fn register_source_alias(
+        ctx: &SessionContext,
+        sole_name: &str,
+        schema: SchemaRef,
+        batches: Vec<RecordBatch>,
+    ) -> Result<(), ChartError> {
+        let alias_table =
+            datafusion::datasource::MemTable::try_new(schema, vec![batches]).map_err(|e| {
+                ChartError::DataError(format!(
+                    "Failed to create alias MemTable for source '{}': {}",
+                    sole_name, e
+                ))
+            })?;
+        ctx.register_table("source", Arc::new(alias_table))
+            .map_err(|e| {
+                ChartError::DataError(format!(
+                    "Failed to register `source` alias for '{}': {}",
+                    sole_name, e
+                ))
+            })?;
+        Ok(())
+    }
+
+    async fn run_pipeline(
+        ctx: &SessionContext,
+        initial_table: &str,
+        spec: &TransformSpec,
+    ) -> Result<TransformResult, ChartError> {
+        let mut current_table = initial_table.to_string();
+
+        // Stage 1: SQL
+        if let Some(ref sql_spec) = spec.sql {
+            current_table =
+                stages::sql_stage::execute(ctx, &current_table, sql_spec).await?;
+        }
+
+        // Stage 2: Aggregate
+        if let Some(ref agg_spec) = spec.aggregate {
+            current_table =
+                stages::aggregate_stage::execute(ctx, &current_table, agg_spec).await?;
+        }
+
+        // Stage 3: Forecast
+        if let Some(ref forecast_spec) = spec.forecast {
+            current_table =
+                stages::forecast_stage::execute(ctx, &current_table, forecast_spec).await?;
+        }
+
+        // Collect final result
+        let df = ctx
+            .table(&current_table)
+            .await
+            .map_err(|e| ChartError::DataError(format!("Failed to read result table: {}", e)))?;
+        let output_schema = Arc::new(df.schema().as_arrow().clone());
+        let batches = df
+            .collect()
+            .await
+            .map_err(|e| ChartError::DataError(format!("Failed to collect results: {}", e)))?;
+
+        if batches.is_empty() {
+            return Ok(TransformResult {
+                data: DataTable::from_record_batch(RecordBatch::new_empty(output_schema)),
+                metadata: HashMap::new(),
+            });
+        }
+
+        let result_batch = arrow::compute::concat_batches(&output_schema, &batches)
+            .map_err(|e| {
+                ChartError::DataError(format!("Failed to concat result batches: {}", e))
+            })?;
+
+        Ok(TransformResult {
+            data: DataTable::from_record_batch(result_batch),
+            metadata: HashMap::new(),
+        })
+    }
+}
+
+fn register_mem_table(
+    ctx: &SessionContext,
+    name: &str,
+    schema: SchemaRef,
+    batches: Vec<RecordBatch>,
+) -> Result<(), ChartError> {
+    let mem_table =
+        datafusion::datasource::MemTable::try_new(schema, vec![batches]).map_err(|e| {
+            ChartError::DataError(format!(
+                "Failed to create MemTable for source '{}': {}",
+                name, e
+            ))
+        })?;
+    ctx.register_table(name, Arc::new(mem_table)).map_err(|e| {
+        ChartError::DataError(format!(
+            "Failed to register source table '{}': {}",
+            name, e
+        ))
+    })?;
+    Ok(())
+}
+
+fn initial_table_name(source_count: usize, first_key: Option<&String>) -> String {
+    if source_count == 1 {
+        first_key.expect("sources has 1 entry").clone()
+    } else {
+        "source".to_string()
+    }
+}
 
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
@@ -47,119 +177,60 @@ impl TransformMiddleware for DataFusionTransform {
             ));
         }
 
-        let ctx = SessionContext::new();
+        let ctx = build_session_context()?;
 
-        // Register every source under its declared name. DataTable already
-        // holds an Arrow RecordBatch so no conversion is required.
         for (name, table) in sources {
             let batch = table.record_batch().clone();
             let schema = batch.schema();
-            let mem_table = datafusion::datasource::MemTable::try_new(schema, vec![vec![batch]])
-                .map_err(|e| {
-                    ChartError::DataError(format!(
-                        "Failed to create MemTable for source '{}': {}",
-                        name, e
-                    ))
-                })?;
-            ctx.register_table(name.as_str(), Arc::new(mem_table))
-                .map_err(|e| {
-                    ChartError::DataError(format!(
-                        "Failed to register source table '{}': {}",
-                        name, e
-                    ))
-                })?;
+            register_mem_table(&ctx, name.as_str(), schema, vec![batch])?;
         }
 
-        // Single-source back-compat: alias the sole entry as "source" so legacy
-        // SQL referencing `FROM source` keeps working when the registered name
-        // differs. Multi-entry maps are intentionally NOT aliased — user SQL
-        // must address each source by its declared name.
         if sources.len() == 1 && !sources.contains_key("source") {
-            // Safe to unwrap: just checked sources.len() == 1.
             let (sole_name, sole_table) = sources.iter().next().expect("sources has 1 entry");
             let batch = sole_table.record_batch().clone();
-            let schema = batch.schema();
-            let alias_table = datafusion::datasource::MemTable::try_new(schema, vec![vec![batch]])
-                .map_err(|e| {
-                    ChartError::DataError(format!(
-                        "Failed to create alias MemTable for source '{}': {}",
-                        sole_name, e
-                    ))
-                })?;
-            ctx.register_table("source", Arc::new(alias_table))
-                .map_err(|e| {
-                    ChartError::DataError(format!(
-                        "Failed to register `source` alias for '{}': {}",
-                        sole_name, e
-                    ))
-                })?;
+            Self::register_source_alias(&ctx, sole_name, batch.schema(), vec![batch])?;
         }
 
-        // For single-source maps, `current_table` starts as the sole source name
-        // (which is also accessible via the `"source"` alias). For multi-source
-        // maps, default to `"source"`; user SQL is expected to produce its own
-        // output table by joining the named sources, so the initial value is
-        // only meaningful for stages that pass through (e.g. aggregate-only on
-        // a single source).
-        let mut current_table = if sources.len() == 1 {
-            sources
-                .keys()
-                .next()
-                .expect("sources has 1 entry")
-                .clone()
-        } else {
-            "source".to_string()
-        };
+        let initial = initial_table_name(sources.len(), sources.keys().next());
+        Self::run_pipeline(&ctx, &initial, spec).await
+    }
 
-        // Stage 1: SQL
-        if let Some(ref sql_spec) = spec.sql {
-            current_table =
-                stages::sql_stage::execute(&ctx, &current_table, sql_spec).await?;
+    async fn transform_batches(
+        &self,
+        sources: &IndexMap<String, (SchemaRef, Vec<RecordBatch>)>,
+        spec: &TransformSpec,
+        _context: &TransformContext,
+    ) -> Result<TransformResult, ChartError> {
+        if sources.is_empty() {
+            return Err(ChartError::DataError(
+                "DataFusionTransform: at least one source table is required".to_string(),
+            ));
         }
 
-        // Stage 2: Aggregate
-        if let Some(ref agg_spec) = spec.aggregate {
-            current_table =
-                stages::aggregate_stage::execute(&ctx, &current_table, agg_spec).await?;
+        let ctx = build_session_context()?;
+
+        for (name, (schema, batches)) in sources {
+            register_mem_table(
+                &ctx,
+                name.as_str(),
+                Arc::clone(schema),
+                batches.clone(),
+            )?;
         }
 
-        // Stage 3: Forecast
-        if let Some(ref forecast_spec) = spec.forecast {
-            current_table =
-                stages::forecast_stage::execute(&ctx, &current_table, forecast_spec).await?;
+        if sources.len() == 1 && !sources.contains_key("source") {
+            let (sole_name, (schema, batches)) =
+                sources.iter().next().expect("sources has 1 entry");
+            Self::register_source_alias(
+                &ctx,
+                sole_name,
+                Arc::clone(schema),
+                batches.clone(),
+            )?;
         }
 
-        // Collect final result
-        let df = ctx
-            .table(&current_table)
-            .await
-            .map_err(|e| ChartError::DataError(format!("Failed to read result table: {}", e)))?;
-        let output_schema = Arc::new(df.schema().as_arrow().clone());
-        let batches = df
-            .collect()
-            .await
-            .map_err(|e| ChartError::DataError(format!("Failed to collect results: {}", e)))?;
-
-        if batches.is_empty() {
-            // DataFusion returned no batches (e.g., WHERE filtered all rows).
-            // Return an empty DataTable preserving the output schema.
-            return Ok(TransformResult {
-                data: DataTable::from_record_batch(RecordBatch::new_empty(output_schema)),
-                metadata: HashMap::new(),
-            });
-        }
-
-        // Concatenate all output batches into a single RecordBatch and wrap in DataTable.
-        let result_batch = arrow::compute::concat_batches(
-            &output_schema,
-            &batches,
-        )
-        .map_err(|e| ChartError::DataError(format!("Failed to concat result batches: {}", e)))?;
-
-        Ok(TransformResult {
-            data: DataTable::from_record_batch(result_batch),
-            metadata: HashMap::new(),
-        })
+        let initial = initial_table_name(sources.len(), sources.keys().next());
+        Self::run_pipeline(&ctx, &initial, spec).await
     }
 }
 
@@ -790,5 +861,170 @@ visualize:
             "Error should reference the missing table; got: {}",
             err
         );
+    }
+
+    // --- transform_batches tests ---
+
+    fn sales_batches() -> (SchemaRef, Vec<RecordBatch>) {
+        let table = sales_data();
+        let batch = table.record_batch().clone();
+        let schema = batch.schema();
+        (schema, vec![batch])
+    }
+
+    fn split_sales_batches() -> (SchemaRef, Vec<RecordBatch>) {
+        let table = sales_data();
+        let batch = table.record_batch().clone();
+        let schema = batch.schema();
+        let b1 = batch.slice(0, 3);
+        let b2 = batch.slice(3, 2);
+        (schema, vec![b1, b2])
+    }
+
+    #[tokio::test]
+    async fn test_transform_batches_single_batch() {
+        let (schema, batches) = sales_batches();
+        let mut sources = IndexMap::new();
+        sources.insert("source".to_string(), (schema, batches));
+
+        let spec = TransformSpec {
+            sql: None,
+            forecast: None,
+            aggregate: Some(AggregateSpec {
+                dimensions: vec![Dimension::Simple("region".to_string())],
+                measures: vec![Measure {
+                    column: Some("revenue".to_string()),
+                    aggregation: Some("sum".to_string()),
+                    name: "total_revenue".to_string(),
+                    expression: None,
+                }],
+                filters: None,
+                sort: Some(vec![SortSpec {
+                    field: "total_revenue".to_string(),
+                    direction: Some("desc".to_string()),
+                }]),
+                limit: None,
+            }),
+        };
+
+        let transform = DataFusionTransform;
+        let context = TransformContext::default();
+        let result = transform
+            .transform_batches(&sources, &spec, &context)
+            .await
+            .unwrap();
+
+        assert_eq!(result.data.num_rows(), 3, "Should have 3 regions");
+        let rows = result.data.to_rows();
+        let revenues: Vec<f64> = rows
+            .iter()
+            .map(|r| r.get("total_revenue").unwrap().as_f64().unwrap())
+            .collect();
+        assert!(revenues[0] >= revenues[1]);
+        assert!(revenues[1] >= revenues[2]);
+        assert_eq!(revenues[2], 200.0);
+    }
+
+    #[tokio::test]
+    async fn test_transform_batches_multi_batch() {
+        let (schema, batches) = split_sales_batches();
+        assert_eq!(batches.len(), 2, "Should have 2 batches");
+        let mut sources = IndexMap::new();
+        sources.insert("source".to_string(), (schema, batches));
+
+        let spec = TransformSpec {
+            sql: None,
+            forecast: None,
+            aggregate: Some(AggregateSpec {
+                dimensions: vec![Dimension::Simple("region".to_string())],
+                measures: vec![Measure {
+                    column: Some("revenue".to_string()),
+                    aggregation: Some("sum".to_string()),
+                    name: "total_revenue".to_string(),
+                    expression: None,
+                }],
+                filters: None,
+                sort: Some(vec![SortSpec {
+                    field: "total_revenue".to_string(),
+                    direction: Some("desc".to_string()),
+                }]),
+                limit: None,
+            }),
+        };
+
+        let transform = DataFusionTransform;
+        let context = TransformContext::default();
+        let result = transform
+            .transform_batches(&sources, &spec, &context)
+            .await
+            .unwrap();
+
+        assert_eq!(result.data.num_rows(), 3, "Should have 3 regions");
+        let rows = result.data.to_rows();
+        let revenues: Vec<f64> = rows
+            .iter()
+            .map(|r| r.get("total_revenue").unwrap().as_f64().unwrap())
+            .collect();
+        assert!(revenues[0] >= revenues[1]);
+        assert!(revenues[1] >= revenues[2]);
+        assert_eq!(revenues[2], 200.0, "South total should be 200");
+    }
+
+    #[tokio::test]
+    async fn test_transform_batches_sql_multi_batch() {
+        let (schema, batches) = split_sales_batches();
+        let mut sources = IndexMap::new();
+        sources.insert("source".to_string(), (schema, batches));
+
+        let spec = TransformSpec {
+            sql: Some(SqlSpec::Single(
+                "SELECT * FROM \"source\" WHERE \"revenue\" > 100".to_string(),
+            )),
+            aggregate: None,
+            forecast: None,
+        };
+
+        let transform = DataFusionTransform;
+        let context = TransformContext::default();
+        let result = transform
+            .transform_batches(&sources, &spec, &context)
+            .await
+            .unwrap();
+
+        let rows = result.data.to_rows();
+        assert!(rows.len() < 5, "Should filter out some rows");
+        for row in &rows {
+            let rev = row.get("revenue").unwrap().as_f64().unwrap();
+            assert!(rev > 100.0, "Revenue should be > 100, got {}", rev);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_transform_batches_alias() {
+        let (schema, batches) = sales_batches();
+        let mut sources = IndexMap::new();
+        sources.insert("revenue".to_string(), (schema, batches));
+
+        let spec = TransformSpec {
+            sql: Some(SqlSpec::Single(
+                "SELECT region, revenue FROM source WHERE revenue > 100".to_string(),
+            )),
+            aggregate: None,
+            forecast: None,
+        };
+
+        let transform = DataFusionTransform;
+        let context = TransformContext::default();
+        let result = transform
+            .transform_batches(&sources, &spec, &context)
+            .await
+            .expect("alias should resolve `FROM source`");
+
+        let rows = result.data.to_rows();
+        assert!(!rows.is_empty());
+        for row in &rows {
+            let rev = row.get("revenue").and_then(|v| v.as_f64()).unwrap();
+            assert!(rev > 100.0);
+        }
     }
 }

@@ -1,11 +1,16 @@
+#[cfg(target_arch = "wasm32")]
 use send_wrapper::SendWrapper;
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
+#[cfg(target_arch = "wasm32")]
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+#[cfg(target_arch = "wasm32")]
 use std::time::Duration;
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use chartml_core::element::ElementData;
 use chartml_core::params::ParamValues;
@@ -24,6 +29,7 @@ use crate::tooltip::TooltipState;
 /// Custom tooltip renderer type.
 pub type TooltipRenderer = Arc<dyn Fn(&ElementData) -> AnyView + Send + Sync>;
 
+#[cfg(target_arch = "wasm32")]
 /// Default TTL applied when an `autoRefresh: true` source omits an explicit
 /// `cache.ttl`. Mirrors `chartml_core::resolver::DEFAULT_TTL` (5 minutes) so
 /// we never spin the auto-refresh interval faster than the cache itself
@@ -56,21 +62,43 @@ fn inject_chartml_css() {
     }
 }
 
-fn extract_yaml_title(yaml: &str) -> Option<String> {
-    for line in yaml.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("title:") {
-            let t = rest.trim().trim_matches('"').trim_matches('\'').to_string();
-            if !t.is_empty() {
-                return Some(t);
-            }
-        }
-        // Stop scanning once we hit the visualize section
-        if trimmed.starts_with("visualize:") || trimmed.starts_with("data:") {
-            break;
-        }
+/// Default SVG render height (px) for charts without an explicit
+/// `visualize.style.height`. Mirrors each renderer's `default_dimensions()`:
+/// metric cards are 150px, every other chart type is 400px. Keep in sync with
+/// the per-crate `default_dimensions()` impls in chartml-chart-*.
+const DEFAULT_CHART_HEIGHT: f64 = 400.0;
+const METRIC_CHART_HEIGHT: f64 = 150.0;
+
+/// Resolve the height (px) chartml will render the SVG at, derived
+/// synchronously from the YAML so the loading placeholder reserves the same
+/// in-flow space the SVG will occupy (preventing the loading→rendered layout
+/// shift). Mirrors `ChartML::build_and_render` in chartml-core: an explicit
+/// `visualize.style.height` wins; otherwise the renderer's per-type default
+/// (metric 150, everything else 400) applies. The renderer reads
+/// `visualize.style.height` (NOT the top-level `style:` block), so we do the
+/// same to stay aligned with the rendered SVG height.
+fn resolve_render_height(yaml: &str) -> f64 {
+    let Some(spec) = first_chart_spec(yaml) else {
+        return DEFAULT_CHART_HEIGHT;
+    };
+    if let Some(h) = spec.visualize.style.as_ref().and_then(|s| s.height) {
+        return h;
     }
-    None
+    match spec.visualize.chart_type.as_str() {
+        "metric" => METRIC_CHART_HEIGHT,
+        _ => DEFAULT_CHART_HEIGHT,
+    }
+}
+
+fn extract_yaml_title(yaml: &str) -> Option<String> {
+    // Use the real YAML parser rather than scanning lines. The previous
+    // line-scan broke out of the loop on the first `data:`/`visualize:` line,
+    // so any spec whose `title:` key was ordered after those blocks (e.g.
+    // alphabetically-keyed specs) silently lost its title.
+    first_chart_spec(yaml)
+        .and_then(|s| s.title)
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
 }
 
 /// Build the inline `style` attribute for the HTML `<div class="chart-title">`
@@ -139,6 +167,7 @@ pub(crate) fn build_title_style(theme: &Theme) -> String {
 /// `data:` block). It's surfaced both to the visibility-listener / tick
 /// callback (where it gets logged via `console.debug` for observability) and
 /// to host-app tests that want to assert which sources the parser picked up.
+#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Debug)]
 struct AutoRefreshSource {
     /// User-chosen source name (or `"source"` for unnamed flat data).
@@ -153,6 +182,7 @@ struct AutoRefreshSource {
     ttl: Duration,
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Scan a parsed `ChartSpec.data` for sources whose cache config requests
 /// auto-refresh. Both flat `Inline { cache: Some(...) }` and per-entry
 /// `NamedMap` sources are inspected; `Named` (string ref to a pre-registered
@@ -181,6 +211,7 @@ fn collect_auto_refresh_sources(spec: &ChartSpec) -> Vec<AutoRefreshSource> {
     out
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Build an `AutoRefreshSource` from one inline spec, returning `None`
 /// unless `cache.autoRefresh == true`. Falls back to
 /// [`DEFAULT_AUTO_REFRESH_INTERVAL`] when `cache.ttl` is missing — silently
@@ -205,6 +236,7 @@ fn auto_refresh_from_inline(name: String, inline: &InlineData) -> Option<AutoRef
     })
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Pick the shortest positive TTL across the auto-refresh sources, or
 /// `None` when there are no sources or every TTL is zero.
 fn shortest_interval(sources: &[AutoRefreshSource]) -> Option<Duration> {
@@ -356,6 +388,12 @@ pub fn ChartMLChart(
     /// ```
     #[prop(optional, into)]
     refresh_trigger: Option<Signal<u32>>,
+    /// Fires after a successful fetch + transform + render with the
+    /// `refreshed_at` timestamp (ms since epoch). On cache hits this
+    /// reflects when the data was originally fetched from the server,
+    /// not the current time.
+    #[prop(optional, into)]
+    on_refreshed: Option<Callback<f64>>,
 ) -> impl IntoView {
     let chartml = chartml.clone();
     let tooltip_state = provide_tooltip_context();
@@ -391,8 +429,13 @@ pub fn ChartMLChart(
         }
     }
 
-    // Track container width — updated by ResizeObserver
+    // Track container width — updated by ResizeObserver (wasm32 only).
+    // The read half (`container_width`) drives the resize re-render effect
+    // on both targets; the write half is only used by the ResizeObserver
+    // block which is gated behind `#[cfg(target_arch = "wasm32")]`.
     let (container_width, set_container_width) = signal(0.0_f64);
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = set_container_width;
     let container_ref = NodeRef::<leptos::html::Div>::new();
 
     // Refresh counter — bumped by manual refresh button, auto-refresh
@@ -419,7 +462,7 @@ pub fn ChartMLChart(
             // Subscribe to the trigger so future increments re-run this
             // closure. The value itself isn't used — only the side
             // effect of bumping `refresh_count` matters.
-            let _tick = trigger.get();
+            trigger.try_get();
 
             if !initial_seen_for_effect.get() {
                 initial_seen_for_effect.set(true);
@@ -452,63 +495,66 @@ pub fn ChartMLChart(
     // Set up ResizeObserver after mount; disconnect on disposal.
     // Debounce: only update container_width after resize activity stops for 200ms.
     // Matches the markdown-react plugin pattern (250ms debounce + initial grace).
-    type RoEntry = SendWrapper<Rc<RefCell<Option<(web_sys::ResizeObserver, Closure<dyn Fn(js_sys::Array)>)>>>>;
-    let resize_observer: RoEntry = SendWrapper::new(Rc::new(RefCell::new(None)));
-    let debounce_handle: SendWrapper<Rc<RefCell<Option<i32>>>> = SendWrapper::new(Rc::new(RefCell::new(None)));
+    #[cfg(target_arch = "wasm32")]
+    {
+        type RoEntry = SendWrapper<Rc<RefCell<Option<(web_sys::ResizeObserver, Closure<dyn Fn(js_sys::Array)>)>>>>;
+        let resize_observer: RoEntry = SendWrapper::new(Rc::new(RefCell::new(None)));
+        let debounce_handle: SendWrapper<Rc<RefCell<Option<i32>>>> = SendWrapper::new(Rc::new(RefCell::new(None)));
 
-    let ro_clone = resize_observer.clone();
-    let debounce_clone = debounce_handle.clone();
-    Effect::new(move || {
-        if let Some(el) = container_ref.get() {
-            // Set initial width immediately (no debounce for first measurement)
-            let width = el.client_width() as f64;
-            if width > 0.0 {
-                set_container_width.set(width);
-            }
-
-            let dh = debounce_clone.clone();
-            let cb = Closure::<dyn Fn(js_sys::Array)>::new(move |entries: js_sys::Array| {
-                if let Some(entry) = entries.get(0).dyn_ref::<web_sys::ResizeObserverEntry>() {
-                    let rect = entry.content_rect();
-                    let w = rect.width();
-                    if w > 0.0 {
-                        // Cancel any pending debounce
-                        if let Some(tid) = dh.borrow_mut().take() {
-                            web_sys::window()
-                                .expect("window must be available in WASM")
-                                .clear_timeout_with_handle(tid);
-                        }
-                        // Set new debounced timeout
-                        let cb_js = Closure::once_into_js(move || {
-                            set_container_width.set(w);
-                        });
-                        let tid = web_sys::window()
-                            .expect("window must be available in WASM")
-                            .set_timeout_with_callback_and_timeout_and_arguments_0(
-                                cb_js.unchecked_ref(), 200,
-                            ).unwrap_or(0);
-                        *dh.borrow_mut() = Some(tid);
-                    }
+        let ro_clone = resize_observer.clone();
+        let debounce_clone = debounce_handle.clone();
+        Effect::new(move || {
+            if let Some(el) = container_ref.get() {
+                // Set initial width immediately (no debounce for first measurement)
+                let width = el.client_width() as f64;
+                if width > 0.0 {
+                    set_container_width.set(width);
                 }
-            });
 
-            if let Ok(observer) = web_sys::ResizeObserver::new(cb.as_ref().unchecked_ref()) {
-                observer.observe(&el);
-                *ro_clone.borrow_mut() = Some((observer, cb));
+                let dh = debounce_clone.clone();
+                let cb = Closure::<dyn Fn(js_sys::Array)>::new(move |entries: js_sys::Array| {
+                    if let Some(entry) = entries.get(0).dyn_ref::<web_sys::ResizeObserverEntry>() {
+                        let rect = entry.content_rect();
+                        let w = rect.width();
+                        if w > 0.0 {
+                            // Cancel any pending debounce
+                            if let Some(tid) = dh.borrow_mut().take() {
+                                web_sys::window()
+                                    .expect("window must be available in WASM")
+                                    .clear_timeout_with_handle(tid);
+                            }
+                            // Set new debounced timeout
+                            let cb_js = Closure::once_into_js(move || {
+                                set_container_width.set(w);
+                            });
+                            let tid = web_sys::window()
+                                .expect("window must be available in WASM")
+                                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                                    cb_js.unchecked_ref(), 200,
+                                ).unwrap_or(0);
+                            *dh.borrow_mut() = Some(tid);
+                        }
+                    }
+                });
+
+                if let Ok(observer) = web_sys::ResizeObserver::new(cb.as_ref().unchecked_ref()) {
+                    observer.observe(&el);
+                    *ro_clone.borrow_mut() = Some((observer, cb));
+                }
             }
-        }
-    });
+        });
 
-    on_cleanup(move || {
-        if let Some((observer, _cb)) = resize_observer.borrow_mut().take() {
-            observer.disconnect();
-        }
-        if let Some(tid) = debounce_handle.borrow_mut().take() {
-            web_sys::window()
-                .expect("window must be available in WASM")
-                .clear_timeout_with_handle(tid);
-        }
-    });
+        on_cleanup(move || {
+            if let Some((observer, _cb)) = resize_observer.borrow_mut().take() {
+                observer.disconnect();
+            }
+            if let Some(tid) = debounce_handle.borrow_mut().take() {
+                web_sys::window()
+                    .expect("window must be available in WASM")
+                    .clear_timeout_with_handle(tid);
+            }
+        });
+    }
 
     // ── SVG tooltip delegation ───────────────────────────────────────────
     //
@@ -656,7 +702,12 @@ pub fn ChartMLChart(
 
     // Pull a snapshot of the chart's title from the YAML synchronously so
     // the title can render before the async pipeline completes.
-    let title_signal = Memo::new(move |_| extract_yaml_title(&spec.get()));
+    let title_signal = Memo::new(move |_| extract_yaml_title(&spec.try_get().unwrap_or_default()));
+
+    // Height the SVG will render at, resolved synchronously so the loading
+    // placeholder can reserve matching in-flow space (no layout shift).
+    let reserved_height_signal =
+        Memo::new(move |_| resolve_render_height(&spec.try_get().unwrap_or_default()));
 
     // Main fetch + transform effect. Reactive on `(spec, params, refresh_count)`.
     // Runs the new chartml-5 pipeline (`fetch` → `transform` →
@@ -669,11 +720,11 @@ pub fn ChartMLChart(
         let render_gen: Rc<Cell<u32>> = Rc::new(Cell::new(0));
         let render_gen_for_effect = render_gen.clone();
         Effect::new(move || {
-            let yaml = spec.get();
+            let Some(yaml) = spec.try_get() else { return };
             // Subscribing to refresh_count without using its value — only
             // the side effect (re-running this closure) matters.
-            let _refresh_tick = refresh_count.get();
-            let params = param_values.map(|pv| pv.get());
+            refresh_count.try_get();
+            let params = param_values.and_then(|pv| pv.try_get());
 
             if yaml.trim().is_empty() {
                 resolved.set(None);
@@ -728,6 +779,11 @@ pub fn ChartMLChart(
                         return;
                     }
                 };
+                let refreshed_at_ms = {
+                    let age = prepared.metadata.refreshed_at.elapsed()
+                        .unwrap_or(std::time::Duration::ZERO);
+                    now_ms() - (age.as_millis() as f64)
+                };
                 let svg = match chartml_async.render_prepared_to_svg(&prepared, &opts) {
                     Ok(s) => s,
                     Err(err) => {
@@ -744,7 +800,10 @@ pub fn ChartMLChart(
                 }));
                 last_error.set(None);
                 is_loading.set(false);
-                last_refreshed_ms.set(now_ms());
+                last_refreshed_ms.set(refreshed_at_ms);
+                if let Some(cb) = on_refreshed {
+                    cb.try_run(refreshed_at_ms);
+                }
             });
         });
     }
@@ -757,9 +816,9 @@ pub fn ChartMLChart(
     {
         let chartml = chartml.clone();
         Effect::new(move || {
-            let width = container_width.get();
+            let Some(width) = container_width.try_get() else { return };
             if width <= 0.0 { return; }
-            let Some(current) = resolved.get() else { return; };
+            let Some(current) = resolved.try_get().flatten() else { return; };
             if (current.width - width).abs() < 0.5 {
                 // Already rendered at this width (within sub-pixel tolerance).
                 return;
@@ -791,6 +850,7 @@ pub fn ChartMLChart(
     // the component unmounts. We also reset them when the spec changes
     // (the inner effect clears the previous interval before installing
     // a new one).
+    #[cfg(target_arch = "wasm32")]
     {
         let chartml_for_refresh = chartml.clone();
         // Holders for the active interval handle and visibility listener.
@@ -807,7 +867,7 @@ pub fn ChartMLChart(
 
         let holders_for_effect = holders.clone();
         Effect::new(move || {
-            let yaml = spec.get();
+            let Some(yaml) = spec.try_get() else { return };
             // Auto-refresh setup is driven by spec changes only — we
             // intentionally do NOT subscribe to `refresh_count` here.
             //
@@ -881,7 +941,7 @@ pub fn ChartMLChart(
             style="position: relative;"
             node_ref=container_ref
             data-last-refreshed-ms=move || {
-                let ts = last_refreshed_ms.get();
+                let ts = last_refreshed_ms.try_get().unwrap_or(0.0);
                 if ts > 0.0 { Some(format!("{}", ts)) } else { None }
             }
         >
@@ -891,7 +951,7 @@ pub fn ChartMLChart(
                 let title_style = title_style.clone();
                 move || {
                     let title_style = title_style.clone();
-                    title_signal.get().map(|t| view! {
+                    title_signal.try_get().flatten().map(|t| view! {
                         <div class="chart-title" style=title_style>
                             {t}
                         </div>
@@ -905,7 +965,7 @@ pub fn ChartMLChart(
             // width changes (resize) and after every successful resource
             // resolution.
             {move || {
-                resolved.get().map(|r| view! {
+                resolved.try_get().flatten().map(|r| view! {
                     <div class="chartml-svg-host" inner_html=r.svg></div>
                 })
             }}
@@ -914,7 +974,7 @@ pub fn ChartMLChart(
             // `refresh_count`, which the main fetch effect subscribes to
             // and re-runs the pipeline against the current YAML.
             {move || {
-                last_error.get().map(|msg| view! {
+                last_error.try_get().flatten().map(|msg| view! {
                     <div class="chartml-error" role="alert">
                         <p style="color: #dc3545; font-family: monospace; padding: 12px; background: #fff5f5; border: 1px solid #dc3545; border-radius: 4px;">
                             {msg}
@@ -935,9 +995,23 @@ pub fn ChartMLChart(
             // auto refresh (so the user gets feedback even when an old
             // SVG is still on screen).
             {move || {
-                is_loading.get().then(|| view! {
-                    <div class="chartml-loading" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
-                        <img src="/kyomi_animated_logo.svg" alt="Loading" style="width: 32px; height: 32px;" />
+                if !is_loading.try_get().unwrap_or(false) {
+                    return None;
+                }
+                // Initial load: no SVG on screen yet, so reserve in-flow height = H below
+                // the title. Re-fetch: an old SVG already holds the box open — overlay the
+                // spinner (zero flow height) so we don't reserve a SECOND H.
+                let style = if resolved.try_get().flatten().is_none() {
+                    format!(
+                        "min-height: {}px; box-sizing: border-box;",
+                        reserved_height_signal.try_get().unwrap_or(DEFAULT_CHART_HEIGHT),
+                    )
+                } else {
+                    "position: absolute; inset: 0;".to_string()
+                };
+                Some(view! {
+                    <div class="chartml-loading" style=style>
+                        <div class="chartml-spinner" />
                     </div>
                 })
             }}
@@ -951,7 +1025,7 @@ pub fn ChartMLChart(
             {
                 let tooltip = tooltip.clone();
                 move || {
-                    let state = tooltip_state.get();
+                    let state = tooltip_state.try_get().unwrap_or_default();
                     if !state.visible() {
                         return view! { <div style="display:none;" /> }.into_any();
                     }
@@ -979,6 +1053,7 @@ pub fn ChartMLChart(
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Tear down the active interval + visibility listener. Safe to call
 /// multiple times — every field is `Option<...>` and `take()`-cleared.
 fn clear_auto_refresh(holders: &SendWrapper<Rc<RefCell<AutoRefreshState>>>) {
@@ -995,6 +1070,7 @@ fn clear_auto_refresh(holders: &SendWrapper<Rc<RefCell<AutoRefreshState>>>) {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Install the interval that runs auto-refresh ticks. Called from the
 /// auto-refresh effect on initial setup, and from the visibility listener
 /// when the document goes hidden → visible. Replaces any previously
@@ -1046,6 +1122,7 @@ fn install_auto_refresh_interval(
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Install the `visibilitychange` listener. Pauses the interval when the
 /// document is hidden and re-arms it when it becomes visible. Skipped if
 /// `web_sys::window().document()` is unavailable (SSR or detached doc).
@@ -1090,6 +1167,7 @@ fn install_visibility_listener(
     holders.borrow_mut().visibility_listener = Some((target, listener));
 }
 
+#[cfg(target_arch = "wasm32")]
 /// `true` when `document.visibilityState == "hidden"`. Used both by the
 /// per-tick guard and the visibility listener so the two can never
 /// disagree.
@@ -1099,12 +1177,22 @@ fn document_is_hidden() -> bool {
     document.visibility_state() == web_sys::VisibilityState::Hidden
 }
 
-/// Wall-clock now in milliseconds since the unix epoch. Source: `Date.now()`
-/// because `SystemTime::now()` panics on `wasm32-unknown-unknown`.
+/// Wall-clock now in milliseconds since the unix epoch. On wasm32, uses
+/// `Date.now()` because `SystemTime::now()` panics on `wasm32-unknown-unknown`.
+/// On native targets, uses `SystemTime::now()`.
 fn now_ms() -> f64 {
-    js_sys::Date::now()
+    #[cfg(target_arch = "wasm32")]
+    { js_sys::Date::now() }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as f64)
+            .unwrap_or(0.0)
+    }
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Log an auto-refresh tick for a single source to the browser console at
 /// `debug` level. Browser-only AND debug-only — gated on
 /// `target_arch = "wasm32"` so native tests don't touch `web_sys::console`,
@@ -1126,6 +1214,7 @@ fn log_auto_refresh_tick(source_name: &str) {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 /// Reactive state shared between the auto-refresh effect, its interval
 /// callback, and its visibility-listener callback. Lives in a single
 /// `RefCell` so each callback can update or clear the others without
@@ -1215,6 +1304,132 @@ mod title_style_tests {
 }
 
 #[cfg(test)]
+mod extract_title_tests {
+    use super::*;
+
+    #[test]
+    fn title_before_data_is_extracted() {
+        let yaml = "\
+title: My Chart
+type: chart
+version: 1
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+visualize:
+  type: line
+  columns: day
+";
+        assert_eq!(extract_yaml_title(yaml).as_deref(), Some("My Chart"));
+    }
+
+    #[test]
+    fn title_after_data_block_is_still_extracted() {
+        // Regression: the previous line-scan broke on the first `data:` line and
+        // never reached an alphabetically-later `title:` key, dropping the title.
+        let yaml = "\
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+layout:
+  colSpan: 8
+title: Daily Visitors & Sessions
+type: chart
+version: 1
+visualize:
+  type: line
+  columns: day
+";
+        assert_eq!(
+            extract_yaml_title(yaml).as_deref(),
+            Some("Daily Visitors & Sessions"),
+        );
+    }
+
+    #[test]
+    fn missing_title_returns_none() {
+        let yaml = "\
+type: chart
+version: 1
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+visualize:
+  type: line
+  columns: day
+";
+        assert_eq!(extract_yaml_title(yaml), None);
+    }
+}
+
+#[cfg(test)]
+mod resolve_height_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_visualize_style_height_wins() {
+        // An explicit `visualize.style.height` overrides the per-type default.
+        let yaml = "\
+type: chart
+version: 1
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+visualize:
+  type: line
+  columns: day
+  style:
+    height: 300
+";
+        assert_eq!(resolve_render_height(yaml), 300.0);
+    }
+
+    #[test]
+    fn line_chart_without_style_height_uses_default() {
+        // No explicit height -> cartesian renderer's 400px default.
+        let yaml = "\
+type: chart
+version: 1
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+visualize:
+  type: line
+  columns: day
+";
+        assert_eq!(resolve_render_height(yaml), 400.0);
+    }
+
+    #[test]
+    fn metric_chart_without_style_height_uses_metric_default() {
+        // Metric cards render at 150px when no explicit height is given.
+        let yaml = "\
+type: chart
+version: 1
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+visualize:
+  type: metric
+  value: total
+";
+        assert_eq!(resolve_render_height(yaml), 150.0);
+    }
+
+    #[test]
+    fn invalid_yaml_falls_back_to_default() {
+        // Unparseable YAML can't yield a spec — fall back to the safe default
+        // rather than panicking.
+        assert_eq!(resolve_render_height("not: [valid"), 400.0);
+    }
+
+    #[test]
+    fn empty_yaml_falls_back_to_default() {
+        assert_eq!(resolve_render_height(""), 400.0);
+    }
+}
+
+#[cfg(all(test, target_arch = "wasm32"))]
 mod auto_refresh_tests {
     #![allow(clippy::unwrap_used)]
     use super::*;

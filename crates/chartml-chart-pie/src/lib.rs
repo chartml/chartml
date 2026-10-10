@@ -65,7 +65,7 @@ impl ChartRenderer for PieRenderer {
                 .cloned()
                 .unwrap_or_else(|| "#999".to_string());
 
-            let data = ElementData::new(&labels[slice.index], format!("{}", values[slice.index]))
+            let data = ElementData::new(&labels[slice.index], chartml_core::format::format_value(values[slice.index], None))
                 .with_series(&labels[slice.index]);
 
             slice_elements.push(ChartElement::Path {
@@ -74,6 +74,7 @@ impl ChartRenderer for PieRenderer {
                 stroke: Some(config.theme.bg.clone()),
                 stroke_width: Some(2.0),
                 stroke_dasharray: None,
+                stroke_dashoffset: None,
                 opacity: None,
                 class: "chartml-pie-slice".to_string(),
                 data: Some(data),

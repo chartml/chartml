@@ -102,6 +102,7 @@
 .bars rect,
 .bar {
     animation: chartml-bar-grow 400ms ease-out both;
+    transform-box: fill-box;
     transform-origin: 50% 100%;
     opacity: 0.9;
     transition: opacity 200ms ease, stroke 200ms ease, stroke-width 200ms ease;
@@ -126,6 +127,28 @@
     to   { transform: scaleX(1); }
 }
 
+/* Stacked bars: clip-path reveal on per-column groups instead of the
+ * whole wrapper. Each column gets its own animation so short and tall
+ * columns both reveal in exactly 400ms. */
+.bars-stacked-column {
+    animation: chartml-bars-reveal 400ms ease-out both;
+}
+.bars-stacked-column rect,
+.bars-stacked-column .bar {
+    animation: none;
+}
+@keyframes chartml-bars-reveal {
+    from { clip-path: inset(100% 0 0 0); }
+    to   { clip-path: inset(0); }
+}
+.chartml-horizontal .bars-stacked-column {
+    animation-name: chartml-bars-reveal-x;
+}
+@keyframes chartml-bars-reveal-x {
+    from { clip-path: inset(0 100% 0 0); }
+    to   { clip-path: inset(0); }
+}
+
 /* Bar hover */
 .bars rect:hover,
 .bar:hover {
@@ -136,8 +159,6 @@
 
 /* ── Line drawing ── */
 .chartml-line-path {
-    stroke-dasharray: 2000;
-    stroke-dashoffset: 2000;
     animation: chartml-line-draw 800ms ease-out forwards;
 }
 
@@ -207,13 +228,56 @@
     stroke-width: 2;
 }
 
-/* ── Metric card ── */
+/* ── Metric card ──
+ * The Rust renderer emits inline `style="color: var(--chartml-text-secondary, #hex)"` on
+ * metric label and trend spans. No additional class rules are needed here — the
+ * custom property already resolves via the cascade. These animation rules below
+ * are the only CSS class rules metric cards need.
+ */
 .chartml-metric-value {
     animation: chartml-fade-in 300ms ease-out both;
 }
 
 .chartml-metric-trend {
     animation: chartml-fade-in 500ms ease-out 200ms both;
+}
+
+/* ── Table chart ──
+ * The Rust renderer emits inline `style` on table elements with CSS custom
+ * property values (e.g. `color: var(--chartml-table-text, #hex)`). These class
+ * rules below are NOT needed for the inline-style override to work — they exist
+ * so consuming apps can also override table colors purely via CSS class rules
+ * if they prefer, following the same pattern as SVG chart classes above.
+ *
+ * Consuming apps set the custom properties on a parent element:
+ *   .dark { --chartml-table-header-bg: #111827; --chartml-table-border: #374151; ... }
+ */
+.chartml-table-header   { background: var(--chartml-table-header-bg, #f9fafb); }
+.chartml-table-header-cell {
+    color: var(--chartml-table-header-text, #1f2937);
+    border-bottom-color: var(--chartml-table-border, #e5e7eb);
+}
+.chartml-table-row      { background: var(--chartml-table-row-bg, #ffffff); }
+.chartml-table-row-alt  { background: var(--chartml-table-row-bg-alt, #f9fafb); }
+.chartml-table-cell {
+    color: var(--chartml-table-text, #374151);
+    border-bottom-color: var(--chartml-table-border, #e5e7eb);
+}
+.chartml-table-pager    { background: var(--chartml-table-header-bg, #f9fafb); }
+.chartml-table-pager-info { color: var(--chartml-text-secondary, #6b7280); }
+.chartml-table-body {
+    scrollbar-width: thin;
+    scrollbar-color: var(--chartml-table-border, #e5e7eb) transparent;
+}
+.chartml-table-body::-webkit-scrollbar {
+    width: 6px;
+}
+.chartml-table-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+.chartml-table-body::-webkit-scrollbar-thumb {
+    background: var(--chartml-table-border, #e5e7eb);
+    border-radius: 3px;
 }
 
 /* ── Generic keyframes ── */
@@ -225,6 +289,27 @@
 @keyframes chartml-scale-in {
     from { r: 0; opacity: 0; }
     to   { opacity: 1; }
+}
+
+/* ── Loading spinner ── */
+.chartml-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 12px;
+}
+
+.chartml-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--chartml-grid, #e0e0e0);
+    border-top-color: var(--chartml-axis-line, #374151);
+    border-radius: 50%;
+    animation: chartml-spin 0.8s linear infinite;
+}
+
+@keyframes chartml-spin {
+    to { transform: rotate(360deg); }
 }
 
 /* ── Hover effects ── */

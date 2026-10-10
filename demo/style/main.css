@@ -151,6 +151,7 @@ body {
 .bars rect,
 .bar {
     animation: chartml-bar-grow 400ms ease-out both;
+    transform-box: fill-box;
     opacity: 0.9;
     transition: opacity 200ms ease, stroke 200ms ease;
 }
@@ -171,6 +172,26 @@ body {
     to   { transform: scaleX(1); }
 }
 
+/* Stacked bars: clip-path reveal on per-column groups */
+.bars-stacked-column {
+    animation: chartml-bars-reveal 400ms ease-out both;
+}
+.bars-stacked-column rect,
+.bars-stacked-column .bar {
+    animation: none;
+}
+@keyframes chartml-bars-reveal {
+    from { clip-path: inset(100% 0 0 0); }
+    to   { clip-path: inset(0); }
+}
+.chartml-horizontal .bars-stacked-column {
+    animation-name: chartml-bars-reveal-x;
+}
+@keyframes chartml-bars-reveal-x {
+    from { clip-path: inset(0 100% 0 0); }
+    to   { clip-path: inset(0); }
+}
+
 /* Bar hover: opacity 0.9 → 1 + darker stroke border (matches D3 exactly).
    stroke color uses brightness filter on a separate outline. */
 .bars rect,
@@ -187,8 +208,6 @@ body {
 
 /* Line drawing animation via stroke-dasharray */
 .chartml-line-path {
-    stroke-dasharray: 2000;
-    stroke-dashoffset: 2000;
     animation: chartml-line-draw 800ms ease-out forwards;
 }
 

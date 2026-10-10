@@ -23,6 +23,8 @@ use std::collections::HashMap;
 // `web_time::SystemTime` is a wasm32-compatible drop-in for `std::time::SystemTime`.
 use web_time::SystemTime;
 
+use arrow::array::RecordBatch;
+use arrow::datatypes::SchemaRef;
 use indexmap::IndexMap;
 
 use crate::data::DataTable;
@@ -42,6 +44,10 @@ pub use render_options::RenderOptions;
 pub struct FetchedChart {
     pub spec: ChartSpec,
     pub sources: IndexMap<String, DataTable>,
+    /// Original provider batches per source. Populated on cache miss (from
+    /// `fetch_batches`) or from pre-registered DataTables. When present,
+    /// `transform_batches()` is called instead of `transform()`.
+    pub batch_sources: Option<IndexMap<String, (SchemaRef, Vec<RecordBatch>)>>,
     pub metadata: FetchMetadata,
 }
 

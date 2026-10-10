@@ -1,6 +1,7 @@
 use chartml_core::data::DataTable;
 use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform, ViewBox, emit_dot_halo_if_enabled};
 use chartml_core::error::ChartError;
+use indexmap::IndexMap;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
@@ -12,6 +13,27 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetri
 use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
 
 use crate::helpers::{GridConfig, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
+
+/// Position of a bar segment within a stacked bar group.
+///
+/// Controls which corners receive rounding when `theme.bar_corner_radius` is
+/// non-zero. Non-stacked bars use `None` or `Only` (all requested corners
+/// are rounded). Stacked bars use `Top` / `Bottom` / `Middle` so that only
+/// the exposed outer edges are rounded, preventing visible notches where
+/// adjacent segments meet.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum StackPosition {
+    /// Not stacked (single bar, grouped bar) — current rounding behavior.
+    None,
+    /// First (baseline-end) segment in a stack — round only the baseline edge.
+    Bottom,
+    /// Interior segment — no rounding at all.
+    Middle,
+    /// Last (value-end) segment in a stack — round only the value edge.
+    Top,
+    /// Single non-zero series in a stack — round both edges, like `None`.
+    Only,
+}
 
 /// Build a single bar element, honoring `theme.bar_corner_radius`.
 ///
@@ -37,6 +59,13 @@ pub(crate) struct BarRectSpec {
     pub fill: String,
     pub class: String,
     pub data: Option<ElementData>,
+    /// For stacked bars, the shared axis baseline coordinate.
+    /// When `Some(baseline)`, the animation origin uses this instead of the
+    /// segment's own edge so the entire stack grows uniformly from the axis.
+    pub stack_baseline: Option<f64>,
+    /// Position of this segment in a stacked bar group. Controls which
+    /// corners receive rounding. Non-stacked bars should use `StackPosition::None`.
+    pub stack_position: StackPosition,
 }
 
 /// Compute the CSS `transform-origin` anchor for a bar's entrance animation.
@@ -75,6 +104,75 @@ pub fn bar_animation_origin(
     }
 }
 
+/// Which edge of a bar rect receives two-corner rounding.
+///
+/// Used by `rounded_two_corners_path` to generate a path with arcs on
+/// exactly one edge (two corners). This consolidates the four
+/// `(is_horizontal, is_negative)` path templates so both value-end and
+/// baseline-end rounding share the same formatting code.
+#[derive(Clone, Copy)]
+enum RoundedEdge {
+    /// Two corners at y0 (top of vertical rect).
+    Top,
+    /// Two corners at y1 (bottom of vertical rect).
+    Bottom,
+    /// Two corners at x1 (right of horizontal rect).
+    Right,
+    /// Two corners at x0 (left of horizontal rect).
+    Left,
+}
+
+/// Generate a clockwise SVG path `d` string that rounds two corners on
+/// the specified `edge` of a rectangle `(x0, y0)-(x1, y1)` with radius `r`.
+///
+/// Pre-condition: `r > 0.0` and `r <= min(width, height) / 2.0`.
+fn rounded_two_corners_path(x0: f64, y0: f64, x1: f64, y1: f64, r: f64, edge: RoundedEdge) -> String {
+    match edge {
+        RoundedEdge::Top => format!(
+            "M {x0},{y0r} A {r},{r} 0 0 1 {x0r},{y0} L {x1mr},{y0} A {r},{r} 0 0 1 {x1},{y0r} L {x1},{y1} L {x0},{y1} Z",
+            x0 = x0, y0 = y0, x1 = x1, y1 = y1, r = r,
+            x0r = x0 + r, x1mr = x1 - r, y0r = y0 + r,
+        ),
+        RoundedEdge::Bottom => format!(
+            "M {x0},{y0} L {x1},{y0} L {x1},{y1mr} A {r},{r} 0 0 1 {x1mr},{y1} L {x0r},{y1} A {r},{r} 0 0 1 {x0},{y1mr} Z",
+            x0 = x0, y0 = y0, x1 = x1, y1 = y1, r = r,
+            x0r = x0 + r, x1mr = x1 - r, y1mr = y1 - r,
+        ),
+        RoundedEdge::Right => format!(
+            "M {x0},{y0} L {x1mr},{y0} A {r},{r} 0 0 1 {x1},{y0r} L {x1},{y1mr} A {r},{r} 0 0 1 {x1mr},{y1} L {x0},{y1} Z",
+            x0 = x0, y0 = y0, x1 = x1, y1 = y1, r = r,
+            x1mr = x1 - r, y0r = y0 + r, y1mr = y1 - r,
+        ),
+        RoundedEdge::Left => format!(
+            "M {x0r},{y0} L {x1},{y0} L {x1},{y1} L {x0r},{y1} A {r},{r} 0 0 1 {x0},{y1mr} L {x0},{y0r} A {r},{r} 0 0 1 {x0r},{y0} Z",
+            x0 = x0, y0 = y0, x1 = x1, y1 = y1, r = r,
+            x0r = x0 + r, y0r = y0 + r, y1mr = y1 - r,
+        ),
+    }
+}
+
+/// Determine the edge to round for the value-end of a bar (the end pointing
+/// away from the zero baseline).
+fn value_end_edge(is_horizontal: bool, is_negative: bool) -> RoundedEdge {
+    match (is_horizontal, is_negative) {
+        (false, false) => RoundedEdge::Top,
+        (false, true)  => RoundedEdge::Bottom,
+        (true,  false) => RoundedEdge::Right,
+        (true,  true)  => RoundedEdge::Left,
+    }
+}
+
+/// Determine the edge to round for the baseline-end of a bar (the end
+/// touching the zero baseline). This is the opposite edge of `value_end_edge`.
+fn baseline_end_edge(is_horizontal: bool, is_negative: bool) -> RoundedEdge {
+    match (is_horizontal, is_negative) {
+        (false, false) => RoundedEdge::Bottom,
+        (false, true)  => RoundedEdge::Top,
+        (true,  false) => RoundedEdge::Left,
+        (true,  true)  => RoundedEdge::Right,
+    }
+}
+
 pub(crate) fn build_bar_element(
     spec: BarRectSpec,
     theme: &chartml_core::theme::Theme,
@@ -82,8 +180,21 @@ pub(crate) fn build_bar_element(
     use chartml_core::theme::BarCornerRadius;
     let BarRectSpec {
         x, y, width, height, is_horizontal, is_negative, fill, class, data,
+        stack_baseline, stack_position,
     } = spec;
-    let anim_origin = Some(bar_animation_origin(x, y, width, height, is_horizontal, is_negative));
+    // Stacked bars use group-level clip-path animation (no per-element
+    // transform needed). Non-stacked bars use fill-box percentages so the
+    // origin is always correct regardless of group transforms or viewport.
+    let anim_origin = if stack_baseline.is_some() {
+        None
+    } else {
+        Some(match (is_horizontal, is_negative) {
+            (false, false) => (50.0, 100.0), // vertical positive: bottom-center
+            (false, true)  => (50.0, 0.0),   // vertical negative: top-center
+            (true,  false) => (0.0, 50.0),   // horizontal positive: left-center
+            (true,  true)  => (100.0, 50.0), // horizontal negative: right-center
+        })
+    };
 
     // Extract requested radius; short-circuit the zero case to emit a plain
     // Rect (byte-identical contract).
@@ -92,41 +203,56 @@ pub(crate) fn build_bar_element(
         BarCornerRadius::Top(r) => (r as f64, true),
     };
 
+    // Helper: emit a plain Rect with no rounding.
+    let plain_rect = |fill, class, data, anim_origin| ChartElement::Rect {
+        x, y, width, height, fill, stroke: None,
+        rx: None, ry: None, class, data, animation_origin: anim_origin,
+    };
+
     if radius <= 0.0 {
+        return plain_rect(fill, class, data, anim_origin);
+    }
+
+    // Middle segments in a stack never get rounding regardless of the
+    // theme's bar_corner_radius setting.
+    if stack_position == StackPosition::Middle {
+        return plain_rect(fill, class, data, anim_origin);
+    }
+
+    // Determine which edges (if any) need rounded-path treatment.
+    // Returns None when uniform rx/ry is sufficient (all 4 corners),
+    // or Some(edge) for two-corner rounding on a specific edge.
+    let rounded_edges: Vec<RoundedEdge> = match (top_only, stack_position) {
+        // Uniform radius, non-stacked or solo segment → all 4 corners via rx/ry
+        (false, StackPosition::None | StackPosition::Only) => vec![],
+        // Uniform radius, top of stack → only value-end edge
+        (false, StackPosition::Top) => vec![value_end_edge(is_horizontal, is_negative)],
+        // Uniform radius, bottom of stack → only baseline-end edge
+        (false, StackPosition::Bottom) => vec![baseline_end_edge(is_horizontal, is_negative)],
+
+        // Top-only radius, non-stacked or solo or top of stack → value-end edge
+        (true, StackPosition::None | StackPosition::Only | StackPosition::Top) => {
+            vec![value_end_edge(is_horizontal, is_negative)]
+        }
+        // Top-only radius, bottom of stack → baseline-end edge
+        (true, StackPosition::Bottom) => vec![baseline_end_edge(is_horizontal, is_negative)],
+
+        // Middle is already handled above
+        (_, StackPosition::Middle) => unreachable!(),
+    };
+
+    // If no specific edges → uniform rx/ry on all 4 corners (Uniform mode,
+    // non-stacked). This is the only case that emits a Rect with rx/ry.
+    if rounded_edges.is_empty() {
         return ChartElement::Rect {
-            x,
-            y,
-            width,
-            height,
-            fill,
-            stroke: None,
-            rx: None,
-            ry: None,
-            class,
-            data,
-            animation_origin: anim_origin,
+            x, y, width, height, fill, stroke: None,
+            rx: Some(radius), ry: Some(radius),
+            class, data, animation_origin: anim_origin,
         };
     }
 
-    if !top_only {
-        return ChartElement::Rect {
-            x,
-            y,
-            width,
-            height,
-            fill,
-            stroke: None,
-            rx: Some(radius),
-            ry: Some(radius),
-            class,
-            data,
-            animation_origin: anim_origin,
-        };
-    }
-
-    // Top-only rounding: emit a Path with custom d.
-    // Clamp radius to min(w,h)/2 to prevent degenerate geometry on very
-    // thin bars. debug_assert flags regressions in tests.
+    // Path-based rounding: clamp radius to min(w,h)/2 to prevent degenerate
+    // geometry on very thin bars.
     let max_r = (width.min(height) / 2.0).max(0.0);
     debug_assert!(
         radius <= max_r + 1e-9 || width <= 0.0 || height <= 0.0,
@@ -135,67 +261,17 @@ pub(crate) fn build_bar_element(
     );
     let r = radius.min(max_r);
 
-    // Degenerate zero-dimension bars (e.g. a value-at-zero bar that has
-    // height 0 on vertical orientation) collapse to a plain Rect. Emitting
-    // an arc of radius 0 would pollute the path string and confuse
-    // consumers.
+    // Degenerate zero-dimension bars collapse to a plain Rect.
     if r <= 0.0 {
-        return ChartElement::Rect {
-            x,
-            y,
-            width,
-            height,
-            fill,
-            stroke: None,
-            rx: None,
-            ry: None,
-            class,
-            data,
-            animation_origin: anim_origin,
-        };
+        return plain_rect(fill, class, data, anim_origin);
     }
 
-    // Absolute coordinates of the rect corners.
     let x0 = x;
     let y0 = y;
     let x1 = x + width;
     let y1 = y + height;
 
-    // Which two corners get rounded:
-    //   vertical + !negative → top two   (y0 edge)
-    //   vertical +  negative → bottom two (y1 edge)
-    //   horizontal + !negative → right two (x1 edge)
-    //   horizontal +  negative → left two  (x0 edge)
-    //
-    // Path is always traced clockwise starting from the corner immediately
-    // counter-clockwise of the first rounded corner, so the arc sweep flag
-    // is always 1 (clockwise).
-    let d = match (is_horizontal, is_negative) {
-        // Vertical, top rounding (two corners at y0)
-        (false, false) => format!(
-            "M {x0},{y0r} A {r},{r} 0 0 1 {x0r},{y0} L {x1mr},{y0} A {r},{r} 0 0 1 {x1},{y0r} L {x1},{y1} L {x0},{y1} Z",
-            x0 = x0, y0 = y0, x1 = x1, y1 = y1, r = r,
-            x0r = x0 + r, x1mr = x1 - r, y0r = y0 + r,
-        ),
-        // Vertical, negative value → bottom rounding (two corners at y1)
-        (false, true) => format!(
-            "M {x0},{y0} L {x1},{y0} L {x1},{y1mr} A {r},{r} 0 0 1 {x1mr},{y1} L {x0r},{y1} A {r},{r} 0 0 1 {x0},{y1mr} Z",
-            x0 = x0, y0 = y0, x1 = x1, y1 = y1, r = r,
-            x0r = x0 + r, x1mr = x1 - r, y1mr = y1 - r,
-        ),
-        // Horizontal, positive value → right-end rounding (two corners at x1)
-        (true, false) => format!(
-            "M {x0},{y0} L {x1mr},{y0} A {r},{r} 0 0 1 {x1},{y0r} L {x1},{y1mr} A {r},{r} 0 0 1 {x1mr},{y1} L {x0},{y1} Z",
-            x0 = x0, y0 = y0, x1 = x1, y1 = y1, r = r,
-            x1mr = x1 - r, y0r = y0 + r, y1mr = y1 - r,
-        ),
-        // Horizontal, negative value → left-end rounding (two corners at x0)
-        (true, true) => format!(
-            "M {x0r},{y0} L {x1},{y0} L {x1},{y1} L {x0r},{y1} A {r},{r} 0 0 1 {x0},{y1mr} L {x0},{y0r} A {r},{r} 0 0 1 {x0r},{y0} Z",
-            x0 = x0, y0 = y0, x1 = x1, y1 = y1, r = r,
-            x0r = x0 + r, y0r = y0 + r, y1mr = y1 - r,
-        ),
-    };
+    let d = rounded_two_corners_path(x0, y0, x1, y1, r, rounded_edges[0]);
 
     ChartElement::Path {
         d,
@@ -203,11 +279,85 @@ pub(crate) fn build_bar_element(
         stroke: None,
         stroke_width: None,
         stroke_dasharray: None,
+        stroke_dashoffset: None,
         opacity: None,
         class,
         data,
         animation_origin: anim_origin,
     }
+}
+
+/// Compute a map from `(category_key, series_name)` to `StackPosition` for
+/// a set of stacked points.
+///
+/// For each category, we find the non-zero-height segments and assign:
+/// - Single non-zero segment → `Only`
+/// - First non-zero (lowest y0) → `Bottom`
+/// - Last non-zero (highest y1) → `Top`
+/// - Everything in between → `Middle`
+/// - Zero-value segments → `Middle` (they produce degenerate/invisible bars)
+fn compute_stack_positions(
+    stacked_points: &[chartml_core::layout::stack::StackedPoint],
+) -> std::collections::HashMap<(String, String), StackPosition> {
+    use std::collections::HashMap;
+
+    // Group points by category key and collect (series_name, y0, y1, value) tuples
+    let mut by_category: HashMap<String, Vec<(String, f64, f64, f64)>> = HashMap::new();
+    for p in stacked_points {
+        by_category
+            .entry(p.key.clone())
+            .or_default()
+            .push((p.series.clone(), p.y0, p.y1, p.value));
+    }
+
+    let mut positions: HashMap<(String, String), StackPosition> = HashMap::new();
+
+    for (key, segments) in &by_category {
+        // Filter to non-zero-height segments (segments with effectively zero
+        // height contribute nothing visually)
+        let non_zero: Vec<&(String, f64, f64, f64)> = segments
+            .iter()
+            .filter(|(_, y0, y1, _)| (y1 - y0).abs() > 1e-9)
+            .collect();
+
+        let non_zero_count = non_zero.len();
+
+        for (series, y0, y1, _) in segments {
+            let is_non_zero = (y1 - y0).abs() > 1e-9;
+            let pos = if !is_non_zero {
+                // Zero-height segments get no rounding (they're invisible anyway)
+                StackPosition::Middle
+            } else if non_zero_count == 1 {
+                StackPosition::Only
+            } else {
+                // Find the position of this series among the non-zero ones.
+                // The "bottom" is the one with the smallest y0, the "top" has
+                // the largest y1.
+                let is_bottom = non_zero
+                    .iter()
+                    .all(|(_, other_y0, _, _)| *y0 <= *other_y0 + 1e-9);
+                let is_top = non_zero
+                    .iter()
+                    .all(|(_, _, other_y1, _)| *y1 >= *other_y1 - 1e-9);
+
+                if is_bottom && is_top {
+                    // Should not happen with non_zero_count > 1 under normal
+                    // circumstances, but be defensive
+                    StackPosition::Only
+                } else if is_bottom {
+                    StackPosition::Bottom
+                } else if is_top {
+                    StackPosition::Top
+                } else {
+                    StackPosition::Middle
+                }
+            };
+
+            positions.insert((key.clone(), series.clone()), pos);
+        }
+    }
+
+    positions
 }
 
 struct SingleSeriesBarParams<'a> {
@@ -646,8 +796,9 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         children: axis_elements,
     });
 
+    let bars_class = if is_stacked { "bars bars-stacked" } else { "bars" };
     children.push(ChartElement::Group {
-        class: "bars".to_string(),
+        class: bars_class.to_string(),
         transform: Some(Transform::Translate(margins.left, margins.top)),
         children: bar_elements,
     });
@@ -769,6 +920,8 @@ fn render_single_series_bars(
                     fill: fill_color.clone(),
                     class: "bar bar-rect".to_string(),
                     data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
+                    stack_baseline: None,
+                    stack_position: StackPosition::None,
                 },
                 &config.theme,
             ));
@@ -795,7 +948,7 @@ fn render_single_series_bars(
                 None => continue,
             };
             let bar_val_y = linear.map(val);
-            let bar_zero_y = linear.map(0.0);
+            let bar_zero_y = linear.map(domain_min.max(0.0));
             let bar_height = (bar_zero_y - bar_val_y).abs();
             // For positive bars, rect y is at the value (above zero line).
             // For negative bars, rect y is at zero line (bar extends downward).
@@ -812,6 +965,8 @@ fn render_single_series_bars(
                     fill: fill_color.clone(),
                     class: "bar bar-rect".to_string(),
                     data: Some(ElementData::new(&cat, format_value(val, y_fmt_ref))),
+                    stack_baseline: None,
+                    stack_position: StackPosition::None,
                 },
                 &config.theme,
             ));
@@ -904,6 +1059,7 @@ fn render_multi_series_bars(
             StackLayout::new()
         };
         let stacked_points = stack.layout(categories, &series_names, &values_matrix);
+        let stack_positions = compute_stack_positions(&stacked_points);
 
         // For normalized mode, domain is 0-1; for regular stacked, use the raw max.
         let (effective_min, effective_max) = if is_normalized {
@@ -924,7 +1080,9 @@ fn render_multi_series_bars(
             let linear = ScaleLinear::new((effective_min, effective_max), (0.0, inner_width));
             let bar_render_height = band.bandwidth().min(40.0);
             let y_inset = (band.bandwidth() - bar_render_height) / 2.0;
+            let baseline_x = linear.map(effective_min.max(0.0));
 
+            let mut column_map: IndexMap<String, Vec<ChartElement>> = IndexMap::new();
             for point in &stacked_points {
                 let y = match band.map(&point.key) {
                     Some(y) => y,
@@ -941,7 +1099,12 @@ fn render_multi_series_bars(
                     .cloned()
                     .unwrap_or_else(|| "#2E7D9A".to_string());
 
-                elements.push(build_bar_element(
+                let sp = stack_positions
+                    .get(&(point.key.clone(), point.series.clone()))
+                    .copied()
+                    .unwrap_or(StackPosition::None);
+
+                column_map.entry(point.key.clone()).or_default().push(build_bar_element(
                     BarRectSpec {
                         x: x_left.min(x_right),
                         y: y + y_inset,
@@ -955,9 +1118,18 @@ fn render_multi_series_bars(
                             ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
                                 .with_series(&point.series),
                         ),
+                        stack_baseline: Some(baseline_x),
+                        stack_position: sp,
                     },
                     &config.theme,
                 ));
+            }
+            for (_key, category_bars) in column_map {
+                elements.push(ChartElement::Group {
+                    class: "bars-stacked-column".to_string(),
+                    transform: None,
+                    children: category_bars,
+                });
             }
         } else {
             // Vertical stacked: band on x-axis (width), linear on y-axis (height)
@@ -968,7 +1140,9 @@ fn render_multi_series_bars(
             let max_bar_width = inner_width * 0.2;
             let bar_render_width = band.bandwidth().min(max_bar_width);
             let x_inset = (band.bandwidth() - bar_render_width) / 2.0;
+            let baseline_y = linear.map(effective_min.max(0.0));
 
+            let mut column_map: IndexMap<String, Vec<ChartElement>> = IndexMap::new();
             for point in &stacked_points {
                 let x = match band.map(&point.key) {
                     Some(x) => x,
@@ -985,7 +1159,12 @@ fn render_multi_series_bars(
                     .cloned()
                     .unwrap_or_else(|| "#2E7D9A".to_string());
 
-                elements.push(build_bar_element(
+                let sp = stack_positions
+                    .get(&(point.key.clone(), point.series.clone()))
+                    .copied()
+                    .unwrap_or(StackPosition::None);
+
+                column_map.entry(point.key.clone()).or_default().push(build_bar_element(
                     BarRectSpec {
                         x: x + x_inset,
                         y: y_top,
@@ -999,9 +1178,18 @@ fn render_multi_series_bars(
                             ElementData::new(&point.key, format_value(point.value, y_fmt_ref))
                                 .with_series(&point.series),
                         ),
+                        stack_baseline: Some(baseline_y),
+                        stack_position: sp,
                     },
                     &config.theme,
                 ));
+            }
+            for (_key, category_bars) in column_map {
+                elements.push(ChartElement::Group {
+                    class: "bars-stacked-column".to_string(),
+                    transform: None,
+                    children: category_bars,
+                });
             }
         }
 
@@ -1015,14 +1203,31 @@ fn render_multi_series_bars(
         let value_max = if value_max <= 0.0 { 1.0 } else { value_max };
         let effective_max = if domain_max < f64::MAX { domain_max } else { value_max };
 
-        let num_series = series_names.len().max(1);
+        // Build per-category series presence map (unique, insertion-ordered).
+        // When color == category, each category has only 1 series; bars should
+        // be sized and centered based on that local count, not the global one.
+        let mut category_series: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+        for i in 0..data.num_rows() {
+            let cat = match data.get_string(i, category_field) {
+                Some(c) => c,
+                None => continue,
+            };
+            let series = match data.get_string(i, color_field) {
+                Some(s) => s,
+                None => continue,
+            };
+            let present = category_series.entry(cat).or_default();
+            if !present.contains(&series) {
+                present.push(series);
+            }
+        }
 
         if is_horizontal {
             // Horizontal grouped: band on y-axis (height), linear on x-axis (width)
             let band = ScaleBand::new(categories.to_vec(), (0.0, inner_height))
                 .padding(0.05);
             let linear = ScaleLinear::new((domain_min, effective_max), (0.0, inner_width));
-            let sub_band_height = band.bandwidth() / num_series as f64;
 
             for i in 0..data.num_rows() {
                 let cat = match data.get_string(i, category_field) {
@@ -1039,10 +1244,26 @@ fn render_multi_series_bars(
                     Some(y) => y,
                     None => continue,
                 };
-                let series_idx = series_names.iter().position(|s| s == &series).unwrap_or(0);
-                let y = y_base + series_idx as f64 * sub_band_height;
 
-                let bar_left = linear.map(0.0);
+                // Per-category sizing: divide the band by how many series
+                // are actually present in this category.
+                let local_series = category_series.get(&cat);
+                let local_count = local_series.map_or(1, |v| v.len()).max(1);
+                let sub_band_height = band.bandwidth() / local_count as f64;
+
+                // Cap individual bar height (matches single-series horizontal
+                // capping at 40px) and center within sub-band.
+                let bar_render_height = sub_band_height.min(40.0);
+                let y_inset = (sub_band_height - bar_render_height) / 2.0;
+
+                let local_idx = local_series
+                    .and_then(|v| v.iter().position(|s| s == &series))
+                    .unwrap_or(0);
+                let y = y_base + local_idx as f64 * sub_band_height + y_inset;
+
+                let series_idx = series_names.iter().position(|s| s == &series).unwrap_or(0);
+
+                let bar_left = linear.map(domain_min.max(0.0));
                 let bar_right = linear.map(val);
                 let bar_width = (bar_right - bar_left).abs();
 
@@ -1057,7 +1278,7 @@ fn render_multi_series_bars(
                         x: bar_left.min(bar_right),
                         y,
                         width: bar_width,
-                        height: sub_band_height,
+                        height: bar_render_height,
                         is_horizontal: true,
                         is_negative: val < 0.0,
                         fill,
@@ -1066,6 +1287,8 @@ fn render_multi_series_bars(
                             ElementData::new(&cat, format_value(val, y_fmt_ref))
                                 .with_series(&series),
                         ),
+                        stack_baseline: None,
+                        stack_position: StackPosition::None,
                     },
                     &config.theme,
                 ));
@@ -1075,7 +1298,9 @@ fn render_multi_series_bars(
             let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
                 .padding(0.05);
             let linear = ScaleLinear::new((domain_min, effective_max), (inner_height, 0.0));
-            let sub_band_width = band.bandwidth() / num_series as f64;
+
+            // Max bar width cap (matches single-series vertical path).
+            let max_bar_width = inner_width * 0.2;
 
             for i in 0..data.num_rows() {
                 let cat = match data.get_string(i, category_field) {
@@ -1092,11 +1317,26 @@ fn render_multi_series_bars(
                     Some(x) => x,
                     None => continue,
                 };
+
+                // Per-category sizing: divide the band by how many series
+                // are actually present in this category.
+                let local_series = category_series.get(&cat);
+                let local_count = local_series.map_or(1, |v| v.len()).max(1);
+                let sub_band_width = band.bandwidth() / local_count as f64;
+
+                // Cap individual bar width and center within sub-band.
+                let bar_render_width = sub_band_width.min(max_bar_width);
+                let x_inset = (sub_band_width - bar_render_width) / 2.0;
+
+                let local_idx = local_series
+                    .and_then(|v| v.iter().position(|s| s == &series))
+                    .unwrap_or(0);
+                let x = x_base + local_idx as f64 * sub_band_width + x_inset;
+
                 let series_idx = series_names.iter().position(|s| s == &series).unwrap_or(0);
-                let x = x_base + series_idx as f64 * sub_band_width;
 
                 let bar_top = linear.map(val);
-                let bar_bottom = linear.map(0.0);
+                let bar_bottom = linear.map(domain_min.max(0.0));
                 let bar_height = (bar_bottom - bar_top).abs();
 
                 let fill = config
@@ -1109,7 +1349,7 @@ fn render_multi_series_bars(
                     BarRectSpec {
                         x,
                         y: bar_top,
-                        width: sub_band_width,
+                        width: bar_render_width,
                         height: bar_height,
                         is_horizontal: false,
                         is_negative: val < 0.0,
@@ -1119,6 +1359,8 @@ fn render_multi_series_bars(
                             ElementData::new(&cat, format_value(val, y_fmt_ref))
                                 .with_series(&series),
                         ),
+                        stack_baseline: None,
+                        stack_position: StackPosition::None,
                     },
                     &config.theme,
                 ));
@@ -1454,9 +1696,11 @@ fn render_combo(
 
             let stack = StackLayout::new();
             let stacked_points = stack.layout(&categories, &color_series, &values_matrix);
+            let combo_stack_positions = compute_stack_positions(&stacked_points);
 
             let bar_render_width = bandwidth.min(max_bar_width);
             let x_inset = (bandwidth - bar_render_width) / 2.0;
+            let combo_baseline_y = scale.map(left_domain_min.max(0.0)) + margins.top;
 
             for point in &stacked_points {
                 let x = match band.map(&point.key) { Some(x) => x, None => continue };
@@ -1466,6 +1710,11 @@ fn render_combo(
 
                 let series_idx = color_series.iter().position(|s| s == &point.series).unwrap_or(0);
                 let fill = config.colors.get(series_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string());
+
+                let sp = combo_stack_positions
+                    .get(&(point.key.clone(), point.series.clone()))
+                    .copied()
+                    .unwrap_or(StackPosition::None);
 
                 mark_elements.push(build_bar_element(
                     BarRectSpec {
@@ -1481,6 +1730,8 @@ fn render_combo(
                             ElementData::new(&point.key, format_value(point.value, fmt_ref))
                                 .with_series(&point.series),
                         ),
+                        stack_baseline: Some(combo_baseline_y),
+                        stack_position: sp,
                     },
                     &config.theme,
                 ));
@@ -1536,7 +1787,12 @@ fn render_combo(
                     let x = match band.map(&cat) { Some(x) => x, None => continue };
                     let bar_x = x + combo_x_inset + this_bar_idx as f64 * (sub_bar_width + sub_bar_padding);
                     let bar_val_y = scale.map(val);
-                    let bar_zero_y = scale.map(0.0);
+                    let domain_floor = if is_right {
+                        right_scale.as_ref().map(|s| s.domain().0).unwrap_or(0.0)
+                    } else {
+                        left_domain_min
+                    };
+                    let bar_zero_y = scale.map(domain_floor.max(0.0));
                     let bar_height = (bar_zero_y - bar_val_y).abs();
                     let rect_y = bar_val_y.min(bar_zero_y);
 
@@ -1554,6 +1810,8 @@ fn render_combo(
                                 ElementData::new(&cat, format_value(val, fmt_ref))
                                     .with_series(&label),
                             ),
+                            stack_baseline: None,
+                            stack_position: StackPosition::None,
                         },
                         &config.theme,
                     ));
@@ -1599,6 +1857,7 @@ fn render_combo(
                     mark_elements.push(ChartElement::Path {
                         d: path_d, fill: None, stroke: Some(color.clone()),
                         stroke_width: Some(config.theme.series_line_weight as f64), stroke_dasharray: None,
+                        stroke_dashoffset: None,
                         opacity: None,
                         class: "chartml-line-path series-line".to_string(),
                         data: Some(ElementData::new(&label, "").with_series(&label)),

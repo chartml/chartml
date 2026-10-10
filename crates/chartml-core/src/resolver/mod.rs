@@ -3,8 +3,10 @@
 //!
 //! The resolver owns:
 //! - **Tier-1 cache** — a `MemoryBackend` always present.
-//! - **Tier-2 cache** — optional [`CacheBackendRef`] (populated in
-//!   phase 3b by `IndexedDbBackend`; phase 3 leaves it `None`).
+//! - **Tier-2 cache** — a [`PersistentSlot`] that is either `None` (no
+//!   persistent cache), `Ready` (backend constructed), or `Deferred`
+//!   (lazy factory awaiting first `fetch()` to initialize — used for
+//!   `IndexedDbBackend` whose async constructor can't run at setup time).
 //! - **In-flight tracker** — a `HashMap<u64, Shared<BoxFuture<...>>>` so two
 //!   concurrent fetches for the same key share one provider invocation.
 //! - **Provider registry** — `HashMap<String, Arc<dyn DataSourceProvider>>`,
@@ -15,6 +17,9 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+
+use arrow::array::RecordBatch;
+use arrow::datatypes::SchemaRef;
 // `web_time::SystemTime` works on `wasm32-unknown-unknown` (where the std
 // version panics). On native it's a transparent alias for `std::time`.
 use std::time::Duration;
@@ -165,6 +170,23 @@ pub trait DataSourceProvider: Send + Sync {
     /// providers only see this single call per actual upstream invocation.
     async fn fetch(&self, request: FetchRequest) -> Result<FetchResult, FetchError>;
 
+    /// Batch-oriented fetch. Returns multiple RecordBatches with a shared
+    /// schema, allowing the transform layer to register them into MemTable
+    /// without concatenation.
+    ///
+    /// Default wraps `fetch()` into a single-batch result. Override to
+    /// stream batches from an HTTP endpoint (e.g. Arrow IPC stream).
+    async fn fetch_batches(&self, request: FetchRequest) -> Result<FetchBatchResult, FetchError> {
+        let result = self.fetch(request).await?;
+        let schema = result.data.schema();
+        let batch = result.data.into_record_batch();
+        Ok(FetchBatchResult {
+            schema,
+            batches: vec![batch],
+            metadata: result.metadata,
+        })
+    }
+
     /// Optional graceful shutdown hook. Called by `ChartML::shutdown()` on
     /// SSR request end / tab close. Default no-op so providers that hold no
     /// pooled resources don't have to implement it.
@@ -203,6 +225,16 @@ pub struct FetchResult {
     pub data: DataTable,
     /// Free-form per-provider metadata — `bytes_billed`, `rows_returned`,
     /// `server_refreshed_at`, `upstream_cache_hit`, `warnings`, etc.
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Batch-oriented provider response. Carries multiple RecordBatches with a
+/// shared schema, allowing the transform layer to register them into
+/// MemTable without concatenation.
+#[derive(Debug, Clone)]
+pub struct FetchBatchResult {
+    pub schema: SchemaRef,
+    pub batches: Vec<RecordBatch>,
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
@@ -311,6 +343,10 @@ impl CacheConfig {
 pub struct ResolveOutcome {
     pub result: FetchResult,
     pub cache_hit: bool,
+    /// Original provider batches. `Some` on cache miss (when the provider
+    /// returned via `fetch_batches`), `None` on cache hit. Allows the
+    /// transform layer to register batches into MemTable without concat.
+    pub batches: Option<FetchBatchResult>,
 }
 
 /// Tag prefix for source-slug-based bulk invalidation. Public so consumers
@@ -336,6 +372,29 @@ pub type ResolverRef = SharedRef<Resolver>;
 /// without tripping `clippy::arc_with_non_send_sync`.
 pub type CacheBackendRef = SharedRef<dyn CacheBackend>;
 
+/// State of the optional tier-2 (persistent) cache slot. Supports both
+/// eagerly-constructed backends (`Ready`) and lazy factories (`Deferred`)
+/// whose async construction is deferred to the first `fetch()`.
+enum PersistentSlot {
+    /// No persistent cache configured.
+    None,
+    /// Backend already constructed and ready to use.
+    Ready(CacheBackendRef),
+    /// Lazy factory — will be invoked on the first `fetch()` call. The inner
+    /// `Option` is `take()`-d once so only one caller runs the factory;
+    /// concurrent callers that find `None` inside skip tier-2 for that fetch.
+    Deferred(Option<BoxPersistentFactory>),
+}
+
+/// Boxed lazy factory for the persistent cache backend.
+/// On native the closure and its returned future must be `Send` so the
+/// resolver stays compatible with `tokio::spawn`. On WASM `?Send` is fine
+/// because the runtime is single-threaded.
+#[cfg(not(target_arch = "wasm32"))]
+type BoxPersistentFactory = Box<dyn FnOnce() -> ResolverFuture<Option<CacheBackendRef>> + Send>;
+#[cfg(target_arch = "wasm32")]
+type BoxPersistentFactory = Box<dyn FnOnce() -> ResolverFuture<Option<CacheBackendRef>>>;
+
 /// Provider dispatch + cache + dedup orchestration.
 ///
 /// One `Resolver` per `ChartML` instance. The resolver is held inside
@@ -360,9 +419,10 @@ pub struct Resolver {
     /// and would trip `clippy::arc_with_non_send_sync` if forced into
     /// `std::sync::Arc`.
     primary: Lock<CacheBackendRef>,
-    /// Tier-2 (persistent) cache. `None` in phase 3 — phase 3b populates it
-    /// with `IndexedDbBackend` for browser consumers.
-    persistent: Lock<Option<CacheBackendRef>>,
+    /// Tier-2 (persistent) cache. Starts as `PersistentSlot::None`; populated
+    /// eagerly via `set_persistent_cache` (`Ready`) or lazily via
+    /// `set_persistent_cache_factory` (`Deferred` — resolved on first fetch).
+    persistent: Lock<PersistentSlot>,
     inflight: SharedRef<Lock<HashMap<u64, SharedFetch>>>,
     providers: Lock<HashMap<String, Arc<dyn DataSourceProvider>>>,
     /// Optional hook impl. Wrapped in `Lock<Option<...>>` so `set_hooks`
@@ -415,7 +475,16 @@ struct InvalidationTracker {
 /// inner `ResolverFuture` is `BoxFuture` (Send) on native and
 /// `LocalBoxFuture` (?Send) on WASM so we don't conflict with the
 /// `?Send` async traits the providers and cache backends use.
-type SharedFetch = Shared<ResolverFuture<Result<FetchResult, FetchError>>>;
+///
+/// Provider invocation result carried inside the in-flight dedup future.
+/// Holds the DataTable (for caching) plus optional original batches.
+#[derive(Debug, Clone)]
+struct FetchWithBatches {
+    result: FetchResult,
+    batches: Option<FetchBatchResult>,
+}
+
+type SharedFetch = Shared<ResolverFuture<Result<FetchWithBatches, FetchError>>>;
 
 impl Default for Resolver {
     fn default() -> Self {
@@ -425,7 +494,14 @@ impl Default for Resolver {
 
 impl std::fmt::Debug for Resolver {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let has_persistent = self.persistent.read_lock("persistent cache").is_some();
+        let persistent_state = {
+            let guard = self.persistent.read_lock("persistent cache");
+            match &*guard {
+                PersistentSlot::None => "none",
+                PersistentSlot::Ready(_) => "ready",
+                PersistentSlot::Deferred(_) => "deferred",
+            }
+        };
         let provider_keys: Vec<String> = self
             .providers
             .read_lock("providers")
@@ -434,7 +510,7 @@ impl std::fmt::Debug for Resolver {
             .collect();
         f.debug_struct("Resolver")
             .field("memory", &self.memory)
-            .field("has_persistent", &has_persistent)
+            .field("persistent", &persistent_state)
             .field("providers", &provider_keys)
             .finish_non_exhaustive()
     }
@@ -450,7 +526,7 @@ impl Resolver {
         Self {
             memory,
             primary: Lock::new(primary),
-            persistent: Lock::new(None),
+            persistent: Lock::new(PersistentSlot::None),
             inflight: SharedRef::new(Lock::new(HashMap::new())),
             providers: Lock::new(HashMap::new()),
             hooks: Lock::new(None),
@@ -466,12 +542,68 @@ impl Resolver {
         *guard = backend;
     }
 
-    /// Set the optional tier-2 (persistent) cache. Phase 3 leaves this
-    /// public so phase 3b's `IndexedDbBackend` can wire in without further
-    /// surface changes.
+    /// Set the tier-2 (persistent) cache to an already-constructed backend.
+    /// Immediately marks the slot as `Ready` — no lazy resolution needed.
     pub fn set_persistent_cache(&self, backend: CacheBackendRef) {
         let mut guard = self.persistent.write_lock("persistent cache");
-        *guard = Some(backend);
+        *guard = PersistentSlot::Ready(backend);
+    }
+
+    /// Set the tier-2 (persistent) cache to a lazy factory. The factory is
+    /// invoked on the first `fetch()` call; until then the slot stays
+    /// `Deferred` and sync invalidation/shutdown paths skip tier-2 (the
+    /// backend doesn't exist yet, so there is nothing to invalidate).
+    ///
+    /// This exists because on WASM `IndexedDbBackend::new()` is async — it
+    /// can't be ready at `ChartML` construction time. The factory defers the
+    /// database open until the first fetch needs it.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_persistent_cache_factory<F, Fut>(&self, factory: F)
+    where
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = Option<CacheBackendRef>> + Send + 'static,
+    {
+        let mut guard = self.persistent.write_lock("persistent cache");
+        *guard = PersistentSlot::Deferred(Some(Box::new(move || Box::pin(factory()))));
+    }
+
+    /// Set the tier-2 (persistent) cache to a lazy factory. The factory is
+    /// invoked on the first `fetch()` call; until then the slot stays
+    /// `Deferred` and sync invalidation/shutdown paths skip tier-2 (the
+    /// backend doesn't exist yet, so there is nothing to invalidate).
+    ///
+    /// WASM variant — no `Send` bound on the closure or its returned future,
+    /// matching the single-threaded `wasm32-unknown-unknown` runtime.
+    #[cfg(target_arch = "wasm32")]
+    pub fn set_persistent_cache_factory<F, Fut>(&self, factory: F)
+    where
+        F: FnOnce() -> Fut + 'static,
+        Fut: std::future::Future<Output = Option<CacheBackendRef>> + 'static,
+    {
+        let mut guard = self.persistent.write_lock("persistent cache");
+        *guard = PersistentSlot::Deferred(Some(Box::new(move || Box::pin(factory()))));
+    }
+
+    /// Enable IndexedDB-backed persistent caching. The database is opened
+    /// lazily on the first fetch. `db_name` is the IDB database name,
+    /// `namespace` isolates entries (e.g. per-workspace).
+    ///
+    /// This is a convenience wrapper around `set_persistent_cache_factory`
+    /// using the built-in `IndexedDbBackend`.
+    #[cfg(all(target_arch = "wasm32", feature = "wasm-indexeddb"))]
+    pub fn enable_indexeddb_cache(&self, db_name: &str, namespace: &str) {
+        let db = db_name.to_string();
+        let ns = namespace.to_string();
+        self.set_persistent_cache_factory(move || async move {
+            use crate::resolver::backends::indexeddb::IndexedDbBackend;
+            match IndexedDbBackend::new(&db, &ns).await {
+                Ok(backend) => Some(SharedRef::new(backend) as CacheBackendRef),
+                Err(e) => {
+                    tracing::warn!(error = %e, "IndexedDB cache unavailable");
+                    None
+                }
+            }
+        });
     }
 
     /// Register a [`ResolverHooks`] impl. Replaces any previously registered
@@ -507,11 +639,60 @@ impl Resolver {
         self.primary.read_lock("primary cache").clone()
     }
 
-    /// Snapshot the optional tier-2 cache handle (or `None`) for the same
-    /// reason `primary_snapshot` exists — release the sync lock before
-    /// the async cache call.
-    fn persistent_snapshot(&self) -> Option<CacheBackendRef> {
-        self.persistent.read_lock("persistent cache").clone()
+    /// Resolve the tier-2 cache, lazily initializing the factory if needed.
+    /// Returns the backend handle (or `None`). Used by `fetch()` — the only
+    /// path that should trigger lazy init.
+    ///
+    /// Lock discipline: the sync lock is NEVER held across an `.await`.
+    /// The factory closure is `take()`-d under a write lock, the lock is
+    /// dropped, then the factory's returned future is awaited. The result
+    /// is written back under a fresh write lock.
+    async fn resolve_persistent(&self) -> Option<CacheBackendRef> {
+        // Fast path — no write lock needed
+        {
+            let guard = self.persistent.read_lock("persistent cache");
+            match &*guard {
+                PersistentSlot::None => return None,
+                PersistentSlot::Ready(b) => return Some(b.clone()),
+                PersistentSlot::Deferred(_) => {} // fall through to slow path
+            }
+        }
+
+        // Slow path — take the factory under write lock, release, then await
+        let factory = {
+            let mut guard = self.persistent.write_lock("persistent cache");
+            match &mut *guard {
+                PersistentSlot::Deferred(opt) => opt.take(),
+                PersistentSlot::Ready(b) => return Some(b.clone()),
+                PersistentSlot::None => return None,
+            }
+        };
+
+        let Some(factory) = factory else {
+            // Another caller already took the factory; skip tier-2 for this fetch
+            return None;
+        };
+
+        let result = factory().await;
+        let mut guard = self.persistent.write_lock("persistent cache");
+        match &result {
+            Some(backend) => *guard = PersistentSlot::Ready(backend.clone()),
+            None => *guard = PersistentSlot::None,
+        }
+        result
+    }
+
+    /// Sync snapshot of the tier-2 cache — returns `Some` only if the slot
+    /// is already `Ready`. Does NOT trigger lazy initialization. Used by
+    /// invalidation and shutdown paths where we must not start an async
+    /// factory (the backend doesn't exist yet, so there is nothing to
+    /// invalidate or shut down).
+    fn persistent_snapshot_if_ready(&self) -> Option<CacheBackendRef> {
+        let guard = self.persistent.read_lock("persistent cache");
+        match &*guard {
+            PersistentSlot::Ready(b) => Some(b.clone()),
+            _ => None,
+        }
     }
 
     /// Register a provider under a dispatch key (`"inline"`, `"http"`,
@@ -588,7 +769,7 @@ impl Resolver {
         request: FetchRequest,
     ) -> Result<ResolveOutcome, FetchError> {
         let primary = self.primary_snapshot();
-        let persistent = self.persistent_snapshot();
+        let persistent = self.resolve_persistent().await;
         // Snapshot the hooks `HooksRef` ONCE up front so the hooks lock is
         // never held across an `.await` and downstream sites can share the
         // same clone without re-acquiring.
@@ -601,12 +782,15 @@ impl Resolver {
             if !entry.is_expired() {
                 let age = entry.age();
                 emit_cache_hit(&hooks, key, &source_name, hooks::CacheTier::Memory, age);
+                let mut metadata = entry.metadata;
+                inject_fetched_at(&mut metadata, &entry.fetched_at);
                 return Ok(ResolveOutcome {
                     result: FetchResult {
                         data: entry.data,
-                        metadata: entry.metadata,
+                        metadata,
                     },
                     cache_hit: true,
+                    batches: None,
                 });
             }
             // Expired — let it fall through; we'll overwrite on success.
@@ -630,12 +814,15 @@ impl Resolver {
                         hooks::CacheTier::Persistent,
                         age,
                     );
+                    let mut metadata = entry.metadata;
+                    inject_fetched_at(&mut metadata, &entry.fetched_at);
                     return Ok(ResolveOutcome {
                         result: FetchResult {
                             data: entry.data,
-                            metadata: entry.metadata,
+                            metadata,
                         },
                         cache_hit: true,
+                        batches: None,
                     });
                 }
                 // Expired — evict from tier-2 too.
@@ -687,8 +874,8 @@ impl Resolver {
         self.inflight.write_lock("inflight").remove(&key);
 
         match result {
-            Ok(fetch_result) => {
-                let row_count = fetch_result.data.num_rows();
+            Ok(fetched) => {
+                let row_count = fetched.result.data.num_rows();
                 emit_progress(
                     &hooks,
                     hooks::Phase::Fetch,
@@ -702,8 +889,9 @@ impl Resolver {
                     ),
                 );
                 Ok(ResolveOutcome {
-                    result: fetch_result,
+                    result: fetched.result,
                     cache_hit: false,
+                    batches: fetched.batches,
                 })
             }
             Err(err) => {
@@ -738,35 +926,52 @@ impl Resolver {
 
         let work = async move {
             let provider = dispatch_provider(&providers, &request.spec)?;
-            let result = provider.fetch(request).await?;
+            let batch_result = provider.fetch_batches(request).await?;
+
+            // Concat batches → DataTable for caching.
+            let data = if batch_result.batches.is_empty() {
+                DataTable::from_record_batch(RecordBatch::new_empty(
+                    Arc::clone(&batch_result.schema),
+                ))
+            } else {
+                let concat = arrow::compute::concat_batches(
+                    &batch_result.schema,
+                    &batch_result.batches,
+                )
+                .map_err(|e| FetchError::DecodeFailed(format!("concat batches: {e}")))?;
+                DataTable::from_record_batch(concat)
+            };
+
+            let fetch_result = FetchResult {
+                data: data.clone(),
+                metadata: batch_result.metadata.clone(),
+            };
 
             // Write-through: tier-1 always; tier-2 if configured.
             let entry = CachedEntry {
-                data: result.data.clone(),
+                data,
                 fetched_at: SystemTime::now(),
                 ttl: cache_cfg
                     .as_ref()
                     .and_then(|c| c.ttl_duration())
                     .unwrap_or(DEFAULT_TTL),
                 tags: build_tags(slug.as_deref(), namespace.as_deref()),
-                metadata: result.metadata.clone(),
+                metadata: batch_result.metadata.clone(),
             };
-            // Cache write failures must not poison the result — log via
-            // tracing in 3c, but for now just swallow (matches the design
-            // doc's `.ok()` guidance).
             let _ = primary.put(key, entry.clone()).await;
             if let Some(p) = &persistent {
                 let _ = p.put(key, entry).await;
             }
-            Ok(result)
+            Ok(FetchWithBatches {
+                result: fetch_result,
+                batches: Some(batch_result),
+            })
         };
 
-        // Pick the right Box variant for the target. `boxed()` is Send-only
-        // (native), `boxed_local()` is ?Send (WASM).
         #[cfg(not(target_arch = "wasm32"))]
-        let boxed: ResolverFuture<Result<FetchResult, FetchError>> = work.boxed();
+        let boxed: ResolverFuture<Result<FetchWithBatches, FetchError>> = work.boxed();
         #[cfg(target_arch = "wasm32")]
-        let boxed: ResolverFuture<Result<FetchResult, FetchError>> = work.boxed_local();
+        let boxed: ResolverFuture<Result<FetchWithBatches, FetchError>> = work.boxed_local();
 
         let future = boxed.shared();
         inflight.insert(key, future.clone());
@@ -786,7 +991,7 @@ impl Resolver {
     /// [`hooks::MissReason::Invalidated`] rather than `NotFound`.
     pub async fn invalidate(&self, key: u64) {
         let primary = self.primary_snapshot();
-        let persistent = self.persistent_snapshot();
+        let persistent = self.persistent_snapshot_if_ready();
         let _ = primary.invalidate(key).await;
         if let Some(p) = &persistent {
             let _ = p.invalidate(key).await;
@@ -804,7 +1009,7 @@ impl Resolver {
     /// isn't done here (would require a `keys()` method on every backend).
     pub async fn invalidate_all(&self) {
         let primary = self.primary_snapshot();
-        let persistent = self.persistent_snapshot();
+        let persistent = self.persistent_snapshot_if_ready();
         let _ = primary.clear().await;
         if let Some(p) = &persistent {
             let _ = p.clear().await;
@@ -819,7 +1024,7 @@ impl Resolver {
     pub async fn invalidate_by_slug(&self, slug: &str) {
         let tag = format!("{TAG_SLUG_PREFIX}{slug}");
         let primary = self.primary_snapshot();
-        let persistent = self.persistent_snapshot();
+        let persistent = self.persistent_snapshot_if_ready();
         let _ = primary.invalidate_by_tag(&tag).await;
         if let Some(p) = &persistent {
             let _ = p.invalidate_by_tag(&tag).await;
@@ -834,7 +1039,7 @@ impl Resolver {
     pub async fn invalidate_by_namespace(&self, namespace: &str) {
         let tag = format!("{TAG_NAMESPACE_PREFIX}{namespace}");
         let primary = self.primary_snapshot();
-        let persistent = self.persistent_snapshot();
+        let persistent = self.persistent_snapshot_if_ready();
         let _ = primary.invalidate_by_tag(&tag).await;
         if let Some(p) = &persistent {
             let _ = p.invalidate_by_tag(&tag).await;
@@ -880,7 +1085,7 @@ impl Resolver {
         }
         let primary = self.primary_snapshot();
         primary.shutdown().await;
-        if let Some(p) = self.persistent_snapshot() {
+        if let Some(p) = self.persistent_snapshot_if_ready() {
             p.shutdown().await;
         }
     }
@@ -971,6 +1176,17 @@ pub(crate) fn emit_error(
     hooks::spawn_hook(async move {
         h.on_error(event).await;
     });
+}
+
+/// Inject `fetched_at_ms` into provider metadata on cache hits so consumers
+/// can display the actual data age rather than "just now."
+fn inject_fetched_at(metadata: &mut HashMap<String, serde_json::Value>, fetched_at: &SystemTime) {
+    if let Ok(d) = fetched_at.duration_since(SystemTime::UNIX_EPOCH) {
+        metadata.insert(
+            "fetched_at_ms".to_string(),
+            serde_json::Value::from(d.as_millis() as f64),
+        );
+    }
 }
 
 /// Build the tag list applied to `CachedEntry` on write. `slug` and
@@ -1151,5 +1367,97 @@ mod tests {
         let spec = empty_inline();
         let err = dispatch_provider(&providers, &spec).err().expect("dispatch must error");
         assert!(matches!(err, FetchError::Other(_)));
+    }
+
+    // ── PersistentSlot / factory tests ──────────────────────────────────
+
+    /// Minimal `CacheBackend` impl for testing the persistent slot plumbing.
+    struct MockBackend;
+
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+    #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+    impl CacheBackend for MockBackend {
+        async fn get(&self, _key: u64) -> Option<CachedEntry> {
+            None
+        }
+        async fn put(&self, _key: u64, _entry: CachedEntry) -> Result<(), CacheError> {
+            Ok(())
+        }
+        async fn invalidate(&self, _key: u64) -> Result<(), CacheError> {
+            Ok(())
+        }
+        async fn invalidate_by_tag(&self, _tag: &str) -> Result<(), CacheError> {
+            Ok(())
+        }
+        async fn clear(&self) -> Result<(), CacheError> {
+            Ok(())
+        }
+        async fn shutdown(&self) {}
+    }
+
+    #[test]
+    fn test_persistent_slot_default_is_none() {
+        let resolver = Resolver::new();
+        assert!(resolver.persistent_snapshot_if_ready().is_none());
+    }
+
+    #[test]
+    fn test_set_persistent_cache_still_works() {
+        let resolver = Resolver::new();
+        let backend: CacheBackendRef = SharedRef::new(MockBackend);
+        resolver.set_persistent_cache(backend);
+        assert!(resolver.persistent_snapshot_if_ready().is_some());
+    }
+
+    #[test]
+    fn test_persistent_cache_factory_stores_deferred() {
+        let resolver = Resolver::new();
+        resolver.set_persistent_cache_factory(|| async {
+            Some(SharedRef::new(MockBackend) as CacheBackendRef)
+        });
+        // Factory hasn't fired yet — sync snapshot must be None
+        assert!(resolver.persistent_snapshot_if_ready().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_persistent_cache_factory_resolves_on_fetch() {
+        let resolver = Resolver::new();
+        resolver.set_persistent_cache_factory(|| async {
+            Some(SharedRef::new(MockBackend) as CacheBackendRef)
+        });
+        // resolve_persistent triggers the factory
+        let result = resolver.resolve_persistent().await;
+        assert!(result.is_some());
+        // After resolution the slot is Ready — sync snapshot works now
+        assert!(resolver.persistent_snapshot_if_ready().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_persistent_cache_factory_none_result() {
+        let resolver = Resolver::new();
+        resolver.set_persistent_cache_factory(|| async { None });
+        let result = resolver.resolve_persistent().await;
+        assert!(result.is_none());
+        // After a None factory result the slot becomes None — subsequent
+        // resolve_persistent calls return None without re-running the factory
+        let result2 = resolver.resolve_persistent().await;
+        assert!(result2.is_none());
+        assert!(resolver.persistent_snapshot_if_ready().is_none());
+    }
+
+    #[test]
+    fn test_persistent_cache_factory_replaces_previous() {
+        let resolver = Resolver::new();
+        // Set a ready backend
+        let backend: CacheBackendRef = SharedRef::new(MockBackend);
+        resolver.set_persistent_cache(backend);
+        assert!(resolver.persistent_snapshot_if_ready().is_some());
+
+        // Now set a factory — it replaces the ready backend
+        resolver.set_persistent_cache_factory(|| async {
+            Some(SharedRef::new(MockBackend) as CacheBackendRef)
+        });
+        // Sync snapshot returns None because the slot is now Deferred
+        assert!(resolver.persistent_snapshot_if_ready().is_none());
     }
 }

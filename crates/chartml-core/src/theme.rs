@@ -254,6 +254,15 @@ pub struct Theme {
     pub table_header_bg: String,
     /// Text color for the table header row.
     pub table_header_text: String,
+    /// CSS font-weight for header cells (e.g. `"600"`, `"500"`).
+    pub table_header_font_weight: String,
+    /// CSS letter-spacing for header cells (e.g. `"normal"`, `"0.08em"`).
+    pub table_header_letter_spacing: String,
+    /// CSS text-transform for header cells (e.g. `"none"`, `"uppercase"`).
+    pub table_header_text_transform: String,
+    /// Border color for header cell bottom edge. Empty string falls back
+    /// to `table_border`.
+    pub table_header_border: String,
     /// Background color for a regular (non-striped) body row.
     pub table_row_bg: String,
     /// Background color for the alternating zebra-striped body row.
@@ -266,6 +275,8 @@ pub struct Theme {
     pub table_cell_padding: String,
     /// CSS font size for table text (e.g. `"13px"`).
     pub table_font_size: String,
+    /// CSS border-radius for the table root container (e.g. `"4px"`, `"0"`).
+    pub table_border_radius: String,
 }
 
 impl Default for Theme {
@@ -321,12 +332,17 @@ impl Default for Theme {
             // Table tokens — light mode defaults
             table_header_bg: "#f9fafb".into(),
             table_header_text: "#1f2937".into(),
+            table_header_font_weight: "600".into(),
+            table_header_letter_spacing: "normal".into(),
+            table_header_text_transform: "none".into(),
+            table_header_border: String::new(),
             table_row_bg: "#ffffff".into(),
             table_row_bg_alt: "#f9fafb".into(),
             table_border: "#e5e7eb".into(),
             table_text: "#374151".into(),
             table_cell_padding: "8px 12px".into(),
             table_font_size: "13px".into(),
+            table_border_radius: "4px".into(),
         }
     }
 }

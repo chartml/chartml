@@ -5,12 +5,14 @@
 //! Every bar element emitted by `chartml-chart-cartesian` — regardless of
 //! orientation, value sign, or `BarCornerRadius` shape — must carry
 //! `animation_origin: Some((ox, oy))` set to the bar's value-baseline
-//! anchor:
+//! anchor in **fill-box-relative coordinates** (i.e. relative to the
+//! element's own top-left corner, for use with `transform-box: fill-box`
+//! in the consuming CSS):
 //!
-//! - vertical positive → bottom-center  (`x + w/2, y + h`)
-//! - vertical negative → top-center     (`x + w/2, y`)
-//! - horizontal positive → left-center  (`x, y + h/2`)
-//! - horizontal negative → right-center (`x + w, y + h/2`)
+//! - vertical positive → bottom-center  (`w/2, h`)
+//! - vertical negative → top-center     (`w/2, 0`)
+//! - horizontal positive → left-center  (`0, h/2`)
+//! - horizontal negative → right-center (`w, h/2`)
 //!
 //! These four anchors hold under all three corner-radius shapes the
 //! emitter supports:
@@ -152,12 +154,13 @@ enum Direction {
 }
 
 impl Direction {
-    fn expected_origin(self, b: &BarBox) -> (f64, f64) {
+    /// Expected fill-box percentage origin.
+    fn expected_origin(self, _b: &BarBox) -> (f64, f64) {
         match self {
-            Direction::VerticalPositive => (b.x + b.w / 2.0, b.y + b.h),
-            Direction::VerticalNegative => (b.x + b.w / 2.0, b.y),
-            Direction::HorizontalPositive => (b.x, b.y + b.h / 2.0),
-            Direction::HorizontalNegative => (b.x + b.w, b.y + b.h / 2.0),
+            Direction::VerticalPositive => (50.0, 100.0),
+            Direction::VerticalNegative => (50.0, 0.0),
+            Direction::HorizontalPositive => (0.0, 50.0),
+            Direction::HorizontalNegative => (100.0, 50.0),
         }
     }
     fn label(self) -> &'static str {
@@ -334,5 +337,111 @@ fn bar_animation_origin_horizontal_positive() {
 fn bar_animation_origin_horizontal_negative() {
     for corner in corner_variants().iter() {
         run_case(corner, Direction::HorizontalNegative, HORIZONTAL_NEGATIVE_YAML);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Stacked bar animation origin tests
+//
+// In stacked bar charts, ALL bar segments in a column must share the same
+// axis-baseline animation origin so the stack grows uniformly from the axis.
+// The per-segment `bar_animation_origin` would give each segment its own
+// edge, causing upper segments to appear to float.
+// ---------------------------------------------------------------------------
+
+const STACKED_VERTICAL_YAML: &str = r#"
+type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - cat: "A"
+      v: 10
+      g: "X"
+    - cat: "A"
+      v: 20
+      g: "Y"
+    - cat: "B"
+      v: 15
+      g: "X"
+    - cat: "B"
+      v: 25
+      g: "Y"
+visualize:
+  type: bar
+  mode: stacked
+  columns: cat
+  rows: v
+  marks:
+    color: g
+"#;
+
+const STACKED_HORIZONTAL_YAML: &str = r#"
+type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - cat: "A"
+      v: 10
+      g: "X"
+    - cat: "A"
+      v: 20
+      g: "Y"
+    - cat: "B"
+      v: 15
+      g: "X"
+    - cat: "B"
+      v: 25
+      g: "Y"
+visualize:
+  type: bar
+  mode: stacked
+  orientation: horizontal
+  columns: cat
+  rows: v
+  marks:
+    color: g
+"#;
+
+/// Stacked bars use group-level clip-path animation, so individual bar
+/// segments must have `animation_origin == None` (no per-element transform).
+fn run_stacked_case(corner: &BarCornerRadius, yaml: &str, is_horizontal: bool) {
+    let chartml = make_chartml(corner);
+    let el = chartml
+        .render_from_yaml(yaml)
+        .expect("render stacked bar fixture under test");
+    let bars = collect_bars(&el);
+    let real_bars: Vec<&BarBox> = bars.iter().filter(|b| b.w > 0.0 && b.h > 0.0).collect();
+    assert!(
+        real_bars.len() >= 2,
+        "{:?} / stacked {} — need at least 2 non-degenerate bars, got {}",
+        corner,
+        if is_horizontal { "horizontal" } else { "vertical" },
+        real_bars.len(),
+    );
+    for b in &real_bars {
+        assert!(
+            b.origin.is_none(),
+            "{:?} / stacked {} — bar tag={} x={} y={} w={} h={} has \
+             animation_origin = {:?}, expected None (clip-path handles animation)",
+            corner,
+            if is_horizontal { "horizontal" } else { "vertical" },
+            b.tag, b.x, b.y, b.w, b.h, b.origin,
+        );
+    }
+}
+
+#[test]
+fn bar_animation_origin_stacked_vertical() {
+    for corner in corner_variants().iter() {
+        run_stacked_case(corner, STACKED_VERTICAL_YAML, false);
+    }
+}
+
+#[test]
+fn bar_animation_origin_stacked_horizontal() {
+    for corner in corner_variants().iter() {
+        run_stacked_case(corner, STACKED_HORIZONTAL_YAML, true);
     }
 }

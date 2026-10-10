@@ -319,32 +319,17 @@ impl LabelStrategy {
             let angle_rad = config.rotation_angle_deg.to_radians();
             let skip_factor = compute_skip_factor(labels, available_width, config.rotation_angle_deg, &config.text_metrics);
 
-            // Mirror the post-rotation truncation from generate_x_axis:
-            // visible labels are capped so their rotated horizontal projection
-            // fits the available space.  The effective label width after truncation
-            // determines the actual vertical descent used for the margin.
-            let visible_count = match skip_factor {
-                Some(f) if f > 1 => (0..label_count).filter(|i| i % f == 0).count(),
-                _ => label_count,
+            // Rotated labels render at full length (generate_x_axis does not
+            // truncate them), so the vertical descent comes from the widest
+            // label that will actually be visible after skip sampling.
+            let visible_max_width = match skip_factor {
+                Some(f) if f > 1 => widths.iter().enumerate()
+                    .filter(|(i, _)| i % f == 0)
+                    .map(|(_, w)| *w)
+                    .fold(0.0_f64, f64::max),
+                _ => max_width,
             };
-            let cos_a = angle_rad.cos(); // ~0.707 for 45 deg
-            let available_per_visible = if visible_count > 0 {
-                available_width / visible_count as f64
-            } else {
-                available_width
-            };
-            let spacing = 6.0;
-            let overlap_width = (available_per_visible - spacing) / cos_a;
-
-            // Effective width: cap each label at the overlap-free width
-            // derived from the per-label spacing. This scales naturally with
-            // chart width and label count — no special-case boost needed.
-            let effective_width = if overlap_width > 0.0 {
-                max_width.min(overlap_width)
-            } else {
-                max_width
-            };
-            let required_vertical = effective_width * angle_rad.sin();
+            let required_vertical = visible_max_width * angle_rad.sin();
             // Rotated labels are placed at y_position + 10, so total space
             // needed below the axis line is 10 + vertical_descent + padding.
             // The base bottom margin (40px) already covers some of that.
@@ -631,6 +616,32 @@ mod tests {
         let strategy = LabelStrategy::determine(&labels, 400.0, &LabelStrategyConfig::default());
         assert!(matches!(strategy, LabelStrategy::Sampled { .. }),
             "Expected Sampled, got {:?}", strategy);
+    }
+
+    #[test]
+    fn rotated_margin_covers_full_label_descent() {
+        // Rotated labels render at full length (no post-rotation truncation
+        // in generate_x_axis), so the reserved margin must cover the descent
+        // of the longest visible label — not a truncation-capped width.
+        let labels: Vec<String> = vec![
+            "UNKNOWN".into(), "GOOGLE".into(), "DIRECT".into(), "LINKEDIN".into(),
+            "PRODUCTHUNT".into(), "TWITTER".into(), "OTHER".into(),
+        ];
+        let config = LabelStrategyConfig::default();
+        let strategy = LabelStrategy::determine(&labels, 300.0, &config);
+        let LabelStrategy::Rotated { margin, skip_factor } = strategy else {
+            panic!("Expected Rotated, got {:?}", strategy);
+        };
+        let visible_max = labels.iter().enumerate()
+            .filter(|(i, _)| skip_factor.is_none_or(|f| i % f == 0))
+            .map(|(_, l)| measure_text(l, &config.text_metrics))
+            .fold(0.0_f64, f64::max);
+        let descent = visible_max * config.rotation_angle_deg.to_radians().sin();
+        // Labels are anchored at y_position + 10 with 15px clearance below;
+        // the base bottom margin (40px) absorbs the first 40px of that.
+        let needed = (10.0 + descent + 15.0 - 40.0).max(0.0);
+        assert!(margin + 0.5 >= needed,
+            "Rotated margin {margin} does not cover full label descent (needs {needed})");
     }
 
     #[test]

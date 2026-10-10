@@ -85,6 +85,16 @@ export class ChartML {
         return this.inner.setCache(backend);
     }
     /**
+     * Enable IndexedDB-backed persistent caching with the given database
+     * name and namespace. The database opens lazily on the first fetch.
+     *
+     * This is a simpler alternative to `setCache("indexeddb")` — it lets
+     * callers specify the database name and namespace explicitly.
+     */
+    enableIndexedDbCache(dbName, namespace) {
+        this.inner.enableIndexedDbCache(dbName, namespace);
+    }
+    /**
      * Register a `ResolverHooksInterface` impl. Missing handlers are silent
      * no-ops. Handlers may return Promises — the resolver fires them
      * fire-and-forget so a slow telemetry sink cannot stall the pipeline.

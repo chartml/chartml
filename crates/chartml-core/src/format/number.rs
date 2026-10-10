@@ -236,7 +236,7 @@ fn si_prefix(value: f64) -> (f64, &'static str) {
     (value / 1e-9, "n")
 }
 
-fn insert_commas(int_part: &str) -> String {
+pub(crate) fn insert_commas(int_part: &str) -> String {
     let len = int_part.len();
     if len <= 3 {
         return int_part.to_string();

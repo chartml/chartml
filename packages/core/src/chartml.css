@@ -140,6 +140,20 @@
   font-size: var(--chartml-table-font-size);
   color: var(--chartml-text-secondary);
 }
+.chartml-table-body {
+  scrollbar-width: thin;
+  scrollbar-color: var(--chartml-table-border, #e5e7eb) transparent;
+}
+.chartml-table-body::-webkit-scrollbar {
+  width: 6px;
+}
+.chartml-table-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chartml-table-body::-webkit-scrollbar-thumb {
+  background: var(--chartml-table-border, #e5e7eb);
+  border-radius: 3px;
+}
 
 /* Defensive CSS fallback for D3-generated axis elements */
 .chartml-chart .tick text {

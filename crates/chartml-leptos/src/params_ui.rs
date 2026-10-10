@@ -133,7 +133,7 @@ fn render_multiselect(
                                         s.retain(|v| v != &opt_val);
                                     }
                                 });
-                                let vals: Vec<serde_json::Value> = selected.get()
+                                let vals: Vec<serde_json::Value> = selected.try_get().unwrap_or_default()
                                     .iter()
                                     .map(|v| serde_json::Value::String(v.clone()))
                                     .collect();
@@ -240,7 +240,7 @@ fn render_daterange(
                     param_values.update(|pv| {
                         pv.insert(key_start.clone(), serde_json::json!({
                             "start": val,
-                            "end": end_val.get()
+                            "end": end_val.try_get().unwrap_or_default()
                         }));
                     });
                 }
@@ -254,7 +254,7 @@ fn render_daterange(
                     end_val.set(val.clone());
                     param_values.update(|pv| {
                         pv.insert(key_end.clone(), serde_json::json!({
-                            "start": start_val.get(),
+                            "start": start_val.try_get().unwrap_or_default(),
                             "end": val
                         }));
                     });

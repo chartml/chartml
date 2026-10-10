@@ -1,6 +1,11 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use arrow::array::RecordBatch;
+use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use indexmap::IndexMap;
-use std::collections::HashMap;
+
 use crate::data::DataTable;
 use crate::error::ChartError;
 use crate::spec::TransformSpec;
@@ -41,4 +46,33 @@ pub trait TransformMiddleware: Send + Sync {
         spec: &TransformSpec,
         context: &TransformContext,
     ) -> Result<TransformResult, ChartError>;
+
+    /// Batch-oriented transform. Receives multiple RecordBatches per source,
+    /// allowing implementations to register them into MemTable without
+    /// concatenation.
+    ///
+    /// Default concatenates batches into DataTables and delegates to
+    /// `transform()`. Override in `DataFusionTransform` to avoid the concat.
+    async fn transform_batches(
+        &self,
+        sources: &IndexMap<String, (SchemaRef, Vec<RecordBatch>)>,
+        spec: &TransformSpec,
+        context: &TransformContext,
+    ) -> Result<TransformResult, ChartError> {
+        let mut data_tables = IndexMap::with_capacity(sources.len());
+        for (name, (schema, batches)) in sources {
+            let batch = if batches.is_empty() {
+                RecordBatch::new_empty(Arc::clone(schema))
+            } else {
+                arrow::compute::concat_batches(schema, batches).map_err(|e| {
+                    ChartError::DataError(format!(
+                        "Failed to concat batches for source '{}': {}",
+                        name, e
+                    ))
+                })?
+            };
+            data_tables.insert(name.clone(), DataTable::from_record_batch(batch));
+        }
+        self.transform(&data_tables, spec, context).await
+    }
 }
