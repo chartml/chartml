@@ -8,7 +8,16 @@
 //! on the feat/theme-hooks branch (not copied from `test-output/golden/`,
 //! whose signed fixtures predate recent theme refactors). Every subsequent
 //! phase must leave this test passing — any rendering change while using
-//! `Theme::default()` is a regression.
+//! `Theme::default()` is a regression until proven otherwise.
+//!
+//! A failure here is a finding to investigate, not a baseline to regenerate.
+//! Refreshing a baseline is legitimate only when the rendering change is a
+//! deliberate, reviewed fix and the new output has been inspected and shown to
+//! be the intended one — the diff explained, and only the files that fix
+//! touches differing. Regenerating to get a green run, without that, silently
+//! ratifies whatever the last edit happened to do. (CHA-11 refreshed the eight
+//! metric baselines under exactly that bar: a reviewed metric-card centring fix,
+//! verified in a browser, with no non-metric baseline affected.)
 //!
 //! On mismatch, the actual SVG is written to
 //! `target/backward-compat-diffs/<subdir>/<name>.svg` for inspection.
