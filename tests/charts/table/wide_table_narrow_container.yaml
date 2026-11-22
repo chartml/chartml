@@ -6,7 +6,12 @@ description: >
   the table scrolls sideways with the first column frozen; numeric columns
   are right-aligned from their data type, and a right-edge fade shows while
   more columns are hidden to the right. Pagination is on (pageSize 15) so
-  the pager footer stays below the scroll area.
+  the pager footer stays below the scroll area. Rendered at phone width
+  (375px).
+
+viewport:
+  width: 375
+  height: 400
 
 chart:
   type: chart

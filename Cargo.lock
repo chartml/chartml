@@ -679,6 +679,7 @@ version = "5.1.9"
 dependencies = [
  "async-trait",
  "chartml-chart-cartesian",
+ "chartml-chart-table",
  "chartml-core",
  "futures",
  "gloo-timers",
@@ -686,6 +687,7 @@ dependencies = [
  "js-sys",
  "leptos",
  "send_wrapper",
+ "serde",
  "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-futures",

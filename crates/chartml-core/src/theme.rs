@@ -268,9 +268,10 @@ pub struct Theme {
     /// Background color for the alternating zebra-striped body row.
     pub table_row_bg_alt: String,
     /// Opaque color of the surface the table sits on (e.g. the card behind
-    /// it). Drawn under the sticky header, the frozen first column and the
-    /// right-edge fade, so cells scrolling beneath them never show through
-    /// even when the header or row colors are transparent. CSS variable:
+    /// it). The header and body rows lay their own colors over it, so they
+    /// are always opaque: the sticky header, the frozen first column and the
+    /// right-edge fade never let scrolled cells show through, even when the
+    /// header or row colors are transparent. CSS variable:
     /// `--chartml-table-surface`.
     pub table_surface: String,
     /// Border color between cells and between header/body.

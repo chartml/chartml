@@ -40,6 +40,10 @@ humantime = "2"
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
 chartml-chart-cartesian = { path = "../chartml-chart-cartesian" }
+# `table_layout_test.rs` renders tables with the real renderer and reads the
+# page's layout measurements back as JSON.
+chartml-chart-table = { path = "../chartml-chart-table" }
+serde = { version = "1", features = ["derive"] }
 gloo-timers = { version = "0.3", features = ["futures"] }
 async-trait = "0.1"
 futures = "0.3"

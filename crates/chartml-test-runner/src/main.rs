@@ -6,12 +6,16 @@
 //!   chartml-test --gallery [--port <port>]
 //!   chartml-test --accept                         # save current output as golden baseline
 //!   chartml-test --diff                            # compare current output against golden
+//!
+//! A test spec may set `viewport: { width, height }` (pixels) to size the box
+//! an HTML-drawn chart (div root, e.g. a table) is rendered into; without it
+//! such charts render at 800x400.
 
 mod diff;
 mod gallery;
 mod tree;
 
-use chartml_core::ChartML;
+use chartml_core::{ChartElement, ChartML};
 use chartml_chart_cartesian::CartesianRenderer;
 use chartml_chart_pie::PieRenderer;
 use chartml_chart_scatter::ScatterRenderer;
@@ -132,8 +136,22 @@ fn render_spec(yaml_path: &Path, output_dir: &Path, batch_root: Option<&Path>) -
     fs::write(&tree_path, serde_json::to_string_pretty(&tree_json).expect("serde_json::Value always serializes"))
         .map_err(|e| format!("Failed to write tree: {}", e))?;
 
-    // Write SVG
-    let (width, height) = tree::extract_dimensions(&element);
+    // Write SVG. A chart drawn as HTML (a div root, e.g. a table) has no size
+    // of its own; it fills the box the SVG's foreignObject gives it. The
+    // optional top-level `viewport: { width, height }` in a test spec sets
+    // that box, e.g. to render a table at phone width.
+    let (width, height) = match viewport(&spec, yaml_path)? {
+        Some(size) => {
+            if matches!(element, ChartElement::Svg { .. }) {
+                return Err(format!(
+                    "{}: `viewport` only applies to charts drawn as HTML (div root); this chart is an SVG",
+                    yaml_path.display()
+                ));
+            }
+            size
+        }
+        None => tree::extract_dimensions(&element),
+    };
     let svg = element_to_svg(&element, width, height);
     let svg_path = output_dir.join(format!("{}.svg", prefix));
     fs::write(&svg_path, &svg)
@@ -172,6 +190,20 @@ fn render_spec(yaml_path: &Path, output_dir: &Path, batch_root: Option<&Path>) -
         assertions_path: if assertions.is_some() { Some(assertions_path) } else { None },
         expected_error: None,
     })
+}
+
+/// Read the optional `viewport: { width, height }` of a test spec.
+fn viewport(spec: &serde_yaml::Value, yaml_path: &Path) -> Result<Option<(f64, f64)>, String> {
+    let Some(v) = spec.get("viewport") else {
+        return Ok(None);
+    };
+    let dim = |key: &str| {
+        v.get(key)
+            .and_then(serde_yaml::Value::as_f64)
+            .filter(|n| *n > 0.0)
+            .ok_or_else(|| format!("{}: `viewport.{key}` must be a positive number", yaml_path.display()))
+    };
+    Ok(Some((dim("width")?, dim("height")?)))
 }
 
 struct RenderResult {
@@ -358,6 +390,34 @@ fn collect_specs(dir: &Path, specs: &mut Vec<PathBuf>) {
             } else if path.extension().map(|e| e == "yaml" || e == "yml").unwrap_or(false) {
                 specs.push(path);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::viewport;
+    use std::path::Path;
+
+    fn spec(yaml: &str) -> serde_yaml::Value {
+        serde_yaml::from_str(yaml).expect("test YAML parses")
+    }
+
+    #[test]
+    fn viewport_is_optional() {
+        assert_eq!(viewport(&spec("chart: {}"), Path::new("s.yaml")), Ok(None));
+    }
+
+    #[test]
+    fn viewport_sets_width_and_height() {
+        let s = spec("viewport: { width: 375, height: 400 }");
+        assert_eq!(viewport(&s, Path::new("s.yaml")), Ok(Some((375.0, 400.0))));
+    }
+
+    #[test]
+    fn viewport_rejects_missing_or_non_positive_sizes() {
+        for yaml in ["viewport: { width: 375 }", "viewport: { width: 0, height: 400 }", "viewport: { width: wide, height: 400 }"] {
+            assert!(viewport(&spec(yaml), Path::new("s.yaml")).is_err(), "{yaml}");
         }
     }
 }

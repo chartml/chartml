@@ -253,9 +253,10 @@
  *   .dark { --chartml-table-header-bg: #111827; --chartml-table-border: #374151; ... }
  *
  * `--chartml-table-surface` is the opaque colour of the surface the table
- * sits on (e.g. the card behind it). It is drawn under the sticky header,
- * the frozen first column and the right-edge fade, so set it to match that
- * surface when the header or row colours are transparent.
+ * sits on (e.g. the card behind it). The header and rows lay their colours
+ * over it, so the sticky header, the frozen first column and the right-edge
+ * fade stay opaque; set it to match that surface when the header or row
+ * colours are transparent.
  */
 .chartml-table-header   { background: var(--chartml-table-header-bg, #f9fafb); }
 .chartml-table-header-cell {
