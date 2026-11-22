@@ -1,0 +1,278 @@
+name: "Table — 12 columns in a narrow container (sideways scroll)"
+tags: [table, narrow, horizontal-scroll, sticky-first-column, numeric-alignment]
+description: >
+  A twelve-column regional sales table. In a narrow container (a phone or
+  a narrow dashboard column) the columns keep a readable minimum width and
+  the table scrolls sideways with the first column frozen; numeric columns
+  are right-aligned from their data type, and a right-edge fade shows while
+  more columns are hidden to the right. Pagination is on (pageSize 15) so
+  the pager footer stays below the scroll area.
+
+chart:
+  type: chart
+  version: 1
+  title: "Regional Sales"
+  data:
+    provider: inline
+    rows:
+      - region: "North America"
+        manager: "Ana Souza"
+        revenue: 863000
+        cost: 672403
+        units: 52750
+        orders: 891
+        customers: 643
+        returns: 274
+        margin: 0.088
+        growth: 0.133
+        nps: 44
+        tier: "Gold"
+      - region: "South America"
+        manager: "Ben Okafor"
+        revenue: 276000
+        cost: 119888
+        units: 55810
+        orders: 1244
+        customers: 2021
+        returns: 46
+        margin: 0.27
+        growth: -0.076
+        nps: 52
+        tier: "Gold"
+      - region: "Western Europe"
+        manager: "Chen Wei"
+        revenue: 657000
+        cost: 428528
+        units: 77414
+        orders: 1113
+        customers: 4777
+        returns: 299
+        margin: 0.209
+        growth: 0.291
+        nps: -15
+        tier: "Bronze"
+      - region: "Eastern Europe"
+        manager: "Dana Kim"
+        revenue: 1958000
+        cost: 887502
+        units: 55937
+        orders: 2463
+        customers: 4479
+        returns: 60
+        margin: 0.278
+        growth: 0.124
+        nps: 67
+        tier: "Gold"
+      - region: "Middle East"
+        manager: "Eli Novak"
+        revenue: 411000
+        cost: 260015
+        units: 84743
+        orders: 3178
+        customers: 3100
+        returns: 49
+        margin: 0.269
+        growth: -0.075
+        nps: -13
+        tier: "Bronze"
+      - region: "North Africa"
+        manager: "Fatima Zahra"
+        revenue: 621000
+        cost: 371709
+        units: 70693
+        orders: 7105
+        customers: 2623
+        returns: 238
+        margin: 0.284
+        growth: 0.081
+        nps: 18
+        tier: "Gold"
+      - region: "Sub-Saharan Africa"
+        manager: "Gus Lindqvist"
+        revenue: 1826000
+        cost: 861701
+        units: 32994
+        orders: 1441
+        customers: 4755
+        returns: 153
+        margin: 0.26
+        growth: 0.25
+        nps: 73
+        tier: "Silver"
+      - region: "South Asia"
+        manager: "Hana Sato"
+        revenue: 789000
+        cost: 507787
+        units: 10594
+        orders: 2034
+        customers: 4243
+        returns: 214
+        margin: 0.116
+        growth: 0.037
+        nps: 42
+        tier: "Silver"
+      - region: "East Asia"
+        manager: "Ivan Petrov"
+        revenue: 280000
+        cost: 219746
+        units: 11173
+        orders: 5240
+        customers: 2836
+        returns: 355
+        margin: 0.19
+        growth: 0.099
+        nps: 38
+        tier: "Gold"
+      - region: "Southeast Asia"
+        manager: "Jo Martin"
+        revenue: 1920000
+        cost: 839881
+        units: 36381
+        orders: 7867
+        customers: 582
+        returns: 31
+        margin: 0.342
+        growth: 0.024
+        nps: 53
+        tier: "Bronze"
+      - region: "Oceania"
+        manager: "Kiri Ngata"
+        revenue: 1883000
+        cost: 1088856
+        units: 51566
+        orders: 5785
+        customers: 234
+        returns: 236
+        margin: 0.192
+        growth: 0.144
+        nps: 43
+        tier: "Gold"
+      - region: "Central Asia"
+        manager: "Liam Byrne"
+        revenue: 646000
+        cost: 456911
+        units: 17952
+        orders: 4156
+        customers: 3309
+        returns: 200
+        margin: 0.417
+        growth: 0.099
+        nps: 1
+        tier: "Silver"
+      - region: "Caribbean"
+        manager: "Mia Rossi"
+        revenue: 1022000
+        cost: 633411
+        units: 18947
+        orders: 7153
+        customers: 4557
+        returns: 142
+        margin: 0.333
+        growth: 0.295
+        nps: 67
+        tier: "Silver"
+      - region: "Central America"
+        manager: "Noah Levi"
+        revenue: 672000
+        cost: 309367
+        units: 24097
+        orders: 2578
+        customers: 1950
+        returns: 337
+        margin: 0.143
+        growth: 0.094
+        nps: 55
+        tier: "Gold"
+      - region: "Nordics"
+        manager: "Olga Berg"
+        revenue: 738000
+        cost: 378425
+        units: 20094
+        orders: 6964
+        customers: 4429
+        returns: 189
+        margin: 0.294
+        growth: 0.027
+        nps: -4
+        tier: "Bronze"
+      - region: "Baltics"
+        manager: "Pia Tamm"
+        revenue: 1959000
+        cost: 1187539
+        units: 81949
+        orders: 984
+        customers: 3790
+        returns: 399
+        margin: 0.431
+        growth: 0.172
+        nps: 51
+        tier: "Silver"
+      - region: "Iberia"
+        manager: "Rui Costa"
+        revenue: 1015000
+        cost: 567985
+        units: 14570
+        orders: 7989
+        customers: 3330
+        returns: 31
+        margin: 0.126
+        growth: 0.294
+        nps: 36
+        tier: "Gold"
+      - region: "Balkans"
+        manager: "Sara Ilic"
+        revenue: 425000
+        cost: 227809
+        units: 7891
+        orders: 1777
+        customers: 51
+        returns: 290
+        margin: 0.111
+        growth: -0.059
+        nps: 26
+        tier: "Bronze"
+  visualize:
+    type: table
+    columns: region
+    rows:
+      - field: manager
+        label: Manager
+      - field: revenue
+        label: Revenue
+        format: "$,.0f"
+      - field: cost
+        label: Cost
+        format: "$,.0f"
+      - field: units
+        label: Units
+        format: ",.0f"
+      - field: orders
+        label: Orders
+        format: ",.0f"
+      - field: customers
+        label: Customers
+        format: ",.0f"
+      - field: returns
+        label: Returns
+      - field: margin
+        label: Margin
+        format: ".1%"
+      - field: growth
+        label: Growth
+        format: "+.1%"
+      - field: nps
+        label: NPS
+      - field: tier
+        label: Tier
+    style:
+      pageSize: 15
+
+assertions:
+  structure:
+    root: div
+    is_table: true
+  columns: [region, Manager, Revenue, Cost, Units, Orders, Customers, Returns, Margin, Growth, NPS, Tier]
+  row_count: 15
+  has_pager: true
+  cells:
+    - { row: 0, col: region, text: "North America" }

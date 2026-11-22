@@ -579,6 +579,7 @@ dependencies = [
 name = "chartml-chart-table"
 version = "5.0.5"
 dependencies = [
+ "arrow",
  "chartml-core",
  "serde_json",
  "serde_yaml",

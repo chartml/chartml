@@ -251,6 +251,11 @@
  *
  * Consuming apps set the custom properties on a parent element:
  *   .dark { --chartml-table-header-bg: #111827; --chartml-table-border: #374151; ... }
+ *
+ * `--chartml-table-surface` is the opaque colour of the surface the table
+ * sits on (e.g. the card behind it). It is drawn under the sticky header,
+ * the frozen first column and the right-edge fade, so set it to match that
+ * surface when the header or row colours are transparent.
  */
 .chartml-table-header   { background: var(--chartml-table-header-bg, #f9fafb); }
 .chartml-table-header-cell {
@@ -265,17 +270,20 @@
 }
 .chartml-table-pager    { background: var(--chartml-table-header-bg, #f9fafb); }
 .chartml-table-pager-info { color: var(--chartml-text-secondary, #6b7280); }
-.chartml-table-body {
+.chartml-table-scroll {
     scrollbar-width: thin;
     scrollbar-color: var(--chartml-table-border, #e5e7eb) transparent;
 }
-.chartml-table-body::-webkit-scrollbar {
+/* The scroll area scrolls both ways (rows vertically, columns sideways). */
+.chartml-table-scroll::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
 }
-.chartml-table-body::-webkit-scrollbar-track {
+.chartml-table-scroll::-webkit-scrollbar-track,
+.chartml-table-scroll::-webkit-scrollbar-corner {
     background: transparent;
 }
-.chartml-table-body::-webkit-scrollbar-thumb {
+.chartml-table-scroll::-webkit-scrollbar-thumb {
     background: var(--chartml-table-border, #e5e7eb);
     border-radius: 3px;
 }
