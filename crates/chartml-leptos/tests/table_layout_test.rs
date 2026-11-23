@@ -90,8 +90,11 @@ data:
     )
 }
 
-/// A single column of long names: it is not capped (nothing to scroll past
-/// it), so each name shows on one line.
+/// A single column of long names: with nothing to scroll past it, it gets
+/// no frozen-column limit and stretches to the container's width, so at
+/// 375px each name shows on one line. (The longest name is over the 18em
+/// cap, so the column's minimum width is capped; the name still fits on one
+/// line here because the column is wider than its minimum.)
 fn one_column_spec() -> String {
     r#"type: chart
 version: 1
