@@ -267,6 +267,13 @@ pub struct Theme {
     pub table_row_bg: String,
     /// Background color for the alternating zebra-striped body row.
     pub table_row_bg_alt: String,
+    /// Opaque color of the surface the table sits on (e.g. the card behind
+    /// it). The header and body rows lay their own colors over it, so they
+    /// are always opaque: the sticky header, the frozen first column and the
+    /// right-edge fade never let scrolled cells show through, even when the
+    /// header or row colors are transparent. CSS variable:
+    /// `--chartml-table-surface`.
+    pub table_surface: String,
     /// Border color between cells and between header/body.
     pub table_border: String,
     /// Text color for body cells.
@@ -338,6 +345,7 @@ impl Default for Theme {
             table_header_border: String::new(),
             table_row_bg: "#ffffff".into(),
             table_row_bg_alt: "#f9fafb".into(),
+            table_surface: "#ffffff".into(),
             table_border: "#e5e7eb".into(),
             table_text: "#374151".into(),
             table_cell_padding: "8px 12px".into(),
@@ -365,6 +373,7 @@ impl Theme {
             table_header_text: "#f3f4f6".into(),
             table_row_bg: "#1f2937".into(),
             table_row_bg_alt: "#111827".into(),
+            table_surface: "#1f2937".into(),
             table_border: "#374151".into(),
             table_text: "#e5e7eb".into(),
             ..Theme::default()
