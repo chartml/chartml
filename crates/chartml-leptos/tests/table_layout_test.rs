@@ -1,6 +1,6 @@
-//! Browser layout tests for the `table` chart (CHA-20): a table in a narrow
-//! container must be readable by scrolling sideways, with the first column
-//! always visible.
+//! Browser layout tests for the `table` chart (CHA-20, CHA-21): a table in a
+//! narrow container must be readable by scrolling sideways; no column is
+//! pinned, the whole table scrolls.
 //!
 //! Each test renders a twelve-column table with the real `TableRenderer`,
 //! puts it in a fixed-size container through one of the two ways hosts show
@@ -9,20 +9,16 @@
 //! this crate's `chartml.css` loaded, then scrolls it sideways and measures
 //! the laid-out page:
 //!
-//! - every column can be scrolled into view beside the frozen first column;
+//! - every column can be scrolled into view;
 //! - header and body columns line up at every scroll position;
 //! - header and body rows span the whole scrolled width;
-//! - the frozen first column stays at the left edge and nothing scrolled
-//!   shows through it, also when the theme makes rows transparent, and it
-//!   covers a gutter beside it so no slivers of a column scrolling under it
-//!   show at its edge;
+//! - no header or body cell is sticky (no column is pinned);
 //! - the right-edge fade is drawn only while columns are hidden to the
 //!   right, and covers no text at the right end;
 //! - no header or body cell is cut off and no word or number is broken
 //!   across lines; where there is room (375px and wider), every header label
-//!   and every value outside the frozen column fits on one line (columns are
-//!   sized from their content), and in a very narrow container values wrap
-//!   only at spaces;
+//!   and every value fits on one line (columns are sized from their
+//!   content), and in a very narrow container values wrap only at spaces;
 //! - scrolled down, the header stays at the top and the pager stays visible.
 //!
 //! Browser-only, like `chart_provider_test.rs`; native `cargo test` compiles
@@ -46,8 +42,8 @@ wasm_bindgen_test_configure!(run_in_browser);
 const STYLESHEET: &str = include_str!("../style/chartml.css");
 
 /// Twelve columns: text category, text measure, nine numeric measures, text.
-/// One first-column value is long enough that the frozen column must wrap it
-/// at phone width. Twenty rows with a page size of 15, so the body scrolls
+/// One first-column value is long enough to wrap in a very narrow container.
+/// Twenty rows with a page size of 15, so the body scrolls
 /// vertically and the pager shows.
 fn wide_spec() -> String {
     let regions = [
@@ -90,8 +86,7 @@ data:
     )
 }
 
-/// A single column of long names: with nothing to scroll past it, it gets
-/// no frozen-column limit and stretches to the container's width, so at
+/// A single column of long names: it stretches to the container's width, so at
 /// 375px each name shows on one line. (The longest name is over the 18em
 /// cap, so the column's minimum width is capped; the name still fits on one
 /// line here because the column is wider than its minimum.)
@@ -186,8 +181,7 @@ struct State {
     max_scroll_left: f64,
     rows_span_scroll_width: bool,
     misalign_px: f64,
-    frozen_left_px: f64,
-    frozen_shows_through: Vec<String>,
+    sticky_cells: u32,
     fade_width: f64,
     fade_covers_text_px: f64,
     clipped_cells: u32,
@@ -225,52 +219,20 @@ fn measure(host: &web_sys::HtmlElement) -> Measurements {
         const rows = [...host.querySelectorAll('.chartml-table-row')];
         const cellsOf = r => [...r.children].filter(c =>
             c.classList.contains('chartml-table-cell') || c.classList.contains('chartml-table-header-cell'));
-        // Rows lay their colour (a gradient image) over the opaque table
-        // surface (their background colour), so an element is opaque when
-        // its background colour is.
-        const opaque = el => { const m = getComputedStyle(el).backgroundColor.match(/rgba?\(([^)]+)\)/);
-            if (!m) return false; const p = m[1].split(',').map(Number); return p.length < 4 || p[3] >= 0.999; };
         const one = () => {
             const sr = sc.getBoundingClientRect(); const visL = sr.left, visR = sr.left + sc.clientWidth;
             const hdr = cellsOf(header), r0 = cellsOf(rows[0]);
-            // Frozen first column: walk down from the top of each row's frozen
-            // cell (near the right edge of its column) until an opaque
-            // background; anything else on the way is a scrolled element
-            // showing through. Then its gutter: the frozen cell must also lie
-            // on top over the first part of the next column's left padding,
-            // where a column scrolling under it would otherwise show slivers.
-            const shows = [];
-            for (const r of [header, ...rows.slice(0, 3)]) {
-                const cell = cellsOf(r)[0]; const b = cell.getBoundingClientRect();
-                const cs = getComputedStyle(cell); const gutter = -parseFloat(cs.marginRight) || 0;
-                const colRight = b.right - gutter; const y = b.top + b.height / 2;
-                const stack = document.elementsFromPoint(Math.min(colRight, visR) - 3, y);
-                if (!stack.includes(cell)) { shows.push('frozen cell not at its sample point'); continue; }
-                for (const el of stack) {
-                    if (el === cell || cell.contains(el) || el === r) { if (opaque(el)) break; continue; }
-                    shows.push(el.className + ': ' + el.textContent.slice(0, 20)); break;
-                }
-                if (cellsOf(r).length > 1) {
-                    const next = cellsOf(r)[1];
-                    if (Math.abs(gutter - parseFloat(getComputedStyle(next).paddingLeft)) > 0.5) shows.push('gutter ' + gutter + 'px is not the next cell left padding');
-                    if ((cs.maskImage || cs.webkitMaskImage || 'none') === 'none') shows.push('gutter has no fade mask');
-                    const top = document.elementsFromPoint(colRight + gutter / 4, y)[0];
-                    if (!(top === cell || cell.contains(top))) shows.push('gutter not on top: ' + (top ? top.className : 'nothing'));
-                }
-            }
             const fade = rows[0].querySelector('.chartml-table-fade'); const fr = fade.getBoundingClientRect();
             let covers = 0;
             for (const r of [header, ...rows]) for (const c of cellsOf(r)) {
                 const rg = document.createRange(); rg.selectNodeContents(c);
                 for (const t of rg.getClientRects()) covers += Math.max(0, Math.min(t.right, fr.right, visR) - Math.max(t.left, fr.left, visL));
             }
-            const frozenRight = r0[0].getBoundingClientRect().right + (parseFloat(getComputedStyle(r0[0]).marginRight) || 0);
             return {
                 scrollLeft: sc.scrollLeft, maxScrollLeft: sc.scrollWidth - sc.clientWidth,
                 rowsSpanScrollWidth: [header, ...rows].every(r => Math.abs(r.getBoundingClientRect().width - sc.scrollWidth) < 1),
                 misalignPx: Math.max(...hdr.map((c, i) => Math.abs(c.getBoundingClientRect().left - r0[i].getBoundingClientRect().left))),
-                frozenLeftPx: r0[0].getBoundingClientRect().left - visL,
-                frozenShowsThrough: shows,
+                stickyCells: [header, ...rows].flatMap(cellsOf).filter(c => getComputedStyle(c).position === 'sticky').length,
                 fadeWidth: fr.width,
                 fadeCoversTextPx: (sc.scrollWidth - sc.clientWidth > 0 && sc.scrollLeft >= sc.scrollWidth - sc.clientWidth - 0.5) ? covers : 0,
                 clippedCells: [header, ...rows].flatMap(cellsOf).filter(c => c.scrollWidth > c.clientWidth + 0.5 || c.scrollHeight > c.clientHeight + 0.5).length,
@@ -283,12 +245,15 @@ fn measure(host: &web_sys::HtmlElement) -> Measurements {
                     }
                     return out;
                 }),
-                wrappedCells: [...hdr, ...rows.flatMap(r => cellsOf(r).slice(1))].filter(c => {
+                wrappedCells: [header, ...rows].flatMap(cellsOf).filter(c => {
                     const rg = document.createRange(); rg.selectNodeContents(c);
                     return new Set([...rg.getClientRects()].map(t => Math.round(t.top))).size > 1;
                 }).map(c => c.textContent),
+                // A column is in view when it shows whole, or fills the
+                // visible area, at this scroll position.
                 columnsInView: r0.map((c, i) => { const b = c.getBoundingClientRect();
-                    return i === 0 || Math.min(b.right, visR) - Math.max(b.left, frozenRight) >= 8 ? i : -1; }).filter(i => i >= 0),
+                    const shown = Math.min(b.right, visR) - Math.max(b.left, visL);
+                    return shown >= Math.min(b.width, visR - visL) - 0.5 ? i : -1; }).filter(i => i >= 0),
             };
         };
         const states = []; const max = sc.scrollWidth - sc.clientWidth;
@@ -323,9 +288,8 @@ struct Case<'a> {
     expect_sideways: bool,
     expect_vertical: bool,
     expect_pager: bool,
-    /// Every header label and every value outside the frozen column on one
-    /// line (true wherever the columns' one-line widths fit beside the
-    /// frozen column).
+    /// Every header label and every value on one line (true wherever each
+    /// column's one-line width fits in the visible area).
     expect_single_line: bool,
 }
 
@@ -340,8 +304,7 @@ fn check(case: Case<'_>) {
         let at = format!("{ctx}, scrollLeft {}", s.scroll_left);
         assert!(s.rows_span_scroll_width, "{at}: a row is narrower than the scrolled width");
         assert!(s.misalign_px < 0.5, "{at}: header and body columns misaligned by {}px", s.misalign_px);
-        assert!(s.frozen_left_px.abs() < 0.5, "{at}: frozen column moved to {}px", s.frozen_left_px);
-        assert!(s.frozen_shows_through.is_empty(), "{at}: shows through the frozen column: {:?}", s.frozen_shows_through);
+        assert_eq!(s.sticky_cells, 0, "{at}: {} header or body cells are sticky", s.sticky_cells);
         assert_eq!(s.clipped_cells, 0, "{at}: {} cells cut off", s.clipped_cells);
         assert!(s.broken_words.is_empty(), "{at}: words broken across lines: {:?}", s.broken_words);
         if case.expect_single_line {
@@ -429,7 +392,7 @@ fn one_column_fits_without_scrolling() {
 }
 
 /// A very narrow container (a narrow dashboard column): the columns are
-/// wider than the space beside the frozen column, so the table scrolls and
+/// wider than the visible area, so the table scrolls and
 /// longer values may wrap at their spaces, but no word or number is broken.
 #[wasm_bindgen_test]
 fn very_narrow_leptos_default_theme() {

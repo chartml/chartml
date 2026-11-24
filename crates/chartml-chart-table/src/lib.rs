@@ -34,16 +34,6 @@ const MAX_MIN_TEXT_EM: f64 = 18.0;
 const TEXT_WIDTH_CALIBRATION_PX: f64 = 12.0;
 const TEXT_WIDTH_SLACK: f64 = 1.15;
 
-/// While the table scrolls, the frozen first column takes at most this share
-/// of the scroll area's width (or its widest word if wider, see
-/// `MIN_SCROLL_WINDOW`), so the scrolling columns stay reachable beside it.
-const FROZEN_MAX_SHARE: &str = "50cqw";
-
-/// The least width left beside the frozen column (and the fade) through
-/// which the other columns scroll, when the frozen column's widest word
-/// would otherwise take more.
-const MIN_SCROLL_WINDOW: &str = "3em";
-
 /// Width of the right-edge fade that signals more columns off to the right
 /// (see `fade_cell`).
 const FADE_WIDTH_PX: u32 = 32;
@@ -249,10 +239,10 @@ fn style(pairs: &[(&str, &str)]) -> HashMap<String, String> {
 
 /// A header or row background that is always opaque: its own colour (which
 /// a theme may make transparent) layered over the opaque colour of the
-/// surface the table sits on. The frozen first column and the fade take
-/// their row's background (`inherit`), so they are opaque too and scrolled
-/// cells never show through them. A consumer rule that replaces a row's
-/// background (e.g. a hover colour) carries through to both.
+/// surface the table sits on. The fade takes its row's background
+/// (`inherit`), so it is opaque too and scrolled cells never show through
+/// it. A consumer rule that replaces a row's background (e.g. a hover
+/// colour) carries through to it.
 fn opaque_bg(colour: &str, theme: &Theme) -> String {
     format!(
         "linear-gradient({colour}, {colour}), var(--chartml-table-surface, {})",
@@ -267,8 +257,6 @@ struct CellPlacement {
     /// 1-based grid column.
     column: usize,
     last: bool,
-    /// First column: frozen at the left edge while the rest scroll.
-    frozen: bool,
     numeric: bool,
 }
 
@@ -304,39 +292,7 @@ fn cell_style(
         let (_, right) = horizontal_padding(padding);
         map.insert("padding-right".into(), format!("calc({right} + {fade_width})"));
     }
-    if place.frozen {
-        // `inherit` takes the row's current, opaque background (row,
-        // alternate row, a consumer's hover).
-        map.extend(style(&[
-            ("position", "sticky"),
-            ("left", "0"),
-            ("z-index", "1"),
-            ("background", "inherit"),
-        ]));
-        if !place.last {
-            map.extend(frozen_gutter(padding));
-            // Keep the frozen cell's own text where it was.
-            let (left, right) = horizontal_padding(padding);
-            map.insert("padding-right".into(), format!("calc({right} + {left})"));
-        }
-    }
     map
-}
-
-/// The frozen cell also covers a gutter beside it, as wide as a cell's left
-/// padding: solid for its first half, then fading out. A column scrolled
-/// partly under the frozen one would otherwise show slivers of glyphs at the
-/// frozen edge. At rest the gutter lies over the next cell's empty left
-/// padding in the same row colour, so it changes nothing visible.
-fn frozen_gutter(padding: &str) -> HashMap<String, String> {
-    let (left, _) = horizontal_padding(padding);
-    style(&[
-        ("margin-right", &format!("calc(-1 * {left})")),
-        (
-            "mask-image",
-            &format!("linear-gradient(to right, #000 calc(100% - {left} / 2), transparent)"),
-        ),
-    ])
 }
 
 /// Build a header cell. The column is sized to fit the label; should the
@@ -373,7 +329,7 @@ fn header_cell(label: &str, place: &CellPlacement, theme: &Theme, fade_width: &s
 
 /// Build a body cell. Every value stays readable: the column is sized to
 /// fit it on one line, and a value wider than the column (beyond
-/// `MAX_MIN_TEXT_EM`, past the frozen column's cap, or when the font runs
+/// `MAX_MIN_TEXT_EM`, wider than the visible area, or when the font runs
 /// wider than estimated) wraps onto more lines instead of being cut off.
 fn body_cell(content: &str, place: &CellPlacement, theme: &Theme, fade_width: &str) -> ChartElement {
     let text_var = format!("var(--chartml-table-text, {})", theme.table_text);
@@ -471,11 +427,9 @@ impl ChartRenderer for TableRenderer {
         // ── Column tracks ──
         // Each column is at least as wide as its header label or widest
         // value on the page (plus padding) and otherwise takes an equal
-        // share of the width. When the columns don't all fit, the frozen
-        // first column gives way first, down to its scrolling width (see
-        // below; its values wrap at spaces), then the table scrolls
-        // sideways: header and body rows are at least the sum of the
-        // minimums plus the fade.
+        // share of the width. No column is pinned: when the columns don't
+        // all fit, the whole table scrolls sideways (header and body rows
+        // are at least the sum of the minimums plus the fade).
         //
         // The expressions are set once, as custom properties on the scroll
         // area, and used by every row. Everything is relative to the
@@ -494,44 +448,19 @@ impl ChartRenderer for TableRenderer {
         let min_var = |i: usize| format!("--chartml-table-min-{}", i + 1);
         let mut sizing: Vec<(String, String)> = Vec::new();
         if columns.len() > 1 {
-            // While the table scrolls, the frozen column is `FROZEN_MAX_SHARE`
-            // wide or its own one-line width if smaller, but never narrower
-            // than its widest word unless that would leave less than
-            // `MIN_SCROLL_WINDOW` beside it (and the fade) to scroll the
-            // other columns through.
-            sizing.push((
-                "--chartml-table-frozen-scrolling".into(),
-                format!(
-                    "max(min({}, calc(100cqw - {FADE_WIDTH_PX}px - {MIN_SCROLL_WINDOW})), min({}, {FROZEN_MAX_SHARE}))",
-                    width(texts[0].word),
-                    width(texts[0].line),
-                ),
-            ));
-            // Every other column fits beside it so its values can be seen
-            // whole — wrapping at spaces if they must — but is never
-            // narrower than its widest word.
-            for (i, text) in texts.iter().enumerate().skip(1) {
+            // Every column fits in the visible area (less the fade) so its
+            // values can be seen whole — wrapping at spaces if they must —
+            // but is never narrower than its widest word.
+            for (i, text) in texts.iter().enumerate() {
                 sizing.push((
                     min_var(i),
                     format!(
-                        "max({}, min({}, calc(100cqw - var(--chartml-table-frozen-scrolling) - {FADE_WIDTH_PX}px)))",
+                        "max({}, min({}, calc(100cqw - {FADE_WIDTH_PX}px)))",
                         width(text.word),
                         width(text.line),
                     ),
                 ));
             }
-            // The frozen column takes whatever width the other columns leave
-            // it, up to its one-line width: it gives way before the table
-            // scrolls, down to its scrolling width.
-            let others: Vec<String> = (1..columns.len()).map(|i| format!("var({})", min_var(i))).collect();
-            sizing.push((
-                min_var(0),
-                format!(
-                    "min({}, max(var(--chartml-table-frozen-scrolling), calc(100cqw - ({}))))",
-                    width(texts[0].line),
-                    others.join(" + "),
-                ),
-            ));
         } else {
             sizing.push((min_var(0), width(texts[0].line)));
         }
@@ -557,7 +486,6 @@ impl ChartRenderer for TableRenderer {
         let place = |i: usize| CellPlacement {
             column: i + 1,
             last: i + 1 == columns.len(),
-            frozen: i == 0,
             numeric: numeric[i],
         };
 
@@ -569,7 +497,7 @@ impl ChartRenderer for TableRenderer {
         let row_bg_alt_var = format!("var(--chartml-table-row-bg-alt, {})", theme.table_row_bg_alt);
 
         // ── Header row (sticky to the top of the scroll area, above the
-        // body's frozen cells; opaque, so rows scrolling under it never show
+        // body rows; opaque, so rows scrolling under it never show
         // through) ──
         let mut header_children: Vec<ChartElement> = columns
                 .iter()
@@ -1268,9 +1196,7 @@ style:
             assert!(t.line > 0.0, "{}", c.label);
             let min = get(scroll, &format!("--chartml-table-min-{}", i + 1)).unwrap();
             assert!(min.contains(&format!("calc({:.2}em + 12px + 12px)", t.line)), "{}: {min}", c.label);
-            // The frozen column's widest word is part of its scrolling width.
-            let word_in = if i == 0 { get(scroll, "--chartml-table-frozen-scrolling").unwrap() } else { min };
-            assert!(word_in.contains(&format!("calc({:.2}em + 12px + 12px)", t.word)), "{}: {word_in}", c.label);
+            assert!(min.contains(&format!("calc({:.2}em + 12px + 12px)", t.word)), "{}: {min}", c.label);
         }
         let expected: Vec<String> = (1..=columns.len())
             .map(|i| format!("minmax(var(--chartml-table-min-{i}), 1fr)"))
@@ -1306,8 +1232,7 @@ style:
     fn rows_and_header_are_opaque_over_the_table_surface() {
         // Point 2: header and body rows lay their colour over the table
         // surface, so they are opaque even when a theme makes them
-        // transparent; the frozen first cell takes its row's background
-        // and is sticky at the left; no other cell is.
+        // transparent.
         let mut config = cfg(WIDE_SPEC);
         config.theme.table_header_bg = "transparent".into();
         config.theme.table_row_bg = "transparent".into();
@@ -1317,14 +1242,6 @@ style:
             let bg = get(row, "background").unwrap();
             assert!(bg.starts_with("linear-gradient("), "{bg}");
             assert!(bg.ends_with(", var(--chartml-table-surface, #24201E)"), "{bg}");
-            let cells = real_cells(row);
-            assert_eq!(get(cells[0], "position"), Some("sticky"));
-            assert_eq!(get(cells[0], "left"), Some("0"));
-            assert_eq!(get(cells[0], "background"), Some("inherit"));
-            for c in &cells[1..] {
-                assert_eq!(get(c, "position"), None);
-                assert_eq!(get(c, "background"), None);
-            }
         }
         let header = by_class(&el, "chartml-table-header")[0];
         assert_eq!(get(header, "position"), Some("sticky"));
@@ -1332,21 +1249,39 @@ style:
     }
 
     #[test]
-    fn frozen_cell_covers_a_gutter_and_keeps_its_text_in_place() {
-        // The frozen cell reaches over the next cell's left padding (12px in
-        // the default theme), fading out, and widens its own right padding
-        // by the same amount so its text does not move. A lone column has
-        // nothing beside it and no gutter.
-        let el = wide();
+    fn no_column_is_sticky_and_each_fits_the_visible_area() {
+        // No column is pinned: no header or body cell is sticky, takes its
+        // row's background or covers a gutter beside it, so the whole table
+        // scrolls sideways. Every column, the first included, fits in the
+        // visible area less the fade (so each can be scrolled fully into
+        // view), but is never narrower than its widest word.
+        let table = wide_data();
+        let el = TableRenderer::new().render(&table, &cfg(WIDE_SPEC)).unwrap();
         for row in header_and_rows(&el) {
-            let first = real_cells(row)[0];
-            assert_eq!(get(first, "margin-right"), Some("calc(-1 * 12px)"));
-            assert_eq!(get(first, "padding-right"), Some("calc(12px + 12px)"));
-            assert!(get(first, "mask-image").is_some_and(|m| m.contains("transparent")));
+            for (i, c) in real_cells(row).iter().enumerate() {
+                for key in ["position", "left", "z-index", "background", "margin-right", "mask-image"] {
+                    assert_eq!(get(c, key), None, "cell {i}: {key}");
+                }
+            }
         }
-        let one = TableRenderer::new().render(&data(), &cfg("type: table\ncolumns: month\n")).unwrap();
-        for row in header_and_rows(&one) {
-            assert_eq!(get(real_cells(row)[0], "margin-right"), None);
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        assert!(!style_of(scroll).keys().any(|k| k.contains("frozen")), "{:?}", style_of(scroll).keys());
+        let header = header_text(&Theme::default());
+        for (i, c) in resolve_columns(&cfg(WIDE_SPEC).visualize, &table).iter().enumerate() {
+            let values: Vec<String> = (0..3).map(|r| format_cell(&table, r, c)).collect();
+            let t = column_text(&c.label, &header, values.iter().map(String::as_str));
+            assert_eq!(
+                get(scroll, &format!("--chartml-table-min-{}", i + 1)),
+                Some(
+                    format!(
+                        "max(calc({:.2}em + 12px + 12px), min(calc({:.2}em + 12px + 12px), calc(100cqw - 32px)))",
+                        t.word, t.line
+                    )
+                    .as_str()
+                ),
+                "{}",
+                c.label
+            );
         }
     }
 

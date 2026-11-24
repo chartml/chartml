@@ -1,9 +1,9 @@
 name: "Table — 12 columns in a narrow container (sideways scroll)"
-tags: [table, narrow, horizontal-scroll, sticky-first-column, numeric-alignment]
+tags: [table, narrow, horizontal-scroll, no-sticky-column, numeric-alignment]
 description: >
   A twelve-column regional sales table. In a narrow container (a phone or
   a narrow dashboard column) the columns keep a readable minimum width and
-  the table scrolls sideways with the first column frozen; numeric columns
+  the whole table scrolls sideways, with no column pinned; numeric columns
   are right-aligned from their data type, and a right-edge fade shows while
   more columns are hidden to the right. Pagination is on (pageSize 15) so
   the pager footer stays below the scroll area. Rendered at phone width
