@@ -26,10 +26,13 @@ mv "$OUT_DIR/web/chartml_wasm_bg.wasm" "$OUT_DIR/wasm/"
 rm -f "$OUT_DIR/node/chartml_wasm_bg.wasm"
 
 # Patch web JS to reference shared wasm
-sed -i "s|new URL('chartml_wasm_bg.wasm', import.meta.url)|new URL('../wasm/chartml_wasm_bg.wasm', import.meta.url)|" "$OUT_DIR/web/chartml_wasm.js"
+# (`sed -i` takes a different argument on GNU and BSD sed, so write to a temp file and move it.)
+sed "s|new URL('chartml_wasm_bg.wasm', import.meta.url)|new URL('../wasm/chartml_wasm_bg.wasm', import.meta.url)|" "$OUT_DIR/web/chartml_wasm.js" > "$OUT_DIR/web/chartml_wasm.js.tmp"
+mv "$OUT_DIR/web/chartml_wasm.js.tmp" "$OUT_DIR/web/chartml_wasm.js"
 
 # Patch node JS to reference shared wasm
-sed -i 's|`${__dirname}/chartml_wasm_bg.wasm`|`${__dirname}/../wasm/chartml_wasm_bg.wasm`|' "$OUT_DIR/node/chartml_wasm.js"
+sed 's|`${__dirname}/chartml_wasm_bg.wasm`|`${__dirname}/../wasm/chartml_wasm_bg.wasm`|' "$OUT_DIR/node/chartml_wasm.js" > "$OUT_DIR/node/chartml_wasm.js.tmp"
+mv "$OUT_DIR/node/chartml_wasm.js.tmp" "$OUT_DIR/node/chartml_wasm.js"
 
 # Clean up generated package.json and gitignore from wasm-pack.
 # We replace the auto-generated node `package.json` with a minimal one that
