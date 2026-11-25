@@ -3250,6 +3250,42 @@ style:
         }
     }
 
+    /// Every top-level CSS block of `css` that mentions `needle`, as
+    /// whitespace-normalised text with comments removed. The two stylesheets
+    /// wrap and indent their rules differently and word their comments
+    /// separately; the rules themselves must match.
+    fn css_blocks_mentioning(css: &str, needle: &str) -> Vec<String> {
+        let normalise = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+        let mut blocks = Vec::new();
+        let mut depth = 0usize;
+        let mut start = 0usize;
+        let mut i = 0usize;
+        while i < css.len() {
+            let ch = css[i..].chars().next().expect("in bounds");
+            // Skip comments so their wording and wrapping never matters.
+            if css[i..].starts_with("/*") {
+                i = css[i..].find("*/").map_or(css.len(), |end| i + end + 2);
+                continue;
+            }
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        let block = &css[start..=i];
+                        if block.contains(needle) {
+                            blocks.push(normalise(block));
+                        }
+                        start = i + 1;
+                    }
+                }
+                _ => {}
+            }
+            i += ch.len_utf8();
+        }
+        blocks
+    }
+
     #[test]
     fn fade_width_is_driven_by_the_stylesheet_scroll_timeline() {
         // The published stylesheets (packages/core and chartml-leptos) drive
@@ -3264,20 +3300,39 @@ style:
             assert!(template.ends_with("var(--chartml-table-fade, 0px)"), "{template}");
             assert!(!template.contains("clamp("), "no estimated fade: {template}");
         }
-        let sheets = [
-            include_str!("../../../packages/core/src/chartml.css"),
-            include_str!("../../chartml-leptos/style/chartml.css"),
-        ];
-        for css in sheets {
-            assert!(css.contains("@property --chartml-table-fade"), "fade must be a registered length");
-            assert!(css.contains("@keyframes chartml-table-fade-on"), "fade-on keyframes");
-            assert!(css.contains("@supports (animation-timeline: scroll(self inline))"), "gated on support");
+
+        // Both stylesheets carry the same fade rules: the registered length,
+        // the keyframes and the @supports block. Comparing the blocks
+        // themselves (not just their presence) makes a drift between the two
+        // files a test failure.
+        let core = include_str!("../../../packages/core/src/chartml.css");
+        let leptos = include_str!("../../chartml-leptos/style/chartml.css");
+        for (name, css) in [("packages/core", core), ("chartml-leptos", leptos)] {
+            // `chartml-table-fade` (one dash) matches the @property name, the
+            // animation name in the @keyframes and @supports blocks, and the
+            // variable the track reads.
+            let blocks = css_blocks_mentioning(css, "chartml-table-fade");
+            assert!(!blocks.is_empty(), "{name}: no fade rules");
+            let all = blocks.join("\n");
+            assert!(all.contains("@property --chartml-table-fade"), "{name}: registered length");
+            assert!(all.contains("@keyframes chartml-table-fade-on"), "{name}: keyframes");
             assert!(
-                css.contains("animation-timeline: scroll(self inline)"),
-                "the scroll area is the scroller the fade reports"
+                all.contains("@supports (animation-timeline: scroll(self inline))"),
+                "{name}: gated on support"
             );
-            assert!(!css.contains("--chartml-table-columns-min"), "no overflow estimate in the stylesheet");
+            assert!(
+                all.contains("animation-timeline: scroll(self inline)"),
+                "{name}: the scroll area is the scroller the fade reports"
+            );
+            assert!(!css.contains("--chartml-table-columns-min"), "{name}: no overflow estimate");
         }
+        let core_rules: Vec<String> = css_blocks_mentioning(core, "chartml-table-fade");
+        let leptos_rules: Vec<String> = css_blocks_mentioning(leptos, "chartml-table-fade");
+        assert_eq!(
+            core_rules, leptos_rules,
+            "the fade rules must be identical in packages/core/src/chartml.css and \
+             crates/chartml-leptos/style/chartml.css"
+        );
     }
 
     #[test]
