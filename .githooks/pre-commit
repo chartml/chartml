@@ -71,6 +71,7 @@ cleanup() {
     [ -d "$state_dir" ] || return 0
     rm -f -- "${owner_file:-}"
     rm -f -- "$clippy_log"
+    rmdir -- "$state_dir/lock.reclaim" 2>/dev/null || true
     release_lock
 }
 trap cleanup EXIT
@@ -89,6 +90,15 @@ fi
 
 # The lock is taken before anything reads the index, so two hooks starting at
 # the same moment cannot collide in `git write-tree`.
+#
+# A guard directory left behind by a hook killed mid-reclaim would disable
+# reclamation, and with it the ability to recover a stale lock. The guard is
+# only ever created while the lint lock is held, so a guard with no lock file
+# at all belongs to a dead run and is cleared here. A guard alongside a live or
+# unresolved lock is left to the reclaim path below, which can tell them apart.
+if [ -e "$state_dir/lock.reclaim" ] && [ ! -e "$lock_dir" ]; then
+    rmdir -- "$state_dir/lock.reclaim" 2>/dev/null || true
+fi
 #
 # The lock is a FILE whose content is the owner's pid, created with noclobber:
 # the create is atomic, needs no hard links (exFAT, some network mounts), and —
@@ -119,6 +129,10 @@ while :; do
                 rm -rf -- "$leftover"
             fi
         done
+        # A hook killed while it held the reclaim guard leaves the guard behind,
+        # and no hook can reclaim anything while it exists. Nothing is linting
+        # because we hold the lock, so a guard seen here belongs to a dead run.
+        rmdir -- "$state_dir/lock.reclaim" 2>/dev/null || true
         break
     fi
     holder=$(lock_owner)
@@ -145,9 +159,17 @@ while :; do
         # thing: two reclaimers could both see a dead pid and both delete, and
         # the second could delete the lock a third hook had just created. A
         # short-lived guard directory makes the verify-and-delete a single
-        # operation, because only one hook can hold the guard, and a hook that
-        # creates a lock cannot do so while the lock file still exists.
+        # operation. A guard found alongside a stale lock, with nobody alive to
+        # hold it, is left by a killed run and is cleared so reclamation can
+        # proceed.
         reclaim_guard="$state_dir/lock.reclaim"
+        # A guard is held for a few syscalls, so one that is older than the
+        # whole wait bound belongs to a killed run. Older guards are cleared so
+        # reclamation can proceed; a fresh one means another hook is inside it.
+        if [ -d "$reclaim_guard" ] &&
+            [ -n "$(find "$reclaim_guard" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
+            rmdir -- "$reclaim_guard" 2>/dev/null || true
+        fi
         if mkdir -- "$reclaim_guard" 2>/dev/null; then
             # Re-read inside the guard: this is the value being acted on. A
             # lock whose content is not a live pid — including garbage, which

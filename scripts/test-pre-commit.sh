@@ -1274,6 +1274,46 @@ else
     tail -5 "$scratch/garbage-lock.log" >&2
 fi
 
+# --- The reclaim guard is respected, and a leaked one is cleaned ---------
+# While another hook holds the guard, a dead lock must NOT be deleted.
+repo="$scratch/guard-held"
+new_repo "$repo"
+mkdir -p "$repo/.git/chartml-pre-commit/lock.reclaim"
+printf '999999\n' > "$repo/.git/chartml-pre-commit/lock"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+(
+    cd "$repo"
+    timeout 15 bash "$hook" > "$scratch/guard-held.log" 2>&1
+) || true
+if [ -e "$repo/.git/chartml-pre-commit/lock" ] && grep -qx '999999' "$repo/.git/chartml-pre-commit/lock"; then
+    pass 'a dead lock is not deleted while another hook holds the reclaim guard'
+else
+    fail 'the reclaim guard was ignored and the dead lock was removed'
+    tail -5 "$scratch/guard-held.log" >&2
+fi
+
+# A guard left behind by a killed hook must not disable reclamation for ever.
+repo="$scratch/guard-leaked"
+new_repo "$repo"
+mkdir -p "$repo/.git/chartml-pre-commit/lock.reclaim"
+printf '999999\n' > "$repo/.git/chartml-pre-commit/lock"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+# Age the guard as a killed run would have left it.
+touch -t 200001010000 "$repo/.git/chartml-pre-commit/lock.reclaim"
+if (cd "$repo" && timeout 40 bash "$hook" > "$scratch/guard-leaked.log" 2>&1); then
+    pass 'a leaked reclaim guard does not disable reclamation'
+else
+    fail 'a leaked reclaim guard blocked every commit'
+    tail -5 "$scratch/guard-leaked.log" >&2
+fi
+if [ -e "$repo/.git/chartml-pre-commit/lock.reclaim" ]; then
+    fail 'the leaked reclaim guard was never removed'
+else
+    pass 'the leaked reclaim guard is removed'
+fi
+
 if [ "$failures" -ne 0 ]; then
     echo "ERROR: $failures pre-commit test(s) failed" >&2
     exit 1
