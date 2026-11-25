@@ -236,6 +236,77 @@ mod tests {
         assert!(span_count >= 2, "Should have label + value spans, got {}", span_count);
     }
 
+    /// Render a single-value metric card that has no `visualize.format` and
+    /// return the value span's content.
+    fn render_unformatted_value(value: serde_json::Value) -> String {
+        let rows: Vec<Row> = vec![[("current".to_string(), value)].into_iter().collect()];
+        let data = DataTable::from_rows(&rows).expect("DataTable::from_rows should succeed");
+
+        let viz: chartml_core::spec::VisualizeSpec =
+            serde_yaml::from_str("type: metric\nvalue: current\n")
+                .expect("metric VisualizeSpec YAML should parse");
+        let config = ChartConfig {
+            visualize: viz,
+            title: None,
+            width: 300.0,
+            height: 150.0,
+            colors: vec![],
+            theme: chartml_core::theme::Theme::default(),
+        };
+
+        let element = MetricRenderer::new()
+            .render(&data, &config)
+            .expect("a metric without a format must render");
+
+        let children = match element {
+            ChartElement::Div { children, .. } => children,
+            other => panic!("root must be Div, got {other:?}"),
+        };
+        match children.get(1) {
+            Some(ChartElement::Span { content, .. }) => content.clone(),
+            other => panic!("value child must be Span, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn metric_without_format_shows_the_raw_number() {
+        // CHA-29: with no `visualize.format` the card prints the raw f64 via
+        // `format!("{}", n)` — no thousands separators, no currency or unit
+        // symbols and no fixed decimals. `docs/docs/spec.md` documents exactly
+        // these outputs, so this test pins them: if the renderer's default ever
+        // changes, the spec has to change with it.
+        let cases: Vec<(serde_json::Value, &str)> = vec![
+            // The example the spec uses: a large integer stays ungrouped.
+            (json!(1234567), "1234567"),
+            // A float keeps its fractional digits and gains no separators.
+            (json!(1234567.89), "1234567.89"),
+            (json!(0.125), "0.125"),
+            // Shortest round-trip decimal, not a rounded display string.
+            (json!(0.30000000000000004_f64), "0.30000000000000004"),
+            // Negatives keep their sign, with or without a fraction.
+            (json!(-1234567), "-1234567"),
+            (json!(-1234567.89), "-1234567.89"),
+            (json!(-2.5), "-2.5"),
+            // Whole numbers print with no decimal point.
+            (json!(0), "0"),
+            (json!(100), "100"),
+            // Large values print in full and never switch to scientific
+            // notation; above 2^53 the digits are limited by f64 precision,
+            // so 9007199254740993 arrives as the nearest f64.
+            (json!(1234567890123456_i64), "1234567890123456"),
+            (json!(1e21), "1000000000000000000000"),
+            (json!(9007199254740993_i64), "9007199254740992"),
+        ];
+
+        for (value, expected) in cases {
+            assert_eq!(
+                render_unformatted_value(value.clone()),
+                expected,
+                "no-format metric output drifted for data value {value}",
+            );
+        }
+    }
+
     #[test]
     fn metric_has_trend_indicator() {
         let renderer = MetricRenderer::new();
