@@ -77,7 +77,10 @@ mkdir -p -- "$state_dir"
 # lock is never visible without its owner recorded (even if we are killed).
 printf '%s\n' "$$" > "$lock_pid_file"
 waited=0
-while ! ln -- "$lock_pid_file" "$lock_file" 2>/dev/null; do
+while :; do
+    if ln -- "$lock_pid_file" "$lock_file" 2>/dev/null; then
+        break
+    fi
     holder=$(cat -- "$lock_file" 2>/dev/null || true)
     case "$holder" in
         ''|*[!0-9]*) holder='' ;;
@@ -87,17 +90,21 @@ while ! ln -- "$lock_pid_file" "$lock_file" 2>/dev/null; do
         if mv -- "$lock_file" "$stale" 2>/dev/null; then
             rm -f -- "$stale"
             echo "   removed stale snapshot lock${holder:+ left by pid $holder}"
+            holder=''
         fi
-        continue
     fi
     if [ "$waited" -ge 60 ]; then
         echo ""
-        echo "❌ Another pre-commit hook is still using this snapshot (pid ${holder})."
-        echo "   If it is not running, remove $lock_file and try again."
+        if [ -n "$holder" ]; then
+            echo "❌ Another pre-commit hook is still using this snapshot (pid ${holder})."
+        else
+            echo "❌ Could not take the snapshot lock at $lock_file."
+        fi
+        echo "   If no other hook is running, remove $lock_file and retry."
         exit 1
     fi
     if [ "$waited" -eq 0 ]; then
-        echo "⏳ Waiting for another pre-commit hook to finish (pid ${holder})..."
+        echo "⏳ Waiting for another pre-commit hook to finish${holder:+ (pid $holder)}..."
     fi
     sleep 1
     waited=$((waited + 1))
