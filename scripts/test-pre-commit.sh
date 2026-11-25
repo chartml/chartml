@@ -57,15 +57,25 @@ printf '%s\n' "${HOOK_TEST_OUTPUT:-}"
 # suppress them. Without this the isolation test would pass no matter where the
 # copy sat, so it could not catch the defect it exists for.
 suppress=0
-check_dir=$PWD
-while :; do
-    if [ -f "$check_dir/.cargo/config.toml" ] && grep -q -- '-A"*, *"warnings\|-A warnings\|allow' "$check_dir/.cargo/config.toml" 2>/dev/null; then
-        suppress=1
-        break
-    fi
-    [ "$check_dir" = "/" ] && break
-    check_dir=$(dirname -- "$check_dir")
-done
+# Cargo honours build.rustflags from config files it discovers, but RUSTFLAGS
+# in the environment overrides them entirely — even an empty value. Emulate
+# that, so the isolation tests fail when a setting outside the commit reaches
+# the linted content.
+if [ -n "${RUSTFLAGS+set}" ]; then
+    case "${RUSTFLAGS:-}" in
+        *-A*warnings*|*allow*) suppress=1 ;;
+    esac
+else
+    check_dir=$PWD
+    while :; do
+        if [ -f "$check_dir/.cargo/config.toml" ] && grep -qE -- '-A"?,? ?"warnings|allow' "$check_dir/.cargo/config.toml" 2>/dev/null; then
+            suppress=1
+            break
+        fi
+        [ "$check_dir" = "/" ] && break
+        check_dir=$(dirname -- "$check_dir")
+    done
+fi
 # Emit a warning when the linted content itself contains a marker, so tests
 # can prove the verdict follows the linted content and nothing else.
 if [ -n "${HOOK_TEST_WARN_ON_MARKER:-}" ] && [ "$suppress" -eq 0 ] && grep -rqF -- "$HOOK_TEST_WARN_ON_MARKER" .; then
@@ -511,6 +521,40 @@ else
     pass 'a commit without a manifest is refused instead of linting the working tree'
 fi
 
+# --- Settings outside the commit cannot change the verdict ---------------
+# Cargo merges .cargo/config.toml from the copy's ancestors and from
+# CARGO_HOME, and reads RUSTFLAGS from the environment. None of that is part of
+# the commit, so a rustflags that silences warnings must not make a commit with
+# a real warning pass.
+repo="$scratch/isolation-env"
+new_repo "$repo"
+# The ancestor config must be outside the repository (a TMPDIR inside it is
+# refused for a different reason), yet still an ancestor of the lint copy.
+outer="$scratch/isolation-outer"
+mkdir -p "$outer/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$outer/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_ANCESTOR_WARNING = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    TMPDIR="$outer" HOOK_TEST_WARN_ON_MARKER='CHA27_ANCESTOR_WARNING' bash "$hook" > "$scratch/isolation-env.log" 2>&1
+); then
+    fail 'a cargo config in an ancestor directory suppressed a committed warning'
+elif ! grep -q 'CHA27_ANCESTOR_WARNING\|Clippy warnings found' "$scratch/isolation-env.log"; then
+    fail 'the ancestor-config case failed for the wrong reason'
+    cat "$scratch/isolation-env.log" >&2
+else
+    pass 'a cargo config in an ancestor directory cannot suppress a committed warning'
+fi
+if (
+    cd "$repo"
+    RUSTFLAGS='-A warnings' HOOK_TEST_WARN_ON_MARKER='CHA27_ANCESTOR_WARNING' bash "$hook" > "$scratch/isolation-rustflags.log" 2>&1
+); then
+    fail 'RUSTFLAGS from the environment suppressed a committed warning'
+else
+    pass 'RUSTFLAGS from the environment cannot suppress a committed warning'
+fi
+
 # --- The hook never rewrites an unstaged tracked file ---------------------
 # Cargo rewrites Cargo.lock when it resolves from a directory it should not
 # have read. An unstaged lockfile edit must survive a passing and a failing run.
@@ -934,6 +978,49 @@ if (cd "$repo" && bash "$hook" > "$scratch/killed-lock-file.log" 2>&1); then
 else
     fail 'a lock file left by a dead hook blocked the commit'
     cat "$scratch/killed-lock-file.log" >&2
+fi
+
+# --- A refused run never prints an internal error ------------------------
+# An unwritable state directory is reported and stops the commit; the trap then
+# runs, and must not fail on an unset variable or emit a script error next to
+# the real diagnosis.
+repo="$scratch/unwritable-state"
+new_repo "$repo"
+mkdir -p "$repo/.git/chartml-pre-commit"
+chmod 500 "$repo/.git/chartml-pre-commit"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+if (cd "$repo" && bash "$hook" > "$scratch/unwritable-state.log" 2>&1); then
+    fail 'an unwritable state directory still produced a verdict'
+else
+    pass 'an unwritable state directory is reported'
+fi
+if grep -qE 'unbound variable|command not found|No such file or directory' "$scratch/unwritable-state.log"; then
+    fail 'the refusal printed an internal script error'
+    cat "$scratch/unwritable-state.log" >&2
+else
+    pass 'the refusal prints no internal script error'
+fi
+chmod 700 "$repo/.git/chartml-pre-commit"
+
+# --- The hook works where hard links are unavailable ---------------------
+# The lock must not depend on `ln`: exFAT, FAT32 and some network mounts do not
+# support hard links, and the repository itself still works there.
+repo="$scratch/no-hardlinks"
+new_repo "$repo"
+mkdir -p "$scratch/no-hardlinks-bin"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$scratch/no-hardlinks-bin/ln"
+chmod +x "$scratch/no-hardlinks-bin/ln"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+if (
+    cd "$repo"
+    PATH="$scratch/no-hardlinks-bin:$PATH" bash "$hook" > "$scratch/no-hardlinks.log" 2>&1
+); then
+    pass 'the lock works where hard links are unavailable'
+else
+    fail 'the lock failed where hard links are unavailable'
+    cat "$scratch/no-hardlinks.log" >&2
 fi
 
 if [ "$failures" -ne 0 ]; then
