@@ -39,6 +39,12 @@ humantime = "2"
 # resolver expects.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+# `chart_provider_test.rs` mounts the real component through
+# `leptos::mount::mount_to`. Leptos compiles effects (`Effect::new`) as
+# no-ops unless its `csr` feature enables `reactive_graph/effects`, so the
+# browser test build needs the feature even though the library itself must
+# not force it on consumers (they pick `csr` or `hydrate` themselves).
+leptos = { version = "0.8", features = ["csr"] }
 chartml-chart-cartesian = { path = "../chartml-chart-cartesian" }
 # `table_layout_test.rs` renders tables with the real renderer and reads the
 # page's layout measurements back as JSON.
