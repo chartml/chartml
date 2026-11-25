@@ -41,7 +41,9 @@ lock_file="$state_dir/lock"
 
 lock_pid_file="$state_dir/lock.$$"
 cargo_pid=''
-clippy_log="$state_dir/clippy.log"
+# Per-invocation, so a hook that exits before taking the lock can never delete
+# the log of the hook that holds it.
+clippy_log="$state_dir/clippy.$$.log"
 cleanup() {
     # Never leave cargo linting a snapshot that the next hook will replace.
     if [ -n "$cargo_pid" ] && kill -0 "$cargo_pid" 2>/dev/null; then
@@ -138,21 +140,56 @@ if ! (
 fi
 rm -f -- "$verify_index"
 
-# Prove the snapshot is exactly the tree the commit will record before linting
-# it. A mismatch (for example a filtering or submodule edge case) fails the
-# commit instead of linting content that differs from what would be committed.
+# Prove the snapshot holds exactly the commit's content before linting it. A
+# mismatch (for example a smudge filter) fails the commit instead of linting
+# something else. Content is compared, not the tree id: clippy reads bytes, so
+# an executable bit that the filesystem cannot represent (core.filemode=false,
+# Git for Windows) must not refuse every commit.
 verify_index=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-verify.XXXXXX")
 rm -f -- "$verify_index"
 abs_git_dir=$(cd -- "$(git rev-parse --git-dir)" && pwd)
-snapshot_tree_id=$(
-    cd -- "$snapshot_tree"
+listing_file=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-listing.XXXXXX")
+(
+    cd -- "$snapshot_tree" || exit 1
     GIT_INDEX_FILE="$verify_index" git --git-dir="$abs_git_dir" --work-tree="$snapshot_tree" add -A -f -- . &&
-        GIT_INDEX_FILE="$verify_index" git --git-dir="$abs_git_dir" write-tree
-) || snapshot_tree_id=''
+        GIT_INDEX_FILE="$verify_index" git --git-dir="$abs_git_dir" --work-tree="$snapshot_tree" ls-files -s
+) > "$listing_file" || : > "$listing_file"
 rm -f -- "$verify_index"
-if [ "$snapshot_tree_id" != "$index_tree" ]; then
+
+# Normalise both sides to "path<TAB>object<TAB>kind" so modes, index stages and
+# ordering differences cannot mask or invent a content difference. Submodules
+# (gitlinks) are not materialised, so they are not part of the linted content.
+# Paths with unusual characters are quoted by git here; both sides are produced
+# by git, so the quoting is compared consistently, and blobs are what differ.
+content_of_index_tree() {
+    git ls-tree -r "$1" | awk -F'\t' '{
+        split($1, meta, " ")
+        kind = (meta[1] == "120000") ? "symlink" : "file"
+        if (meta[2] == "blob") printf "%s\t%s\t%s\n", $2, meta[3], kind
+    }' | LC_ALL=C sort
+}
+content_of_index_file() {
+    awk -F'\t' '{
+        split($1, meta, " ")
+        if (meta[3] != "0") next
+        kind = (meta[1] == "120000") ? "symlink" : "file"
+        printf "%s\t%s\t%s\n", $2, meta[2], kind
+    }' "$1" | LC_ALL=C sort
+}
+
+index_content=$(content_of_index_tree "$index_tree")
+snapshot_content=$(content_of_index_file "$listing_file")
+rm -f -- "$listing_file"
+if [ "$index_content" != "$snapshot_content" ]; then
     echo ""
-    echo "❌ The staged snapshot does not match the index (expected ${index_tree}, got ${snapshot_tree_id:-nothing})."
+    echo "❌ The staged snapshot does not match the index content."
+    if [ -z "$snapshot_content" ]; then
+        echo "   The snapshot at $snapshot_tree could not be read."
+    elif [ -z "$index_content" ]; then
+        echo "   The commit has no content to lint."
+    else
+        diff <(printf '%s\n' "$index_content") <(printf '%s\n' "$snapshot_content") | head -20
+    fi
     echo "   Refusing to lint content other than the commit's. Remove $state_dir and try again."
     exit 1
 fi

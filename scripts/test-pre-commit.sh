@@ -38,7 +38,16 @@ if [ -n "${HOOK_TEST_WARN_ON_MARKER:-}" ] && grep -rqF -- "$HOOK_TEST_WARN_ON_MA
 fi
 if [ -n "${HOOK_TEST_HANG_MARKER:-}" ]; then
     : > "$HOOK_TEST_HANG_MARKER"
-    sleep "${HOOK_TEST_HANG_SECONDS:-30}"
+    if [ -n "${HOOK_TEST_RELEASE_FILE:-}" ]; then
+        # Deterministic hold: keep linting until the test releases us, with a
+        # bound so a broken test cannot hang the suite.
+        for _ in $(seq 1 600); do
+            [ -e "$HOOK_TEST_RELEASE_FILE" ] && break
+            sleep 0.1
+        done
+    else
+        sleep "${HOOK_TEST_HANG_SECONDS:-30}"
+    fi
 fi
 exit "${HOOK_TEST_EXIT:-0}"
 CARGO
@@ -354,8 +363,13 @@ printf 'fn working_tree_only() { let CHA27_UNSTAGED_WARNING = 1; }\n' > "$repo/t
 (
     cd "$repo"
     HOOK_TEST_WARN_ON_MARKER='CHA27_UNSTAGED_WARNING' bash "$hook" >/dev/null 2>&1
-) || fail 'an unstaged warning blocked a clean commit'
-pass 'warning in the working tree only does not block the commit'
+) || {
+    fail 'an unstaged warning blocked a clean commit'
+    unstaged_blocked=1
+}
+if [ "${unstaged_blocked:-0}" -eq 0 ]; then
+    pass 'warning in the working tree only does not block the commit'
+fi
 
 printf 'fn staged_warns() { let CHA27_STAGED_WARNING = 1; }\n' > "$repo/tracked.rs"
 git -C "$repo" add tracked.rs
@@ -384,7 +398,7 @@ printf 'fn tracked() {}\n' > "$repo/tracked.rs"
 git -C "$repo" add tracked.rs
 if (cd "$repo" && bash "$hook" > "$scratch/snapshot-mismatch.log" 2>&1); then
     fail 'hook linted a snapshot that differs from the commit'
-elif grep -q 'does not match the index' "$scratch/snapshot-mismatch.log"; then
+elif grep -q 'does not match the index content' "$scratch/snapshot-mismatch.log"; then
     pass 'snapshot that differs from the commit is refused'
 else
     fail 'snapshot mismatch was rejected for the wrong reason'
@@ -518,6 +532,82 @@ if (
 else
     fail 'a partial commit was blocked by content it does not commit'
     cat "$scratch/real-partial.log" >&2
+fi
+
+# --- Refusal does not depend on the executable bit ------------------------
+# clippy reads content, so a checkout where the filesystem cannot represent
+# the executable bit (core.filemode=false, e.g. Git for Windows) must still
+# commit. Comparing whole tree ids used to refuse every commit here.
+repo="$scratch/filemode"
+new_repo "$repo"
+printf '#!/bin/sh\necho tool\n' > "$repo/tool.sh"
+chmod +x "$repo/tool.sh"
+git -C "$repo" add tool.sh
+git -C "$repo" commit -qm 'add executable'
+git -C "$repo" config core.filemode false
+printf 'fn tracked() { let cha27 = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (cd "$repo" && bash "$hook" > "$scratch/filemode.log" 2>&1); then
+    pass 'a checkout without executable bits still commits'
+else
+    fail 'core.filemode=false refused a clean commit'
+    cat "$scratch/filemode.log" >&2
+fi
+
+# --- A second hook that gives up must not disturb the running one ---------
+# A hook that exits before taking the lock used to delete the active hook's
+# clippy log, so a clean commit failed for an unrelated reason.
+repo="$scratch/second-hook-cleanup"
+new_repo "$repo"
+printf 'base\n' > "$repo/held.rs"
+git -C "$repo" add held.rs
+git -C "$repo" commit -qm 'add the file both branches change'
+seed_dirty_working_tree "$repo"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+first_marker="$scratch/second-hook-cleanup.marker"
+first_release="$scratch/second-hook-cleanup.release"
+first_log="$scratch/second-hook-cleanup.first.log"
+(
+    cd "$repo" || exit 1
+    HOOK_TEST_HANG_MARKER="$first_marker" HOOK_TEST_RELEASE_FILE="$first_release" bash "$hook" > "$first_log" 2>&1 &
+    first_pid=$!
+    for _ in $(seq 1 100); do
+        [ -e "$first_marker" ] && break
+        sleep 0.1
+    done
+    if [ ! -e "$first_marker" ]; then
+        echo 'ERROR: first hook never reached cargo' >&2
+        kill -KILL "$first_pid" 2>/dev/null || true
+        exit 1
+    fi
+    # Produce a genuine merge conflict so the second hook exits at the
+    # unresolved-index check, which happens before it takes the lock.
+    git stash -q --include-untracked
+    git checkout -q -b conflicting-side
+    printf 'theirs\n' > held.rs
+    git commit -qam theirs
+    git checkout -q -
+    printf 'ours\n' > held.rs
+    git commit -qam ours
+    git merge conflicting-side >/dev/null 2>&1 || true
+    bash "$hook" >/dev/null 2>&1 || true
+    # Only now let the first hook finish linting.
+    : > "$first_release"
+    if wait "$first_pid"; then
+        :
+    else
+        echo 'FIRST_FAILED' > "$scratch/second-hook-cleanup.result"
+    fi
+) || true
+if [ -e "$scratch/second-hook-cleanup.result" ]; then
+    fail 'a second hook that exited early broke the running hook'
+    tail -5 "$first_log" >&2
+elif grep -q '✅ Clippy clean' "$first_log"; then
+    pass 'a second hook that exits early leaves the running hook clean'
+else
+    fail 'the running hook did not finish cleanly'
+    tail -5 "$first_log" >&2
 fi
 
 if [ "$failures" -ne 0 ]; then
