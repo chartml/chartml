@@ -637,7 +637,7 @@
         },
         "format": {
           "type": "string",
-          "description": "Number format (for metric charts)"
+          "description": "Number format for the metric value, as a d3-format string (e.g. \"$,.0f\" shows 1234567 as $1,234,567). Optional: when it is omitted the card shows the raw number with no thousands separators, no currency or unit symbol and no fixed decimal precision — 1234567 shows 1234567, 1234567.89 shows 1234567.89, -1234567 shows -1234567 and 0.125 shows 0.125. Whole numbers print without a decimal point, fractional values print their shortest round-trip decimal, and large values never use scientific notation."
         },
         "compareWith": {
           "type": "string",

@@ -574,7 +574,7 @@ visualize:
   type: metric
   value: current_value
   label: "Revenue"             # Optional - label shown inside card
-  format: "$,.0f"
+  format: "$,.0f"              # Optional - omit to show the raw number (1234567)
   compareWith: previous_value  # Optional - show trend
   invertTrend: false           # Optional - invert trend colors (true = red for increase, green for decrease)
 ```
@@ -583,6 +583,35 @@ visualize:
 - `chart.title` (optional) → Label shown **above** card (consistent with all chart types)
 - `visualize.label` (optional) → Label shown **inside** card (metric-specific)
 - If neither specified, only the formatted value is shown
+
+**Metric Value Formatting:**
+
+`visualize.format` is optional. When set, it is a
+[d3-format](https://d3js.org/d3-format) string applied to the value, e.g.
+`"$,.0f"` shows `1234567` as `$1,234,567`.
+
+With **no** `visualize.format`, the card shows the **raw number**: no thousands
+separators, no currency or unit symbol, and no fixed decimal precision.
+
+| Data value | Card shows |
+|------------|------------|
+| `1234567` | `1234567` |
+| `1234567.89` | `1234567.89` |
+| `0.125` | `0.125` |
+| `-1234567` | `-1234567` |
+| `1e21` | `1000000000000000000000` |
+
+Whole numbers print without a decimal point (`100`, not `100.0`). Fractional
+values print the shortest run of significant digits that round-trips to the
+same `f64`, so `0.1` shows `0.1` and `0.30000000000000004` stays in full rather
+than becoming `0.3`. No value is ever printed in scientific notation.
+
+```yaml
+visualize:
+  type: metric
+  value: current_value
+  # No format: the card shows 1234567, not 1,234,567
+```
 ```
 
 5. **Dual-Axis Chart**
@@ -1113,6 +1142,10 @@ Formats can be applied to:
 - **Axis labels**: `axes.rows.format`
 - **Data labels**: `rows.dataLabels.format`
 - **Metric values**: `visualize.format`
+
+All of these are optional. A metric with no `visualize.format` shows the raw
+number exactly as the renderer prints it: `1234567`, not `1,234,567` — see
+*Metric Value Formatting* under [Visualize Layer](#visualize-layer) above.
 
 **Example:**
 ```yaml
