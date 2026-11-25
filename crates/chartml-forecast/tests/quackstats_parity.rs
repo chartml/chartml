@@ -31,7 +31,7 @@ fn linear_simple_trend() {
     // Simple upward trend: y = 10 + 2*x + noise
     let values: Vec<f64> = (0..20).map(|i| 10.0 + 2.0 * i as f64 + (i as f64 * 0.5).sin()).collect();
     let series = make_series(values);
-    let result = linear::forecast_linear(&series, 5, 0.95).unwrap();
+    let result = linear::forecast_linear(&series, 5, 0.95).expect("linear forecast should succeed");
 
     assert_eq!(result.forecasts.len(), 5);
     assert_eq!(result.timestamps.len(), 5);
@@ -76,7 +76,8 @@ fn linear_noisy_data_bands_widen() {
         23.4, 25.9, 18.7, 24.2,
     ];
     let series = make_series(values);
-    let result = linear::forecast_linear(&series, 10, 0.95).unwrap();
+    let result = linear::forecast_linear(&series, 10, 0.95)
+        .expect("linear forecast should succeed");
 
     println!("=== LINEAR NOISY DATA ===");
     let mut prev_width = 0.0;
@@ -102,7 +103,7 @@ fn linear_perfect_fit_zero_bands() {
     // Perfectly linear data — bands should collapse to zero
     let values: Vec<f64> = (0..10).map(|i| 5.0 + 3.0 * i as f64).collect();
     let series = make_series(values);
-    let result = linear::forecast_linear(&series, 3, 0.95).unwrap();
+    let result = linear::forecast_linear(&series, 3, 0.95).expect("linear forecast should succeed");
 
     println!("=== LINEAR PERFECT FIT ===");
     for i in 0..3 {
@@ -128,7 +129,8 @@ fn linear_perfect_fit_zero_bands() {
 fn exponential_pure_growth() {
     let values: Vec<f64> = (0..30).map(|i| 100.0 * (0.03 * i as f64).exp()).collect();
     let series = make_series(values.clone());
-    let result = exponential::forecast_exponential(&series, 5, 0.95).unwrap();
+    let result = exponential::forecast_exponential(&series, 5, 0.95)
+        .expect("exponential forecast should succeed");
 
     println!("=== EXPONENTIAL PURE GROWTH ===");
     for i in 0..5 {
@@ -138,7 +140,7 @@ fn exponential_pure_growth() {
         );
     }
 
-    let last_observed = values.last().unwrap();
+    let last_observed = values.last().expect("values should not be empty");
     for fc in &result.forecasts {
         assert!(*fc > *last_observed, "Forecast should exceed last observed");
     }
@@ -156,7 +158,8 @@ fn exponential_asymmetric_intervals() {
         })
         .collect();
     let series = make_series(values);
-    let result = exponential::forecast_exponential(&series, 5, 0.95).unwrap();
+    let result = exponential::forecast_exponential(&series, 5, 0.95)
+        .expect("exponential forecast should succeed");
 
     println!("=== EXPONENTIAL ASYMMETRIC INTERVALS ===");
     for i in 0..5 {
@@ -193,7 +196,8 @@ fn logistic_s_curve() {
         .map(|i| 500.0 / (1.0 + (-0.15 * (i as f64 - 25.0)).exp()))
         .collect();
     let series = make_series(values);
-    let result = logistic::forecast_logistic(&series, 10, 0.95).unwrap();
+    let result = logistic::forecast_logistic(&series, 10, 0.95)
+        .expect("logistic forecast should succeed");
 
     println!("=== LOGISTIC S-CURVE ===");
     for i in 0..10 {
@@ -216,9 +220,10 @@ fn logistic_dashboard_no_drop() {
         15.0, 28.0, 55.0, 105.0, 195.0, 340.0, 490.0, 620.0,
         720.0, 790.0, 840.0, 875.0, 900.0, 918.0, 930.0,
     ];
-    let last_actual = *values.last().unwrap();
+    let last_actual = *values.last().expect("values should not be empty");
     let series = make_series(values);
-    let result = logistic::forecast_logistic(&series, 6, 0.95).unwrap();
+    let result = logistic::forecast_logistic(&series, 6, 0.95)
+        .expect("logistic forecast should succeed");
 
     println!("=== LOGISTIC DASHBOARD DATA ===");
     for i in 0..6 {
@@ -252,7 +257,7 @@ fn auto_selects_on_exponential_data() {
         })
         .collect();
     let series = make_series(values);
-    let result = auto::forecast_auto(&series, 5, 0.95).unwrap();
+    let result = auto::forecast_auto(&series, 5, 0.95).expect("auto forecast should succeed");
 
     println!("=== AUTO ON EXPONENTIAL DATA ===");
     for i in 0..5 {
@@ -274,7 +279,7 @@ fn auto_handles_negatives() {
     let series = make_series(values);
     let result = auto::forecast_auto(&series, 5, 0.95);
     assert!(result.is_ok(), "Auto should handle negative values");
-    assert_eq!(result.unwrap().forecasts.len(), 5);
+    assert_eq!(result.expect("auto forecast should succeed on negative values").forecasts.len(), 5);
 }
 
 #[test]
@@ -283,7 +288,7 @@ fn auto_scurve_data() {
         .map(|i| 200.0 / (1.0 + (-0.2 * (i as f64 - 20.0)).exp()))
         .collect();
     let series = make_series(values);
-    let result = auto::forecast_auto(&series, 5, 0.95).unwrap();
+    let result = auto::forecast_auto(&series, 5, 0.95).expect("auto forecast should succeed");
 
     println!("=== AUTO ON S-CURVE DATA ===");
     for i in 0..5 {
@@ -306,7 +311,7 @@ fn auto_scurve_data() {
 fn ets_simple_trend() {
     let values: Vec<f64> = (0..20).map(|i| 10.0 + 2.0 * i as f64).collect();
     let series = make_series(values);
-    let result = ets::forecast_ets(&series, 5, 0.95).unwrap();
+    let result = ets::forecast_ets(&series, 5, 0.95).expect("ets forecast should succeed");
 
     println!("=== ETS SIMPLE TREND ===");
     for i in 0..5 {
@@ -345,7 +350,7 @@ fn seasonality_periodic_data() {
         })
         .collect();
     let series = make_series(values);
-    let results = detect_seasonality(&series.values).unwrap();
+    let results = detect_seasonality(&series.values).expect("seasonality detection should succeed");
 
     println!("=== SEASONALITY DETECTION ===");
     for r in &results {
@@ -385,7 +390,7 @@ fn all_models_produce_valid_output() {
             horizon: 5,
             confidence_level: 0.95,
         };
-        let result = forecast(&series, &config).unwrap();
+        let result = forecast(&series, &config).expect("forecast should succeed for every model");
 
         println!("\n--- {} ---", name);
         for i in 0..5 {
@@ -435,7 +440,8 @@ fn bands_widen_all_models() {
     println!("=== BAND WIDENING CHECK ===");
 
     // Linear should definitely widen
-    let result = linear::forecast_linear(&series, 10, 0.95).unwrap();
+    let result = linear::forecast_linear(&series, 10, 0.95)
+        .expect("linear forecast should succeed");
     let widths: Vec<f64> = (0..10)
         .map(|i| result.upper_bounds[i] - result.lower_bounds[i])
         .collect();
@@ -452,7 +458,8 @@ fn bands_widen_all_models() {
 
     // Exponential should also widen
     // Need all positive values (already are)
-    let result = exponential::forecast_exponential(&series, 10, 0.95).unwrap();
+    let result = exponential::forecast_exponential(&series, 10, 0.95)
+        .expect("exponential forecast should succeed");
     let widths: Vec<f64> = (0..10)
         .map(|i| result.upper_bounds[i] - result.lower_bounds[i])
         .collect();
@@ -472,13 +479,13 @@ fn bands_widen_all_models() {
 fn timestamps_are_sequential() {
     let values: Vec<f64> = (0..15).map(|i| 100.0 + i as f64 * 3.0).collect();
     let series = make_series(values);
-    let result = linear::forecast_linear(&series, 5, 0.95).unwrap();
+    let result = linear::forecast_linear(&series, 5, 0.95).expect("linear forecast should succeed");
 
     // Timestamps should continue from the last one
     let last_ts = 1000 + 14; // timestamps start at 1000, 15 values = last is 1014
-    for i in 0..5 {
+    for (i, ts) in result.timestamps[..5].iter().enumerate() {
         assert_eq!(
-            result.timestamps[i],
+            *ts,
             last_ts + (i as i32 + 1),
             "Timestamp {} should be {}",
             i, last_ts + (i as i32 + 1)

@@ -37,7 +37,7 @@ fn visitors_table() -> DataTable {
         make_row(vec![("date", json!("2024-01-02")), ("n", json!(150.0))]),
         make_row(vec![("date", json!("2024-01-03")), ("n", json!(200.0))]),
     ])
-    .unwrap()
+    .expect("visitors table should build")
 }
 
 fn sessions_table() -> DataTable {
@@ -46,7 +46,7 @@ fn sessions_table() -> DataTable {
         make_row(vec![("date", json!("2024-01-02")), ("n", json!(15.0))]),
         make_row(vec![("date", json!("2024-01-03")), ("n", json!(20.0))]),
     ])
-    .unwrap()
+    .expect("sessions table should build")
 }
 
 /// Mock renderer that always emits a known SVG envelope and counts how many
@@ -58,7 +58,7 @@ struct CountingRenderer {
 
 impl ChartRenderer for CountingRenderer {
     fn render(&self, _data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
-        *self.calls.lock().unwrap() += 1;
+        *self.calls.lock().expect("calls mutex should not be poisoned") += 1;
         Ok(ChartElement::Svg {
             viewbox: ViewBox::new(0.0, 0.0, config.width, config.height),
             width: Some(config.width),
@@ -107,7 +107,7 @@ struct CapturingRenderer {
 
 impl ChartRenderer for CapturingRenderer {
     fn render(&self, data: &DataTable, _config: &ChartConfig) -> Result<ChartElement, ChartError> {
-        *self.captured.lock().unwrap() = Some(data.clone());
+        *self.captured.lock().expect("captured mutex should not be poisoned") = Some(data.clone());
         Ok(ChartElement::Svg {
             viewbox: ViewBox::new(0.0, 0.0, 800.0, 400.0),
             width: Some(800.0),
@@ -243,7 +243,7 @@ async fn test_transform_passthrough() {
     );
 
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(SINGLE_INLINE_YAML, &opts).await.unwrap();
+    let fetched = chartml.fetch(SINGLE_INLINE_YAML, &opts).await.expect("fetch should succeed");
 
     // Snapshot the source table BEFORE transform so we can prove identity.
     let original = fetched.sources["source"].clone();
@@ -294,7 +294,7 @@ async fn test_transform_multi_no_transform_error() {
     let fetched = chartml
         .fetch(MULTI_NAMED_MAP_NO_TRANSFORM_YAML, &opts)
         .await
-        .unwrap();
+        .expect("fetch should succeed");
 
     let err = chartml
         .transform(fetched, &opts)
@@ -321,8 +321,8 @@ async fn test_render_prepared_to_svg() {
     );
 
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(SINGLE_INLINE_YAML, &opts).await.unwrap();
-    let prepared = chartml.transform(fetched, &opts).await.unwrap();
+    let fetched = chartml.fetch(SINGLE_INLINE_YAML, &opts).await.expect("fetch should succeed");
+    let prepared = chartml.transform(fetched, &opts).await.expect("transform should succeed");
 
     let svg = chartml
         .render_prepared_to_svg(&prepared, &opts)
@@ -335,7 +335,7 @@ async fn test_render_prepared_to_svg() {
     );
     assert!(svg.contains("</svg>"));
     assert!(
-        captured.lock().unwrap().is_some(),
+        captured.lock().expect("captured mutex should not be poisoned").is_some(),
         "The renderer should have been called with the prepared data",
     );
 }
@@ -369,8 +369,8 @@ visualize:
 "#;
 
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(METRIC_YAML, &opts).await.unwrap();
-    let prepared = chartml.transform(fetched, &opts).await.unwrap();
+    let fetched = chartml.fetch(METRIC_YAML, &opts).await.expect("fetch should succeed");
+    let prepared = chartml.transform(fetched, &opts).await.expect("transform should succeed");
     let svg = chartml
         .render_prepared_to_svg(&prepared, &opts)
         .expect("render_prepared_to_svg must succeed for the metric spec");
@@ -412,14 +412,17 @@ async fn test_three_stage_cached_resize() {
     );
 
     let base_opts = RenderOptions::default();
-    let fetched = chartml.fetch(SINGLE_INLINE_YAML, &base_opts).await.unwrap();
-    let prepared = chartml.transform(fetched, &base_opts).await.unwrap();
+    let fetched = chartml
+        .fetch(SINGLE_INLINE_YAML, &base_opts)
+        .await
+        .expect("fetch should succeed");
+    let prepared = chartml.transform(fetched, &base_opts).await.expect("transform should succeed");
 
     // Three resizes from the SAME prepared chart — no re-fetch, no re-transform.
     let mut svgs = Vec::new();
     for width in [400.0_f64, 800.0, 1600.0] {
         let opts = RenderOptions::with_size(Some(width), Some(300.0));
-        let svg = chartml.render_prepared_to_svg(&prepared, &opts).unwrap();
+        let svg = chartml.render_prepared_to_svg(&prepared, &opts).expect("render should succeed");
         assert!(
             svg.contains(&format!("width=\"{}\"", width)),
             "Resize at width={} must be reflected in the SVG header; got: {}",
@@ -431,7 +434,7 @@ async fn test_three_stage_cached_resize() {
 
     assert_eq!(svgs.len(), 3);
     assert_eq!(
-        *calls.lock().unwrap(),
+        *calls.lock().expect("calls mutex should not be poisoned"),
         3,
         "Renderer must be called once per resize (no skipped renders)",
     );
@@ -465,7 +468,7 @@ async fn test_render_to_svg_async_with_join() {
         .expect("render_to_svg_async must drive fetch + transform + render");
 
     assert!(svg.starts_with("<svg"));
-    let table = captured.lock().unwrap();
+    let table = captured.lock().expect("captured mutex should not be poisoned");
     let table = table.as_ref().expect("renderer must have received joined data");
     assert_eq!(
         table.num_rows(),

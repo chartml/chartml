@@ -45,7 +45,7 @@ fn visitors_table() -> DataTable {
         make_row(vec![("date", json!("2024-01-02")), ("n", json!(150.0))]),
         make_row(vec![("date", json!("2024-01-03")), ("n", json!(200.0))]),
     ])
-    .unwrap()
+    .expect("visitors table should build")
 }
 
 fn sessions_table() -> DataTable {
@@ -54,7 +54,7 @@ fn sessions_table() -> DataTable {
         make_row(vec![("date", json!("2024-01-02")), ("n", json!(15.0))]),
         make_row(vec![("date", json!("2024-01-03")), ("n", json!(20.0))]),
     ])
-    .unwrap()
+    .expect("sessions table should build")
 }
 
 struct MockRenderer;
@@ -77,7 +77,7 @@ struct CapturingRenderer {
 
 impl ChartRenderer for CapturingRenderer {
     fn render(&self, data: &DataTable, _config: &ChartConfig) -> Result<ChartElement, ChartError> {
-        *self.captured.lock().unwrap() = Some(data.clone());
+        *self.captured.lock().expect("captured mutex should not be poisoned") = Some(data.clone());
         Ok(ChartElement::Svg {
             viewbox: ViewBox::new(0.0, 0.0, 800.0, 400.0),
             width: Some(800.0),
@@ -163,7 +163,10 @@ impl RecordingProvider {
 #[async_trait]
 impl DataSourceProvider for RecordingProvider {
     async fn fetch(&self, request: FetchRequest) -> Result<FetchResult, FetchError> {
-        *self.last_request.lock().unwrap() = Some(request);
+        *self
+            .last_request
+            .lock()
+            .expect("last_request mutex should not be poisoned") = Some(request);
         Ok(FetchResult {
             data: self.table.clone(),
             metadata: HashMap::new(),
@@ -226,7 +229,7 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(yaml, &opts).await.unwrap();
+    let fetched = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(fetched.sources.len(), 1);
     assert!(fetched.sources.contains_key("source"));
     assert_eq!(calls_handle.load(Ordering::SeqCst), 1);
@@ -262,7 +265,7 @@ visualize:
         server.uri(),
     );
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(&yaml, &opts).await.unwrap();
+    let fetched = chartml.fetch(&yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(fetched.sources["source"].num_rows(), 2);
     assert_eq!(fetched.metadata.cache_misses, vec!["source".to_string()]);
 }
@@ -286,10 +289,14 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(yaml, &opts).await.unwrap();
+    let fetched = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(fetched.sources["source"].num_rows(), 3);
 
-    let recorded = last_request.lock().unwrap().clone().expect("provider was called");
+    let recorded = last_request
+        .lock()
+        .expect("last_request mutex should not be poisoned")
+        .clone()
+        .expect("provider was called");
     assert_eq!(recorded.spec.datasource.as_deref(), Some("warehouse"));
     assert_eq!(
         recorded.spec.query.as_deref(),
@@ -337,7 +344,7 @@ visualize:
 "#;
     let opts = RenderOptions::default();
     let start = Instant::now();
-    let fetched = chartml.fetch(yaml, &opts).await.unwrap();
+    let fetched = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     let elapsed = start.elapsed();
 
     assert_eq!(fetched.sources.len(), 3);
@@ -376,14 +383,14 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(yaml, &opts).await.unwrap();
+    let fetched = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     // After normalization the source map has exactly one entry, keyed
     // "source" — proving the rewrite happened.
     assert_eq!(fetched.sources.len(), 1);
     assert!(fetched.sources.contains_key("source"));
 
     // And the SQL transform must succeed against `FROM source`.
-    let prepared = chartml.transform(fetched, &opts).await.unwrap();
+    let prepared = chartml.transform(fetched, &opts).await.expect("transform should succeed");
     assert_eq!(prepared.data.num_rows(), 3);
 }
 
@@ -410,11 +417,11 @@ visualize:
 "#;
     let opts = RenderOptions::default();
 
-    let first = chartml.fetch(yaml, &opts).await.unwrap();
+    let first = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(first.metadata.cache_misses, vec!["source".to_string()]);
     assert!(first.metadata.cache_hits.is_empty());
 
-    let second = chartml.fetch(yaml, &opts).await.unwrap();
+    let second = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(second.metadata.cache_hits, vec!["source".to_string()]);
     assert!(second.metadata.cache_misses.is_empty());
 
@@ -447,9 +454,9 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     tokio::time::sleep(Duration::from_millis(20)).await;
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(
         calls.load(Ordering::SeqCst),
         2,
@@ -529,17 +536,17 @@ visualize:
     let c1 = chartml.clone();
     let yaml1 = yaml.to_string();
     let h1 = tokio::spawn(async move {
-        let _ = c1.fetch(&yaml1, &opts).await.unwrap();
+        let _ = c1.fetch(&yaml1, &opts).await.expect("fetch should succeed");
     });
     let c2 = chartml.clone();
     let yaml2 = yaml.to_string();
     let opts2 = RenderOptions::default();
     let h2 = tokio::spawn(async move {
-        let _ = c2.fetch(&yaml2, &opts2).await.unwrap();
+        let _ = c2.fetch(&yaml2, &opts2).await.expect("fetch should succeed");
     });
 
-    h1.await.unwrap();
-    h2.await.unwrap();
+    h1.await.expect("fetch task should not panic");
+    h2.await.expect("fetch task should not panic");
     assert_eq!(
         calls.load(Ordering::SeqCst),
         1,
@@ -569,8 +576,8 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 
     // Compute the key and invalidate it.
@@ -589,7 +596,7 @@ visualize:
     let key = chartml_core::resolver::Resolver::key_for(&inline, None);
     chartml.resolver().invalidate(key).await;
 
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(
         calls.load(Ordering::SeqCst),
         2,
@@ -635,12 +642,12 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(foo_calls.load(Ordering::SeqCst), 2);
     assert_eq!(bar_calls.load(Ordering::SeqCst), 1);
 
     chartml.resolver().invalidate_by_slug("foo").await;
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     // foo entries re-fetched (2 more calls); bar entry stayed cached.
     assert_eq!(foo_calls.load(Ordering::SeqCst), 4);
     assert_eq!(bar_calls.load(Ordering::SeqCst), 1);
@@ -666,11 +673,11 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     chartml.resolver().invalidate_all().await;
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(calls.load(Ordering::SeqCst), 2);
 }
 
@@ -699,8 +706,8 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(yaml, &opts).await.unwrap();
-    let err = chartml.transform(fetched, &opts).await.unwrap_err();
+    let fetched = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
+    let err = chartml.transform(fetched, &opts).await.expect_err("transform should fail");
     let msg = err.to_string();
     assert!(
         msg.contains("Named data sources require a transform block when multiple sources are defined"),
@@ -728,8 +735,8 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(yaml, &opts).await.unwrap();
-    let prepared = chartml.transform(fetched, &opts).await.unwrap();
+    let fetched = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
+    let prepared = chartml.transform(fetched, &opts).await.expect("transform should succeed");
     assert!(!prepared.metadata.transform_applied);
     assert_eq!(prepared.data.num_rows(), 3);
     assert_eq!(prepared.metadata.sources_used, vec!["visitors".to_string()]);
@@ -772,7 +779,7 @@ visualize:
         server.uri()
     );
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(&yaml, &opts).await.unwrap();
+    let fetched = chartml.fetch(&yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(fetched.sources["source"].num_rows(), 1);
 }
 
@@ -820,7 +827,7 @@ async fn test_http_provider_request_headers_override() {
         .headers
         .insert("Authorization".to_string(), "Bearer OVERRIDE".to_string());
 
-    let result = provider.fetch(request).await.unwrap();
+    let result = provider.fetch(request).await.expect("provider fetch should succeed");
     assert_eq!(result.data.num_rows(), 1);
 }
 
@@ -853,7 +860,7 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let err = chartml.fetch(yaml, &opts).await.unwrap_err();
+    let err = chartml.fetch(yaml, &opts).await.expect_err("fetch should fail");
     let msg = err.to_string();
     // The error message must identify which source failed (phase 3c will
     // also fire per-source ErrorEvents through ResolverHooks).
@@ -901,7 +908,7 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(yaml, &opts).await.unwrap();
+    let fetched = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     let warehouse_meta = fetched
         .metadata
         .per_source
@@ -956,9 +963,9 @@ visualize:
   rows: visitors
 "#;
     let opts = RenderOptions::default();
-    let svg = chartml.render_to_svg_async(yaml, &opts).await.unwrap();
+    let svg = chartml.render_to_svg_async(yaml, &opts).await.expect("render should succeed");
     assert!(svg.starts_with("<svg"));
-    let table = captured.lock().unwrap();
+    let table = captured.lock().expect("captured mutex should not be poisoned");
     let table = table.as_ref().expect("renderer must have received joined data");
     assert_eq!(table.num_rows(), 3);
 }
@@ -990,7 +997,7 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(yaml, &opts).await.unwrap();
+    let fetched = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(fetched.sources["visitors"].num_rows(), 3);
     // Pre-registered sources are NOT counted as cache hits or misses —
     // they never touched the resolver.
@@ -1030,7 +1037,7 @@ visualize:
   rows: visitors
 "#;
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(yaml, &opts).await.unwrap();
+    let fetched = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(fetched.sources["visitors"].num_rows(), 3);
     assert_eq!(fetched.sources["sessions"].num_rows(), 3);
     assert_eq!(
@@ -1094,7 +1101,7 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(
         puts.load(Ordering::SeqCst),
         1,
@@ -1125,9 +1132,9 @@ visualize:
 "#;
     let opts = RenderOptions::default();
     chartml.set_namespace("tenant-a");
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     chartml.set_namespace("tenant-b");
-    let _ = chartml.fetch(yaml, &opts).await.unwrap();
+    let _ = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     assert_eq!(
         calls.load(Ordering::SeqCst),
         2,

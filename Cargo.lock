@@ -663,7 +663,6 @@ dependencies = [
  "augurs-core",
  "augurs-ets",
  "augurs-seasons",
- "chrono",
  "getrandom 0.2.17",
  "levenberg-marquardt",
  "linregress",

@@ -83,19 +83,31 @@ impl RecordingHooks {
 impl ResolverHooks for RecordingHooks {
     async fn on_progress(&self, event: ProgressEvent) {
         self.maybe_delay().await;
-        self.events.lock().unwrap().push(Event::Progress(event));
+        self.events
+            .lock()
+            .expect("events mutex should not be poisoned")
+            .push(Event::Progress(event));
     }
     async fn on_cache_hit(&self, event: CacheHitEvent) {
         self.maybe_delay().await;
-        self.events.lock().unwrap().push(Event::CacheHit(event));
+        self.events
+            .lock()
+            .expect("events mutex should not be poisoned")
+            .push(Event::CacheHit(event));
     }
     async fn on_cache_miss(&self, event: CacheMissEvent) {
         self.maybe_delay().await;
-        self.events.lock().unwrap().push(Event::CacheMiss(event));
+        self.events
+            .lock()
+            .expect("events mutex should not be poisoned")
+            .push(Event::CacheMiss(event));
     }
     async fn on_error(&self, event: ErrorEvent) {
         self.maybe_delay().await;
-        self.events.lock().unwrap().push(Event::Error(event));
+        self.events
+            .lock()
+            .expect("events mutex should not be poisoned")
+            .push(Event::Error(event));
     }
 }
 
@@ -121,7 +133,7 @@ fn visitors_table() -> DataTable {
         make_row(vec![("date", json!("2024-01-01")), ("n", json!(100.0))]),
         make_row(vec![("date", json!("2024-01-02")), ("n", json!(150.0))]),
     ])
-    .unwrap()
+    .expect("visitors table should build")
 }
 
 fn sessions_table() -> DataTable {
@@ -129,7 +141,7 @@ fn sessions_table() -> DataTable {
         make_row(vec![("date", json!("2024-01-01")), ("n", json!(10.0))]),
         make_row(vec![("date", json!("2024-01-02")), ("n", json!(15.0))]),
     ])
-    .unwrap()
+    .expect("sessions table should build")
 }
 
 struct MockRenderer;
@@ -212,11 +224,11 @@ visualize:
 "#;
     let opts = RenderOptions::default();
 
-    chartml.fetch(yaml, &opts).await.unwrap();
-    chartml.fetch(yaml, &opts).await.unwrap();
+    chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
+    chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     flush_pending_hooks().await;
 
-    let events = events.lock().unwrap();
+    let events = events.lock().expect("events mutex should not be poisoned");
     let misses: Vec<&Event> = events.iter().filter(|e| matches!(e, Event::CacheMiss(_))).collect();
     let hits: Vec<&Event> = events.iter().filter(|e| matches!(e, Event::CacheHit(_))).collect();
 
@@ -266,19 +278,19 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    chartml.fetch(yaml, &opts).await.unwrap();
+    chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
 
     // Swap the primary (tier-1) cache for an empty MemoryBackend so the
     // next fetch misses tier-1 and falls through to the persistent tier.
     chartml.resolver().set_primary_cache(Arc::new(MemoryBackend::new()));
 
     // Clear collected events so we only assert on the second fetch.
-    events.lock().unwrap().clear();
+    events.lock().expect("events mutex should not be poisoned").clear();
 
-    chartml.fetch(yaml, &opts).await.unwrap();
+    chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     flush_pending_hooks().await;
 
-    let events = events.lock().unwrap();
+    let events = events.lock().expect("events mutex should not be poisoned");
     let hits: Vec<&CacheHitEvent> = events
         .iter()
         .filter_map(|e| {
@@ -340,7 +352,7 @@ visualize:
     let _ = chartml.fetch(yaml, &opts).await.expect_err("multi-source fetch must fail");
     flush_pending_hooks().await;
 
-    let events = events.lock().unwrap();
+    let events = events.lock().expect("events mutex should not be poisoned");
     let failing_errors: Vec<&ErrorEvent> = events
         .iter()
         .filter_map(|e| match e {
@@ -380,7 +392,7 @@ visualize:
     let opts = RenderOptions::default();
 
     let start = Instant::now();
-    chartml.fetch(yaml, &opts).await.unwrap();
+    chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     let elapsed = start.elapsed();
 
     assert!(
@@ -457,11 +469,11 @@ visualize:
   rows: visitors
 "#;
     let opts = RenderOptions::default();
-    let fetched = chartml.fetch(yaml, &opts).await.unwrap();
-    let _prepared = chartml.transform(fetched, &opts).await.unwrap();
+    let fetched = chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
+    let _prepared = chartml.transform(fetched, &opts).await.expect("transform should succeed");
     flush_pending_hooks().await;
 
-    let events = events.lock().unwrap();
+    let events = events.lock().expect("events mutex should not be poisoned");
 
     // ── 1. Exactly two cache misses, one per source ──
     let misses: Vec<&CacheMissEvent> = events
@@ -553,9 +565,9 @@ visualize:
     let opts = RenderOptions::default();
 
     // First fetch primes the cache.
-    chartml.fetch(yaml, &opts).await.unwrap();
+    chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     // Confirm a hit on second fetch (sanity — sets up the invalidate scenario).
-    chartml.fetch(yaml, &opts).await.unwrap();
+    chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
 
     // Invalidate the exact resolver key the spec would hash to. We
     // recompute it via `Resolver::key_for` against the same `InlineData`
@@ -570,13 +582,13 @@ visualize:
     // otherwise their late-arriving emissions would land in the "post"
     // collector and skew the assertion.
     flush_pending_hooks().await;
-    events.lock().unwrap().clear();
+    events.lock().expect("events mutex should not be poisoned").clear();
 
-    chartml.fetch(yaml, &opts).await.unwrap();
+    chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     flush_pending_hooks().await;
 
     {
-        let post_invalidate = events.lock().unwrap();
+        let post_invalidate = events.lock().expect("events mutex should not be poisoned");
         let misses: Vec<&CacheMissEvent> = post_invalidate
             .iter()
             .filter_map(|e| {
@@ -604,11 +616,11 @@ visualize:
     // see a hit (NOT another `Invalidated` miss — the per-key entry was
     // drained on first observation).
     flush_pending_hooks().await;
-    events.lock().unwrap().clear();
-    chartml.fetch(yaml, &opts).await.unwrap();
+    events.lock().expect("events mutex should not be poisoned").clear();
+    chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     flush_pending_hooks().await;
 
-    let post_refetch = events.lock().unwrap();
+    let post_refetch = events.lock().expect("events mutex should not be poisoned");
     let third_misses: Vec<&CacheMissEvent> = post_refetch
         .iter()
         .filter_map(|e| {
@@ -651,7 +663,7 @@ visualize:
   rows: n
 "#;
     let opts = RenderOptions::default();
-    chartml.fetch(yaml, &opts).await.unwrap();
+    chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
 
     // Bulk-invalidate the slug — this clears the cache and arms the
     // bulk-pending flag so the very next miss surfaces as `Invalidated`.
@@ -661,12 +673,12 @@ visualize:
     // collector (see test_invalidate_emits_invalidated_miss_reason for
     // the same coordination).
     flush_pending_hooks().await;
-    events.lock().unwrap().clear();
+    events.lock().expect("events mutex should not be poisoned").clear();
 
-    chartml.fetch(yaml, &opts).await.unwrap();
+    chartml.fetch(yaml, &opts).await.expect("fetch should succeed");
     flush_pending_hooks().await;
 
-    let events_snapshot = events.lock().unwrap();
+    let events_snapshot = events.lock().expect("events mutex should not be poisoned");
     let misses: Vec<&CacheMissEvent> = events_snapshot
         .iter()
         .filter_map(|e| {
