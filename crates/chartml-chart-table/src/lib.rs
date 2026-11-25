@@ -1595,8 +1595,9 @@ fn body_cell(
 /// track, held at the right edge of the visible area (sticky) while columns
 /// are hidden to the right. It takes the row's current, opaque background
 /// (`inherit`, so a consumer's hover shows) masked from transparent to
-/// solid, and stops 1px short of the row's bottom so the row's border line
-/// is never faded.
+/// solid. Its 1px bottom margin leaves the row's bottom rule uncovered, so
+/// the rule is never faded (the row draws that rule; the fade sits inside
+/// the row's box, where a grid item cannot reach it).
 ///
 /// The track's width is `--chartml-table-fade`, computed by `render` from the
 /// columns' estimated minimums: `FADE_WIDTH_PX` while the columns at their
@@ -3084,8 +3085,8 @@ visualize:
                 assert_eq!(get(cell, "padding-right"), None, "the token must control every side");
                 assert_eq!(get(cell, "box-sizing"), Some("content-box"));
             }
-            // The fade strip is reserved by a border line in its own track, so
-            // no cell carries a wide border or padding override.
+            // The row owns the bottom rule and spans the fade's strip, so no
+            // cell carries a wide border or padding override.
             assert_eq!(get(cells.last().unwrap(), "border-right"), None);
         }
         // The minimums are content-only; layout adds the padding actually
@@ -3207,6 +3208,7 @@ style:
             "chartml-table-header",
             "chartml-table-header-cell",
             "chartml-table-body",
+            "chartml-table-scroll",
             "chartml-table-row",
             "chartml-table-row-alt",
             "chartml-table-cell",
