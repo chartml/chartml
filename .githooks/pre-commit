@@ -1,9 +1,10 @@
 #!/bin/bash
 # Pre-commit hook: blocks lint suppressions and clippy warnings.
 #
-# Clippy runs against an isolated snapshot of the index, never the working
-# tree, so the verdict depends only on the content being committed. Unstaged
-# and untracked changes are neither read nor modified, whatever the outcome.
+# Clippy lints an isolated copy of the tree the commit will record, never the
+# working tree, so the verdict depends only on the content being committed.
+# Unstaged and untracked changes are neither read nor modified, whatever the
+# outcome.
 
 set -eu
 
@@ -27,78 +28,82 @@ fi
 
 echo "✅ No new lint suppressions."
 
-# --- Check 2: Cargo clippy on the staged content ---
-# The snapshot lives inside this worktree's Git directory, so linked worktrees
-# each get their own copy, and concurrent hooks are serialised by a lock.
+# --- Check 2: Cargo clippy on the committed content ---
+# Two separate directories are involved:
+#   * the lint copy, which must live OUTSIDE the repository so Cargo's upward
+#     search for a manifest and for .cargo/config.toml cannot reach the
+#     working tree (that search is how unstaged files leaked into the verdict);
+#   * the state directory inside this worktree's Git directory, which holds
+#     the lock and the Cargo target dir. The target dir is reused between runs
+#     so linting stays incremental.
 
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
-state_dir=$(cd -- "$(git rev-parse --git-dir)" && pwd)/chartml-pre-commit
-snapshot_tree="$state_dir/tree"
+git_dir=$(cd -- "$(git rev-parse --git-dir)" && pwd)
+state_dir="$git_dir/chartml-pre-commit"
 target_dir="$state_dir/target"
-lock_file="$state_dir/lock"
-
-lock_pid_file="$state_dir/lock.$$"
-cargo_pid=''
-# Per-invocation, so a hook that exits before taking the lock can never delete
-# the log of the hook that holds it.
+lock_dir="$state_dir/lock"
 clippy_log="$state_dir/clippy.$$.log"
+
+lock_held=0
+cargo_pid=''
+
+lock_owner() {
+    cat -- "$lock_dir/owner" 2>/dev/null || true
+}
+
+release_lock() {
+    [ "$lock_held" -eq 1 ] || return 0
+    if [ "$(lock_owner)" = "$$" ]; then
+        rm -f -- "$lock_dir/owner"
+        rmdir -- "$lock_dir" 2>/dev/null || true
+    fi
+    lock_held=0
+}
+
 cleanup() {
-    # Never leave cargo linting a snapshot that the next hook will replace.
+    # Never leave cargo linting a copy that the next hook will replace.
     if [ -n "$cargo_pid" ] && kill -0 "$cargo_pid" 2>/dev/null; then
         kill -TERM "$cargo_pid" 2>/dev/null || true
         wait "$cargo_pid" 2>/dev/null || true
     fi
-    rm -f -- "$clippy_log" "$lock_pid_file"
-    # Only release the lock if this process still holds it.
-    if [ "$(cat -- "$lock_file" 2>/dev/null || true)" = "$$" ]; then
-        rm -f -- "$lock_file"
-    fi
+    [ -d "$state_dir" ] || return 0
+    rm -f -- "$clippy_log"
+    release_lock
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
-echo "🔍 Running cargo clippy on the staged snapshot..."
-echo "   snapshot: $snapshot_tree"
-echo "   target:   $target_dir"
-echo "   remove both: rm -rf -- $state_dir"
-
-if ! index_tree=$(git write-tree 2>/dev/null); then
-    echo ""
-    echo "❌ Cannot lint the staged content — the index has unresolved conflicts."
-    echo "   Resolve them, stage the results, and commit again."
-    exit 1
-fi
-
 mkdir -p -- "$state_dir" 2>/dev/null || true
 if [ ! -d "$state_dir" ] || [ ! -w "$state_dir" ]; then
     echo ""
-    echo "❌ Cannot write the staged snapshot at $state_dir."
+    echo "❌ Cannot write the lint state at $state_dir."
     echo "   The hook refuses to lint anything but the commit's content, so it cannot continue."
     echo "   Check permissions on $state_dir and try again."
     exit 1
 fi
 
-# Acquire the lock by hard-linking a file that already contains our pid, so a
-# lock is never visible without its owner recorded (even if we are killed).
-printf '%s\n' "$$" > "$lock_pid_file"
+# The lock is taken before anything reads the index, so two hooks starting at
+# the same moment cannot collide in `git write-tree`.
 waited=0
 reclaimed=0
 while :; do
-    if ln -- "$lock_pid_file" "$lock_file" 2>/dev/null; then
-        # A killed hook cannot clean up after itself, so drop the per-pid files
-        # of runs that are no longer alive.
-        for leftover in "$state_dir"/lock.* "$state_dir"/clippy.*.log; do
+    if mkdir -- "$lock_dir" 2>/dev/null; then
+        printf '%s\n' "$$" > "$lock_dir/owner"
+        lock_held=1
+        # A killed hook cannot clean up after itself. Nothing is linting while
+        # we hold the lock, so any other per-run file belongs to a dead run.
+        for leftover in "$state_dir"/clippy.*.log "$state_dir"/lock.stale.*; do
             [ -e "$leftover" ] || continue
             leftover_pid=${leftover##*/}
-            leftover_pid=${leftover_pid#lock.}
             leftover_pid=${leftover_pid#clippy.}
+            leftover_pid=${leftover_pid#lock.stale.}
             leftover_pid=${leftover_pid%.log}
             case "$leftover_pid" in
-                ''|*[!0-9]*) continue ;;
+                ''|*[!0-9]*) rm -f -- "$leftover"; continue ;;
             esac
             [ "$leftover_pid" = "$$" ] && continue
             if ! kill -0 "$leftover_pid" 2>/dev/null; then
@@ -107,27 +112,37 @@ while :; do
         done
         break
     fi
-    holder=$(cat -- "$lock_file" 2>/dev/null || true)
+    holder=$(lock_owner)
     case "$holder" in
         ''|*[!0-9]*) holder='' ;;
     esac
     if [ -z "$holder" ] || ! kill -0 "$holder" 2>/dev/null; then
+        # Reclaim by renaming the directory, then checking that what was moved
+        # still names the dead owner. If it names someone else, the lock was
+        # re-created between the read and the rename: put it back untouched.
         stale="$state_dir/lock.stale.$$"
-        if mv -- "$lock_file" "$stale" 2>/dev/null; then
-            rm -f -- "$stale"
-            echo "   removed stale snapshot lock${holder:+ left by pid $holder}"
-            holder=''
-            reclaimed=1
+        if mv -- "$lock_dir" "$stale" 2>/dev/null; then
+            moved=$(cat -- "$stale/owner" 2>/dev/null || true)
+            case "$moved" in
+                ''|*[!0-9]*) moved='' ;;
+            esac
+            if [ "$moved" = "$holder" ]; then
+                rm -rf -- "$stale"
+                echo "   removed stale lint lock${moved:+ left by pid $moved}"
+                reclaimed=1
+            else
+                mv -- "$stale" "$lock_dir" 2>/dev/null || true
+            fi
         fi
     fi
     if [ "$waited" -ge 60 ]; then
         echo ""
         if [ -n "$holder" ]; then
-            echo "❌ Another pre-commit hook is still using this snapshot (pid ${holder})."
+            echo "❌ Another pre-commit hook is still using this lint lock (pid ${holder})."
         else
-            echo "❌ Could not take the snapshot lock at $lock_file."
+            echo "❌ Could not take the lint lock at $lock_dir."
         fi
-        echo "   If no other hook is running, remove $lock_file and retry."
+        echo "   If no other hook is running, remove $state_dir and retry."
         exit 1
     fi
     if [ "$waited" -eq 0 ] && [ "$reclaimed" -eq 0 ]; then
@@ -137,14 +152,55 @@ while :; do
     waited=$((waited + 1))
 done
 
-# Rebuild the snapshot from scratch, from the very tree the commit will record.
-# Reading the tree (rather than checkout-index -a) keeps intent-to-add entries,
-# which are staged but not committed, out of the linted content, and starting
-# from an empty directory means a file the index no longer has cannot survive.
-verify_index=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-index.XXXXXX")
-rm -f -- "$verify_index"
+if ! index_tree=$(git write-tree 2>/dev/null); then
+    echo ""
+    if [ -n "$(git ls-files -u 2>/dev/null | head -1)" ]; then
+        echo "❌ Cannot lint the committed content — the index has unresolved conflicts."
+        echo "   Resolve them, stage the results, and commit again."
+    else
+        echo "❌ Cannot read the index to determine what this commit would contain."
+        git write-tree || true
+        echo "   Nothing was linted; the commit is blocked."
+    fi
+    exit 1
+fi
+
+# Reuse one lint copy per worktree so Cargo's fingerprints stay valid and
+# linting stays incremental. It is recreated from the commit's tree on every
+# run, so a deleted or renamed file can never survive in it.
+snapshot_root=''
+pointer="$state_dir/snapshot-dir"
+if [ -f "$pointer" ]; then
+    candidate=$(cat -- "$pointer" 2>/dev/null || true)
+    case "$candidate" in
+        */tree) candidate=${candidate%/tree} ;;
+    esac
+    if [ -n "$candidate" ] && [ -d "$candidate" ] && [ -w "$candidate" ]; then
+        case "$candidate/" in
+            "$repo_root"/*) ;;
+            *) snapshot_root=$candidate ;;
+        esac
+    fi
+fi
+if [ -z "$snapshot_root" ]; then
+    temp_base=${TMPDIR:-/tmp}
+    temp_base=${temp_base%/}
+    snapshot_root=$(mktemp -d "$temp_base/chartml-pre-commit.XXXXXX")
+    printf '%s\n' "$snapshot_root" > "$pointer"
+fi
+snapshot_tree="$snapshot_root/tree"
+snapshot_manifest="$snapshot_tree/Cargo.toml"
+
+echo "🔍 Running cargo clippy on the committed content..."
+echo "   lint copy:  $snapshot_tree"
+echo "   target dir: $target_dir"
+echo "   remove them: rm -rf -- $snapshot_root $target_dir"
+
 rm -rf -- "$snapshot_tree"
 mkdir -p -- "$snapshot_tree"
+verify_index=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-index.XXXXXX")
+rm -f -- "$verify_index"
+abs_git_dir=$(cd -- "$(git rev-parse --git-dir)" && pwd)
 if ! (
     export GIT_INDEX_FILE="$verify_index"
     git read-tree "$index_tree" &&
@@ -152,20 +208,19 @@ if ! (
 ); then
     rm -f -- "$verify_index"
     echo ""
-    echo "❌ Could not materialise the staged content at $snapshot_tree."
+    echo "❌ Could not materialise the committed content at $snapshot_tree."
     echo "   Remove $state_dir and try again."
     exit 1
 fi
 rm -f -- "$verify_index"
 
-# Prove the snapshot holds exactly the commit's content before linting it. A
+# Prove the copy holds exactly the commit's content before linting it. A
 # mismatch (for example a smudge filter) fails the commit instead of linting
 # something else. Content is compared, not the tree id: clippy reads bytes, so
 # an executable bit that the filesystem cannot represent (core.filemode=false,
 # Git for Windows) must not refuse every commit.
 verify_index=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-verify.XXXXXX")
 rm -f -- "$verify_index"
-abs_git_dir=$(cd -- "$(git rev-parse --git-dir)" && pwd)
 listing_file=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-listing.XXXXXX")
 (
     cd -- "$snapshot_tree" || exit 1
@@ -177,16 +232,14 @@ rm -f -- "$verify_index"
 # Normalise both sides to "path<TAB>object<TAB>kind" so modes, index stages and
 # ordering differences cannot mask or invent a content difference. Submodules
 # (gitlinks) are not materialised, so they are not part of the linted content.
-# Paths with unusual characters are quoted by git here; both sides are produced
-# by git, so the quoting is compared consistently, and blobs are what differ.
-content_of_index_tree() {
+content_of_tree() {
     git ls-tree -r "$1" | awk -F'\t' '{
         split($1, meta, " ")
         kind = (meta[1] == "120000") ? "symlink" : "file"
         if (meta[2] == "blob") printf "%s\t%s\t%s\n", $2, meta[3], kind
     }' | LC_ALL=C sort
 }
-content_of_index_file() {
+content_of_listing() {
     awk -F'\t' '{
         split($1, meta, " ")
         if (meta[3] != "0") next
@@ -195,14 +248,14 @@ content_of_index_file() {
     }' "$1" | LC_ALL=C sort
 }
 
-index_content=$(content_of_index_tree "$index_tree")
-snapshot_content=$(content_of_index_file "$listing_file")
+index_content=$(content_of_tree "$index_tree")
+snapshot_content=$(content_of_listing "$listing_file")
 rm -f -- "$listing_file"
 if [ "$index_content" != "$snapshot_content" ]; then
     echo ""
-    echo "❌ The staged snapshot does not match the index content."
+    echo "❌ The lint copy does not match the committed content."
     if [ -z "$snapshot_content" ]; then
-        echo "   The snapshot at $snapshot_tree could not be read."
+        echo "   The copy at $snapshot_tree could not be read."
     elif [ -z "$index_content" ]; then
         echo "   The commit has no content to lint."
     else
@@ -212,27 +265,37 @@ if [ "$index_content" != "$snapshot_content" ]; then
     exit 1
 fi
 
-# Run clippy in the background and wait for it, so an interrupt is acted on
-# immediately instead of after cargo finishes; cleanup then stops cargo too.
-# The log path also avoids printing compiler output from a killed run.
-( cd -- "$snapshot_tree" && CARGO_TARGET_DIR="$target_dir" cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion ) > "$clippy_log" 2>&1 &
+if [ ! -f "$snapshot_manifest" ]; then
+    echo ""
+    echo "❌ This commit has no Cargo.toml, so there is nothing for clippy to lint."
+    echo "   The hook only lints the commit's own content."
+    exit 1
+fi
+
+# Clippy runs from the lint copy with an explicit manifest, so its own search
+# for a manifest or a .cargo/config.toml cannot reach the working tree.
+( cd -- "$snapshot_tree" && CARGO_TARGET_DIR="$target_dir" cargo clippy --manifest-path "$snapshot_manifest" --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion ) > "$clippy_log" 2>&1 &
 cargo_pid=$!
 clippy_status=0
-# `wait` briefly returns >128 when a trapped signal arrives while it waits;
-# keep waiting for cargo so its log is complete before it is reported.
-until wait "$cargo_pid"; do
-    clippy_status=$?
-    if [ "$clippy_status" -le 128 ]; then
-        break
-    fi
+# A trapped signal can make `wait` return early while cargo is still running,
+# so wait until the child is really gone. `kill -0` is the loop condition
+# because after the child is reaped `wait` keeps returning the same >128
+# status forever, which would otherwise spin here.
+while kill -0 "$cargo_pid" 2>/dev/null; do
+    sleep 0.05
 done
+wait "$cargo_pid" || clippy_status=$?
 cargo_pid=''
 clippy_output=$(cat -- "$clippy_log")
 rm -f -- "$clippy_log"
 
 if [ "$clippy_status" -ne 0 ]; then
     printf '%s\n' "$clippy_output"
-    echo "❌ Cargo clippy failed on the staged snapshot — commit blocked."
+    if [ "$clippy_status" -gt 128 ]; then
+        echo "❌ Cargo clippy was killed by a signal (status $clippy_status) — commit blocked."
+    else
+        echo "❌ Cargo clippy failed on the committed content — commit blocked."
+    fi
     exit 1
 fi
 

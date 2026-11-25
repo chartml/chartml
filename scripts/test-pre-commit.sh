@@ -9,7 +9,8 @@ set -euo pipefail
 project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 hook="$project_dir/.githooks/pre-commit"
 scratch=$(mktemp -d)
-trap 'rm -rf "$scratch"' EXIT
+lint_copies=()
+trap 'rm -rf "$scratch" "${lint_copies[@]:-}"' EXIT
 
 failures=0
 pass() { echo "PASS: $*"; }
@@ -18,10 +19,30 @@ fail() {
     failures=$((failures + 1))
 }
 
+# The hook keeps its lint copy outside the repository, so tests read its
+# location from the pointer the hook writes.
+snapshot_dir() {
+    local repo=$1 pointer=$1/.git/chartml-pre-commit/snapshot-dir root
+    [ -f "$pointer" ] || return 1
+    root=$(cat -- "$pointer")
+    lint_copies+=("$root")
+    printf '%s/tree' "$root"
+}
+
+# The hook prints the copy at its real path; compare against that, not the
+# unresolved TMPDIR form.
+reported_snapshot_dir() {
+    local repo=$1 pointer=$1/.git/chartml-pre-commit/snapshot-dir root
+    [ -f "$pointer" ] || return 1
+    root=$(cat -- "$pointer")
+    printf '%s/tree' "$(cd -- "$root" && pwd -P)/tree"
+}
+
 # --- Fixture shared by every scenario -------------------------------------
 # A fake cargo on PATH records the directory it linted, so the tests can prove
-# the hook lints the staged snapshot rather than the working tree, and can
-# simulate warnings, failures and hangs.
+# the hook lints a copy outside the working tree, and can simulate warnings,
+# failures and hangs. It also fails if the copy it is given sits inside the
+# repository, which is how unstaged files used to leak into the verdict.
 setup_bin() {
     mkdir -p "$scratch/bin"
     cat > "$scratch/bin/cargo" <<'CARGO'
@@ -29,6 +50,15 @@ setup_bin() {
 printf '%s\n' "$PWD" >> "${HOOK_TEST_PWD_LOG:-/dev/null}"
 if [ -n "${HOOK_TEST_PID_FILE:-}" ]; then
     printf '%s\n' "$$" > "$HOOK_TEST_PID_FILE"
+fi
+# A lint copy inside the working tree lets Cargo find the working tree's
+# manifest and .cargo/config.toml, so unstaged files would change the verdict.
+if [ -n "${HOOK_TEST_REPO_ROOT:-}" ]; then
+    case "$PWD/" in
+        "$HOOK_TEST_REPO_ROOT"/*)
+            printf 'warning: lint copy is inside the working tree: %s\n' "$PWD"
+            ;;
+    esac
 fi
 printf '%s\n' "${HOOK_TEST_OUTPUT:-}"
 # Emit a warning when the linted content itself contains a marker, so tests
@@ -94,9 +124,11 @@ new_repo() {
     git -C "$repo" init -q
     git -C "$repo" config user.email fixture@example.com
     git -C "$repo" config user.name Fixture
+    # A committed manifest, so the hook has the commit's own workspace to lint.
+    printf '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2021"\n' > "$repo/Cargo.toml"
     printf 'fn tracked() {}\n' > "$repo/tracked.rs"
     printf 'fn staged() {}\n' > "$repo/staged.rs"
-    git -C "$repo" add tracked.rs staged.rs
+    git -C "$repo" add Cargo.toml tracked.rs staged.rs
     git -C "$repo" commit -qm 'initial'
 }
 
@@ -203,7 +235,11 @@ else
     fail 'failing hook altered the working tree'
 fi
 
-# --- Interrupt: the working tree survives a killed hook --------------------
+# --- Interrupt: the working tree survives, and the hook stops promptly ----
+# The exit code alone is not proof: bash reports 130 for an untrapped SIGINT
+# while `wait` is blocked and then carries on. These checks require the hook
+# to stop well before cargo would have finished, to kill cargo, and to release
+# the lock, so removing the trap (or ignoring the signal) fails the test.
 repo="$scratch/interrupt"
 new_repo "$repo"
 seed_dirty_working_tree "$repo"
@@ -214,12 +250,13 @@ marker="$scratch/interrupt.marker"
 cargo_pid_file="$scratch/interrupt.cargo.pid"
 interrupt_log="$scratch/interrupt.log"
 interrupt_status="$scratch/interrupt.status"
+interrupt_elapsed="$scratch/interrupt.elapsed"
 # A terminal delivers Ctrl-C to the hook and cargo together, so the test puts
 # the hook in its own process group (job control) and signals that group.
 (
     set -m
     cd "$repo" || exit 1
-    HOOK_TEST_HANG_MARKER="$marker" HOOK_TEST_HANG_SECONDS=30 HOOK_TEST_PID_FILE="$cargo_pid_file" \
+    HOOK_TEST_HANG_MARKER="$marker" HOOK_TEST_HANG_SECONDS=60 HOOK_TEST_PID_FILE="$cargo_pid_file" \
         bash "$hook" > "$interrupt_log" 2>&1 &
     hook_pid=$!
     for _ in $(seq 1 100); do
@@ -231,9 +268,11 @@ interrupt_status="$scratch/interrupt.status"
         kill -KILL -- -"$hook_pid" 2>/dev/null || true
         exit 1
     fi
+    started=$(date +%s)
     kill -INT -- -"$hook_pid" 2>/dev/null || true
     wait "$hook_pid"
     printf '%s\n' "$?" > "$interrupt_status"
+    printf '%s\n' "$(( $(date +%s) - started ))" > "$interrupt_elapsed"
     # Nothing should survive the interrupt; make sure of it before moving on.
     kill -KILL -- -"$hook_pid" 2>/dev/null || true
 ) || true
@@ -242,6 +281,11 @@ if [ -e "$marker" ] && grep -qx '130' "$interrupt_status" 2>/dev/null; then
 else
     fail "hook was not interrupted while linting (status: $(cat "$interrupt_status" 2>/dev/null || echo none))"
 fi
+if [ -e "$interrupt_elapsed" ] && [ "$(cat "$interrupt_elapsed")" -lt 20 ]; then
+    pass 'the interrupt stopped the hook promptly instead of after cargo'
+else
+    fail "the hook did not stop promptly on interrupt ($(cat "$interrupt_elapsed" 2>/dev/null || echo '?')s)"
+fi
 snapshot_worktree "$repo" "$scratch/interrupt.after"
 if diff -u "$scratch/interrupt.before" "$scratch/interrupt.after"; then
     pass 'interrupted hook left every unstaged and untracked change untouched'
@@ -249,9 +293,9 @@ else
     fail 'interrupted hook altered the working tree'
 fi
 if [ -e "$repo/.git/chartml-pre-commit/lock" ]; then
-    fail 'interrupted hook left its snapshot lock behind'
+    fail 'interrupted hook left its lint lock behind'
 else
-    pass 'interrupted hook released its snapshot lock'
+    pass 'interrupted hook released its lint lock'
 fi
 if kill -0 "$(cat "$cargo_pid_file")" 2>/dev/null; then
     fail 'interrupted hook left cargo running'
@@ -302,27 +346,46 @@ else
     pass 'hook signalled on its own stopped cargo'
 fi
 if [ -e "$repo/.git/chartml-pre-commit/lock" ]; then
-    fail 'hook signalled on its own left its snapshot lock behind'
+    fail 'hook signalled on its own left its lint lock behind'
 else
-    pass 'hook signalled on its own released its snapshot lock'
+    pass 'hook signalled on its own released its lint lock'
 fi
 
-# --- Snapshot exactness: the hook lints the index, not the working tree ---
+# --- Snapshot exactness: the hook lints the commit, not the working tree --
 repo="$scratch/snapshot-content"
 new_repo "$repo"
 pwd_log="$scratch/snapshot-content.pwd"
 (
     cd "$repo"
-    HOOK_TEST_PWD_LOG="$pwd_log" bash "$hook" >/dev/null 2>&1
+    HOOK_TEST_REPO_ROOT=$(cd -- "$repo" && pwd -P) HOOK_TEST_PWD_LOG="$pwd_log" bash "$hook" > "$scratch/snapshot-content.log" 2>&1
 ) || fail 'hook failed while recording the linted directory'
 linted=$(cat "$pwd_log")
-expected=$(cd -- "$repo" && pwd -P)/.git/chartml-pre-commit/tree
-case "$linted" in
-    "$expected"|"$(cd -- "$expected" && pwd -P)") pass "hook linted the snapshot, not the working tree" ;;
-    *) fail "hook linted unexpected directory: $linted (expected $expected)" ;;
+linted_resolved=$(cd -- "$linted" 2>/dev/null && pwd -P || printf '%s' "$linted")
+case "$linted/" in
+    "$repo"/*) fail "hook linted inside the working tree: $linted" ;;
+    *) pass "hook linted a copy outside the working tree" ;;
 esac
+if grep -q 'lint copy is inside the working tree' "$scratch/snapshot-content.log"; then
+    fail 'the lint copy sits inside the working tree, so Cargo would read unstaged files'
+else
+    pass 'the lint copy cannot inherit the working tree manifest or cargo config'
+fi
+if grep -qF "lint copy:  $linted" "$scratch/snapshot-content.log" ||
+    grep -qF "lint copy:  $linted_resolved" "$scratch/snapshot-content.log"; then
+    reported=1
+else
+    reported=0
+fi
+if [ "$reported" -eq 1 ] &&
+    grep -qE 'target dir: .*/\.git/chartml-pre-commit/target$' "$scratch/snapshot-content.log" &&
+    grep -qE 'remove them: rm -rf -- .*/chartml-pre-commit\.[A-Za-z0-9]+ .*/chartml-pre-commit/target$' "$scratch/snapshot-content.log"; then
+    pass 'the hook says where the lint copy and target dir live and how to remove them'
+else
+    fail 'the hook does not report the lint copy and target dir locations'
+    cat "$scratch/snapshot-content.log" >&2
+fi
 
-# A file deleted from the index must be gone from the snapshot, and staged
+# A file deleted from the index must be gone from the lint copy, and staged
 # content must be what the hook sees even when the working copy differs.
 repo="$scratch/snapshot-exact"
 new_repo "$repo"
@@ -337,11 +400,11 @@ printf 'fn working_tree_body() {}\n' > "$repo/tracked.rs"
     cd "$repo"
     HOOK_TEST_PWD_LOG="$scratch/snapshot-exact.pwd" bash "$hook" >/dev/null 2>&1
 ) || fail 'hook failed on a repo with staged deletions'
-snapshot="$repo/.git/chartml-pre-commit/tree"
+snapshot=$(snapshot_dir "$repo")
 if [ -e "$snapshot/stale.rs" ]; then
-    fail 'file deleted from the index survived in the snapshot'
+    fail 'file deleted from the index survived in the lint copy'
 else
-    pass 'file deleted from the index is absent from the snapshot'
+    pass 'file deleted from the index is absent from the lint copy'
 fi
 if grep -q 'staged_body' "$snapshot/tracked.rs" && ! grep -q 'working_tree_body' "$snapshot/tracked.rs"; then
     pass 'snapshot holds staged content, not the working copy'
@@ -398,14 +461,112 @@ printf 'fn tracked() {}\n' > "$repo/tracked.rs"
 git -C "$repo" add tracked.rs
 if (cd "$repo" && bash "$hook" > "$scratch/snapshot-mismatch.log" 2>&1); then
     fail 'hook linted a snapshot that differs from the commit'
-elif grep -q 'does not match the index content' "$scratch/snapshot-mismatch.log"; then
+elif grep -q 'does not match the committed content' "$scratch/snapshot-mismatch.log"; then
     pass 'snapshot that differs from the commit is refused'
 else
     fail 'snapshot mismatch was rejected for the wrong reason'
     cat "$scratch/snapshot-mismatch.log" >&2
 fi
 
-# --- Linked worktrees keep separate snapshots -----------------------------
+# --- Unstaged files cannot change the verdict -----------------------------
+# Cargo searches upwards for a manifest and for .cargo/config.toml. If the lint
+# copy sits inside the working tree it finds the developer's unstaged ones, so
+# these two cases are what "lints exactly the commit" means in practice.
+repo="$scratch/isolation"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_COMMITTED_WARNING = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    HOOK_TEST_WARN_ON_MARKER='CHA27_COMMITTED_WARNING' bash "$hook" > "$scratch/isolation.log" 2>&1
+); then
+    fail 'an untracked .cargo/config.toml suppressed a warning that is in the commit'
+else
+    pass 'an untracked .cargo/config.toml cannot suppress a committed warning'
+fi
+
+# A commit that stages no manifest must still be linted as the commit's own
+# content, not by walking up to the working tree's manifest.
+repo="$scratch/isolation-manifest"
+new_repo "$repo"
+printf 'fn tracked() { let CHA27_MANIFEST_WARNING = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+git -C "$repo" rm -q --cached Cargo.toml 2>/dev/null || true
+if (
+    cd "$repo"
+    HOOK_TEST_WARN_ON_MARKER='CHA27_MANIFEST_WARNING' bash "$hook" > "$scratch/isolation-manifest.log" 2>&1
+); then
+    fail 'a commit without a manifest was linted through the working tree'
+elif ! grep -q 'no Cargo.toml' "$scratch/isolation-manifest.log"; then
+    fail 'a commit without a manifest was rejected for the wrong reason'
+    cat "$scratch/isolation-manifest.log" >&2
+else
+    pass 'a commit without a manifest is refused instead of linting the working tree'
+fi
+
+# --- The hook never rewrites an unstaged tracked file ---------------------
+# Cargo rewrites Cargo.lock when it resolves from a directory it should not
+# have read. An unstaged lockfile edit must survive a passing and a failing run.
+repo="$scratch/untouched-lock"
+new_repo "$repo"
+printf '[package]\nname = "lockfixture"\nversion = "0.1.0"\nedition = "2021"\n' > "$repo/Cargo.toml"
+printf '# unstaged developer edit\n' > "$repo/Cargo.lock"
+git -C "$repo" add Cargo.toml Cargo.lock
+git -C "$repo" commit -qm 'manifest and lock'
+printf '# unstaged developer edit, second pass\n' > "$repo/Cargo.lock"
+before=$(git -C "$repo" hash-object Cargo.lock)
+(cd "$repo" && bash "$hook" >/dev/null 2>&1) || true
+after=$(git -C "$repo" hash-object Cargo.lock)
+if [ "$before" = "$after" ]; then
+    pass 'a failing hook leaves an unstaged Cargo.lock byte-identical'
+else
+    fail 'a failing hook rewrote an unstaged Cargo.lock'
+fi
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+before=$(git -C "$repo" hash-object Cargo.lock)
+(cd "$repo" && bash "$hook" >/dev/null 2>&1) || true
+after=$(git -C "$repo" hash-object Cargo.lock)
+if [ "$before" = "$after" ]; then
+    pass 'a passing hook leaves an unstaged Cargo.lock byte-identical'
+else
+    fail 'a passing hook rewrote an unstaged Cargo.lock'
+fi
+
+# --- Both hooks starting at once must both succeed -----------------------
+# The lock is taken before the index is read, so two hooks cannot collide in
+# `git write-tree` (which needs the real index lock) and be misreported as
+# unresolved conflicts.
+repo="$scratch/simultaneous"
+new_repo "$repo"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+simultaneous_failures=0
+for _ in 1 2 3; do
+    if ! (
+        cd "$repo" || exit 1
+        bash "$hook" > "$scratch/simultaneous.1.log" 2>&1 &
+        first=$!
+        bash "$hook" > "$scratch/simultaneous.2.log" 2>&1 &
+        second=$!
+        status=0
+        wait "$first" || status=1
+        wait "$second" || status=1
+        exit "$status"
+    ); then
+        simultaneous_failures=$((simultaneous_failures + 1))
+        grep -E '❌' "$scratch/simultaneous.1.log" "$scratch/simultaneous.2.log" >&2 || true
+    fi
+done
+if [ "$simultaneous_failures" -eq 0 ]; then
+    pass 'two simultaneous hooks both accept a clean commit'
+else
+    fail "a simultaneous hook refused a clean commit ($simultaneous_failures of 3 rounds)"
+fi
+
+# --- Linked worktrees keep separate lint copies --------------------------
 repo="$scratch/linked"
 new_repo "$repo"
 git -C "$repo" worktree add -q -b linked-branch "$scratch/linked-wt" >/dev/null
@@ -462,8 +623,8 @@ fi
 # --- Stale lock left by a dead hook does not block commits ----------------
 repo="$scratch/stale-lock"
 new_repo "$repo"
-mkdir -p "$repo/.git/chartml-pre-commit"
-printf '999999\n' > "$repo/.git/chartml-pre-commit/lock"
+mkdir -p "$repo/.git/chartml-pre-commit/lock"
+printf '999999\n' > "$repo/.git/chartml-pre-commit/lock/owner"
 if (cd "$repo" && bash "$hook" >/dev/null 2>&1); then
     pass 'stale lock from a dead hook is reclaimed'
 else
@@ -556,15 +717,36 @@ fi
 
 # --- A second hook that gives up must not disturb the running one ---------
 # A hook that exits before taking the lock used to delete the active hook's
-# clippy log, so a clean commit failed for an unrelated reason.
+# clippy log, so a clean commit failed for an unrelated reason. The conflict
+# is built in a separate clone so the repository the hook is linting is never
+# disturbed, and the test asserts the conflict really is in the index.
 repo="$scratch/second-hook-cleanup"
 new_repo "$repo"
 printf 'base\n' > "$repo/held.rs"
 git -C "$repo" add held.rs
 git -C "$repo" commit -qm 'add the file both branches change'
-seed_dirty_working_tree "$repo"
 printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
 git -C "$repo" add clean.rs
+conflict_repo="$scratch/second-hook-conflict"
+git clone -q "$repo" "$conflict_repo"
+(
+    cd "$conflict_repo" || exit 1
+    git config user.email fixture@example.com
+    git config user.name Fixture
+    git checkout -q -b conflicting-side
+    printf 'theirs\n' > held.rs
+    git commit -qam theirs
+    git checkout -q -
+    printf 'ours\n' > held.rs
+    git commit -qam ours
+    git merge conflicting-side >/dev/null 2>&1 || true
+) || fail 'could not build the conflicting index for the second hook'
+unmerged=$(git -C "$conflict_repo" ls-files -u | wc -l | tr -d ' ')
+if [ "$unmerged" -gt 0 ]; then
+    pass 'the second hook has a genuinely conflicting index to exit on'
+else
+    fail 'the second hook fixture has no conflict, so it would not exit early'
+fi
 first_marker="$scratch/second-hook-cleanup.marker"
 first_release="$scratch/second-hook-cleanup.release"
 first_log="$scratch/second-hook-cleanup.first.log"
@@ -581,17 +763,11 @@ first_log="$scratch/second-hook-cleanup.first.log"
         kill -KILL "$first_pid" 2>/dev/null || true
         exit 1
     fi
-    # Produce a genuine merge conflict so the second hook exits at the
-    # unresolved-index check, which happens before it takes the lock.
-    git stash -q --include-untracked
-    git checkout -q -b conflicting-side
-    printf 'theirs\n' > held.rs
-    git commit -qam theirs
-    git checkout -q -
-    printf 'ours\n' > held.rs
-    git commit -qam ours
-    git merge conflicting-side >/dev/null 2>&1 || true
-    bash "$hook" >/dev/null 2>&1 || true
+    # This hook exits at the unresolved-index check, before taking the lock.
+    (
+        cd "$conflict_repo" || exit 1
+        bash "$hook" > "$scratch/second-hook-cleanup.conflict.log" 2>&1
+    ) || true
     # Only now let the first hook finish linting.
     : > "$first_release"
     if wait "$first_pid"; then
@@ -600,6 +776,12 @@ first_log="$scratch/second-hook-cleanup.first.log"
         echo 'FIRST_FAILED' > "$scratch/second-hook-cleanup.result"
     fi
 ) || true
+if grep -q 'unresolved conflicts' "$scratch/second-hook-cleanup.conflict.log" 2>/dev/null; then
+    pass 'the second hook exited at the unresolved-index check before taking the lock'
+else
+    fail 'the second hook did not exit at the unresolved-index check'
+    cat "$scratch/second-hook-cleanup.conflict.log" >&2 2>/dev/null || true
+fi
 if [ -e "$scratch/second-hook-cleanup.result" ]; then
     fail 'a second hook that exited early broke the running hook'
     tail -5 "$first_log" >&2
@@ -642,7 +824,7 @@ if [ -e "$state_dir/lock" ]; then
         fail 'a commit after a SIGKILLed hook was blocked'
         cat "$scratch/killed-hook.log" >&2
     fi
-    if ls "$state_dir"/clippy.*.log >/dev/null 2>&1 || ls "$state_dir"/lock.* >/dev/null 2>&1; then
+    if ls "$state_dir"/clippy.*.log >/dev/null 2>&1 || ls -d "$state_dir"/lock.stale.* >/dev/null 2>&1; then
         fail 'per-run files from a SIGKILLed hook were never reclaimed'
         ls -1 "$state_dir" >&2
     else
