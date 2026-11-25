@@ -508,8 +508,9 @@ fn measure_align_and_width(host: &web_sys::HtmlElement) -> AlignWidthState {
     serde_json::from_str(&json).expect("align/width state parses")
 }
 
-/// A table with a fixed 120px column and a host padding that takes most of it:
-/// `--chartml-table-cell-padding: 8px 40px` leaves 40px for the text.
+/// A table with a fixed 120px content column and a host padding that takes most
+/// of it: `--chartml-table-cell-padding: 8px 40px` leaves the 120px for text
+/// and adds 80px of padding around it.
 fn narrow_fixed_width_spec() -> String {
     r#"type: chart
 version: 1
@@ -560,11 +561,30 @@ fn all_fixed_columns_still_fill_the_row() {
         let state = measure_row_span(&host);
         let ctx = format!("{path:?}: all-fixed table at 800px");
         assert_eq!(state.rows, 3, "{ctx}: header + two body rows");
+        // The rule must be one the browser actually accepts — an invalid
+        // track list is silently dropped and the rows then fill only by the
+        // implicit auto track's default stretch, which a host can override.
+        assert_eq!(
+            state.emitted_track.as_deref(),
+            Some("minmax(min-content, 100%)"),
+            "{ctx}: the scroll area's track rule was dropped by the CSS parser",
+        );
         for (row, width) in state.row_widths.iter().enumerate() {
             assert!(
                 (width - state.client_width).abs() < 1.0,
                 "{ctx}: row {row} is {width}px across a {}px area",
                 state.client_width,
+            );
+        }
+        // The fill must not depend on the default stretch of an implicit
+        // track: with `justify-content: start` forced on the scroll area, the
+        // rows still span the area because the track rule itself says so.
+        let forced = measure_row_span_with_justify(&host, "start");
+        for (row, width) in forced.row_widths.iter().enumerate() {
+            assert!(
+                (width - forced.client_width).abs() < 1.0,
+                "{ctx}: with justify-content:start, row {row} is {width}px across a {}px area",
+                forced.client_width,
             );
         }
     }
@@ -576,6 +596,33 @@ struct RowSpanState {
     client_width: f64,
     rows: usize,
     row_widths: Vec<f64>,
+    emitted_track: Option<String>,
+}
+
+/// Re-measure row widths after forcing `justify-content` on the scroll area,
+/// the property a host could set through the published class.
+fn measure_row_span_with_justify(host: &web_sys::HtmlElement, justify: &str) -> RowSpanState {
+    let f = js_sys::Function::new_with_args(
+        "host, justify",
+        r#"
+        const sc = host.querySelector('.chartml-table-scroll');
+        sc.style.justifyContent = justify;
+        void host.offsetWidth;
+        const rows = [host.querySelector('.chartml-table-header'), ...host.querySelectorAll('.chartml-table-row')];
+        return JSON.stringify({
+            clientWidth: sc.clientWidth,
+            rows: rows.length,
+            rowWidths: rows.map(r => Math.round(r.getBoundingClientRect().width * 100) / 100),
+            emittedTrack: sc.style.getPropertyValue('grid-template-columns') || null,
+        });
+        "#,
+    );
+    let json = f
+        .call2(&JsValue::NULL, host, &JsValue::from_str(justify))
+        .expect("justify measurement runs")
+        .as_string()
+        .expect("JSON string");
+    serde_json::from_str(&json).expect("row span with justify parses")
 }
 
 /// Measure each row's painted width against the scroll area's visible width.
@@ -589,6 +636,9 @@ fn measure_row_span(host: &web_sys::HtmlElement) -> RowSpanState {
             clientWidth: sc.clientWidth,
             rows: rows.length,
             rowWidths: rows.map(r => Math.round(r.getBoundingClientRect().width * 100) / 100),
+            // What the CSS engine kept for the track list: empty when the
+            // declaration was invalid and dropped.
+            emittedTrack: sc.style.getPropertyValue('grid-template-columns') || null,
         });
         "#,
     );
@@ -596,12 +646,13 @@ fn measure_row_span(host: &web_sys::HtmlElement) -> RowSpanState {
     serde_json::from_str(&json).expect("row span parses")
 }
 
-/// CHA-22 line 1 and line 4: a fixed `width` is the column's total width, with
-/// the padding inside it, so the cell fits its track exactly and never reaches
-/// into the next column — even when a host applies padding wider than the
-/// column. A `content-box` fixed cell overflowed by its padding: with
-/// `width: 60` and `--chartml-table-cell-padding: 8px 40px` it measured 80px in
-/// a 60px track and overlapped its neighbour by 20px.
+/// CHA-22 line 1 and line 4: a fixed `width` is the column's content width, so
+/// the cell's content box is exactly that and the padding the host applies is
+/// added around it by layout. The track is `max-content`, so it always fits the
+/// cell and its padding: the cell never reaches into the next column, at any
+/// padding. A track built from the theme padding instead overflowed by the
+/// difference — with `width: 60` and `--chartml-table-cell-padding: 8px 40px`
+/// an 80px cell sat in a 60px track and overlapped by 20px.
 #[wasm_bindgen_test]
 fn fixed_width_cells_stay_inside_their_track() {
     let spec = narrow_fixed_width_spec();
@@ -611,7 +662,7 @@ fn fixed_width_cells_stay_inside_their_track() {
             let state = measure_fixed_tracks(&host, padding);
             let ctx = format!("{path:?}: 120px fixed column with padding {padding:?}");
             // The track is `max-content`: the declared content width plus
-            // whatever padding is applied, so the cell always fills it.
+            // whatever padding is applied, so the cell always fits it.
             let host_pad = if padding.is_some() { 80.0 } else { 24.0 };
             let expected = 120.0 + host_pad;
             assert!(

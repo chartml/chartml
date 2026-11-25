@@ -1920,11 +1920,11 @@ impl ChartRenderer for TableRenderer {
 
         // ── Fit box: as wide as the columns need, never narrower than the
         // scroll area. The scroll area is a grid whose single track is
-        // `max(100%, min-content)`: the box always spans the visible width (so
+        // `minmax(min-content, 100%)`: the box spans the visible width (so
         // every row's background and bottom border reach the row's end, even
-        // when every column is fixed) and it grows to the columns' minimum
-        // when they need more (so the table scrolls). `min-width` is its own
-        // floor for the intrinsic pass. ──
+        // when every column is fixed) and it grows past it to the columns'
+        // minimum when they need more (so the table scrolls). `min-width` is
+        // its own floor for the intrinsic pass. ──
         let fit = ChartElement::Div {
             class: "chartml-table-fit".to_string(),
             style: style(&[
@@ -1949,10 +1949,12 @@ impl ChartRenderer for TableRenderer {
             ("overflow", "auto"),
             ("isolation", "isolate"),
             ("container-type", "inline-size"),
-            // One column, at least the visible width and at least the
-            // columns' intrinsic minimum.
+            // One column, at least the columns' intrinsic minimum and at
+            // most the visible width: `minmax(min-content, 100%)`. (An
+            // intrinsic keyword is a track breadth, not a `max()` argument, so
+            // `max(100%, min-content)` is invalid CSS and is dropped.)
             ("display", "grid"),
-            ("grid-template-columns", "max(100%, min-content)"),
+            ("grid-template-columns", "minmax(min-content, 100%)"),
         ]);
         scroll_style.extend(sizing);
         let scroll = ChartElement::Div {
@@ -3427,8 +3429,8 @@ style:
         // whose only floor was `min-content` shrank to the sum of the fixed
         // tracks, so their background and bottom border stopped short of the
         // row's end. The scroll area is a grid with one track of
-        // `max(100%, min-content)`, so the fit box and every row span at least
-        // the visible width while still growing to the columns' minimum.
+        // `minmax(min-content, 100%)`, so the fit box and every row span at
+        // least the visible width while still growing to the columns' minimum.
         let config = cfg(
             r#"
 type: table
@@ -3443,12 +3445,12 @@ rows:
         let el = TableRenderer::new().render(&data(), &config).unwrap();
         let scroll = by_class(&el, "chartml-table-scroll")[0];
         assert_eq!(get(scroll, "display"), Some("grid"));
-        assert_eq!(get(scroll, "grid-template-columns"), Some("max(100%, min-content)"));
+        assert_eq!(get(scroll, "grid-template-columns"), Some("minmax(min-content, 100%)"));
         let fit = &children_of(scroll)[0];
         assert_eq!(class_of(fit), "chartml-table-fit");
         for row in header_and_rows(&el) {
-            // The row itself must not be pinned to its content: it tracks the
-            // fit box, which is at least the visible width.
+            // The row itself must not be pinned to its content: it tracks
+            // the fit box, which is at least the visible width.
             assert_eq!(get(row, "min-width"), Some("min-content"));
             let tracks = get(row, "grid-template-columns").unwrap();
             assert_eq!(tracks, "minmax(max-content, max-content) minmax(max-content, max-content) minmax(max-content, max-content) var(--chartml-table-fade)");
