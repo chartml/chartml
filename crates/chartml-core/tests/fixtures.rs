@@ -14,7 +14,7 @@ use chartml_core::parse;
 fn fixtures_dir() -> PathBuf {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     // crates/chartml-core -> workspace root
-    manifest_dir.join("../../fixtures").canonicalize().unwrap()
+    manifest_dir.join("../../fixtures").canonicalize().expect("fixtures directory should exist")
 }
 
 /// Helper: read and parse a single fixture file, returning the ChartSpec inside.
@@ -42,7 +42,7 @@ fn all_fixtures_parse_successfully() {
     let dir = fixtures_dir();
     let mut count = 0;
     for entry in fs::read_dir(&dir).expect("Failed to read fixtures directory") {
-        let entry = entry.unwrap();
+        let entry = entry.expect("fixtures directory entry should be readable");
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) == Some("yaml") {
             let yaml = fs::read_to_string(&path)
@@ -55,7 +55,7 @@ fn all_fixtures_parse_successfully() {
                 result.err()
             );
             // Every fixture should be a Single(Chart(...))
-            let spec = result.unwrap();
+            let spec = result.expect("fixture should parse");
             assert!(
                 matches!(&spec, ChartMLSpec::Single(component) if matches!(component.as_ref(), Component::Chart(_))),
                 "Expected Single(Chart) for {}, got {:?}",

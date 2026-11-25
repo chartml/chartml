@@ -37,7 +37,7 @@ fn visitors_table() -> DataTable {
         make_row(vec![("date", json!("2024-01-02")), ("n", json!(150.0))]),
         make_row(vec![("date", json!("2024-01-03")), ("n", json!(200.0))]),
     ];
-    DataTable::from_rows(&rows).unwrap()
+    DataTable::from_rows(&rows).expect("visitors table should build")
 }
 
 fn sessions_table() -> DataTable {
@@ -46,7 +46,7 @@ fn sessions_table() -> DataTable {
         make_row(vec![("date", json!("2024-01-02")), ("n", json!(15.0))]),
         make_row(vec![("date", json!("2024-01-03")), ("n", json!(20.0))]),
     ];
-    DataTable::from_rows(&rows).unwrap()
+    DataTable::from_rows(&rows).expect("sessions table should build")
 }
 
 const JOIN_YAML: &str = r#"
@@ -77,7 +77,7 @@ struct CapturingRenderer {
 
 impl ChartRenderer for CapturingRenderer {
     fn render(&self, data: &DataTable, _config: &ChartConfig) -> Result<ChartElement, ChartError> {
-        *self.captured.lock().unwrap() = Some(data.clone());
+        *self.captured.lock().expect("captured mutex should not be poisoned") = Some(data.clone());
         Ok(ChartElement::Svg {
             viewbox: ViewBox::new(0.0, 0.0, 800.0, 400.0),
             width: Some(800.0),
@@ -89,7 +89,7 @@ impl ChartRenderer for CapturingRenderer {
 }
 
 fn assert_join_result(captured: &Mutex<Option<DataTable>>) {
-    let captured = captured.lock().unwrap();
+    let captured = captured.lock().expect("captured mutex should not be poisoned");
     let table = captured
         .as_ref()
         .expect("Renderer must have been called with the joined data");
@@ -189,7 +189,7 @@ visualize:
         .render_from_yaml_with_params_async(yaml, None, None, None)
         .await;
     assert!(result.is_err(), "Multi-source without transform must error");
-    let err = result.unwrap_err().to_string();
+    let err = result.expect_err("multi-source without transform should fail").to_string();
     assert!(
         err.contains("transform") || err.contains("multiple sources"),
         "Error should explain that a transform is required; got: {}",

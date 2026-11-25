@@ -889,10 +889,8 @@ rows:
                         walk(c, needle, out);
                     }
                 }
-                ChartElement::Span { style, .. } => {
-                    if style.values().any(|v| v.contains(needle)) {
-                        *out = true;
-                    }
+                ChartElement::Span { style, .. } if style.values().any(|v| v.contains(needle)) => {
+                    *out = true;
                 }
                 _ => {}
             }

@@ -670,7 +670,7 @@ mod tests {
                 "Rotated label should NOT be truncated but got: {text:?}");
         }
         // Check that at least some of the full labels appear verbatim
-        assert!(tick_texts.iter().any(|t| *t == "Monday, January 6th, 2025"),
+        assert!(tick_texts.contains(&"Monday, January 6th, 2025"),
             "Expected full label text in output, got: {:?}", tick_texts);
     }
 

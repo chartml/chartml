@@ -132,12 +132,18 @@ fn backward_compat_goldens_byte_identical() {
     let mut skipped_expect_error = 0usize;
 
     for yaml_path in &yamls {
-        let rel = yaml_path.strip_prefix(&specs_root).unwrap();
+        let rel = yaml_path
+            .strip_prefix(&specs_root)
+            .expect("yaml path should be under specs root");
         let chart_type = rel
             .parent()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
-        let stem = rel.file_stem().unwrap().to_string_lossy().to_string();
+        let stem = rel
+            .file_stem()
+            .expect("yaml path should have a file stem")
+            .to_string_lossy()
+            .to_string();
         let spec_id = if chart_type.is_empty() {
             stem.clone()
         } else {
