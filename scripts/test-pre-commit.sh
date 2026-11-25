@@ -122,6 +122,15 @@ fi
 
 if (
     cd "$repo"
+    HOOK_TEST_OUTPUT='error: unused import: `std::fmt`' HOOK_TEST_EXIT=101 bash "$hook" >/dev/null
+); then
+    fail 'denied compiler error accepted'
+else
+    pass 'denied compiler error blocks the commit'
+fi
+
+if (
+    cd "$repo"
     HOOK_TEST_EXIT=101 HOOK_TEST_OUTPUT='error: compilation failed' bash "$hook" >/dev/null
 ); then
     fail 'Cargo failure accepted'
@@ -162,12 +171,14 @@ fi
 repo="$scratch/staged-warning"
 new_repo "$repo"
 seed_dirty_working_tree "$repo"
-printf 'fn staged_warning() {}\n' > "$repo/warning.rs"
+printf 'fn staged_warning() { let CHA27_STAGED_WARNING = 1; }\n' > "$repo/warning.rs"
 git -C "$repo" add warning.rs
 snapshot_worktree "$repo" "$scratch/staged-warning.before"
 if (
     cd "$repo"
-    HOOK_TEST_OUTPUT='warning: unused variable: `staged`' bash "$hook" > "$scratch/staged-warning.log" 2>&1
+    # The warning comes from the staged content the hook lints, not from a
+    # canned output, so this covers "a staged warning fails" as reported.
+    HOOK_TEST_WARN_ON_MARKER='CHA27_STAGED_WARNING' bash "$hook" > "$scratch/staged-warning.log" 2>&1
 ); then
     fail 'staged warning was accepted'
 elif ! grep -q 'Clippy warnings found' "$scratch/staged-warning.log"; then
