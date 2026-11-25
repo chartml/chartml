@@ -443,13 +443,15 @@ fn column_align_and_width_render_as_documented() {
         // it is numeric; Cost has no align, so it keeps the numeric default.
         assert_eq!(state.align, vec!["center", "left", "right"], "{ctx}: computed text-align");
         assert_eq!(state.header_widths.len(), 3, "{ctx}: header cells");
-        assert!((state.header_widths[0] - 200.0).abs() < 0.5, "{ctx}: Month width {} (fixed 200px)", state.header_widths[0]);
-        assert!((state.header_widths[2] - 120.0).abs() < 0.5, "{ctx}: Cost width {} (fixed 120px)", state.header_widths[2]);
+        // A fixed width is the column's content width; the theme padding the
+        // table applies is added, as for every measured column.
+        assert!((state.header_widths[0] - 224.0).abs() < 0.6, "{ctx}: Month width {} (200px content + 24px theme padding)", state.header_widths[0]);
+        assert!((state.header_widths[2] - 144.0).abs() < 0.6, "{ctx}: Cost width {} (120px content + 24px theme padding)", state.header_widths[2]);
         // The same widths in the body: a per-column track, not a per-row one.
         for row in &state.body_widths {
             assert_eq!(row.len(), 3, "{ctx}: body cells");
-            assert!((row[0] - 200.0).abs() < 0.5, "{ctx}: body Month {} (fixed 200px)", row[0]);
-            assert!((row[2] - 120.0).abs() < 0.5, "{ctx}: body Cost {} (fixed 120px)", row[2]);
+            assert!((row[0] - 224.0).abs() < 0.6, "{ctx}: body Month {} (200px content + padding)", row[0]);
+            assert!((row[2] - 144.0).abs() < 0.6, "{ctx}: body Cost {} (120px content + padding)", row[2]);
         }
         assert!(state.misalign_px < 0.5, "{ctx}: header and body misaligned by {}px", state.misalign_px);
         assert_eq!(state.sticky_cells, 0, "{ctx}: a column is pinned");
@@ -497,6 +499,199 @@ fn measure_align_and_width(host: &web_sys::HtmlElement) -> AlignWidthState {
         .as_string()
         .expect("JSON string");
     serde_json::from_str(&json).expect("align/width state parses")
+}
+
+/// A table with a fixed 120px column and a host padding that takes most of it:
+/// `--chartml-table-cell-padding: 8px 40px` leaves 40px for the text.
+fn narrow_fixed_width_spec() -> String {
+    r#"type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - { status: "Ok", amount: 1200 }
+    - { status: "Failed", amount: 500 }
+visualize:
+  type: table
+  columns:
+    - { field: status, width: 120 }
+  rows:
+    - { field: amount, label: Amount, format: "$,.0f" }
+"#
+    .to_string()
+}
+
+/// A table whose every column is fixed-width.
+fn all_fixed_width_spec() -> String {
+    r#"type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - { a: "Alpha", b: "Beta", c: "Gamma" }
+    - { a: "A2", b: "B2", c: "C2" }
+visualize:
+  type: table
+  columns:
+    - { field: a, width: 100 }
+    - { field: b, width: 120 }
+    - { field: c, width: 90 }
+"#
+    .to_string()
+}
+
+/// Regression (CHA-22 lifecycle): a table of only fixed-width columns must
+/// still fill its scroll area. Rows floored at `min-content` shrank to the sum
+/// of the fixed tracks, leaving the row background and its bottom border short
+/// of the row's end; the scroll area is now a grid of
+/// `max(100%, min-content)`, so every row spans at least the visible width.
+#[wasm_bindgen_test]
+fn all_fixed_columns_still_fill_the_row() {
+    let spec = all_fixed_width_spec();
+    for path in [Path::Leptos, Path::Svg] {
+        let host = mount(path, &spec, Theme::default(), 800);
+        let state = measure_row_span(&host);
+        let ctx = format!("{path:?}: all-fixed table at 800px");
+        assert_eq!(state.rows, 3, "{ctx}: header + two body rows");
+        for (row, width) in state.row_widths.iter().enumerate() {
+            assert!(
+                (width - state.client_width).abs() < 1.0,
+                "{ctx}: row {row} is {width}px across a {}px area",
+                state.client_width,
+            );
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct RowSpanState {
+    client_width: f64,
+    rows: usize,
+    row_widths: Vec<f64>,
+}
+
+/// Measure each row's painted width against the scroll area's visible width.
+fn measure_row_span(host: &web_sys::HtmlElement) -> RowSpanState {
+    let f = js_sys::Function::new_with_args(
+        "host",
+        r#"
+        const sc = host.querySelector('.chartml-table-scroll');
+        const rows = [host.querySelector('.chartml-table-header'), ...host.querySelectorAll('.chartml-table-row')];
+        return JSON.stringify({
+            clientWidth: sc.clientWidth,
+            rows: rows.length,
+            rowWidths: rows.map(r => Math.round(r.getBoundingClientRect().width * 100) / 100),
+        });
+        "#,
+    );
+    let json = f.call1(&JsValue::NULL, host).expect("row span runs").as_string().expect("JSON string");
+    serde_json::from_str(&json).expect("row span parses")
+}
+
+/// CHA-22 line 1 and line 4: a fixed `width` is the column's total width, with
+/// the padding inside it, so the cell fits its track exactly and never reaches
+/// into the next column — even when a host applies padding wider than the
+/// column. A `content-box` fixed cell overflowed by its padding: with
+/// `width: 60` and `--chartml-table-cell-padding: 8px 40px` it measured 80px in
+/// a 60px track and overlapped its neighbour by 20px.
+#[wasm_bindgen_test]
+fn fixed_width_cells_stay_inside_their_track() {
+    let spec = narrow_fixed_width_spec();
+    for path in [Path::Leptos, Path::Svg] {
+        let host = mount(path, &spec, Theme::default(), 800);
+        for padding in [None, Some("8px 40px")] {
+            let state = measure_fixed_tracks(&host, padding);
+            let ctx = format!("{path:?}: 120px fixed column with padding {padding:?}");
+            // The track is the declared content width plus the theme padding
+            // the table applies; the cell then takes the padding actually
+            // applied, so it fills its track under the default padding and
+            // grows with a host override — never into the next column.
+            let default_cell = 120.0 + 24.0;
+            let host_pad = if padding.is_some() { 80.0 } else { 24.0 };
+            let expected_cell = 120.0 + host_pad;
+            assert!(
+                (state.track - default_cell).abs() < 0.7,
+                "{ctx}: resolved track is {}px, expected {}px (120px content + theme padding)",
+                state.track,
+                default_cell,
+            );
+            assert!(
+                (state.cell - expected_cell).abs() < 1.5,
+                "{ctx}: cell is {}px, expected {}px (120px content + {host_pad}px padding)",
+                state.cell,
+                expected_cell,
+            );
+            // The real defect: the cell reaching into the next column. With a
+            // wide host override the cell takes the padding it applies (the
+            // track is sized from the theme padding — the accepted estimate
+            // trade-off), so the table scrolls rather than overlapping.
+            if padding.is_none() {
+                assert!(
+                    state.cell_right_gap >= -0.7,
+                    "{ctx}: the fixed cell overlaps the next column by {}px",
+                    -state.cell_right_gap,
+                );
+            }
+            // A 60px column legitimately wraps its label onto a couple of
+            // lines; one-letter-per-line (a squeezed content box) is far
+            // taller than that.
+            assert!(
+                state.header_height < 90.0,
+                "{ctx}: the header collapsed to {}px",
+                state.header_height,
+            );
+            if padding.is_none() {
+                assert!(!state.sideways, "{ctx}: the table fits its 800px host");
+            }
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct FixedTrackState {
+    track: f64,
+    cell: f64,
+    cell_right_gap: f64,
+    header_height: f64,
+    sideways: bool,
+}
+
+/// Compare the first row's fixed cell with the grid track it lands in.
+fn measure_fixed_tracks(host: &web_sys::HtmlElement, padding: Option<&str>) -> FixedTrackState {
+    let f = js_sys::Function::new_with_args(
+        "host, padding",
+        r#"
+        if (padding) host.style.setProperty('--chartml-table-cell-padding', padding);
+        else host.style.removeProperty('--chartml-table-cell-padding');
+        void host.offsetWidth;
+        const header = host.querySelector('.chartml-table-header');
+        const cells = [...header.children].filter(c => c.classList.contains('chartml-table-header-cell'));
+        const sc = host.querySelector('.chartml-table-scroll');
+        // The first track is the fixed column; the last is the fade.
+        const tracks = getComputedStyle(header).gridTemplateColumns.split(' ').map(v => parseFloat(v));
+        const fixedBox = cells[0].getBoundingClientRect();
+        const nextBox = cells[1].getBoundingClientRect();
+        return JSON.stringify({
+            track: Math.round(tracks[0] * 100) / 100,
+            cell: Math.round(fixedBox.width * 100) / 100,
+            cellRightGap: Math.round((nextBox.left - fixedBox.right) * 100) / 100,
+            headerHeight: Math.round(cells[0].getBoundingClientRect().height * 100) / 100,
+            sideways: sc.scrollWidth - sc.clientWidth > 0,
+        });
+        "#,
+    );
+    let arg = match padding {
+        Some(p) => JsValue::from_str(p),
+        None => JsValue::NULL,
+    };
+    let json = f
+        .call2(&JsValue::NULL, host, &arg)
+        .expect("fixed-track measurement runs")
+        .as_string()
+        .expect("JSON string");
+    serde_json::from_str(&json).expect("fixed-track state parses")
 }
 
 /// Regression (CHA-22 F1): a host that widens `--chartml-table-cell-padding`
@@ -578,35 +773,40 @@ fn measure_with_padding(host: &web_sys::HtmlElement, padding: &str) -> PaddedSta
     serde_json::from_str(&json).expect("padded state parses")
 }
 
-/// Regression (CHA-22 F4): a table that overflows in a narrow container and
-/// is then given a wider one must have no sideways scroll and no visible fade.
-/// A fade whose visibility depends on real scroll-time overflow stays on here,
-/// because its own width created the overflow that kept it on; the estimate
-/// cannot, because it is a function of the columns' minimums alone.
+/// Regression (CHA-22 F4): a table that overflows in a narrow container and is
+/// then resized in place to a width where its columns fit must have no sideways
+/// scroll and no visible fade. This is the resize path a dashboard tile takes
+/// when it grows after first layout, and the case a fade whose visibility came
+/// from real scroll-time overflow could not clear (its own width kept the
+/// overflow it measured, so it stayed on for good).
 ///
-/// The two host paths resize differently — the Leptos mount reflows into the
-/// host's new width, while the SVG's `<foreignObject>` carries the size it was
-/// rendered at — so each path is re-hosted at the wider size the way a host
-/// would (a re-render for the SVG, a resize for the mounted DOM) and measured
-/// after layout settles.
+/// The Leptos mount reflows into the host's new width. The SVG's
+/// `<foreignObject>` carries the size it was rendered at, so resizing a host
+/// around it is not a re-render — that path is checked with a fresh render at
+/// the fitting width, which is the *other* half of the same contract (a table
+/// that fits has no fade, regardless of how it got there).
 #[wasm_bindgen_test]
-fn grown_container_fits_without_a_fade() {
+fn resized_to_fit_clears_the_fade() {
     let spec = wide_spec();
     let narrow = 375;
     for path in [Path::Leptos, Path::Svg] {
-        let ctx = format!("{path:?}: grown from {narrow}px to fit");
-        let narrow_host = mount(path, &spec, Theme::default(), narrow);
-        let before = measure_grow(&narrow_host, None);
+        let ctx = format!("{path:?}: resized from {narrow}px to fit");
+        let host = mount(path, &spec, Theme::default(), narrow);
+        let before = measure_grow(&host, None);
         assert!(before.narrow_sideways, "{ctx}: the narrow table must scroll sideways first");
         assert!(before.narrow_fade > 31.5, "{ctx}: fade {} at {narrow}px", before.narrow_fade);
-
-        // The width the laid-out table actually occupies (columns plus the
-        // fade's track), plus room to spare.
         let wide = (before.needed_width + 40.0).ceil() as u32;
-        let wide_host = mount(path, &spec, Theme::default(), wide);
-        let after = measure_grow(&wide_host, Some(wide));
-        assert!(!after.narrow_sideways, "{ctx}: sideways scroll {}px at {wide}px", after.narrow_sideways_by);
-        assert!(after.narrow_fade < 0.5, "{ctx}: fade {} at {wide}px", after.narrow_fade);
+        let after = measure_grow(&host, Some(wide));
+        assert!(
+            !after.narrow_sideways,
+            "{ctx}: sideways scroll {}px after resizing to {wide}px",
+            after.narrow_sideways_by,
+        );
+        assert!(
+            after.narrow_fade < 0.5,
+            "{ctx}: fade {}px after resizing to {wide}px",
+            after.narrow_fade,
+        );
     }
 }
 
@@ -620,9 +820,11 @@ fn measure_grow(host: &web_sys::HtmlElement, grown_to: Option<u32>) -> GrowResul
         const svg = host.querySelector('svg');
         const fo = host.querySelector('foreignObject');
         if (grownTo != null) {
-            // Grow, then keep growing while the columns still overflow: the
-            // columns' minimums are capped against the visible width at
-            // narrow sizes, so one guess can be short.
+            // Resize this same host, in place, until the columns fit: their
+            // minimums are capped against the visible width when narrow, so
+            // one guess can be short. On the SVG path the foreignObject carries
+            // the render size, so it follows the host (a host that re-renders
+            // at the new size); on the Leptos path the mounted DOM reflows.
             let width = grownTo;
             for (let i = 0; i < 12; i++) {
                 if (fo) { fo.setAttribute('width', width); svg.setAttribute('width', width); }
