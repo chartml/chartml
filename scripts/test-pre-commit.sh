@@ -395,6 +395,11 @@ if grep -qF "lint copy:  $linted" "$scratch/snapshot-content.log" ||
 else
     reported=0
 fi
+if [ "$reported" -eq 1 ] && [ "$(grep -c 'lint copy:' "$scratch/snapshot-content.log")" -eq 1 ]; then
+    pass 'the hook reports the lint copy exactly once'
+else
+    fail "the hook reported the lint copy $(grep -c 'lint copy:' "$scratch/snapshot-content.log") times"
+fi
 if [ "$reported" -eq 1 ] &&
     grep -qE 'target dir: .*/\.git/chartml-pre-commit/target$' "$scratch/snapshot-content.log" &&
     grep -qE 'remove them: rm -rf -- .*/chartml-pre-commit\.[A-Za-z0-9]+ .*/chartml-pre-commit/target$' "$scratch/snapshot-content.log"; then
@@ -1005,22 +1010,27 @@ fi
 # the real diagnosis.
 repo="$scratch/unwritable-state"
 new_repo "$repo"
-mkdir -p "$repo/.git/chartml-pre-commit"
-chmod 500 "$repo/.git/chartml-pre-commit"
 printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
 git -C "$repo" add clean.rs
-if (cd "$repo" && bash "$hook" > "$scratch/unwritable-state.log" 2>&1); then
-    fail 'an unwritable state directory still produced a verdict'
+if [ "$(id -u)" -eq 0 ]; then
+    # root ignores directory permissions, so this scenario cannot be created.
+    echo 'SKIP: an unwritable state directory cannot be set up as root' >&2
 else
-    pass 'an unwritable state directory is reported'
+    mkdir -p "$repo/.git/chartml-pre-commit"
+    chmod 500 "$repo/.git/chartml-pre-commit"
+    if (cd "$repo" && bash "$hook" > "$scratch/unwritable-state.log" 2>&1); then
+        fail 'an unwritable state directory still produced a verdict'
+    else
+        pass 'an unwritable state directory is reported'
+    fi
+    if grep -qE 'unbound variable|command not found|No such file or directory' "$scratch/unwritable-state.log"; then
+        fail 'the refusal printed an internal script error'
+        cat "$scratch/unwritable-state.log" >&2
+    else
+        pass 'the refusal prints no internal script error'
+    fi
+    chmod 700 "$repo/.git/chartml-pre-commit"
 fi
-if grep -qE 'unbound variable|command not found|No such file or directory' "$scratch/unwritable-state.log"; then
-    fail 'the refusal printed an internal script error'
-    cat "$scratch/unwritable-state.log" >&2
-else
-    pass 'the refusal prints no internal script error'
-fi
-chmod 700 "$repo/.git/chartml-pre-commit"
 
 # --- The hook works where hard links are unavailable ---------------------
 # The lock must not depend on `ln`: exFAT, FAT32 and some network mounts do not
@@ -1040,6 +1050,25 @@ if (
 else
     fail 'the lock failed where hard links are unavailable'
     cat "$scratch/no-hardlinks.log" >&2
+fi
+
+# --- A rustflags the commit itself carries is honoured -------------------
+# The hook must ignore settings from outside the commit, but a .cargo/config.toml
+# that is part of the commit is content, so its rustflags must still count.
+repo="$scratch/committed-config"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_COMMITTED_SUPPRESSED = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+if (
+    cd "$repo"
+    HOOK_TEST_WARN_ON_MARKER='CHA27_COMMITTED_SUPPRESSED' bash "$hook" > "$scratch/committed-config.log" 2>&1
+); then
+    pass 'rustflags committed in .cargo/config.toml are honoured'
+else
+    fail 'a commit was blocked by a warning its own committed config silences'
+    cat "$scratch/committed-config.log" >&2
 fi
 
 if [ "$failures" -ne 0 ]; then

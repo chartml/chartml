@@ -353,18 +353,60 @@ fi
 # their build.rustflags could silence a warning the commit contains. Cargo
 # merges those rather than overriding them, so the only reliable isolation is
 # RUSTFLAGS: when it is set, Cargo ignores build.rustflags from every config
-# file. An empty value keeps the defaults, and RUSTFLAGS from the developer's
-# environment is replaced too, because it is not part of the commit either.
-echo "🔍 Running cargo clippy on the committed content..."
-echo "   lint copy:  $snapshot_tree"
-echo "   target dir: $target_dir"
-echo "   remove them: rm -rf -- $snapshot_root $target_dir"
-
+# file. Its value carries the rustflags the commit itself brings.
 # Settings from the developer's environment are not part of the commit, so they
-# must not decide the verdict. RUSTFLAGS is set (empty) because Cargo only
-# ignores config-file rustflags when it is set. RUSTC_WRAPPER can rewrite the
+# must not decide the verdict. RUSTFLAGS is set because Cargo only ignores
+# config-file rustflags when it is set; the value carries the rustflags the
+# commit itself brings, so a committed .cargo/config.toml still counts while a
+# config file outside the commit does not. RUSTC_WRAPPER can rewrite the
 # compiler invocation, and the toolchain/target selectors change what is built.
-RUSTFLAGS=''
+committed_rustflags=''
+committed_config="$snapshot_tree/.cargo/config.toml"
+if [ -f "$committed_config" ]; then
+    committed_rustflags=$(awk '
+        BEGIN { in_build = 0; collecting = 0; buf = "" }
+        /^[[:space:]]*\[/ {
+            line = $0
+            sub(/^[[:space:]]*/, "", line)
+            if (collecting) { buf = buf $0 "\n"; if (line ~ /\]/) collecting = 0; next }
+            in_build = (line ~ /^\[build\]/)
+            next
+        }
+        {
+            if (collecting) { buf = buf $0 "\n"; if ($0 ~ /\]/) collecting = 0; next }
+            if (in_build) {
+                line = $0
+                sub(/^[[:space:]]*/, "", line)
+                if (line ~ /^rustflags[[:space:]]*=/) {
+                    buf = line "\n"
+                    collecting = (line !~ /\]/)
+                }
+            }
+        }
+        END {
+            out = ""; n = length(buf); i = 1
+            while (i <= n) {
+                if (substr(buf, i, 1) == "\"") {
+                    j = i + 1; val = ""
+                    while (j <= n) {
+                        cj = substr(buf, j, 1)
+                        if (cj == "\\") { val = val substr(buf, j+1, 1); j += 2; continue }
+                        if (cj == "\"") break
+                        val = val cj; j += 1
+                    }
+                    out = (out == "" ? val : out " " val)
+                    i = j + 1
+                    continue
+                }
+                i += 1
+            }
+            printf "%s", out
+        }' "$committed_config")
+    if [ -n "$committed_rustflags" ]; then
+        echo "   note: using the rustflags from this commit's .cargo/config.toml"
+    fi
+fi
+RUSTFLAGS="$committed_rustflags"
 export RUSTFLAGS
 unset RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER CARGO_BUILD_TARGET CARGO_BUILD_RUSTFLAGS 2>/dev/null || true
 ( cd -- "$snapshot_tree" && CARGO_TARGET_DIR="$target_dir" cargo clippy --manifest-path "$snapshot_manifest" --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion ) > "$clippy_log" 2>&1 &
