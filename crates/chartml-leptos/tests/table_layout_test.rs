@@ -404,6 +404,85 @@ fn very_narrow_svg_transparent_rows() {
     wide(Path::Svg, transparent_theme(), 240, true, false);
 }
 
+/// Regression (CHA-22 F1): a host that widens `--chartml-table-cell-padding`
+/// must get wider columns, not squeezed text. Every column's minimum is its
+/// content only and layout adds the padding actually applied, so with a wide
+/// override in a narrow container there are still no cells cut off, no words
+/// broken across lines, and no cell overflowing its row.
+#[wasm_bindgen_test]
+fn wide_cell_padding_widens_columns_instead_of_breaking_text() {
+    let spec = wide_spec();
+    for path in [Path::Leptos, Path::Svg] {
+        let host = mount(path, &spec, Theme::default(), 375);
+        let state = measure_with_padding(&host, "8px 40px");
+        let ctx = format!("{path:?}: --chartml-table-cell-padding: 8px 40px at 375px");
+        assert!(state.clipped_cells == 0, "{ctx}: {} cells cut off", state.clipped_cells);
+        assert!(state.broken_words.is_empty(), "{ctx}: words broken across lines: {:?}", state.broken_words);
+        assert!(state.cell_overflow_px < 0.5, "{ctx}: a cell overflows its row by {}px", state.cell_overflow_px);
+        // The override really applied (otherwise the assertions above are vacuous).
+        assert_eq!(state.padding, "8px 40px", "{ctx}: padding was {:?}", state.padding);
+        // And the columns are wider than the theme padding would give: the
+        // table still needs to scroll sideways at this width.
+        assert!(state.sideways, "{ctx}: the widened padding must not fit at 375px");
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct PaddedState {
+    padding: String,
+    sideways: bool,
+    clipped_cells: u32,
+    broken_words: Vec<String>,
+    cell_overflow_px: f64,
+}
+
+/// Apply `padding` as the host's `--chartml-table-cell-padding`, force layout
+/// and measure the table's text integrity.
+fn measure_with_padding(host: &web_sys::HtmlElement, padding: &str) -> PaddedState {
+    let f = js_sys::Function::new_with_args(
+        "host, padding",
+        r#"
+        host.style.setProperty('--chartml-table-cell-padding', padding);
+        void host.offsetWidth;
+        const sc = host.querySelector('.chartml-table-scroll');
+        const cellsOf = r => [...r.children].filter(c =>
+            c.classList.contains('chartml-table-cell') || c.classList.contains('chartml-table-header-cell'));
+        const rows = [host.querySelector('.chartml-table-header'), ...host.querySelectorAll('.chartml-table-row')];
+        let overflow = 0;
+        for (const r of rows) {
+            const rb = r.getBoundingClientRect();
+            for (const c of cellsOf(r)) {
+                const cb = c.getBoundingClientRect();
+                overflow = Math.max(overflow, cb.right - rb.right);
+            }
+        }
+        const first = cellsOf(rows[0])[0];
+        return JSON.stringify({
+            padding: getComputedStyle(first).padding,
+            sideways: sc.scrollWidth - sc.clientWidth > 0,
+            clippedCells: rows.flatMap(cellsOf).filter(c => c.scrollWidth > c.clientWidth + 0.5 || c.scrollHeight > c.clientHeight + 0.5).length,
+            brokenWords: rows.flatMap(cellsOf).flatMap(c => {
+                const node = c.firstChild; if (!node) return [];
+                const out = []; const re = /\S+/g; let m;
+                while ((m = re.exec(node.textContent))) {
+                    const rg = document.createRange(); rg.setStart(node, m.index); rg.setEnd(node, m.index + m[0].length);
+                    if (new Set([...rg.getClientRects()].map(t => Math.round(t.top))).size > 1) out.push(m[0]);
+                }
+                return out;
+            }),
+            cellOverflowPx: Math.max(0, overflow),
+        });
+        "#,
+    );
+    let json = f
+        .call2(&JsValue::NULL, host, &JsValue::from_str(padding))
+        .expect("padding measurement runs")
+        .as_string()
+        .expect("JSON string");
+    serde_json::from_str(&json).expect("padded state parses")
+}
+
 /// Regression (CHA-22 F4): a table that overflows in a narrow container and
 /// is then given a wider one must have no sideways scroll and no visible fade.
 /// A fade whose visibility depends on real scroll-time overflow stays on here,
