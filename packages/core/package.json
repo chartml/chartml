@@ -10,13 +10,13 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./style.css": "./dist/style.css",
+    "./style.css": "./src/chartml.css",
     "./wasm": {
       "node": "./pkg/node/chartml_wasm.js",
       "default": "./pkg/web/chartml_wasm.js"
     }
   },
-  "files": ["dist/", "pkg/"],
+  "files": ["dist/", "pkg/", "src/chartml.css"],
   "scripts": {
     "build:wasm": "bash build.sh",
     "build:ts": "tsc",
