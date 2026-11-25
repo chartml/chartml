@@ -441,12 +441,17 @@ fn column_align_and_width_render_as_documented() {
         let ctx = format!("{path:?}: align + width at 800px");
         // Month is explicitly centred; Revenue is explicitly left even though
         // it is numeric; Cost has no align, so it keeps the numeric default.
-        assert_eq!(state.align, vec!["center", "left", "right"], "{ctx}: computed text-align");
+        assert_eq!(state.align, vec!["center", "left", "right"], "{ctx}: header text-align");
+        // Every body row carries the same alignment, not only the header.
+        assert_eq!(state.body_align.len(), 3, "{ctx}: body rows");
+        for (row, align) in state.body_align.iter().enumerate() {
+            assert_eq!(align, &vec!["center", "left", "right"], "{ctx}: body row {row} text-align");
+        }
         assert_eq!(state.header_widths.len(), 3, "{ctx}: header cells");
-        // A fixed width is the column's content width; the theme padding the
-        // table applies is added, as for every measured column.
-        assert!((state.header_widths[0] - 224.0).abs() < 0.6, "{ctx}: Month width {} (200px content + 24px theme padding)", state.header_widths[0]);
-        assert!((state.header_widths[2] - 144.0).abs() < 0.6, "{ctx}: Cost width {} (120px content + 24px theme padding)", state.header_widths[2]);
+        // A fixed width is the column's content width; the padding the table
+        // applies is added by layout (24px of theme padding here).
+        assert!((state.header_widths[0] - 224.0).abs() < 0.6, "{ctx}: Month width {} (200px content + 24px padding)", state.header_widths[0]);
+        assert!((state.header_widths[2] - 144.0).abs() < 0.6, "{ctx}: Cost width {} (120px content + 24px padding)", state.header_widths[2]);
         // The same widths in the body: a per-column track, not a per-row one.
         for row in &state.body_widths {
             assert_eq!(row.len(), 3, "{ctx}: body cells");
@@ -463,6 +468,7 @@ fn column_align_and_width_render_as_documented() {
 #[serde(rename_all = "camelCase")]
 struct AlignWidthState {
     align: Vec<String>,
+    body_align: Vec<Vec<String>>,
     header_widths: Vec<f64>,
     body_widths: Vec<Vec<f64>>,
     misalign_px: f64,
@@ -485,6 +491,7 @@ fn measure_align_and_width(host: &web_sys::HtmlElement) -> AlignWidthState {
         const widths = cells => cells.map(c => Math.round(c.getBoundingClientRect().width * 100) / 100);
         return JSON.stringify({
             align: hdr.map(c => getComputedStyle(c).textAlign),
+            bodyAlign: rows.map(r => cellsOf(r).map(c => getComputedStyle(c).textAlign)),
             headerWidths: widths(hdr),
             bodyWidths: rows.map(r => widths(cellsOf(r))),
             misalignPx: Math.max(...hdr.map((c, i) => Math.abs(c.getBoundingClientRect().left - cellsOf(rows[0])[i].getBoundingClientRect().left))),
@@ -603,36 +610,30 @@ fn fixed_width_cells_stay_inside_their_track() {
         for padding in [None, Some("8px 40px")] {
             let state = measure_fixed_tracks(&host, padding);
             let ctx = format!("{path:?}: 120px fixed column with padding {padding:?}");
-            // The track is the declared content width plus the theme padding
-            // the table applies; the cell then takes the padding actually
-            // applied, so it fills its track under the default padding and
-            // grows with a host override — never into the next column.
-            let default_cell = 120.0 + 24.0;
+            // The track is `max-content`: the declared content width plus
+            // whatever padding is applied, so the cell always fills it.
             let host_pad = if padding.is_some() { 80.0 } else { 24.0 };
-            let expected_cell = 120.0 + host_pad;
+            let expected = 120.0 + host_pad;
             assert!(
-                (state.track - default_cell).abs() < 0.7,
-                "{ctx}: resolved track is {}px, expected {}px (120px content + theme padding)",
+                (state.track - expected).abs() < 0.7,
+                "{ctx}: resolved track is {}px, expected {}px (120px content + {host_pad}px padding)",
                 state.track,
-                default_cell,
+                expected,
             );
             assert!(
-                (state.cell - expected_cell).abs() < 1.5,
+                (state.cell - expected).abs() < 0.7,
                 "{ctx}: cell is {}px, expected {}px (120px content + {host_pad}px padding)",
                 state.cell,
-                expected_cell,
+                expected,
             );
-            // The real defect: the cell reaching into the next column. With a
-            // wide host override the cell takes the padding it applies (the
-            // track is sized from the theme padding — the accepted estimate
-            // trade-off), so the table scrolls rather than overlapping.
-            if padding.is_none() {
-                assert!(
-                    state.cell_right_gap >= -0.7,
-                    "{ctx}: the fixed cell overlaps the next column by {}px",
-                    -state.cell_right_gap,
-                );
-            }
+            // The real defect: the cell reaching into the next column. The
+            // track is `max-content`, so it fits whatever padding the host
+            // applies and the cell never overlaps, at any padding.
+            assert!(
+                state.cell_right_gap >= -0.7,
+                "{ctx}: the fixed cell overlaps the next column by {}px",
+                -state.cell_right_gap,
+            );
             // A 60px column legitimately wraps its label onto a couple of
             // lines; one-letter-per-line (a squeezed content box) is far
             // taller than that.

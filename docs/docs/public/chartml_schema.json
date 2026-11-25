@@ -699,7 +699,7 @@
             { "type": "number", "exclusiveMinimum": 0 },
             { "type": "string", "const": "auto" }
           ],
-          "description": "Table column width in pixels, or 'auto' to size from its header label and values"
+          "description": "Table column width: the column's content width in pixels (the table's cell padding is added around it), or 'auto' to size from its header label and values"
         },
         "align": {
           "type": "string",
@@ -725,7 +725,7 @@
             { "type": "number", "exclusiveMinimum": 0 },
             { "type": "string", "const": "auto" }
           ],
-          "description": "Table column width in pixels, or 'auto' to size from its header label and values"
+          "description": "Table column width: the column's content width in pixels (the table's cell padding is added around it), or 'auto' to size from its header label and values"
         },
         "format": {
           "type": "string",
