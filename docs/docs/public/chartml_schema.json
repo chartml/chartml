@@ -693,6 +693,18 @@
         },
         "dataLabels": {
           "$ref": "#/definitions/DataLabels"
+        },
+        "width": {
+          "oneOf": [
+            { "type": "number", "exclusiveMinimum": 0 },
+            { "type": "string", "const": "auto" }
+          ],
+          "description": "Table column width in pixels, or 'auto' to size from its header label and values"
+        },
+        "align": {
+          "type": "string",
+          "enum": ["left", "center", "right"],
+          "description": "Table column text alignment, overriding the type-based default (numbers right, everything else left)"
         }
       },
       "required": ["field"]

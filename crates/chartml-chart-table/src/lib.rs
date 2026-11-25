@@ -3024,6 +3024,14 @@ visualize:
         documented.sort_unstable();
         assert_eq!(documented, vec!["align", "field", "format", "label", "width"]);
 
+        // Table measures come from `rows` too, so the same width/align are
+        // documented there; the renderer reads them from either.
+        let row_properties = schema["definitions"]["RowsObject"]["properties"]
+            .as_object()
+            .expect("RowsObject.properties");
+        assert!(row_properties.contains_key("width"), "rows must document width");
+        assert!(row_properties.contains_key("align"), "rows must document align");
+
         let page_size = &schema["definitions"]["Style"]["properties"]["pageSize"];
         assert_eq!(page_size["type"], "integer");
         assert_eq!(page_size["minimum"], 1);
@@ -3045,6 +3053,7 @@ rows:
     label: Revenue
     format: "$,.0f"
     width: auto
+    align: left
 style:
   pageSize: 2
 "#,
@@ -3067,6 +3076,7 @@ style:
             let cells = real_cells(row);
             assert_eq!(get(cells[0], "grid-column"), Some("1"));
             assert_eq!(get(cells[0], "text-align"), Some("center"));
+            assert_eq!(get(cells[1], "text-align"), Some("left"), "rows align is read");
         }
     }
 
