@@ -84,13 +84,9 @@ chartml-datafusion = { path = "../chartml-datafusion" }
 wiremock = "0.6"
 
 # `wasm-bindgen-test` only runs on the wasm32 target — guarding it keeps
-# the native build lean. `web-time` must be named here too so
-# `indexeddb_test.rs` can build the `CachedEntry::fetched_at` values the
-# resolver's cache type expects (it is a normal dependency of the library,
-# not automatically in scope for integration tests).
+# the native build lean.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
-web-time = "1"
 
 [lints]
 workspace = true

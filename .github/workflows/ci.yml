@@ -88,9 +88,12 @@ jobs:
       # `cargo test`. Both the runner and the browser/driver are pinned so a
       # run is repeatable; the tests themselves are the changes' acceptance.
       - name: Install wasm-bindgen test runner
-        env:
-          WASM_BINDGEN_VERSION: '0.2.120'
         run: |
+          # `wasm-bindgen-test-runner` must exactly match the wasm-bindgen
+          # crate the tests were built against, so derive it from Cargo.lock
+          # instead of keeping a second pin that can drift.
+          WASM_BINDGEN_VERSION="$(cargo metadata --locked --format-version 1 \
+            | python3 -c 'import json, sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "wasm-bindgen"))')"
           DIR="${RUNNER_TEMP}/wasm-bindgen-${WASM_BINDGEN_VERSION}-x86_64-unknown-linux-musl"
           curl -sSfL "https://github.com/rustwasm/wasm-bindgen/releases/download/${WASM_BINDGEN_VERSION}/wasm-bindgen-${WASM_BINDGEN_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
             | tar xz -C "${RUNNER_TEMP}"
@@ -99,7 +102,7 @@ jobs:
             "${DIR}/wasm-bindgen-test-runner" \
             "${DIR}/wasm2es6js" \
             /usr/local/bin/
-          wasm-bindgen-test-runner --version
+          test "$(wasm-bindgen-test-runner --version | awk '{print $2}')" = "${WASM_BINDGEN_VERSION}"
 
       - name: Install pinned headless Chrome and chromedriver
         env:
@@ -118,6 +121,11 @@ jobs:
         env:
           CHROMEDRIVER: /usr/local/bin/chromedriver
           CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER: wasm-bindgen-test-runner
+          # The runner caps a whole test binary at 20s by default. The provider
+          # suite alone deliberately waits several seconds, so give CI headroom
+          # rather than turning a slow runner into a false failure.
+          WASM_BINDGEN_TEST_TIMEOUT: '120'
+          WASM_BINDGEN_TEST_DRIVER_TIMEOUT: '30'
         run: |
           cat > "${RUNNER_TEMP}/webdriver.json" <<'JSON'
           {
@@ -128,9 +136,30 @@ jobs:
           }
           JSON
           export WASM_BINDGEN_TEST_WEBDRIVER_JSON="${RUNNER_TEMP}/webdriver.json"
-          cargo test --target wasm32-unknown-unknown -p chartml-wasm --test web
-          cargo test --target wasm32-unknown-unknown -p chartml-leptos --test table_layout_test --test chart_provider_test
-          cargo test --target wasm32-unknown-unknown -p chartml-core --features wasm-indexeddb --test indexeddb_test
+
+          # A wasm-bindgen test binary with no tests prints "no tests to run!"
+          # and exits 0, so assert each suite actually ran the expected number
+          # of tests. Update the count when a suite gains or loses a test.
+          run_suite() {
+            local label="$1" expected="$2"
+            shift 2
+            local log="${RUNNER_TEMP}/browser-${label}.log"
+            if ! "$@" > "${log}" 2>&1; then
+              cat "${log}"
+              echo "::error::browser suite ${label} failed"
+              exit 1
+            fi
+            cat "${log}"
+            if ! grep -q "test result: ok. ${expected} passed; 0 failed" "${log}"; then
+              echo "::error::browser suite ${label}: expected ${expected} passing tests"
+              exit 1
+            fi
+          }
+
+          run_suite wasm-api 12 cargo test --target wasm32-unknown-unknown -p chartml-wasm --test web
+          run_suite table-layout 9 cargo test --target wasm32-unknown-unknown -p chartml-leptos --test table_layout_test
+          run_suite chart-provider 6 cargo test --target wasm32-unknown-unknown -p chartml-leptos --test chart_provider_test
+          run_suite indexeddb 7 cargo test --target wasm32-unknown-unknown -p chartml-core --features wasm-indexeddb --test indexeddb_test
 
   wasm-build:
     name: WASM Build
