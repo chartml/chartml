@@ -1893,7 +1893,6 @@ impl ChartRenderer for TableRenderer {
                 ("display", "flex"),
                 ("flex-direction", "column"),
                 ("min-width", "min-content"),
-                ("flex", "1 0 auto"),
                 ("font-size", &font_size_var),
             ]),
             children: vec![header_row, body],
@@ -3337,8 +3336,8 @@ style:
         // whose columns need less than the visible area has a 0px fade track
         // — there is no history, no scroll position and no prior overflow
         // that can keep it on, which is what the scroll-timeline version got
-        // wrong. Narrow-to-just-fits is asserted in the browser:
-        // `grow_to_just_fits_clears_the_fade` in the Leptos suite.
+        // wrong. The browser suite's `grown_container_fits_without_a_fade`
+        // covers the same shape end to end (narrow, then wide enough to fit).
         let config = cfg("type: table\ncolumns: month\nrows: [revenue]");
         let el = TableRenderer::new().render(&data(), &config).unwrap();
         let scroll = by_class(&el, "chartml-table-scroll")[0];

@@ -404,6 +404,101 @@ fn very_narrow_svg_transparent_rows() {
     wide(Path::Svg, transparent_theme(), 240, true, false);
 }
 
+/// A table spec that uses the schema's per-column `align` and `width`: Month
+/// centred and fixed at 200px, Revenue forced left, Cost fixed at 120px.
+fn align_and_width_spec() -> String {
+    r#"type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - { month: "January", revenue: 1234.5, cost: 400 }
+    - { month: "February", revenue: 987.25, cost: 450 }
+    - { month: "March", revenue: 1800.0, cost: 500 }
+visualize:
+  type: table
+  columns:
+    - { field: month, label: Month, width: 200, align: center }
+  rows:
+    - { field: revenue, label: Revenue, format: "$,.0f", align: left }
+    - { field: cost, label: Cost, format: "$,.0f", width: 120 }
+"#
+    .to_string()
+}
+
+/// CHA-22 line 1 and line 4: the schema's per-column `align` and `width`
+/// really change the rendered table. `align` must reach the computed
+/// `text-align` of the header and every body cell (and override the numeric
+/// default); a fixed `width` must be the column's rendered width in the
+/// header and the body, keep the header and body aligned, and leave no column
+/// pinned.
+#[wasm_bindgen_test]
+fn column_align_and_width_render_as_documented() {
+    let spec = align_and_width_spec();
+    for path in [Path::Leptos, Path::Svg] {
+        let host = mount(path, &spec, Theme::default(), 800);
+        let state = measure_align_and_width(&host);
+        let ctx = format!("{path:?}: align + width at 800px");
+        // Month is explicitly centred; Revenue is explicitly left even though
+        // it is numeric; Cost has no align, so it keeps the numeric default.
+        assert_eq!(state.align, vec!["center", "left", "right"], "{ctx}: computed text-align");
+        assert_eq!(state.header_widths.len(), 3, "{ctx}: header cells");
+        assert!((state.header_widths[0] - 200.0).abs() < 0.5, "{ctx}: Month width {} (fixed 200px)", state.header_widths[0]);
+        assert!((state.header_widths[2] - 120.0).abs() < 0.5, "{ctx}: Cost width {} (fixed 120px)", state.header_widths[2]);
+        // The same widths in the body: a per-column track, not a per-row one.
+        for row in &state.body_widths {
+            assert_eq!(row.len(), 3, "{ctx}: body cells");
+            assert!((row[0] - 200.0).abs() < 0.5, "{ctx}: body Month {} (fixed 200px)", row[0]);
+            assert!((row[2] - 120.0).abs() < 0.5, "{ctx}: body Cost {} (fixed 120px)", row[2]);
+        }
+        assert!(state.misalign_px < 0.5, "{ctx}: header and body misaligned by {}px", state.misalign_px);
+        assert_eq!(state.sticky_cells, 0, "{ctx}: a column is pinned");
+        assert!(!state.sideways, "{ctx}: the fitting table must not scroll sideways");
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct AlignWidthState {
+    align: Vec<String>,
+    header_widths: Vec<f64>,
+    body_widths: Vec<Vec<f64>>,
+    misalign_px: f64,
+    sticky_cells: u32,
+    sideways: bool,
+}
+
+/// Read the computed `text-align` of each column's cells, the rendered widths
+/// of the fixed columns, and the no-pin/inline-alignment invariants.
+fn measure_align_and_width(host: &web_sys::HtmlElement) -> AlignWidthState {
+    let f = js_sys::Function::new_with_args(
+        "host",
+        r#"
+        const sc = host.querySelector('.chartml-table-scroll');
+        const header = host.querySelector('.chartml-table-header');
+        const rows = [...host.querySelectorAll('.chartml-table-row')];
+        const cellsOf = r => [...r.children].filter(c =>
+            c.classList.contains('chartml-table-cell') || c.classList.contains('chartml-table-header-cell'));
+        const hdr = cellsOf(header);
+        const widths = cells => cells.map(c => Math.round(c.getBoundingClientRect().width * 100) / 100);
+        return JSON.stringify({
+            align: hdr.map(c => getComputedStyle(c).textAlign),
+            headerWidths: widths(hdr),
+            bodyWidths: rows.map(r => widths(cellsOf(r))),
+            misalignPx: Math.max(...hdr.map((c, i) => Math.abs(c.getBoundingClientRect().left - cellsOf(rows[0])[i].getBoundingClientRect().left))),
+            stickyCells: [header, ...rows].flatMap(cellsOf).filter(c => getComputedStyle(c).position === 'sticky').length,
+            sideways: sc.scrollWidth - sc.clientWidth > 0,
+        });
+        "#,
+    );
+    let json = f
+        .call1(&JsValue::NULL, host)
+        .expect("align/width measurement runs")
+        .as_string()
+        .expect("JSON string");
+    serde_json::from_str(&json).expect("align/width state parses")
+}
+
 /// Regression (CHA-22 F1): a host that widens `--chartml-table-cell-padding`
 /// must get wider columns, not squeezed text. Every column's minimum is its
 /// content only and layout adds the padding actually applied, so with a wide
