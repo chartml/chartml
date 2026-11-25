@@ -86,8 +86,25 @@ fi
 # lock is never visible without its owner recorded (even if we are killed).
 printf '%s\n' "$$" > "$lock_pid_file"
 waited=0
+reclaimed=0
 while :; do
     if ln -- "$lock_pid_file" "$lock_file" 2>/dev/null; then
+        # A killed hook cannot clean up after itself, so drop the per-pid files
+        # of runs that are no longer alive.
+        for leftover in "$state_dir"/lock.* "$state_dir"/clippy.*.log; do
+            [ -e "$leftover" ] || continue
+            leftover_pid=${leftover##*/}
+            leftover_pid=${leftover_pid#lock.}
+            leftover_pid=${leftover_pid#clippy.}
+            leftover_pid=${leftover_pid%.log}
+            case "$leftover_pid" in
+                ''|*[!0-9]*) continue ;;
+            esac
+            [ "$leftover_pid" = "$$" ] && continue
+            if ! kill -0 "$leftover_pid" 2>/dev/null; then
+                rm -f -- "$leftover"
+            fi
+        done
         break
     fi
     holder=$(cat -- "$lock_file" 2>/dev/null || true)
@@ -100,6 +117,7 @@ while :; do
             rm -f -- "$stale"
             echo "   removed stale snapshot lock${holder:+ left by pid $holder}"
             holder=''
+            reclaimed=1
         fi
     fi
     if [ "$waited" -ge 60 ]; then
@@ -112,7 +130,7 @@ while :; do
         echo "   If no other hook is running, remove $lock_file and retry."
         exit 1
     fi
-    if [ "$waited" -eq 0 ]; then
+    if [ "$waited" -eq 0 ] && [ "$reclaimed" -eq 0 ]; then
         echo "⏳ Waiting for another pre-commit hook to finish${holder:+ (pid $holder)}..."
     fi
     sleep 1

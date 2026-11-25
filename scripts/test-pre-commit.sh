@@ -610,6 +610,53 @@ else
     tail -5 "$first_log" >&2
 fi
 
+# --- A hook killed with SIGKILL leaves no permanent litter -----------------
+# Traps cannot run on SIGKILL, so the next hook must reclaim the dead run's
+# per-pid lock and log files, and must not report waiting on a dead holder.
+repo="$scratch/killed-hook"
+new_repo "$repo"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+marker="$scratch/killed-hook.marker"
+(
+    cd "$repo" || exit 1
+    HOOK_TEST_HANG_MARKER="$marker" HOOK_TEST_HANG_SECONDS=30 bash "$hook" >/dev/null 2>&1 &
+    hook_pid=$!
+    for _ in $(seq 1 100); do
+        [ -e "$marker" ] && break
+        sleep 0.1
+    done
+    if [ ! -e "$marker" ]; then
+        echo 'ERROR: hook never reached cargo' >&2
+        kill -KILL "$hook_pid" 2>/dev/null || true
+        exit 1
+    fi
+    kill -KILL "$hook_pid" 2>/dev/null || true
+    wait "$hook_pid" 2>/dev/null || true
+) || true
+state_dir="$repo/.git/chartml-pre-commit"
+if [ -e "$state_dir/lock" ]; then
+    if (cd "$repo" && bash "$hook" > "$scratch/killed-hook.log" 2>&1); then
+        pass 'a commit after a SIGKILLed hook succeeds'
+    else
+        fail 'a commit after a SIGKILLed hook was blocked'
+        cat "$scratch/killed-hook.log" >&2
+    fi
+    if ls "$state_dir"/clippy.*.log >/dev/null 2>&1 || ls "$state_dir"/lock.* >/dev/null 2>&1; then
+        fail 'per-run files from a SIGKILLed hook were never reclaimed'
+        ls -1 "$state_dir" >&2
+    else
+        pass 'per-run files from a SIGKILLed hook are reclaimed'
+    fi
+    if grep -q 'Waiting for another pre-commit hook' "$scratch/killed-hook.log"; then
+        fail 'the next hook reported waiting on a dead holder'
+    else
+        pass 'the next hook does not wait on a dead holder'
+    fi
+else
+    fail 'the killed hook left no lock to reclaim, so the test proved nothing'
+fi
+
 if [ "$failures" -ne 0 ]; then
     echo "ERROR: $failures pre-commit test(s) failed" >&2
     exit 1
