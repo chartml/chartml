@@ -51,14 +51,13 @@ cargo_pid=''
 owner_file=''
 
 lock_owner() {
-    cat -- "$lock_dir/owner" 2>/dev/null || true
+    cat -- "$lock_dir" 2>/dev/null || true
 }
 
 release_lock() {
     [ "$lock_held" -eq 1 ] || return 0
     if [ "$(lock_owner)" = "$$" ]; then
-        rm -f -- "$lock_dir/owner"
-        rmdir -- "$lock_dir" 2>/dev/null || true
+        rm -f -- "$lock_dir"
     fi
     lock_held=0
 }
@@ -91,21 +90,20 @@ fi
 # The lock is taken before anything reads the index, so two hooks starting at
 # the same moment cannot collide in `git write-tree`.
 #
-# `mkdir` is the creation primitive: it is atomic and needs no hard links, so
-# it works on exFAT and network mounts. The lock is a directory containing an
-# `owner` file. While a hook is writing that file the directory can be visible
-# without an owner, so an ownerless lock is treated as "being created" and the
-# waiting hook retries rather than stealing it.
+# The lock is a FILE whose content is the owner's pid, created with noclobber:
+# the create is atomic, needs no hard links (exFAT, some network mounts), and —
+# unlike renaming a directory aside — can never "succeed" by nesting inside an
+# existing lock. Release and reclaim both re-read the owner and act only on the
+# pid they saw, and never rename a live lock into place.
 waited=0
 reclaimed=0
 while :; do
-    if mkdir -- "$lock_dir" 2>/dev/null; then
-        printf '%s\n' "$$" > "$lock_dir/owner"
+    if ( set -C; printf '%s\n' "$$" > "$lock_dir" ) 2>/dev/null; then
         lock_held=1
         # A killed hook cannot clean up after itself. Nothing is linting while
         # we hold the lock, so any other per-run entry belongs to a dead run.
-        # Entries can be files (clippy logs) or directories (a half-done
-        # reclaim), so they are removed recursively: `rm -f` on a directory
+        # Entries can be files (clippy logs) or directories (a leftover from an
+        # older layout), so they are removed recursively: `rm -f` on a directory
         # fails and would abort the hook with no verdict at all.
         for leftover in "$state_dir"/clippy.*.log "$state_dir"/lock.stale.*; do
             [ -e "$leftover" ] || continue
@@ -127,39 +125,20 @@ while :; do
     case "$holder" in
         ''|*[!0-9]*) holder='' ;;
     esac
-    if [ -z "$holder" ]; then
-        # Either another hook is in the middle of writing its owner, or a hook
-        # died before writing it. Only reclaim once it has stayed ownerless for
-        # long enough that a live creator is implausible.
-        if [ "$waited" -ge 5 ]; then
-            stale="$state_dir/lock.stale.$$"
-            if mv -- "$lock_dir" "$stale" 2>/dev/null; then
-                if [ -z "$(cat -- "$stale/owner" 2>/dev/null || true)" ]; then
-                    rm -rf -- "$stale"
-                    echo "   removed stale lint lock left without an owner"
-                    reclaimed=1
-                else
-                    mv -- "$stale" "$lock_dir" 2>/dev/null || true
-                fi
-            fi
-        fi
-    elif ! kill -0 "$holder" 2>/dev/null; then
-        # Reclaim by renaming the lock aside, then checking that what was moved
-        # still names the dead owner. If it names someone else, the lock was
-        # re-created between the read and the rename: put it back untouched.
+    if [ -z "$holder" ] || ! kill -0 "$holder" 2>/dev/null; then
+        # Remove the lock only if it still names the owner we just read. The
+        # `rm` is guarded by a second read through the same path, so a lock
+        # re-created by another hook in between is left alone rather than
+        # silently overwritten.
         stale="$state_dir/lock.stale.$$"
-        if mv -- "$lock_dir" "$stale" 2>/dev/null; then
-            moved=$(cat -- "$stale/owner" 2>/dev/null || true)
-            case "$moved" in
-                ''|*[!0-9]*) moved='' ;;
-            esac
-            if [ "$moved" = "$holder" ]; then
-                rm -rf -- "$stale"
+        if [ -f "$lock_dir" ] && cp -- "$lock_dir" "$stale" 2>/dev/null; then
+            moved=$(cat -- "$stale" 2>/dev/null) || moved=''
+            if [ "$moved" = "$holder" ] && [ "$(lock_owner)" = "$holder" ]; then
+                rm -f -- "$lock_dir"
                 echo "   removed stale lint lock${moved:+ left by pid $moved}"
                 reclaimed=1
-            else
-                mv -- "$stale" "$lock_dir" 2>/dev/null || true
             fi
+            rm -f -- "$stale"
         fi
     fi
     if [ "$waited" -ge 60 ]; then
@@ -200,12 +179,15 @@ fi
 # for a manifest and for .cargo/config.toml, and finding the working tree's
 # ones is exactly how unstaged files used to change the verdict.
 inside_repo() {
-    case "$1/" in
-        "$repo_root"/*) return 0 ;;
-    esac
-    # $repo_root is fully resolved, while TMPDIR may be given in an unresolved
-    # form (/var vs /private/var on macOS), so compare the resolved form too.
+    # Decide on the resolved path only: TMPDIR can be spelled with ".." or
+    # through the /var symlink, and refusing a path that merely looks like it
+    # is under the repository would block a legal TMPDIR.
     resolved=$(cd -- "$1" 2>/dev/null && pwd -P) || resolved=''
+    if [ -z "$resolved" ]; then
+        # Cannot resolve it, so treat an unreachable path as outside: creating
+        # a copy there fails loudly on its own.
+        return 1
+    fi
     case "$resolved/" in
         "$repo_root"/*) return 0 ;;
     esac

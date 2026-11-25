@@ -1193,6 +1193,118 @@ else
     cat "$scratch/bracket-in-string-rustflags.log" >&2
 fi
 
+# --- A stale lock cannot be "stolen" from a live holder ------------------
+# The reclaim used to rename the lock aside and restore it with mv; renaming a
+# directory onto an existing directory nests instead of failing, so a live
+# lock could be taken over and two hooks would lint at once. With a lock file
+# and re-read verification, a live holder keeps it.
+repo="$scratch/live-lock-holder"
+new_repo "$repo"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+live_marker="$scratch/live-lock-holder.marker"
+live_release="$scratch/live-lock-holder.release"
+live_log="$scratch/live-lock-holder.log"
+(
+    cd "$repo" || exit 1
+    HOOK_TEST_HANG_MARKER="$live_marker" HOOK_TEST_RELEASE_FILE="$live_release" \
+        bash "$hook" > "$live_log" 2>&1 &
+    holder=$!
+    for _ in $(seq 1 100); do
+        [ -e "$live_marker" ] && break
+        sleep 0.1
+    done
+    if [ ! -e "$live_marker" ]; then
+        echo 'ERROR: holder never reached cargo' >&2
+        kill -KILL "$holder" 2>/dev/null || true
+        exit 1
+    fi
+    holder_pid=$(cat "$repo/.git/chartml-pre-commit/lock" 2>/dev/null || true)
+    # A second hook must not take the lock away from the live holder.
+    bash "$hook" > "$scratch/live-lock-holder.second.log" 2>&1 &
+    second=$!
+    for _ in $(seq 1 40); do
+        kill -0 "$second" 2>/dev/null || break
+        sleep 0.1
+    done
+    still_owner=$(cat "$repo/.git/chartml-pre-commit/lock" 2>/dev/null || true)
+    printf '%s|%s\n' "$holder_pid" "$still_owner" > "$scratch/live-lock-holder.owners"
+    : > "$live_release"
+    wait "$holder" || echo 'HOLDER_FAILED' > "$scratch/live-lock-holder.result"
+    wait "$second" || echo 'SECOND_FAILED' > "$scratch/live-lock-holder.result2"
+) || true
+if [ -e "$scratch/live-lock-holder.result" ]; then
+    fail 'a second hook made the live holder fail'
+    tail -5 "$live_log" >&2
+elif [ -e "$scratch/live-lock-holder.result2" ]; then
+    fail 'a second hook failed against a live holder'
+    tail -5 "$scratch/live-lock-holder.second.log" >&2
+else
+    pass 'a live lock holder is not displaced by a second hook'
+fi
+if [ -e "$scratch/live-lock-holder.owners" ]; then
+    owners=$(cat "$scratch/live-lock-holder.owners")
+    holder_pid=${owners%%|*}
+    still_owner=${owners#*|}
+    if [ -n "$holder_pid" ] && [ "$holder_pid" = "$still_owner" ]; then
+        pass 'the live holder still owns the lock while the second hook waits'
+    else
+        fail "the lock changed hands while its holder was live ($holder_pid -> $still_owner)"
+    fi
+fi
+
+# A "]" or a quote inside a comment is prose. Neither may end the array (which
+# would drop real flags) nor become a flag (which would apply one that the
+# commit does not have).
+repo="$scratch/comment-bracket-rustflags"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = [\n  "--cfg", "cha27_keep", # [CHA-27] keep this\n  "-A", "warnings",\n]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_COMMENT_BRACKET = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+if (
+    cd "$repo"
+    HOOK_TEST_WARN_ON_MARKER='CHA27_COMMENT_BRACKET' bash "$hook" > "$scratch/comment-bracket-rustflags.log" 2>&1
+); then
+    pass 'a "]" in a trailing comment does not drop later flags'
+else
+    fail 'a "]" in a trailing comment truncated the flag list'
+    cat "$scratch/comment-bracket-rustflags.log" >&2
+fi
+
+repo="$scratch/comment-quote-rustflags"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = [\n  "-A", # do not add "extra" flags\n  "warnings",\n]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_COMMENT_QUOTE = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+if (
+    cd "$repo"
+    HOOK_TEST_WARN_ON_MARKER='CHA27_COMMENT_QUOTE' bash "$hook" > "$scratch/comment-quote-rustflags.log" 2>&1
+); then
+    pass 'a quote in a trailing comment does not corrupt the flags'
+else
+    fail 'a quote in a trailing comment corrupted the flag list'
+    cat "$scratch/comment-quote-rustflags.log" >&2
+fi
+
+# A "]" inside a quoted element is a value, not the end of the array.
+repo="$scratch/bracket-in-value-rustflags"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = [\n  "-C",\n  "link-arg=-Wl,z=[anchor]",\n  "-A",\n  "warnings",\n]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_BRACKET_VALUE = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+if (
+    cd "$repo"
+    HOOK_TEST_WARN_ON_MARKER='CHA27_BRACKET_VALUE' bash "$hook" > "$scratch/bracket-in-value-rustflags.log" 2>&1
+); then
+    pass 'a "]" inside a quoted value does not end the array'
+else
+    fail 'a "]" inside a quoted value truncated the flag list'
+    cat "$scratch/bracket-in-value-rustflags.log" >&2
+fi
+
 if [ "$failures" -ne 0 ]; then
     echo "ERROR: $failures pre-commit test(s) failed" >&2
     exit 1

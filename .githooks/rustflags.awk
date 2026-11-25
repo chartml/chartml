@@ -2,20 +2,50 @@
 #
 # Prints four lines:
 #   1. the rustflags from [build], space separated (empty when there are none)
-#   2. how many non-comment lines mention "rustflags" at all
-#   3. 1 when every non-comment rustflags is in [build], 0 when one is elsewhere
+#   2. how many lines that are not comments contain a rustflags key
+#   3. 1 when every such key is in [build], 0 when one is elsewhere
 #   4. 1 when the [build] array was read to its closing bracket, 0 when it was not
 #
-# Lines 3 and 4 are what let the hook fail closed: rustflags under [target.*]
-# (or any other table), and arrays it cannot read, are not reproduced here, so
-# the hook must refuse rather than lint content that differs from what the
-# commit's own build would use.
+# Lines 3 and 4 let the hook fail closed: rustflags under [target.*] (or any
+# other table), and arrays it cannot read, are not reproduced here, so the hook
+# must refuse rather than lint content that differs from the commit's build.
 #
 # POSIX awk only. Handles a single-line array, a multi-line array, an empty
-# array, and both TOML string forms: basic strings ("...", with escapes) and
-# literal strings ('...', taken verbatim). Comment lines are ignored, because
-# Cargo ignores them: treating a commented-out rustflags as real would apply a
-# setting the commit does not have.
+# array, and both TOML string forms ("..." with escapes, '...' literal).
+# Comments are removed quote-aware before anything is read, because a "]" or a
+# quote inside a comment is prose: applying it would use a flag the commit does
+# not have, and letting it end an array would drop flags the commit does have.
+
+# Return $0 with any trailing comment removed. A "#" starts a comment only when
+# it is outside a string, so a value like "a#b" survives.
+function strip_comment(text,   out, i, n, c, quote) {
+    out = ""
+    quote = ""
+    n = length(text)
+    for (i = 1; i <= n; i++) {
+        c = substr(text, i, 1)
+        if (quote == "") {
+            if (c == "#") {
+                break
+            }
+            if (c == "\"" || c == "'") {
+                quote = c
+            }
+            out = out c
+            continue
+        }
+        if (quote == "\"" && c == "\\") {
+            out = out c substr(text, i + 1, 1)
+            i += 1
+            continue
+        }
+        if (c == quote) {
+            quote = ""
+        }
+        out = out c
+    }
+    return out
+}
 
 # Unquote one TOML array, honouring "..." (with escapes) and '...' (literal).
 function unquote(text,   out, i, n, c, next_c, value) {
@@ -64,6 +94,33 @@ function unquote(text,   out, i, n, c, next_c, value) {
     return out
 }
 
+# 1 when the closing "]" of an array appears outside a string in this text.
+function closes_array(text,   i, n, c, quote) {
+    quote = ""
+    n = length(text)
+    for (i = 1; i <= n; i++) {
+        c = substr(text, i, 1)
+        if (quote == "") {
+            if (c == "\"" || c == "'") {
+                quote = c
+                continue
+            }
+            if (c == "]") {
+                return 1
+            }
+            continue
+        }
+        if (quote == "\"" && c == "\\") {
+            i += 1
+            continue
+        }
+        if (c == quote) {
+            quote = ""
+        }
+    }
+    return 0
+}
+
 BEGIN {
     section = ""
     collecting = 0
@@ -74,18 +131,15 @@ BEGIN {
 }
 
 {
-    line = $0
+    line = strip_comment($0)
     sub(/^[[:space:]]*/, "", line)
-
-    # A comment is not a setting. In a multi-line array a comment is also not
-    # the closing bracket, so it must not end the collection either.
-    if (line ~ /^#/) {
+    if (line == "") {
         next
     }
 
     if (collecting) {
-        buf = buf $0 "\n"
-        if (line ~ /\]/) {
+        buf = buf line "\n"
+        if (closes_array(line)) {
             collecting = 0
             parsed_ok = 1
         }
@@ -111,13 +165,16 @@ BEGIN {
 
     value = line
     sub(/^[^=]*=/, "", value)
-    # An empty array that closes on the same line means "no rustflags", which
-    # is safe to treat as such; anything else must be read to its bracket.
-    if (!(value ~ /\[[[:space:]]*\]/)) {
-        parsed_ok = (value ~ /\]/) ? 1 : 0
+    # An empty array that closes on the same line means "no rustflags", which is
+    # safe to treat as such; anything else must be read to its closing bracket.
+    if (value ~ /\[[[:space:]]*\]/) {
+        parsed_ok = 1
+        collecting = 0
+    } else {
+        collecting = closes_array(value) ? 0 : 1
+        parsed_ok = collecting ? 0 : 1
     }
     buf = value "\n"
-    collecting = (value ~ /\]/) ? 0 : 1
 }
 
 END {
