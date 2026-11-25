@@ -685,8 +685,9 @@ fn fixed_width_cells_stay_inside_their_track() {
         for padding in [None, Some("8px 40px"), Some("0 2em"), Some("0 25%"), Some("0 50%")] {
             let state = measure_fixed_tracks(&host, padding);
             let ctx = format!("{path:?}: 120px fixed column with padding {padding:?}");
-            // The track is `max-content`: the declared content width plus
-            // whatever padding is applied, so the cell always fits it.
+            // The track is `max-content`: CSS resolves it to the larger of the
+            // declared width and the cell's own padding, so the cell always
+            // fits it — whichever unit the padding uses.
             let expected = 120.0;
             assert!(
                 (state.track - expected).abs() < 0.7,
