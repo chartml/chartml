@@ -71,7 +71,14 @@ if ! index_tree=$(git write-tree 2>/dev/null); then
     exit 1
 fi
 
-mkdir -p -- "$state_dir"
+mkdir -p -- "$state_dir" 2>/dev/null || true
+if [ ! -d "$state_dir" ] || [ ! -w "$state_dir" ]; then
+    echo ""
+    echo "❌ Cannot write the staged snapshot at $state_dir."
+    echo "   The hook refuses to lint anything but the commit's content, so it cannot continue."
+    echo "   Check permissions on $state_dir and try again."
+    exit 1
+fi
 
 # Acquire the lock by hard-linking a file that already contains our pid, so a
 # lock is never visible without its owner recorded (even if we are killed).
