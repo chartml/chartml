@@ -116,15 +116,16 @@
 }
 .chartml-table-header {
   background: var(--chartml-table-header-bg);
+  border-bottom-color: var(--chartml-table-border);
 }
 .chartml-table-header-cell {
   color: var(--chartml-table-header-text);
   padding: var(--chartml-table-cell-padding);
   font-size: var(--chartml-table-font-size);
-  border-bottom-color: var(--chartml-table-border);
 }
 .chartml-table-row {
   background: var(--chartml-table-row-bg);
+  border-bottom-color: var(--chartml-table-border);
 }
 .chartml-table-row-alt {
   background: var(--chartml-table-row-bg-alt);
@@ -133,7 +134,6 @@
   color: var(--chartml-table-text);
   padding: var(--chartml-table-cell-padding);
   font-size: var(--chartml-table-font-size);
-  border-bottom-color: var(--chartml-table-border);
 }
 .chartml-table-pager {
   background: var(--chartml-table-header-bg);

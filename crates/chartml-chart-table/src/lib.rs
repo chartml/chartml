@@ -1500,11 +1500,12 @@ impl CellPlacement {
 ///
 /// Cell padding comes from `--chartml-table-cell-padding`, with the theme's
 /// `table_cell_padding` as its default — the same way every other
-/// `--chartml-table-*` token is read. Every cell is `content-box` with a
-/// `min-width` for its content: the measured text for an auto column, the
-/// declared `width` for a fixed one. Layout adds the padding actually applied
-/// — including a host's token override — so a wider padding widens the column
-/// instead of squeezing, clipping or overlapping its text.
+/// `--chartml-table-*` token is read. An auto column's cells are
+/// `content-box` with a `min-width` for the measured text, so the padding
+/// actually applied — including a host's token override — widens the column
+/// instead of squeezing or clipping the text. A fixed column's cells are
+/// `border-box` at the declared `width`, so its padding always fits inside the
+/// column and the cell can never reach into its neighbour.
 fn cell_style(
     place: &CellPlacement,
     theme: &Theme,
@@ -1521,10 +1522,12 @@ fn cell_style(
         ("text-align", place.align),
     ]);
     if let Some(width) = width {
-        // A fixed column: the content box is exactly `width`, whatever padding
-        // the host applies. The track is `max-content`, so it always fits the
-        // cell and its padding, with no estimate involved.
+        // A fixed column: `width` is the cell's final width, padding and
+        // border inside it (`border-box`), so no padding — absolute, em or
+        // percentage — can make the cell wider than its track. The track is
+        // exactly that width, so a fixed column never overlaps its neighbour.
         map.insert("width".into(), width.to_string());
+        map.insert("box-sizing".into(), "border-box".to_string());
     }
     map
 }
@@ -1718,17 +1721,18 @@ impl ChartRenderer for TableRenderer {
             };
             match fixed {
                 Some(px) => {
-                    // A fixed `width` is the column's content width: the cell's
-                    // content box is exactly that, and its track is
-                    // `max-content`, which is the content box plus whatever
-                    // padding is actually applied — so the column fits its
-                    // padding under any host override and never overlaps its
-                    // neighbour. The fade estimate uses the theme padding, like
-                    // the other measured values (owner decision 2026-11-25).
+                    // A fixed `width` is the column's width: the cell is
+                    // `border-box` at exactly that width, so its padding —
+                    // including a percentage, which cannot be resolved during
+                    // intrinsic sizing — sits inside the track instead of
+                    // overflowing it. The track is the same width, so the
+                    // column never overlaps its neighbour under any padding.
+                    // The fade estimate counts the theme padding, like the
+                    // other measured values (owner decision 2026-11-25).
                     fixed_widths[i] = Some(px.clone());
                     cell_mins.push("0".to_string());
-                    column_mins.push(format!("calc({px} + {pad_left} + {pad_right})"));
-                    tracks.push("minmax(max-content, max-content)".to_string());
+                    column_mins.push(px.clone());
+                    tracks.push(format!("minmax({px}, {px})"));
                 }
                 None => {
                     let text = &texts[i];
@@ -2991,10 +2995,10 @@ rows:
 "#,
         );
         let el = TableRenderer::new().render(&data(), &config).unwrap();
-        // A fixed width is the column's content width and its track is
-        // `max-content`, so the track is the content plus whatever padding the
-        // table actually applies.
-        let template = "minmax(max-content, max-content) minmax(auto, 1fr) minmax(max-content, max-content) var(--chartml-table-fade)";
+        // A fixed width is the column's width and its cells are `border-box` at
+        // exactly that, so the track is the same width and the padding always
+        // fits inside it.
+        let template = "minmax(120.00px, 120.00px) minmax(auto, 1fr) minmax(90.50px, 90.50px) var(--chartml-table-fade)";
         for row in header_and_rows(&el) {
             assert_eq!(get(row, "grid-template-columns"), Some(template));
             for cell in real_cells(row) {
@@ -3007,19 +3011,22 @@ rows:
         let body = by_class(&el, "chartml-table-body")[0];
         assert_eq!(get(rows[0], "min-width"), get(body, "min-width"));
         assert_eq!(get(rows[0], "min-width"), Some("min-content"));
-        // Every cell is `content-box`. A fixed column declares its content
-        // `width` and its track is `max-content`, so the column fits the
-        // padding actually applied; an auto column carries its measured text
-        // as `min-width`.
+        // A fixed column is `border-box` at its declared width, so no padding
+        // (absolute, em or percentage) can make the cell wider than its track;
+        // an auto column is `content-box` with its measured text as the
+        // minimum layout adds padding to.
         let header = by_class(&el, "chartml-table-header")[0];
         let cells = real_cells(header);
         assert_eq!(get(cells[0], "width"), Some("120.00px"));
+        assert_eq!(get(cells[0], "box-sizing"), Some("border-box"));
         assert!(get(cells[1], "min-width").unwrap().starts_with("max("));
+        assert_eq!(get(cells[1], "box-sizing"), Some("content-box"));
         assert_eq!(get(cells[2], "width"), Some("90.50px"));
+        assert_eq!(get(cells[2], "box-sizing"), Some("border-box"));
         assert_eq!(get(cells[1], "width"), None, "auto columns declare no width");
         for row in header_and_rows(&el) {
             let boxes: Vec<&str> = real_cells(row).iter().map(|c| get(c, "box-sizing").unwrap()).collect();
-            assert_eq!(boxes, vec!["content-box", "content-box", "content-box"]);
+            assert_eq!(boxes, vec!["border-box", "content-box", "border-box"]);
         }
     }
 
@@ -3417,7 +3424,7 @@ rows:
             // the fit box, which is at least the visible width.
             assert_eq!(get(row, "min-width"), Some("min-content"));
             let tracks = get(row, "grid-template-columns").unwrap();
-            assert_eq!(tracks, "minmax(max-content, max-content) minmax(max-content, max-content) minmax(max-content, max-content) var(--chartml-table-fade)");
+            assert_eq!(tracks, "minmax(100.00px, 100.00px) minmax(120.00px, 120.00px) minmax(90.00px, 90.00px) var(--chartml-table-fade)");
         }
     }
 

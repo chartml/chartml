@@ -448,15 +448,14 @@ fn column_align_and_width_render_as_documented() {
             assert_eq!(align, &vec!["center", "left", "right"], "{ctx}: body row {row} text-align");
         }
         assert_eq!(state.header_widths.len(), 3, "{ctx}: header cells");
-        // A fixed width is the column's content width; the padding the table
-        // applies is added by layout (24px of theme padding here).
-        assert!((state.header_widths[0] - 224.0).abs() < 0.6, "{ctx}: Month width {} (200px content + 24px padding)", state.header_widths[0]);
-        assert!((state.header_widths[2] - 144.0).abs() < 0.6, "{ctx}: Cost width {} (120px content + 24px padding)", state.header_widths[2]);
+        // A fixed width is the column's width, with the padding inside it.
+        assert!((state.header_widths[0] - 200.0).abs() < 0.6, "{ctx}: Month width {}", state.header_widths[0]);
+        assert!((state.header_widths[2] - 120.0).abs() < 0.6, "{ctx}: Cost width {}", state.header_widths[2]);
         // The same widths in the body: a per-column track, not a per-row one.
         for row in &state.body_widths {
             assert_eq!(row.len(), 3, "{ctx}: body cells");
-            assert!((row[0] - 224.0).abs() < 0.6, "{ctx}: body Month {} (200px content + padding)", row[0]);
-            assert!((row[2] - 144.0).abs() < 0.6, "{ctx}: body Cost {} (120px content + padding)", row[2]);
+            assert!((row[0] - 200.0).abs() < 0.6, "{ctx}: body Month {} (declared 200px)", row[0]);
+            assert!((row[2] - 120.0).abs() < 0.6, "{ctx}: body Cost {} (declared 120px)", row[2]);
         }
         assert!(state.misalign_px < 0.5, "{ctx}: header and body misaligned by {}px", state.misalign_px);
         assert_eq!(state.sticky_cells, 0, "{ctx}: a column is pinned");
@@ -669,36 +668,35 @@ fn measure_row_span(host: &web_sys::HtmlElement) -> RowSpanState {
     serde_json::from_str(&json).expect("row span parses")
 }
 
-/// CHA-22 line 1 and line 4: a fixed `width` is the column's content width, so
-/// the cell's content box is exactly that and the padding the host applies is
-/// added around it by layout. The track is `max-content`, so it always fits the
-/// cell and its padding: the cell never reaches into the next column, at any
-/// padding. A track built from the theme padding instead overflowed by the
-/// difference — with `width: 60` and `--chartml-table-cell-padding: 8px 40px`
-/// an 80px cell sat in a 60px track and overlapped by 20px.
+/// CHA-22 line 1 and line 4: a fixed `width` is the column's width and its
+/// cells are `border-box` at exactly that, so the track is that width and the
+/// cell never reaches into the next column — with length, em or percentage
+/// padding alike. A `content-box` fixed cell instead grew by its padding; with
+/// percentages, which intrinsic sizing cannot resolve, it overlapped by up to
+/// the whole column (60px at `0 50%`).
 #[wasm_bindgen_test]
 fn fixed_width_cells_stay_inside_their_track() {
     let spec = narrow_fixed_width_spec();
     for path in [Path::Leptos, Path::Svg] {
         let host = mount(path, &spec, Theme::default(), 800);
-        for padding in [None, Some("8px 40px")] {
+        // Lengths, an em value and percentage paddings: a percentage cannot be
+        // resolved during intrinsic sizing, so only a `border-box` fixed column
+        // can contain it.
+        for padding in [None, Some("8px 40px"), Some("0 2em"), Some("0 25%"), Some("0 50%")] {
             let state = measure_fixed_tracks(&host, padding);
             let ctx = format!("{path:?}: 120px fixed column with padding {padding:?}");
             // The track is `max-content`: the declared content width plus
             // whatever padding is applied, so the cell always fits it.
-            let host_pad = if padding.is_some() { 80.0 } else { 24.0 };
-            let expected = 120.0 + host_pad;
+            let expected = 120.0;
             assert!(
                 (state.track - expected).abs() < 0.7,
-                "{ctx}: resolved track is {}px, expected {}px (120px content + {host_pad}px padding)",
+                "{ctx}: resolved track is {}px, expected the declared {expected}px",
                 state.track,
-                expected,
             );
             assert!(
                 (state.cell - expected).abs() < 0.7,
-                "{ctx}: cell is {}px, expected {}px (120px content + {host_pad}px padding)",
+                "{ctx}: cell is {}px, expected the declared {expected}px",
                 state.cell,
-                expected,
             );
             // The real defect: the cell reaching into the next column. The
             // track is `max-content`, so it fits whatever padding the host
@@ -708,11 +706,12 @@ fn fixed_width_cells_stay_inside_their_track() {
                 "{ctx}: the fixed cell overlaps the next column by {}px",
                 -state.cell_right_gap,
             );
-            // A 120px column legitimately wraps its label onto a couple of
-            // lines; one-letter-per-line (a squeezed content box) is far
-            // taller than that.
+            // A 120px column wraps its label onto a few lines, and a very wide
+            // padding (50% per side) leaves little room and wraps further; what
+            // must not happen is the one-letter-per-line collapse of a cell
+            // squeezed below its own padding, which is far taller still.
             assert!(
-                state.header_height < 90.0,
+                state.header_height < 160.0,
                 "{ctx}: the header collapsed to {}px",
                 state.header_height,
             );
