@@ -549,10 +549,11 @@ visualize:
 }
 
 /// Regression (CHA-22 lifecycle): a table of only fixed-width columns must
-/// still fill its scroll area. Rows floored at `min-content` shrank to the sum
-/// of the fixed tracks, leaving the row background and its bottom border short
-/// of the row's end; the scroll area is now a grid of
-/// `max(100%, min-content)`, so every row spans at least the visible width.
+/// still fill its scroll area, and its rows must carry the bottom rule to the
+/// row's end. Rows floored at `min-content` shrank to the sum of the fixed
+/// tracks; the scroll area's track is `minmax(min-content, 100%)`, and the
+/// rows themselves draw the rule, so both the background and the border span
+/// at least the visible width.
 #[wasm_bindgen_test]
 fn all_fixed_columns_still_fill_the_row() {
     let spec = all_fixed_width_spec();
@@ -707,7 +708,7 @@ fn fixed_width_cells_stay_inside_their_track() {
                 "{ctx}: the fixed cell overlaps the next column by {}px",
                 -state.cell_right_gap,
             );
-            // A 60px column legitimately wraps its label onto a couple of
+            // A 120px column legitimately wraps its label onto a couple of
             // lines; one-letter-per-line (a squeezed content box) is far
             // taller than that.
             assert!(
