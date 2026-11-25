@@ -511,10 +511,17 @@ fi
 # have read. An unstaged lockfile edit must survive a passing and a failing run.
 repo="$scratch/untouched-lock"
 new_repo "$repo"
-printf '[package]\nname = "lockfixture"\nversion = "0.1.0"\nedition = "2021"\n' > "$repo/Cargo.toml"
+# Mirror the real workspace shape: the excluded packages are members, and other
+# members remain, so `--workspace --exclude` still has something to lint.
+mkdir -p "$repo/crates/chartml-wasm/src" "$repo/crates/core/src"
+printf '[workspace]\nresolver = "2"\nmembers = ["crates/core", "crates/chartml-wasm"]\n' > "$repo/Cargo.toml"
+printf '[package]\nname = "core"\nversion = "0.1.0"\nedition = "2021"\n' > "$repo/crates/core/Cargo.toml"
+printf 'pub fn f() {}\n' > "$repo/crates/core/src/lib.rs"
+printf '[package]\nname = "chartml-wasm"\nversion = "0.1.0"\nedition = "2021"\n' > "$repo/crates/chartml-wasm/Cargo.toml"
+printf 'pub fn f() {}\n' > "$repo/crates/chartml-wasm/src/lib.rs"
 printf '# unstaged developer edit\n' > "$repo/Cargo.lock"
-git -C "$repo" add Cargo.toml Cargo.lock
-git -C "$repo" commit -qm 'manifest and lock'
+git -C "$repo" add -A
+git -C "$repo" commit -qm 'workspace, manifest and lock'
 printf '# unstaged developer edit, second pass\n' > "$repo/Cargo.lock"
 before=$(git -C "$repo" hash-object Cargo.lock)
 (cd "$repo" && bash "$hook" >/dev/null 2>&1) || true
@@ -837,6 +844,29 @@ if [ -e "$state_dir/lock" ]; then
     fi
 else
     fail 'the killed hook left no lock to reclaim, so the test proved nothing'
+fi
+
+# --- The fixtures mirror the real workspace shape ------------------------
+# `--workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion` needs
+# members left over, as the real workspace has. A fixture whose only members
+# are the excluded ones would make clippy fail for the wrong reason.
+repo="$scratch/workspace-shape"
+mkdir -p "$repo"
+git -C "$repo" init -q
+git -C "$repo" config user.email fixture@example.com
+git -C "$repo" config user.name Fixture
+mkdir -p "$repo/crates/chartml-wasm/src" "$repo/crates/chartml-wasm-datafusion/src" "$repo/crates/core/src"
+printf '[workspace]\nresolver = "2"\nmembers = ["crates/core", "crates/chartml-wasm", "crates/chartml-wasm-datafusion"]\n' > "$repo/Cargo.toml"
+for crate in core chartml-wasm chartml-wasm-datafusion; do
+    printf '[package]\nname = "%s"\nversion = "0.1.0"\nedition = "2021"\n' "$crate" > "$repo/crates/$crate/Cargo.toml"
+    printf 'pub fn f() {}\n' > "$repo/crates/$crate/src/lib.rs"
+done
+git -C "$repo" add -A
+if (cd "$repo" && bash "$hook" > "$scratch/workspace-shape.log" 2>&1); then
+    pass 'the hook lints a workspace shaped like this repository'
+else
+    fail 'the hook failed on a workspace shaped like this repository'
+    cat "$scratch/workspace-shape.log" >&2
 fi
 
 if [ "$failures" -ne 0 ]; then
