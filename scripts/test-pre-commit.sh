@@ -9,8 +9,25 @@ set -euo pipefail
 project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 hook="$project_dir/.githooks/pre-commit"
 scratch=$(mktemp -d)
-lint_copies=()
-trap 'rm -rf "$scratch" "${lint_copies[@]:-}"' EXIT
+# The hook keeps its lint copy outside the repository, so the suite must remove
+# the copies it caused; otherwise every run leaves one behind per fixture.
+cleanup_scratch() {
+    local pointer copy found
+    set +f 2>/dev/null || true
+    while IFS= read -r pointer; do
+        if [ -z "$pointer" ] || [ ! -f "$pointer" ]; then
+            continue
+        fi
+        copy=$(cat -- "$pointer" 2>/dev/null) || copy=''
+        case "$copy" in
+            */chartml-pre-commit.*) rm -rf -- "$copy" ;;
+        esac
+    done <<EOF
+$(find "$scratch" -name snapshot-dir -path '*chartml-pre-commit/snapshot-dir' 2>/dev/null || true)
+EOF
+    rm -rf -- "$scratch"
+}
+trap cleanup_scratch EXIT
 
 failures=0
 pass() { echo "PASS: $*"; }
@@ -22,10 +39,13 @@ fail() {
 # The hook keeps its lint copy outside the repository, so tests read its
 # location from the pointer the hook writes.
 snapshot_dir() {
-    local repo=$1 pointer=$1/.git/chartml-pre-commit/snapshot-dir root
-    [ -f "$pointer" ] || return 1
+    local repo=$1 git_dir pointer root
+    git_dir=$(git -C "$repo" rev-parse --absolute-git-dir) || return 1
+    pointer="$git_dir/chartml-pre-commit/snapshot-dir"
+    if [ ! -f "$pointer" ]; then
+        return 1
+    fi
     root=$(cat -- "$pointer")
-    lint_copies+=("$root")
     printf '%s/tree' "$root"
 }
 
@@ -1103,6 +1123,74 @@ elif ! grep -q 'sets rustflags for a specific target' "$scratch/target-config.lo
     cat "$scratch/target-config.log" >&2
 else
     pass 'committed [target.*] rustflags are refused rather than ignored'
+fi
+
+# A commented-out rustflags is not a setting, so it must not be applied: doing
+# so would lint with a flag the commit does not have.
+repo="$scratch/commented-rustflags"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\n# rustflags = ["-A", "warnings"]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_COMMENTED_WARNING = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+if (
+    cd "$repo"
+    HOOK_TEST_WARN_ON_MARKER='CHA27_COMMENTED_WARNING' bash "$hook" > "$scratch/commented-rustflags.log" 2>&1
+); then
+    fail 'a commented-out rustflags was applied'
+else
+    pass 'a commented-out rustflags is ignored'
+fi
+
+# TOML literal strings ('...') are valid too, so a commit using them must be
+# linted with its own flags rather than refused or silently stripped.
+repo="$scratch/literal-string-rustflags"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf "[build]\nrustflags = ['-A', 'warnings']\n" > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_LITERAL_SUPPRESSED = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+if (
+    cd "$repo"
+    HOOK_TEST_WARN_ON_MARKER='CHA27_LITERAL_SUPPRESSED' bash "$hook" > "$scratch/literal-string-rustflags.log" 2>&1
+); then
+    pass 'rustflags written as TOML literal strings are honoured'
+else
+    fail 'a commit was blocked by a warning its own literal-string rustflags silence'
+    cat "$scratch/literal-string-rustflags.log" >&2
+fi
+
+# A comment that merely mentions rustflags is not a setting either: refusing on
+# prose would block a commit whose own content is clean.
+repo="$scratch/prose-rustflags"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '# Do not add rustflags here; CI owns compiler flags.\n[build]\njobs = 2\n' > "$repo/.cargo/config.toml"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add .cargo/config.toml clean.rs
+if (cd "$repo" && bash "$hook" > "$scratch/prose-rustflags.log" 2>&1); then
+    pass 'a comment that mentions rustflags does not block a clean commit'
+else
+    fail 'a comment mentioning rustflags blocked a clean commit'
+    cat "$scratch/prose-rustflags.log" >&2
+fi
+
+# A ']' inside a quoted element must not end the array early, or the flags
+# after it would be silently dropped.
+repo="$scratch/bracket-in-string-rustflags"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = ["--cfg", "cha27_bracket", "-A", "warnings"]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_BRACKET_SUPPRESSED = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+if (
+    cd "$repo"
+    HOOK_TEST_WARN_ON_MARKER='CHA27_BRACKET_SUPPRESSED' bash "$hook" > "$scratch/bracket-in-string-rustflags.log" 2>&1
+); then
+    pass 'flags after a quoted element are still applied'
+else
+    fail 'a flag list was truncated at a quoted element'
+    cat "$scratch/bracket-in-string-rustflags.log" >&2
 fi
 
 if [ "$failures" -ne 0 ]; then

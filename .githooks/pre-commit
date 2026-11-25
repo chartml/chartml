@@ -376,8 +376,18 @@ fi
 committed_rustflags=''
 if [ -n "$committed_config" ]; then
     # Resolve the helper next to this hook, not in the repository being
-    # committed, so the hook works from any checkout.
-    hook_dir=$(cd -- "$(dirname -- "$0")" && pwd)
+    # committed, so the hook works from any checkout. The hook itself may be
+    # reached through a symlink (a common way to install hooks), so follow it
+    # before looking for the helper.
+    hook_path=${BASH_SOURCE[0]:-$0}
+    while [ -L "$hook_path" ]; do
+        hook_link=$(readlink -- "$hook_path")
+        case "$hook_link" in
+            /*) hook_path=$hook_link ;;
+            *) hook_path=$(dirname -- "$hook_path")/$hook_link ;;
+        esac
+    done
+    hook_dir=$(cd -- "$(dirname -- "$hook_path")" && pwd)
     extraction=$(awk -f "$hook_dir/rustflags.awk" "$committed_config")
     committed_rustflags=$(printf '%s\n' "$extraction" | sed -n 1p)
     rustflags_mentions=$(printf '%s\n' "$extraction" | sed -n 2p)
