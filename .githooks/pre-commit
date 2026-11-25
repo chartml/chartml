@@ -360,10 +360,13 @@ echo "   lint copy:  $snapshot_tree"
 echo "   target dir: $target_dir"
 echo "   remove them: rm -rf -- $snapshot_root $target_dir"
 
-# Set rather than assign on the command line: an empty VAR= prefix can be
-# dropped, and Cargo only ignores config-file rustflags when RUSTFLAGS is set.
+# Settings from the developer's environment are not part of the commit, so they
+# must not decide the verdict. RUSTFLAGS is set (empty) because Cargo only
+# ignores config-file rustflags when it is set. RUSTC_WRAPPER can rewrite the
+# compiler invocation, and the toolchain/target selectors change what is built.
 RUSTFLAGS=''
 export RUSTFLAGS
+unset RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER CARGO_BUILD_TARGET CARGO_BUILD_RUSTFLAGS 2>/dev/null || true
 ( cd -- "$snapshot_tree" && CARGO_TARGET_DIR="$target_dir" cargo clippy --manifest-path "$snapshot_manifest" --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion ) > "$clippy_log" 2>&1 &
 cargo_pid=$!
 clippy_status=0

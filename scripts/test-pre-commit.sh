@@ -65,7 +65,11 @@ if [ -n "${RUSTFLAGS+set}" ]; then
     case "${RUSTFLAGS:-}" in
         *-A*warnings*|*allow*) suppress=1 ;;
     esac
-else
+fi
+if [ -n "${RUSTC_WRAPPER:-}${RUSTC_WORKSPACE_WRAPPER:-}" ] && grep -qE -- '-A"? ?"?warnings' "${RUSTC_WRAPPER:-${RUSTC_WORKSPACE_WRAPPER:-}}" 2>/dev/null; then
+    suppress=1
+fi
+if [ "$suppress" -eq 0 ] && [ -z "${RUSTFLAGS+set}" ]; then
     check_dir=$PWD
     while :; do
         if [ -f "$check_dir/.cargo/config.toml" ] && grep -qE -- '-A"?,? ?"warnings|allow' "$check_dir/.cargo/config.toml" 2>/dev/null; then
@@ -553,6 +557,21 @@ if (
     fail 'RUSTFLAGS from the environment suppressed a committed warning'
 else
     pass 'RUSTFLAGS from the environment cannot suppress a committed warning'
+fi
+# RUSTC_WRAPPER can rewrite the compiler invocation itself, so it is cleared
+# for the lint run too.
+mkdir -p "$scratch/wrapper"
+printf '#!/usr/bin/env bash\nexec "$@" -A warnings\n' > "$scratch/wrapper/rustc-wrapper"
+chmod +x "$scratch/wrapper/rustc-wrapper"
+printf 'fn tracked() { let CHA27_WRAPPER_WARNING = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    RUSTC_WRAPPER="$scratch/wrapper/rustc-wrapper" HOOK_TEST_WARN_ON_MARKER='CHA27_WRAPPER_WARNING' bash "$hook" > "$scratch/isolation-wrapper.log" 2>&1
+); then
+    fail 'RUSTC_WRAPPER from the environment suppressed a committed warning'
+else
+    pass 'RUSTC_WRAPPER from the environment cannot suppress a committed warning'
 fi
 
 # --- The hook never rewrites an unstaged tracked file ---------------------
