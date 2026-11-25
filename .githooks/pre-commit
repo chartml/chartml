@@ -361,8 +361,16 @@ fi
 # config file outside the commit does not. RUSTC_WRAPPER can rewrite the
 # compiler invocation, and the toolchain/target selectors change what is built.
 committed_rustflags=''
-committed_config="$snapshot_tree/.cargo/config.toml"
-if [ -f "$committed_config" ]; then
+# Cargo accepts both .cargo/config and .cargo/config.toml for the commit's own
+# settings, so read whichever the commit carries.
+committed_config=''
+for candidate_config in "$snapshot_tree/.cargo/config.toml" "$snapshot_tree/.cargo/config"; do
+    if [ -f "$candidate_config" ]; then
+        committed_config=$candidate_config
+        break
+    fi
+done
+if [ -n "$committed_config" ]; then
     committed_rustflags=$(awk '
         BEGIN { in_build = 0; collecting = 0; buf = "" }
         /^[[:space:]]*\[/ {
