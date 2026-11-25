@@ -122,8 +122,9 @@ while :; do
         break
     fi
     holder=$(lock_owner)
-    case "$holder" in
-        ''|*[!0-9]*) holder='' ;;
+    holder_pid=$holder
+    case "$holder_pid" in
+        ''|*[!0-9]*) holder_pid='' ;;
     esac
     # An earlier layout in this series used a lock DIRECTORY. One left behind by
     # an interrupted run cannot be a live lock under the current scheme, but a
@@ -139,31 +140,40 @@ while :; do
         waited=$((waited + 1))
         continue
     fi
-    if [ -z "$holder" ] || ! kill -0 "$holder" 2>/dev/null; then
-        # Remove the lock only if it still names the owner we just read. The
-        # `rm` is guarded by a second read through the same path, so a lock
-        # re-created by another hook in between is left alone rather than
-        # silently overwritten.
-        stale="$state_dir/lock.stale.$$"
-        if [ -f "$lock_dir" ] && cp -- "$lock_dir" "$stale" 2>/dev/null; then
-            moved=$(cat -- "$stale" 2>/dev/null) || moved=''
-            if [ "$moved" = "$holder" ] && [ "$(lock_owner)" = "$holder" ]; then
+    if [ -z "$holder" ] || [ -z "$holder_pid" ] || ! kill -0 "$holder_pid" 2>/dev/null; then
+        # Removing the lock has to be safe against another hook doing the same
+        # thing: two reclaimers could both see a dead pid and both delete, and
+        # the second could delete the lock a third hook had just created. A
+        # short-lived guard directory makes the verify-and-delete a single
+        # operation, because only one hook can hold the guard, and a hook that
+        # creates a lock cannot do so while the lock file still exists.
+        reclaim_guard="$state_dir/lock.reclaim"
+        if mkdir -- "$reclaim_guard" 2>/dev/null; then
+            # Re-read inside the guard: this is the value being acted on. A
+            # lock whose content is not a live pid — including garbage, which
+            # this hook never writes — is stale.
+            current=$(lock_owner)
+            current_pid=$current
+            case "$current_pid" in
+                ''|*[!0-9]*) current_pid='' ;;
+            esac
+            if [ "$current" = "$holder" ] &&
+                { [ -z "$current_pid" ] || ! kill -0 "$current_pid" 2>/dev/null; }; then
                 rm -f -- "$lock_dir"
-                echo "   removed stale lint lock${moved:+ left by pid $moved}"
+                echo "   removed stale lint lock${current_pid:+ left by pid $current_pid}"
                 reclaimed=1
             fi
-            rm -f -- "$stale"
+            rmdir -- "$reclaim_guard" 2>/dev/null || true
         fi
     fi
     if [ "$waited" -ge 60 ]; then
         echo ""
         if [ -n "$holder" ]; then
-            echo "❌ Another pre-commit hook is still using this lint lock (pid ${holder})."
-            echo "   If that process is not a pre-commit hook, remove $lock_dir and retry."
+            echo "❌ Another pre-commit hook is still using this lint lock (owner: ${holder})."
         else
             echo "❌ Could not take the lint lock at $lock_dir."
-            echo "   Remove $lock_dir and retry."
         fi
+        echo "   Remove $lock_dir and retry."
         exit 1
     fi
     if [ "$waited" -eq 0 ] && [ "$reclaimed" -eq 0 ]; then
