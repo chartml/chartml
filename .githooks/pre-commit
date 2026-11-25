@@ -411,7 +411,7 @@ if [ -n "$committed_config" ]; then
             printf "%s", out
         }' "$committed_config")
     if [ -n "$committed_rustflags" ]; then
-        echo "   note: using the rustflags from this commit's .cargo/config.toml"
+        echo "   note: using the rustflags from this commit's ${committed_config#"$snapshot_tree"/}"
     fi
 fi
 RUSTFLAGS="$committed_rustflags"
