@@ -1,7 +1,11 @@
 #!/bin/bash
 # Pre-commit hook: blocks lint suppressions and clippy warnings.
+#
+# Clippy runs against an isolated snapshot of the index, never the working
+# tree, so the verdict depends only on the content being committed. Unstaged
+# and untracked changes are neither read nor modified, whatever the outcome.
 
-set -e
+set -eu
 
 # --- Check 1: Reject new lint suppressions in staged files ---
 echo "🔍 Checking for new lint suppressions..."
@@ -23,12 +27,143 @@ fi
 
 echo "✅ No new lint suppressions."
 
-# --- Check 2: Cargo clippy ---
-echo "🔍 Running cargo clippy..."
+# --- Check 2: Cargo clippy on the staged content ---
+# The snapshot lives inside this worktree's Git directory, so linked worktrees
+# each get their own copy, and concurrent hooks are serialised by a lock.
 
-if ! clippy_output=$(cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion 2>&1); then
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+state_dir=$(cd -- "$(git rev-parse --git-dir)" && pwd)/chartml-pre-commit
+snapshot_tree="$state_dir/tree"
+target_dir="$state_dir/target"
+lock_file="$state_dir/lock"
+
+lock_pid_file="$state_dir/lock.$$"
+cargo_pid=''
+clippy_log="$state_dir/clippy.log"
+cleanup() {
+    # Never leave cargo linting a snapshot that the next hook will replace.
+    if [ -n "$cargo_pid" ] && kill -0 "$cargo_pid" 2>/dev/null; then
+        kill -TERM "$cargo_pid" 2>/dev/null || true
+        wait "$cargo_pid" 2>/dev/null || true
+    fi
+    rm -f -- "$clippy_log" "$lock_pid_file"
+    # Only release the lock if this process still holds it.
+    if [ "$(cat -- "$lock_file" 2>/dev/null || true)" = "$$" ]; then
+        rm -f -- "$lock_file"
+    fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
+echo "🔍 Running cargo clippy on the staged snapshot..."
+echo "   snapshot: $snapshot_tree"
+echo "   target:   $target_dir"
+echo "   remove both: rm -rf -- $state_dir"
+
+if ! index_tree=$(git write-tree 2>/dev/null); then
+    echo ""
+    echo "❌ Cannot lint the staged content — the index has unresolved conflicts."
+    echo "   Resolve them, stage the results, and commit again."
+    exit 1
+fi
+
+mkdir -p -- "$state_dir"
+
+# Acquire the lock by hard-linking a file that already contains our pid, so a
+# lock is never visible without its owner recorded (even if we are killed).
+printf '%s\n' "$$" > "$lock_pid_file"
+waited=0
+while ! ln -- "$lock_pid_file" "$lock_file" 2>/dev/null; do
+    holder=$(cat -- "$lock_file" 2>/dev/null || true)
+    case "$holder" in
+        ''|*[!0-9]*) holder='' ;;
+    esac
+    if [ -z "$holder" ] || ! kill -0 "$holder" 2>/dev/null; then
+        stale="$state_dir/lock.stale.$$"
+        if mv -- "$lock_file" "$stale" 2>/dev/null; then
+            rm -f -- "$stale"
+            echo "   removed stale snapshot lock${holder:+ left by pid $holder}"
+        fi
+        continue
+    fi
+    if [ "$waited" -ge 60 ]; then
+        echo ""
+        echo "❌ Another pre-commit hook is still using this snapshot (pid ${holder})."
+        echo "   If it is not running, remove $lock_file and try again."
+        exit 1
+    fi
+    if [ "$waited" -eq 0 ]; then
+        echo "⏳ Waiting for another pre-commit hook to finish (pid ${holder})..."
+    fi
+    sleep 1
+    waited=$((waited + 1))
+done
+
+# Rebuild the snapshot from scratch, from the very tree the commit will record.
+# Reading the tree (rather than checkout-index -a) keeps intent-to-add entries,
+# which are staged but not committed, out of the linted content, and starting
+# from an empty directory means a file the index no longer has cannot survive.
+verify_index=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-index.XXXXXX")
+rm -f -- "$verify_index"
+rm -rf -- "$snapshot_tree"
+mkdir -p -- "$snapshot_tree"
+if ! (
+    export GIT_INDEX_FILE="$verify_index"
+    git read-tree "$index_tree" &&
+        git checkout-index -a -f --prefix="$snapshot_tree/"
+); then
+    rm -f -- "$verify_index"
+    echo ""
+    echo "❌ Could not materialise the staged content at $snapshot_tree."
+    echo "   Remove $state_dir and try again."
+    exit 1
+fi
+rm -f -- "$verify_index"
+
+# Prove the snapshot is exactly the tree the commit will record before linting
+# it. A mismatch (for example a filtering or submodule edge case) fails the
+# commit instead of linting content that differs from what would be committed.
+verify_index=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-verify.XXXXXX")
+rm -f -- "$verify_index"
+abs_git_dir=$(cd -- "$(git rev-parse --git-dir)" && pwd)
+snapshot_tree_id=$(
+    cd -- "$snapshot_tree"
+    GIT_INDEX_FILE="$verify_index" git --git-dir="$abs_git_dir" --work-tree="$snapshot_tree" add -A -f -- . &&
+        GIT_INDEX_FILE="$verify_index" git --git-dir="$abs_git_dir" write-tree
+) || snapshot_tree_id=''
+rm -f -- "$verify_index"
+if [ "$snapshot_tree_id" != "$index_tree" ]; then
+    echo ""
+    echo "❌ The staged snapshot does not match the index (expected ${index_tree}, got ${snapshot_tree_id:-nothing})."
+    echo "   Refusing to lint content other than the commit's. Remove $state_dir and try again."
+    exit 1
+fi
+
+# Run clippy in the background and wait for it, so an interrupt is acted on
+# immediately instead of after cargo finishes; cleanup then stops cargo too.
+# The log path also avoids printing compiler output from a killed run.
+( cd -- "$snapshot_tree" && CARGO_TARGET_DIR="$target_dir" cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion ) > "$clippy_log" 2>&1 &
+cargo_pid=$!
+clippy_status=0
+# `wait` briefly returns >128 when a trapped signal arrives while it waits;
+# keep waiting for cargo so its log is complete before it is reported.
+until wait "$cargo_pid"; do
+    clippy_status=$?
+    if [ "$clippy_status" -le 128 ]; then
+        break
+    fi
+done
+cargo_pid=''
+clippy_output=$(cat -- "$clippy_log")
+rm -f -- "$clippy_log"
+
+if [ "$clippy_status" -ne 0 ]; then
     printf '%s\n' "$clippy_output"
-    echo "❌ Cargo clippy failed — commit blocked."
+    echo "❌ Cargo clippy failed on the staged snapshot — commit blocked."
     exit 1
 fi
 
