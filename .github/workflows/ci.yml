@@ -73,3 +73,5 @@ jobs:
       - run: npm ci
       - run: bash packages/core/build.sh
       - run: bash packages/datafusion/build.sh
+      - name: Check packed @chartml/core style.css matches source
+        run: bash scripts/check-npm-pack.sh
