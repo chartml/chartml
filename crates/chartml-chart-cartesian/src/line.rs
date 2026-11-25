@@ -31,6 +31,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 field: Some(name.clone()), mark: None, axis: None, label: None,
                 color: None, format: None, data_labels: None,
                 line_style: None, upper: None, lower: None, opacity: None,
+                width: None, align: None,
             },
         }).collect(),
         _ => vec![],

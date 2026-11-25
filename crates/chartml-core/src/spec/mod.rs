@@ -10,9 +10,10 @@ use serde::{Deserialize, Serialize};
 use crate::error::ChartError;
 
 pub use chart::{
-    AnnotationSpec, AxesSpec, AxisSpec, ChartMode, ChartSpec, ChartStyleSpec, DataLabelsSpec,
-    DataRef, FieldRef, FieldRefItem, FieldSpec, InlineData, LayoutSpec, MarkEncoding,
-    MarkEncodingSpec, MarksSpec, Orientation, StyleRefOrInline, VisualizeSpec,
+    AnnotationSpec, AutoWidth, AxesSpec, AxisSpec, ChartMode, ChartSpec, ChartStyleSpec,
+    ColumnAlign, ColumnWidth, DataLabelsSpec, DataRef, FieldRef, FieldRefItem, FieldSpec,
+    InlineData, LayoutSpec, MarkEncoding, MarkEncodingSpec, MarksSpec, Orientation,
+    StyleRefOrInline, VisualizeSpec,
 };
 pub use config::{ConfigSpec, StyleRef};
 pub use params::{ParamDef, ParamsSpec};

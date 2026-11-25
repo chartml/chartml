@@ -710,10 +710,10 @@
         },
         "width": {
           "oneOf": [
-            { "type": "number" },
+            { "type": "number", "exclusiveMinimum": 0 },
             { "type": "string", "const": "auto" }
           ],
-          "description": "Column width in pixels or 'auto'"
+          "description": "Table column width in pixels, or 'auto' to size from its header label and values"
         },
         "format": {
           "type": "string",
@@ -722,7 +722,7 @@
         "align": {
           "type": "string",
           "enum": ["left", "center", "right"],
-          "description": "Text alignment for table columns"
+          "description": "Table column text alignment, overriding the type-based default (numbers right, everything else left)"
         }
       },
       "required": ["field"]
@@ -1012,6 +1012,12 @@
               "description": "Legend orientation"
             }
           }
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 50,
+          "description": "Table-only: rows per page (default 50)"
         }
       }
     }

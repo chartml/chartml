@@ -16,7 +16,9 @@ use chartml_core::element::*;
 use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
 use chartml_core::plugin::{ChartConfig, ChartRenderer};
-use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec, VisualizeSpec};
+use chartml_core::spec::{
+    ColumnAlign, ColumnWidth, FieldRef, FieldRefItem, FieldSpec, VisualizeSpec,
+};
 use chartml_core::theme::{TextTransform, Theme};
 
 const DEFAULT_PAGE_SIZE: usize = 50;
@@ -49,11 +51,14 @@ const TEXT_WIDTH_SLACK: f64 = 1.05;
 /// (see `fade_cell`).
 const FADE_WIDTH_PX: u32 = 32;
 
-/// Resolved column: the source field name + display label + optional format.
+/// Resolved column: the source field name + display label + optional format,
+/// width and alignment.
 struct Column {
     field: String,
     label: String,
     format: Option<String>,
+    width: Option<ColumnWidth>,
+    align: Option<ColumnAlign>,
 }
 
 impl Column {
@@ -62,6 +67,8 @@ impl Column {
             field: field.to_string(),
             label: field.to_string(),
             format: None,
+            width: None,
+            align: None,
         }
     }
 
@@ -73,6 +80,8 @@ impl Column {
             label: spec.label.clone().unwrap_or_else(|| field.clone()),
             field,
             format: spec.format.clone(),
+            width: spec.width,
+            align: spec.align,
         })
     }
 }
@@ -1432,6 +1441,15 @@ fn word_em(word: &str, text: &str, header: &HeaderText) -> f64 {
     }
 }
 
+/// A column's explicit CSS `text-align` value, if it sets one.
+fn align_css(align: ColumnAlign) -> &'static str {
+    match align {
+        ColumnAlign::Left => "left",
+        ColumnAlign::Center => "center",
+        ColumnAlign::Right => "right",
+    }
+}
+
 /// Left and right components of a CSS `padding` shorthand (1–4 values).
 fn horizontal_padding(shorthand: &str) -> (String, String) {
     let parts: Vec<&str> = shorthand.split_whitespace().collect();
@@ -1470,7 +1488,8 @@ struct CellPlacement {
     /// 1-based grid column.
     column: usize,
     last: bool,
-    numeric: bool,
+    /// CSS `text-align` value.
+    align: &'static str,
 }
 
 impl CellPlacement {
@@ -1484,25 +1503,32 @@ impl CellPlacement {
 }
 
 /// Styles common to header and body cells.
+///
+/// Cell padding comes from `--chartml-table-cell-padding`, with the theme's
+/// `table_cell_padding` as its default — the same way every other
+/// `--chartml-table-*` token is read. The last cell's extra right inset
+/// keeps its content clear of the fade's strip; it is based on the theme's
+/// right padding, as are the column-width measurements (see `render`).
 fn cell_style(
     place: &CellPlacement,
-    padding: &str,
+    theme: &Theme,
     border_bottom: &str,
     fade_width: &str,
 ) -> HashMap<String, String> {
+    let padding = format!("var(--chartml-table-cell-padding, {})", theme.table_cell_padding);
     let mut map = style(&[
         ("grid-column", &place.grid_column()),
         ("grid-row", "1"),
         ("min-width", "0"),
         ("box-sizing", "border-box"),
-        ("padding", padding),
-        ("text-align", if place.numeric { "right" } else { "left" }),
+        ("padding", &padding),
+        ("text-align", place.align),
         ("border-bottom", border_bottom),
     ]);
     if place.last {
         // The last cell reaches under the fade's strip so its border runs to
         // the row's end; its content stays clear of the strip.
-        let (_, right) = horizontal_padding(padding);
+        let (_, right) = horizontal_padding(&theme.table_cell_padding);
         map.insert("padding-right".into(), format!("calc({right} + {fade_width})"));
     }
     map
@@ -1525,7 +1551,7 @@ fn header_cell(label: &str, place: &CellPlacement, theme: &Theme, fade_width: &s
         "var(--chartml-table-header-text-transform, {})",
         theme.table_header_text_transform,
     );
-    let mut cell_style = cell_style(place, &theme.table_cell_padding, &header_border(theme), fade_width);
+    let mut cell_style = cell_style(place, theme, &header_border(theme), fade_width);
     cell_style.extend(style(&[
         ("font-weight", &weight_var),
         ("letter-spacing", &spacing_var),
@@ -1546,7 +1572,7 @@ fn header_cell(label: &str, place: &CellPlacement, theme: &Theme, fade_width: &s
 /// wider than estimated) wraps onto more lines instead of being cut off.
 fn body_cell(content: &str, place: &CellPlacement, theme: &Theme, fade_width: &str) -> ChartElement {
     let text_var = format!("var(--chartml-table-text, {})", theme.table_text);
-    let mut cell_style = cell_style(place, &theme.table_cell_padding, &body_border(theme), fade_width);
+    let mut cell_style = cell_style(place, theme, &body_border(theme), fade_width);
     cell_style.extend(style(&[
         ("color", &text_var),
         ("overflow-wrap", "anywhere"),
@@ -1638,11 +1664,12 @@ impl ChartRenderer for TableRenderer {
             .collect();
 
         // ── Column tracks ──
-        // Each column is at least as wide as its header label or widest
-        // value on the page (plus padding) and otherwise takes an equal
-        // share of the width. No column is pinned: when the columns don't
-        // all fit, the whole table scrolls sideways (header and body rows
-        // are at least the sum of the minimums plus the fade).
+        // A column with a fixed `width` keeps that width. Every other column
+        // is at least as wide as its header label or widest value on the page
+        // (plus padding) and otherwise takes an equal share of the width. No
+        // column is pinned: when the columns don't all fit, the whole table
+        // scrolls sideways (header and body rows are at least the sum of the
+        // minimums plus the fade).
         //
         // The expressions are set once, as custom properties on the scroll
         // area, and used by every row. Everything is relative to the
@@ -1657,49 +1684,73 @@ impl ChartRenderer for TableRenderer {
             .enumerate()
             .map(|(i, c)| column_text(&c.label, &header, cells.iter().map(|r| r[i].as_str())))
             .collect();
-        let width = |em: f64| format!("calc({em:.2}em + {pad_left} + {pad_right})");
+        let text_width = |em: f64| format!("calc({em:.2}em + {pad_left} + {pad_right})");
         let min_var = |i: usize| format!("--chartml-table-min-{}", i + 1);
         let mut sizing: Vec<(String, String)> = Vec::new();
-        if columns.len() > 1 {
-            // Every column fits in the visible area (less the fade) so its
-            // values can be seen whole — wrapping at spaces if they must —
-            // but is never narrower than its widest word.
-            for (i, text) in texts.iter().enumerate() {
-                sizing.push((
-                    min_var(i),
-                    format!(
-                        "max({}, min({}, calc(100cqw - {FADE_WIDTH_PX}px)))",
-                        width(text.word),
-                        width(text.line),
-                    ),
-                ));
+        // Each column's minimum in column order, plus its grid track: a fixed
+        // `width` column is exactly that wide; every other column is at least
+        // its measured content width and shares the remaining space.
+        let mut tracks: Vec<String> = Vec::with_capacity(columns.len());
+        let mut column_mins: Vec<String> = Vec::with_capacity(columns.len());
+        for (i, column) in columns.iter().enumerate() {
+            let fixed = match column.width {
+                Some(ColumnWidth::Pixels(px)) => {
+                    if !(px.is_finite() && px > 0.0) {
+                        return Err(ChartError::InvalidSpec(format!(
+                            "table column '{}': width must be a positive number of pixels or \"auto\"",
+                            column.field
+                        )));
+                    }
+                    Some(format!("{px:.2}px"))
+                }
+                _ => None,
+            };
+            match fixed {
+                Some(px) => {
+                    column_mins.push(px.clone());
+                    tracks.push(format!("minmax({px}, {px})"));
+                }
+                None => {
+                    let text = &texts[i];
+                    let content_min = if columns.len() > 1 {
+                        // Every content-sized column fits in the visible area
+                        // (less the fade) so its values can be seen whole —
+                        // wrapping at spaces if they must — but is never
+                        // narrower than its widest word.
+                        format!(
+                            "max({}, min({}, calc(100cqw - {FADE_WIDTH_PX}px)))",
+                            text_width(text.word),
+                            text_width(text.line),
+                        )
+                    } else {
+                        text_width(texts[0].line)
+                    };
+                    sizing.push((min_var(i), content_min));
+                    column_mins.push(format!("var({})", min_var(i)));
+                    tracks.push(format!("minmax(var({}), 1fr)", min_var(i)));
+                }
             }
-        } else {
-            sizing.push((min_var(0), width(texts[0].line)));
         }
         // The fade: `FADE_WIDTH_PX` once the columns at their minimum are
         // wider than the scroll area (the step completes within 0.04px),
         // otherwise 0. Rows are at least the columns plus the fade, so when
         // the table scrolls its right end shows the fade's own empty strip.
-        let all_mins: Vec<String> = (0..columns.len()).map(|i| format!("var({})", min_var(i))).collect();
-        sizing.push(("--chartml-table-columns-min".into(), format!("calc({})", all_mins.join(" + "))));
+        sizing.push(("--chartml-table-columns-min".into(), format!("calc({})", column_mins.join(" + "))));
         sizing.push((
             "--chartml-table-fade".into(),
             format!("clamp(0px, calc((var(--chartml-table-columns-min) - 100cqw) * 1000), {FADE_WIDTH_PX}px)"),
         ));
         let fade_width = "var(--chartml-table-fade)".to_string();
         let row_min = "calc(var(--chartml-table-columns-min) + var(--chartml-table-fade))".to_string();
-        let template = all_mins
-            .iter()
-            .map(|min| format!("minmax({min}, 1fr)"))
-            .chain(std::iter::once(fade_width.clone()))
-            .collect::<Vec<_>>()
-            .join(" ");
+        tracks.push(fade_width.clone());
+        let template = tracks.join(" ");
         let fade_column = columns.len() + 1;
         let place = |i: usize| CellPlacement {
             column: i + 1,
             last: i + 1 == columns.len(),
-            numeric: numeric[i],
+            align: columns[i]
+                .align
+                .map_or_else(|| if numeric[i] { "right" } else { "left" }, align_css),
         };
 
         // The table font: the size the `em` minimums resolve against and the
@@ -2803,6 +2854,222 @@ style:
         for row in header_and_rows(&el) {
             let got: Vec<&str> = real_cells(row).iter().map(|c| get(c, "text-align").unwrap()).collect();
             assert_eq!(got, vec!["left", "right", "right", "left"]);
+        }
+    }
+
+    #[test]
+    fn column_align_overrides_type_based_default() {
+        // Schema `align` is read for columns and rows: it replaces the
+        // type-based default on both the header and every body cell (here a
+        // text category forced right and numeric measures forced left/center).
+        let config = cfg(
+            r#"
+type: table
+columns:
+  - field: month
+    align: right
+rows:
+  - field: revenue
+    label: Revenue
+    align: left
+  - field: cost
+    label: Cost
+    align: center
+"#,
+        );
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        let rows = header_and_rows(&el);
+        assert_eq!(rows.len(), 4, "header + three body rows");
+        for row in rows {
+            let got: Vec<&str> = real_cells(row).iter().map(|c| get(c, "text-align").unwrap()).collect();
+            assert_eq!(got, vec!["right", "left", "center"]);
+        }
+    }
+
+    #[test]
+    fn fixed_column_width_sets_the_track_and_keeps_the_scroll_layout() {
+        // Schema `width` is read: a number is that column's exact grid track
+        // (header and body cells included); `auto` keeps the measured
+        // content minimum. Fixed widths join the existing scroll machinery,
+        // so the table still scrolls sideways and no column is pinned.
+        let config = cfg(
+            r#"
+type: table
+columns:
+  - field: month
+    width: 120
+rows:
+  - field: revenue
+    label: Revenue
+    width: auto
+  - field: cost
+    label: Cost
+    width: 90.5
+"#,
+        );
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        // Fixed columns need no measured minimum; the auto column keeps one.
+        assert_eq!(get(scroll, "--chartml-table-min-1"), None);
+        assert!(get(scroll, "--chartml-table-min-2").unwrap().starts_with("max("));
+        assert_eq!(get(scroll, "--chartml-table-min-3"), None);
+        assert_eq!(
+            get(scroll, "--chartml-table-columns-min"),
+            Some("calc(120.00px + var(--chartml-table-min-2) + 90.50px)")
+        );
+        let template = "minmax(120.00px, 120.00px) minmax(var(--chartml-table-min-2), 1fr) minmax(90.50px, 90.50px) var(--chartml-table-fade)";
+        for row in header_and_rows(&el) {
+            assert_eq!(get(row, "grid-template-columns"), Some(template));
+            for cell in real_cells(row) {
+                for key in ["position", "left", "z-index"] {
+                    assert_eq!(get(cell, key), None, "{key} must stay unset");
+                }
+            }
+        }
+        let rows = header_and_rows(&el);
+        let body = by_class(&el, "chartml-table-body")[0];
+        assert_eq!(get(rows[0], "min-width"), get(body, "min-width"));
+        assert_eq!(
+            get(rows[0], "min-width"),
+            Some("calc(var(--chartml-table-columns-min) + var(--chartml-table-fade))")
+        );
+    }
+
+    /// Render a chart spec through the public path so parse errors surface
+    /// exactly as consumers see them.
+    fn render_yaml(yaml: &str) -> Result<ChartElement, ChartError> {
+        use chartml_core::ChartML;
+        let mut chartml = ChartML::new();
+        chartml.register_renderer("table", TableRenderer::new());
+        chartml.render_from_yaml(yaml)
+    }
+
+    #[test]
+    fn invalid_column_width_errors_like_other_mistyped_fields() {
+        // A width that is neither a number nor "auto" is a type error, as any
+        // other mistyped FieldSpec value is; a non-positive pixel width is
+        // rejected when rendering instead of emitting invalid CSS.
+        let spec = |width: &str| {
+            format!(
+                r#"
+type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - {{ month: "Jan", revenue: 1200 }}
+visualize:
+  type: table
+  columns:
+    - field: month
+      width: {width}
+  rows: revenue
+"#
+            )
+        };
+        let err = render_yaml(&spec("\"100%\"")).expect_err("a percentage is not documented");
+        assert!(matches!(err, ChartError::YamlParse(_)), "got {err:?}");
+        let err = render_yaml(&spec("0")).expect_err("zero pixels is not a usable width");
+        assert!(
+            matches!(&err, ChartError::InvalidSpec(msg) if msg.contains("positive number of pixels")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn cell_padding_reads_the_css_variable_with_the_theme_default() {
+        // The published --chartml-table-cell-padding token has no effect when
+        // the renderer hardcodes the theme's padding inline. It is now read
+        // like every other --chartml-table-* token, with the theme value as
+        // the fallback, so a host stylesheet can override it.
+        let config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        for row in header_and_rows(&el) {
+            let cells = real_cells(row);
+            for cell in &cells {
+                assert_eq!(get(cell, "padding"), Some("var(--chartml-table-cell-padding, 8px 12px)"));
+            }
+            // The fade clearance on the last cell's right side is added to
+            // the theme's right padding; the shorthand above still applies.
+            assert_eq!(
+                get(cells.last().unwrap(), "padding-right"),
+                Some("calc(12px + var(--chartml-table-fade))")
+            );
+        }
+        // A host theme that sets its own padding provides that fallback.
+        let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+        config.theme.table_cell_padding = "4px 6px".into();
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        for row in header_and_rows(&el) {
+            let cells = real_cells(row);
+            assert_eq!(get(cells[0], "padding"), Some("var(--chartml-table-cell-padding, 4px 6px)"));
+            assert_eq!(
+                get(cells.last().unwrap(), "padding-right"),
+                Some("calc(6px + var(--chartml-table-fade))")
+            );
+        }
+    }
+
+    const SCHEMA: &str = include_str!("../../../docs/docs/public/chartml_schema.json");
+
+    #[test]
+    fn schema_documents_only_table_properties_the_renderer_reads() {
+        // Every property the published schema documents for table columns
+        // must be read by the renderer. If a documented property is added,
+        // this fails until the renderer (and the render proof below) covers it.
+        let schema: serde_json::Value = serde_json::from_str(SCHEMA).expect("schema is JSON");
+        let mut documented: Vec<&str> = schema["definitions"]["ColumnsObject"]["properties"]
+            .as_object()
+            .expect("ColumnsObject.properties")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        documented.sort_unstable();
+        assert_eq!(documented, vec!["align", "field", "format", "label", "width"]);
+
+        let page_size = &schema["definitions"]["Style"]["properties"]["pageSize"];
+        assert_eq!(page_size["type"], "integer");
+        assert_eq!(page_size["minimum"], 1);
+        assert_eq!(page_size["default"], 50);
+
+        // Render proof for the documented column properties and pageSize: a
+        // spec setting every one produces a header label, a fixed track, an
+        // alignment, a formatted cell and a paginated row count.
+        let config = cfg(
+            r#"
+type: table
+columns:
+  - field: month
+    label: Month
+    width: 100
+    align: center
+rows:
+  - field: revenue
+    label: Revenue
+    format: "$,.0f"
+    width: auto
+style:
+  pageSize: 2
+"#,
+        );
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        let mut contents = Vec::new();
+        find_contents(&el, &mut contents);
+        assert!(contents.iter().any(|c| c == "Month"), "{contents:?}");
+        assert!(contents.iter().any(|c| c == "Revenue"), "{contents:?}");
+        assert!(contents.iter().any(|c| c == "$1,200"), "{contents:?}");
+        assert!(!contents.iter().any(|c| c == "Mar"), "pageSize 2 must hide Mar: {contents:?}");
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        assert_eq!(
+            get(scroll, "--chartml-table-columns-min"),
+            Some("calc(100.00px + var(--chartml-table-min-2))")
+        );
+        let rows = header_and_rows(&el);
+        assert_eq!(rows.len(), 3, "header + two body rows");
+        for row in rows {
+            let cells = real_cells(row);
+            assert_eq!(get(cells[0], "grid-column"), Some("1"));
+            assert_eq!(get(cells[0], "text-align"), Some("center"));
         }
     }
 
