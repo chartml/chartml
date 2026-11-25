@@ -1065,10 +1065,27 @@ if (
     cd "$repo"
     HOOK_TEST_WARN_ON_MARKER='CHA27_COMMITTED_SUPPRESSED' bash "$hook" > "$scratch/committed-config.log" 2>&1
 ); then
-    pass 'rustflags committed in .cargo/config.toml are honoured'
+    pass 'a commit whose own committed rustflags silence a warning passes'
 else
     fail 'a commit was blocked by a warning its own committed config silences'
     cat "$scratch/committed-config.log" >&2
+fi
+
+# The same config must not silence anything when it is merely sitting in the
+# working tree unstaged.
+repo="$scratch/uncommitted-config"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_UNCOMMITTED_SUPPRESSED = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    HOOK_TEST_WARN_ON_MARKER='CHA27_UNCOMMITTED_SUPPRESSED' bash "$hook" > "$scratch/uncommitted-config.log" 2>&1
+); then
+    fail 'an untracked .cargo/config.toml silenced a warning in the commit'
+else
+    pass 'an untracked .cargo/config.toml is not honoured'
 fi
 
 if [ "$failures" -ne 0 ]; then
