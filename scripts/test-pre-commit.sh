@@ -1109,6 +1109,51 @@ else
     pass 'an untracked .cargo/config.toml rustflags does not change the verdict'
 fi
 
+# --- A leftover lock directory from an older layout is reclaimed ----------
+# This series used a lock directory before the current lock file. One left by
+# an interrupted run must not cost a contributor the full wait with a remedy
+# that cannot name the cause.
+repo="$scratch/leftover-lock-dir"
+new_repo "$repo"
+mkdir -p "$repo/.git/chartml-pre-commit/lock"
+printf '12345\n' > "$repo/.git/chartml-pre-commit/lock/owner"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+if (cd "$repo" && bash "$hook" > "$scratch/leftover-lock-dir.log" 2>&1); then
+    pass 'a leftover lock directory is reclaimed'
+else
+    fail 'a leftover lock directory blocked the commit'
+    cat "$scratch/leftover-lock-dir.log" >&2
+fi
+
+# --- A committed .cargo/config.toml is reported as ignored ---------------
+# The hook lints with a fixed compiler environment, so a contributor whose own
+# build honours that file must be told why the hook disagrees with it.
+repo="$scratch/config-notice"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_CONFIG_NOTICE = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+(
+    cd "$repo"
+    HOOK_TEST_WARN_ON_MARKER='CHA27_CONFIG_NOTICE' bash "$hook" > "$scratch/config-notice.log" 2>&1
+) || true
+if grep -q ".cargo/config.toml" "$scratch/config-notice.log" && grep -q 'ignor' "$scratch/config-notice.log"; then
+    pass 'a committed .cargo/config.toml is reported as ignored'
+else
+    fail 'the hook did not explain that a committed .cargo/config.toml is ignored'
+    cat "$scratch/config-notice.log" >&2
+fi
+
+# The notice must not appear for a commit that has no such file.
+if grep -q '.cargo/config.toml' "$scratch/clean-commit-dirty-tree.log" 2>/dev/null ||
+    grep -q '.cargo/config.toml' "$scratch/snapshot-content.log" 2>/dev/null; then
+    fail 'the config notice appears for a commit without a .cargo/config.toml'
+else
+    pass 'the config notice appears only when the commit carries that file'
+fi
+
 if [ "$failures" -ne 0 ]; then
     echo "ERROR: $failures pre-commit test(s) failed" >&2
     exit 1

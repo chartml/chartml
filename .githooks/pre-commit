@@ -125,6 +125,20 @@ while :; do
     case "$holder" in
         ''|*[!0-9]*) holder='' ;;
     esac
+    # An earlier layout in this series used a lock DIRECTORY. One left behind by
+    # an interrupted run cannot be a live lock under the current scheme, but a
+    # hook running an older revision could still hold it, so it is only removed
+    # once it has clearly outlived any live creator.
+    if [ -d "$lock_dir" ]; then
+        if [ "$waited" -ge 5 ]; then
+            rm -rf -- "$lock_dir"
+            echo "   removed a leftover lint lock directory from an older hook layout"
+            reclaimed=1
+        fi
+        sleep 1
+        waited=$((waited + 1))
+        continue
+    fi
     if [ -z "$holder" ] || ! kill -0 "$holder" 2>/dev/null; then
         # Remove the lock only if it still names the owner we just read. The
         # `rm` is guarded by a second read through the same path, so a lock
@@ -145,10 +159,11 @@ while :; do
         echo ""
         if [ -n "$holder" ]; then
             echo "❌ Another pre-commit hook is still using this lint lock (pid ${holder})."
+            echo "   If that process is not a pre-commit hook, remove $lock_dir and retry."
         else
             echo "❌ Could not take the lint lock at $lock_dir."
+            echo "   Remove $lock_dir and retry."
         fi
-        echo "   If no other hook is running, remove $state_dir and retry."
         exit 1
     fi
     if [ "$waited" -eq 0 ] && [ "$reclaimed" -eq 0 ]; then
@@ -327,6 +342,11 @@ if [ ! -f "$snapshot_manifest" ]; then
     echo "❌ This commit has no Cargo.toml, so there is nothing for clippy to lint."
     echo "   The hook only lints the commit's own content."
     exit 1
+fi
+
+if [ -f "$snapshot_tree/.cargo/config.toml" ]; then
+    echo "   note: ignoring this commit's .cargo/config.toml — the hook lints with a"
+    echo "         fixed compiler environment, so rustflags come from CI (ci.yml)."
 fi
 
 # Clippy runs from the lint copy with an explicit manifest, so Cargo cannot use
