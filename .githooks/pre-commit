@@ -360,51 +360,47 @@ fi
 # commit itself brings, so a committed .cargo/config.toml still counts while a
 # config file outside the commit does not. RUSTC_WRAPPER can rewrite the
 # compiler invocation, and the toolchain/target selectors change what is built.
-committed_rustflags=''
+committed_config=''
 # Cargo deprecates .cargo/config in favour of .cargo/config.toml and warns about
 # it, which blocks the commit anyway (CI's `-D warnings` rejects it too), so
 # only the current form is read here.
-committed_config="$snapshot_tree/.cargo/config.toml"
-if [ -f "$committed_config" ]; then
-    committed_rustflags=$(awk '
-        BEGIN { in_build = 0; collecting = 0; buf = "" }
-        /^[[:space:]]*\[/ {
-            line = $0
-            sub(/^[[:space:]]*/, "", line)
-            if (collecting) { buf = buf $0 "\n"; if (line ~ /\]/) collecting = 0; next }
-            in_build = (line ~ /^\[build\]/)
-            next
-        }
-        {
-            if (collecting) { buf = buf $0 "\n"; if ($0 ~ /\]/) collecting = 0; next }
-            if (in_build) {
-                line = $0
-                sub(/^[[:space:]]*/, "", line)
-                if (line ~ /^rustflags[[:space:]]*=/) {
-                    buf = line "\n"
-                    collecting = (line !~ /\]/)
-                }
-            }
-        }
-        END {
-            out = ""; n = length(buf); i = 1
-            while (i <= n) {
-                if (substr(buf, i, 1) == "\"") {
-                    j = i + 1; val = ""
-                    while (j <= n) {
-                        cj = substr(buf, j, 1)
-                        if (cj == "\\") { val = val substr(buf, j+1, 1); j += 2; continue }
-                        if (cj == "\"") break
-                        val = val cj; j += 1
-                    }
-                    out = (out == "" ? val : out " " val)
-                    i = j + 1
-                    continue
-                }
-                i += 1
-            }
-            printf "%s", out
-        }' "$committed_config")
+if [ -f "$snapshot_tree/.cargo/config.toml" ]; then
+    committed_config="$snapshot_tree/.cargo/config.toml"
+fi
+
+# Read the rustflags the commit itself brings. RUSTFLAGS has to be set for
+# Cargo to ignore rustflags from config files outside the commit, which makes
+# this read authoritative: anything it misses would be silently dropped rather
+# than merely unused. So an unreadable or out-of-[build] rustflags makes the
+# hook refuse instead of linting content that differs from the commit.
+committed_rustflags=''
+if [ -n "$committed_config" ]; then
+    # Resolve the helper next to this hook, not in the repository being
+    # committed, so the hook works from any checkout.
+    hook_dir=$(cd -- "$(dirname -- "$0")" && pwd)
+    extraction=$(awk -f "$hook_dir/rustflags.awk" "$committed_config")
+    committed_rustflags=$(printf '%s\n' "$extraction" | sed -n 1p)
+    rustflags_mentions=$(printf '%s\n' "$extraction" | sed -n 2p)
+    only_build_section=$(printf '%s\n' "$extraction" | sed -n 3p)
+
+    if [ "$rustflags_mentions" -gt 0 ] && [ "$only_build_section" != "1" ]; then
+        echo ""
+        echo "❌ This commit's .cargo/config.toml sets rustflags for a specific target."
+        echo "   The hook cannot reproduce those exactly, and guessing would lint"
+        echo "   content other than the commit's. Move them to [build], or review"
+        echo "   the staged diff and use --no-verify."
+        exit 1
+    fi
+    if [ "$rustflags_mentions" -gt 0 ] && [ -z "$committed_rustflags" ] && [ "$only_build_section" = "1" ]; then
+        # [build] present but empty, or unreadable: both are safe to treat as
+        # "no rustflags from the commit" only when the array was really empty.
+        if [ "$(printf '%s\n' "$extraction" | sed -n 4p)" != "1" ]; then
+            echo ""
+            echo "❌ This commit's .cargo/config.toml mentions rustflags but the hook cannot read them."
+            echo "   The hook will not guess: review the staged diff and use --no-verify."
+            exit 1
+        fi
+    fi
     if [ -n "$committed_rustflags" ]; then
         echo "   note: using the rustflags from this commit's .cargo/config.toml"
     fi

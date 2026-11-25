@@ -1088,6 +1088,23 @@ else
     pass 'an untracked .cargo/config.toml is not honoured'
 fi
 
+# A rustflags the hook cannot reproduce exactly must be refused, not dropped:
+# RUSTFLAGS is set for the lint run, so anything missed would be silently
+# ignored and the hook would lint content that differs from the commit's build.
+repo="$scratch/target-config"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf "[target.'cfg(all())']\nrustflags = ['-A', 'warnings']\n" > "$repo/.cargo/config.toml"
+git -C "$repo" add .cargo/config.toml
+if (cd "$repo" && bash "$hook" > "$scratch/target-config.log" 2>&1); then
+    fail 'a committed [target.*] rustflags was silently ignored'
+elif ! grep -q 'sets rustflags for a specific target' "$scratch/target-config.log"; then
+    fail 'the [target.*] rustflags case failed for the wrong reason'
+    cat "$scratch/target-config.log" >&2
+else
+    pass 'committed [target.*] rustflags are refused rather than ignored'
+fi
+
 if [ "$failures" -ne 0 ]; then
     echo "ERROR: $failures pre-commit test(s) failed" >&2
     exit 1
