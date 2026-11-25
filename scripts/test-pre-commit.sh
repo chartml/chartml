@@ -29,15 +29,6 @@ snapshot_dir() {
     printf '%s/tree' "$root"
 }
 
-# The hook prints the copy at its real path; compare against that, not the
-# unresolved TMPDIR form.
-reported_snapshot_dir() {
-    local repo=$1 pointer=$1/.git/chartml-pre-commit/snapshot-dir root
-    [ -f "$pointer" ] || return 1
-    root=$(cat -- "$pointer")
-    printf '%s/tree' "$(cd -- "$root" && pwd -P)/tree"
-}
-
 # --- Fixture shared by every scenario -------------------------------------
 # A fake cargo on PATH records the directory it linted, so the tests can prove
 # the hook lints a copy outside the working tree, and can simulate warnings,
@@ -61,9 +52,23 @@ if [ -n "${HOOK_TEST_REPO_ROOT:-}" ]; then
     esac
 fi
 printf '%s\n' "${HOOK_TEST_OUTPUT:-}"
+# Emulate Cargo's own config discovery: a .cargo/config.toml in the linted
+# directory (or an ancestor) with rustflags that silence warnings really does
+# suppress them. Without this the isolation test would pass no matter where the
+# copy sat, so it could not catch the defect it exists for.
+suppress=0
+check_dir=$PWD
+while :; do
+    if [ -f "$check_dir/.cargo/config.toml" ] && grep -q -- '-A"*, *"warnings\|-A warnings\|allow' "$check_dir/.cargo/config.toml" 2>/dev/null; then
+        suppress=1
+        break
+    fi
+    [ "$check_dir" = "/" ] && break
+    check_dir=$(dirname -- "$check_dir")
+done
 # Emit a warning when the linted content itself contains a marker, so tests
 # can prove the verdict follows the linted content and nothing else.
-if [ -n "${HOOK_TEST_WARN_ON_MARKER:-}" ] && grep -rqF -- "$HOOK_TEST_WARN_ON_MARKER" .; then
+if [ -n "${HOOK_TEST_WARN_ON_MARKER:-}" ] && [ "$suppress" -eq 0 ] && grep -rqF -- "$HOOK_TEST_WARN_ON_MARKER" .; then
     printf 'warning: unused variable: `marker`\n'
 fi
 if [ -n "${HOOK_TEST_HANG_MARKER:-}" ]; then
@@ -630,8 +635,8 @@ fi
 # --- Stale lock left by a dead hook does not block commits ----------------
 repo="$scratch/stale-lock"
 new_repo "$repo"
-mkdir -p "$repo/.git/chartml-pre-commit/lock"
-printf '999999\n' > "$repo/.git/chartml-pre-commit/lock/owner"
+mkdir -p "$repo/.git/chartml-pre-commit"
+printf '999999\n' > "$repo/.git/chartml-pre-commit/lock"
 if (cd "$repo" && bash "$hook" >/dev/null 2>&1); then
     pass 'stale lock from a dead hook is reclaimed'
 else
@@ -867,6 +872,68 @@ if (cd "$repo" && bash "$hook" > "$scratch/workspace-shape.log" 2>&1); then
 else
     fail 'the hook failed on a workspace shaped like this repository'
     cat "$scratch/workspace-shape.log" >&2
+fi
+
+# --- TMPDIR inside the worktree is refused, never used -------------------
+# A lint copy under the worktree would let Cargo read the working tree, which
+# is the defect this hook exists to remove, and .tmp//.cache are plausible
+# TMPDIR values. The hook must refuse rather than lint from inside the repo.
+repo="$scratch/tmpdir-inside"
+new_repo "$repo"
+mkdir -p "$repo/.tmp"
+printf 'fn tracked() { let CHA27_TMPDIR_WARNING = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    TMPDIR="$repo/.tmp" HOOK_TEST_WARN_ON_MARKER='CHA27_TMPDIR_WARNING' bash "$hook" > "$scratch/tmpdir-inside.log" 2>&1
+); then
+    fail 'a TMPDIR inside the worktree produced a verdict'
+elif grep -q 'is inside this repository' "$scratch/tmpdir-inside.log"; then
+    pass 'a TMPDIR inside the worktree is refused with the reason'
+else
+    fail 'a TMPDIR inside the worktree failed for the wrong reason'
+    cat "$scratch/tmpdir-inside.log" >&2
+fi
+if [ -n "$(find "$repo/.tmp" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+    fail 'a lint copy was created inside the worktree'
+else
+    pass 'no lint copy is created inside the worktree'
+fi
+
+# --- A half-done reclaim left behind cannot brick the worktree -----------
+# A run killed between renaming the lock aside and deleting it leaves
+# lock.stale.<pid>. Whatever its form, and even as a directory, it must not
+# abort every later commit with no verdict.
+repo="$scratch/stale-dir-lock"
+new_repo "$repo"
+mkdir -p "$repo/.git/chartml-pre-commit/lock.stale.999999"
+printf '999999\n' > "$repo/.git/chartml-pre-commit/lock.stale.999999/owner"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+if (cd "$repo" && bash "$hook" > "$scratch/stale-dir-lock.log" 2>&1); then
+    pass 'a lock.stale.<pid> directory left by a killed reclaim does not block'
+else
+    fail 'a lock.stale.<pid> directory bricked the worktree'
+    cat "$scratch/stale-dir-lock.log" >&2
+fi
+if [ -e "$repo/.git/chartml-pre-commit/lock.stale.999999" ]; then
+    fail 'the leftover lock.stale.<pid> directory was never removed'
+else
+    pass 'the leftover lock.stale.<pid> directory is reclaimed'
+fi
+
+# --- A lock file left by a killed hook is reclaimed ----------------------
+repo="$scratch/killed-lock-file"
+new_repo "$repo"
+mkdir -p "$repo/.git/chartml-pre-commit"
+printf '999999\n' > "$repo/.git/chartml-pre-commit/lock"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+if (cd "$repo" && bash "$hook" > "$scratch/killed-lock-file.log" 2>&1); then
+    pass 'a lock file left by a dead hook is reclaimed'
+else
+    fail 'a lock file left by a dead hook blocked the commit'
+    cat "$scratch/killed-lock-file.log" >&2
 fi
 
 if [ "$failures" -ne 0 ]; then
