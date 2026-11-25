@@ -576,6 +576,15 @@ fn all_fixed_columns_still_fill_the_row() {
                 state.client_width,
             );
         }
+        // The row owns its bottom rule, so the rule spans the row's width
+        // rather than stopping at the last (fixed) column.
+        for (row, width) in state.border_widths.iter().enumerate() {
+            assert!(
+                (width - state.client_width).abs() < 1.0,
+                "{ctx}: row {row} draws its bottom rule only {width}px across a {}px area",
+                state.client_width,
+            );
+        }
         // The fill must not depend on the default stretch of an implicit
         // track: with `justify-content: start` forced on the scroll area, the
         // rows still span the area because the track rule itself says so.
@@ -596,6 +605,7 @@ struct RowSpanState {
     client_width: f64,
     rows: usize,
     row_widths: Vec<f64>,
+    border_widths: Vec<f64>,
     emitted_track: Option<String>,
 }
 
@@ -613,6 +623,12 @@ fn measure_row_span_with_justify(host: &web_sys::HtmlElement, justify: &str) -> 
             clientWidth: sc.clientWidth,
             rows: rows.length,
             rowWidths: rows.map(r => Math.round(r.getBoundingClientRect().width * 100) / 100),
+            // Where the row's own bottom rule reaches: the row box, which is
+            // what the border paints across.
+            borderWidths: rows.map(r => {
+                const rb = r.getBoundingClientRect();
+                return getComputedStyle(r).borderBottomWidth === '0px' ? 0 : Math.round(rb.width * 100) / 100;
+            }),
             emittedTrack: sc.style.getPropertyValue('grid-template-columns') || null,
         });
         "#,
@@ -636,6 +652,12 @@ fn measure_row_span(host: &web_sys::HtmlElement) -> RowSpanState {
             clientWidth: sc.clientWidth,
             rows: rows.length,
             rowWidths: rows.map(r => Math.round(r.getBoundingClientRect().width * 100) / 100),
+            // Where the row's own bottom rule reaches: the row box, which is
+            // what the border paints across.
+            borderWidths: rows.map(r => {
+                const rb = r.getBoundingClientRect();
+                return getComputedStyle(r).borderBottomWidth === '0px' ? 0 : Math.round(rb.width * 100) / 100;
+            }),
             // What the CSS engine kept for the track list: empty when the
             // declaration was invalid and dropped.
             emittedTrack: sc.style.getPropertyValue('grid-template-columns') || null,

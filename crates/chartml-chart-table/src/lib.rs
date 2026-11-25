@@ -1508,7 +1508,6 @@ impl CellPlacement {
 fn cell_style(
     place: &CellPlacement,
     theme: &Theme,
-    border_bottom: &str,
     min_width: &str,
     width: Option<&str>,
 ) -> HashMap<String, String> {
@@ -1520,7 +1519,6 @@ fn cell_style(
         ("box-sizing", "content-box"),
         ("padding", &padding),
         ("text-align", place.align),
-        ("border-bottom", border_bottom),
     ]);
     if let Some(width) = width {
         // A fixed column: the content box is exactly `width`, whatever padding
@@ -1539,7 +1537,6 @@ fn header_cell(
     place: &CellPlacement,
     theme: &Theme,
     min_width: &str,
-    border_bottom: &str,
     width: Option<&str>,
 ) -> ChartElement {
     let header_text_var = format!("var(--chartml-table-header-text, {})", theme.table_header_text);
@@ -1555,7 +1552,7 @@ fn header_cell(
         "var(--chartml-table-header-text-transform, {})",
         theme.table_header_text_transform,
     );
-    let mut cell_style = cell_style(place, theme, border_bottom, min_width, width);
+    let mut cell_style = cell_style(place, theme, min_width, width);
     cell_style.extend(style(&[
         ("font-weight", &weight_var),
         ("letter-spacing", &spacing_var),
@@ -1579,11 +1576,10 @@ fn body_cell(
     place: &CellPlacement,
     theme: &Theme,
     min_width: &str,
-    border_bottom: &str,
     width: Option<&str>,
 ) -> ChartElement {
     let text_var = format!("var(--chartml-table-text, {})", theme.table_text);
-    let mut cell_style = cell_style(place, theme, border_bottom, min_width, width);
+    let mut cell_style = cell_style(place, theme, min_width, width);
     cell_style.extend(style(&[
         ("color", &text_var),
         ("overflow-wrap", "anywhere"),
@@ -1626,52 +1622,20 @@ fn fade_cell(column: usize) -> ChartElement {
     }
 }
 
-/// The straight 1px bottom border under the fade's strip. The cells' own
-/// border ends at the last column's track, so this line completes the row's
-/// bottom border across the fade's track. It is sticky at the same right edge
-/// as the fade — so it is the line under the visible strip at every scroll
-/// position, not only at the right end — and sits in the bottom 1px that
-/// `fade_cell`'s margin leaves uncovered, so the border is never faded or
-/// mitred away.
-fn fade_line(column: usize, colour: &str) -> ChartElement {
-    ChartElement::Span {
-        class: "chartml-table-fade-line".to_string(),
-        style: style(&[
-            ("grid-column", &column.to_string()),
-            ("grid-row", "1"),
-            ("position", "sticky"),
-            ("right", "0"),
-            ("z-index", "1"),
-            ("align-self", "end"),
-            ("height", "1px"),
-            ("background", colour),
-        ]),
-        content: String::new(),
-    }
-}
-
-fn header_border_colour(theme: &Theme) -> String {
+fn header_border(theme: &Theme) -> String {
     let header_border_colour = if theme.table_header_border.is_empty() {
         &theme.table_border
     } else {
         &theme.table_header_border
     };
     format!(
-        "var(--chartml-table-header-border, var(--chartml-table-border, {}))",
+        "1px solid var(--chartml-table-header-border, var(--chartml-table-border, {}))",
         header_border_colour,
     )
 }
 
-fn body_border_colour(theme: &Theme) -> String {
-    format!("var(--chartml-table-border, {})", theme.table_border)
-}
-
-fn header_border(theme: &Theme) -> String {
-    format!("1px solid {}", header_border_colour(theme))
-}
-
 fn body_border(theme: &Theme) -> String {
-    format!("1px solid {}", body_border_colour(theme))
+    format!("1px solid var(--chartml-table-border, {})", theme.table_border)
 }
 
 impl ChartRenderer for TableRenderer {
@@ -1831,7 +1795,6 @@ impl ChartRenderer for TableRenderer {
         // body rows; opaque, so rows scrolling under it never show
         // through) ──
         let header_border_bottom = header_border(theme);
-        let header_line_colour = header_border_colour(theme);
         let mut header_children: Vec<ChartElement> = columns
                 .iter()
                 .enumerate()
@@ -1841,12 +1804,10 @@ impl ChartRenderer for TableRenderer {
                         &place(i),
                         theme,
                         &cell_mins[i],
-                        &header_border_bottom,
                         fixed_widths[i].as_deref(),
                     )
                 })
                 .collect();
-        header_children.push(fade_line(fade_column, &header_line_colour));
         header_children.push(fade_cell(fade_column));
         let header_row = ChartElement::Div {
             class: "chartml-table-header".to_string(),
@@ -1858,6 +1819,10 @@ impl ChartRenderer for TableRenderer {
                 ("top", "0"),
                 ("z-index", "3"),
                 ("background", &opaque_bg(&header_bg_var, theme)),
+                // The row owns the bottom rule, so it spans the row's full
+                // width — including the fade's strip and any space past the
+                // last fixed column — instead of stopping at the last cell.
+                ("border-bottom", &header_border_bottom),
                 ("font-size", &font_size_var),
                 ("font-family", &theme.label_font_family),
             ]),
@@ -1866,7 +1831,6 @@ impl ChartRenderer for TableRenderer {
 
         // ── Body rows ──
         let body_border_bottom = body_border(theme);
-        let body_line_colour = body_border_colour(theme);
         let mut body_children: Vec<ChartElement> = Vec::with_capacity(end);
         for (row_idx, row_cells) in cells.iter().enumerate() {
             let is_alt = row_idx % 2 == 1;
@@ -1885,12 +1849,10 @@ impl ChartRenderer for TableRenderer {
                         &place(i),
                         theme,
                         &cell_mins[i],
-                        &body_border_bottom,
                         fixed_widths[i].as_deref(),
                     )
                 })
                 .collect();
-            children.push(fade_line(fade_column, &body_line_colour));
             children.push(fade_cell(fade_column));
             body_children.push(ChartElement::Div {
                 class: class.to_string(),
@@ -1899,6 +1861,7 @@ impl ChartRenderer for TableRenderer {
                     ("grid-template-columns", &template),
                     ("min-width", "min-content"),
                     ("background", &opaque_bg(bg, theme)),
+                    ("border-bottom", &body_border_bottom),
                     ("font-size", &font_size_var),
                     ("font-family", &theme.label_font_family),
                 ]),
@@ -3249,7 +3212,6 @@ style:
             "chartml-table-cell",
             "chartml-table-fit",
             "chartml-table-fade",
-            "chartml-table-fade-line",
             "chartml-table-pager",
             "chartml-table-pager-info",
         ] {
@@ -3518,15 +3480,19 @@ rows:
     }
 
     #[test]
-    fn every_row_ends_with_the_fade_and_a_straight_border_line() {
-        // Point 4: every header and body row ends with a fade in its own
-        // grid track (sticky at the right edge, the row's background masked
-        // into a gradient, ignoring the pointer) and a straight 1px border
-        // line under that track. The line sits in the bottom 1px the fade's
-        // margin leaves uncovered, so the row's bottom border runs to the
-        // row's end without a mitre or a padded/bordered last cell.
+    fn every_row_ends_with_the_fade_and_owns_its_bottom_border() {
+        // The row itself draws the bottom rule, so it spans the row's full
+        // width — past the last cell, over the fade's strip and any space a
+        // fixed-column table leaves — instead of stopping where the cells do.
+        // Cells draw no bottom rule of their own, and the fade is the row's
+        // last child, sticky at the right edge.
         let el = wide();
         for row in header_and_rows(&el) {
+            assert!(
+                get(row, "border-bottom").unwrap().starts_with("1px solid var(--chartml-table-"),
+                "{:?}",
+                get(row, "border-bottom")
+            );
             let children = children_of(row);
             let fade = children.last().unwrap();
             assert_eq!(class_of(fade), "chartml-table-fade");
@@ -3536,24 +3502,10 @@ rows:
             assert_eq!(get(fade, "background"), Some("inherit"));
             assert_eq!(get(fade, "mask-image"), Some("linear-gradient(to right, transparent, #000)"));
             assert_eq!(get(fade, "pointer-events"), Some("none"));
-            assert_eq!(get(fade, "border-bottom"), None);
-            let line = &children[children.len() - 2];
-            assert_eq!(class_of(line), "chartml-table-fade-line");
-            assert_eq!(get(line, "grid-column"), Some("13"));
-            assert_eq!(get(line, "align-self"), Some("end"));
-            assert_eq!(get(line, "height"), Some("1px"));
-            // Sticky at the same right edge as the fade, so the straight
-            // border sits under the visible strip at every scroll position.
-            assert_eq!(get(line, "position"), Some("sticky"));
-            assert_eq!(get(line, "right"), Some("0"));
-            assert!(
-                get(line, "background").unwrap().contains("var(--chartml-table-border"),
-                "{:?}",
-                get(line, "background")
-            );
-            let last = *real_cells(row).last().unwrap();
-            assert_eq!(get(last, "grid-column"), Some("12"), "no cell spans the fade strip");
-            assert_eq!(get(last, "border-right"), None);
+            for cell in real_cells(row) {
+                assert_eq!(get(cell, "border-bottom"), None, "cells must not draw the rule");
+                assert_eq!(get(cell, "border-right"), None);
+            }
         }
     }
 
