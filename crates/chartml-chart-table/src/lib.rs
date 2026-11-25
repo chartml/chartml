@@ -1591,11 +1591,12 @@ fn body_cell(
 /// solid, and stops 1px short of the row's bottom so the row's border line
 /// is never faded.
 ///
-/// The track is `fade_width` wide: `FADE_WIDTH_PX` while the columns at
-/// their minimum are wider than the scroll area (the table scrolls), 0
-/// otherwise (nothing overflows, nothing is drawn and no width is taken
-/// from the columns). Scrolled to the right end, the fade sits over its own
-/// empty strip, so it covers no content.
+/// The track's width is `--chartml-table-fade`, computed by `render` from the
+/// columns' estimated minimums: `FADE_WIDTH_PX` while the columns at their
+/// minimum are wider than the scroll area (the table scrolls), 0 otherwise
+/// (nothing overflows, nothing is drawn and no width is taken from the
+/// columns). Scrolled to the right end the fade has 0 width, so it covers no
+/// content.
 fn fade_cell(column: usize) -> ChartElement {
     ChartElement::Span {
         class: "chartml-table-fade".to_string(),
@@ -1718,8 +1719,13 @@ impl ChartRenderer for TableRenderer {
         // Each column's track and its cell minimum: a fixed `width` column is
         // exactly that wide and wraps its content; every other column is at
         // least its measured content width and shares the remaining space.
+        // `column_mins` is the per-column minimum used to decide whether the
+        // columns overflow the visible area (see the fade below).
         let mut tracks: Vec<String> = Vec::with_capacity(columns.len() + 1);
         let mut cell_mins: Vec<String> = Vec::with_capacity(columns.len());
+        let mut column_mins: Vec<String> = Vec::with_capacity(columns.len());
+        let min_var = |i: usize| format!("--chartml-table-min-{}", i + 1);
+        let mut sizing: Vec<(String, String)> = Vec::new();
         for (i, column) in columns.iter().enumerate() {
             let fixed = match column.width {
                 Some(ColumnWidth::Pixels(px)) => {
@@ -1736,6 +1742,7 @@ impl ChartRenderer for TableRenderer {
             match fixed {
                 Some(px) => {
                     cell_mins.push("0".to_string());
+                    column_mins.push(px.clone());
                     tracks.push(format!("minmax({px}, {px})"));
                 }
                 None => {
@@ -1752,21 +1759,37 @@ impl ChartRenderer for TableRenderer {
                     } else {
                         format!("{:.2}em", text.line)
                     };
+                    // The overflow estimate adds the theme's horizontal
+                    // padding to the content minimum, the same way the other
+                    // measured `--chartml-table-*` values use theme values.
+                    // Owner decision 2026-11-25: the fade hint is estimated
+                    // from theme padding, so a host padding override can leave
+                    // it off when the table nearly fits.
+                    sizing.push((
+                        min_var(i),
+                        format!("calc({content_min} + {pad_left} + {pad_right})"),
+                    ));
+                    column_mins.push(format!("var({})", min_var(i)));
                     cell_mins.push(content_min);
                     tracks.push("minmax(auto, 1fr)".to_string());
                 }
             }
         }
-        // ── The fade's width, from real overflow ──
-        // The fade's track is `--chartml-table-fade`, a registered length
-        // driven by a scroll timeline on the scroll area (see
-        // `SCROLL_TIMELINE_CSS`): 0 while the table fits, `FADE_WIDTH_PX`
-        // while any part of a column is hidden to the right. It follows the
-        // layout's real overflow, so padding this renderer cannot know — a
-        // host's `--chartml-table-cell-padding` — is included, and no
-        // measurement is estimated. Browsers without scroll timelines keep
-        // the fallback 0: the table still scrolls, only the hint is absent.
-        tracks.push("var(--chartml-table-fade, 0px)".to_string());
+        // ── The fade's width, from the estimated columns' minimum ──
+        // `FADE_WIDTH_PX` once the columns at their minimum are wider than the
+        // scroll area (`100cqw`; the step completes within 0.04px), 0
+        // otherwise. Rows are `min-content` wide, so when the table scrolls
+        // its right end shows the fade's own empty strip; scrolled to the
+        // right end the fade has 0 width and covers no text.
+        sizing.push((
+            "--chartml-table-columns-min".into(),
+            format!("calc({})", column_mins.join(" + ")),
+        ));
+        sizing.push((
+            "--chartml-table-fade".into(),
+            format!("clamp(0px, calc((var(--chartml-table-columns-min) - 100cqw) * 1000), {FADE_WIDTH_PX}px)"),
+        ));
+        tracks.push("var(--chartml-table-fade)".to_string());
         let template = tracks.join(" ");
         let fade_column = columns.len() + 1;
         let place = |i: usize| CellPlacement {
@@ -1879,18 +1902,21 @@ impl ChartRenderer for TableRenderer {
         // ── Scroll area: header + body scroll together on both axes, so the
         // header stays aligned with its columns when scrolled sideways and
         // stays on top (sticky) when the rows scroll vertically. `isolation`
-        // keeps the sticky layers' z-indexes inside the table. The fade's
-        // width comes from the stylesheet's scroll timeline on this element
-        // (see the `chartml.css` rule), not from an inline estimate. ──
+        // keeps the sticky layers' z-indexes inside the table, and the
+        // `--chartml-table-min-N`, `--chartml-table-columns-min` and
+        // `--chartml-table-fade` expressions live here and are read by every
+        // row's track list. ──
+        let mut scroll_style = style(&[
+            ("flex", "1 1 0"),
+            ("min-height", "0"),
+            ("overflow", "auto"),
+            ("isolation", "isolate"),
+            ("container-type", "inline-size"),
+        ]);
+        scroll_style.extend(sizing);
         let scroll = ChartElement::Div {
             class: "chartml-table-scroll".to_string(),
-            style: style(&[
-                ("flex", "1 1 0"),
-                ("min-height", "0"),
-                ("overflow", "auto"),
-                ("isolation", "isolate"),
-                ("container-type", "inline-size"),
-            ]),
+            style: scroll_style,
             children: vec![fit],
         };
 
@@ -2958,7 +2984,7 @@ rows:
 "#,
         );
         let el = TableRenderer::new().render(&data(), &config).unwrap();
-        let template = "minmax(120.00px, 120.00px) minmax(auto, 1fr) minmax(90.50px, 90.50px) var(--chartml-table-fade, 0px)";
+        let template = "minmax(120.00px, 120.00px) minmax(auto, 1fr) minmax(90.50px, 90.50px) var(--chartml-table-fade)";
         for row in header_and_rows(&el) {
             assert_eq!(get(row, "grid-template-columns"), Some(template));
             for cell in real_cells(row) {
@@ -3222,7 +3248,7 @@ style:
         }
         let expected: Vec<String> = (0..columns.len())
             .map(|_| "minmax(auto, 1fr)".to_string())
-            .chain(std::iter::once("var(--chartml-table-fade, 0px)".to_string()))
+            .chain(std::iter::once("var(--chartml-table-fade)".to_string()))
             .collect();
         for row in &rows {
             assert_eq!(get(row, "grid-template-columns"), Some(expected.join(" ").as_str()));
@@ -3231,108 +3257,92 @@ style:
 
     #[test]
     fn fade_turns_on_only_when_the_columns_overflow() {
-        // Point 4: the fade's track is `--chartml-table-fade`, which the
-        // stylesheet's scroll timeline sets from real inline overflow: 0
-        // while the table fits, `FADE_WIDTH_PX` once columns are hidden to
-        // the right. The renderer no longer estimates it. Rows are
-        // `min-content` wide, so their background and border span the
-        // scrolled width including the fade's strip.
+        // Point 4: the fade's width is 0 unless the sum of all column
+        // minimums is wider than the scroll area (`100cqw`), when it is
+        // `FADE_WIDTH_PX`. Each column's minimum is its content minimum plus
+        // the theme's horizontal padding (owner decision 2026-11-25: the hint
+        // is estimated from theme padding, like the other measured values).
+        // Rows are `min-content` wide, so their background and border span
+        // the scrolled width including the fade's strip.
         let el = wide();
         let scroll = by_class(&el, "chartml-table-scroll")[0];
-        assert!(
-            !style_of(scroll).keys().any(|k| k.starts_with("--chartml-table-min")),
-            "no estimated minimum: {:?}",
-            style_of(scroll).keys()
+        let all: Vec<String> = (1..=12).map(|i| format!("var(--chartml-table-min-{i})")).collect();
+        assert_eq!(
+            get(scroll, "--chartml-table-columns-min"),
+            Some(format!("calc({})", all.join(" + ")).as_str())
         );
-        assert_eq!(get(scroll, "--chartml-table-fade"), None, "the track comes from CSS");
+        assert_eq!(
+            get(scroll, "--chartml-table-fade"),
+            Some("clamp(0px, calc((var(--chartml-table-columns-min) - 100cqw) * 1000), 32px)")
+        );
+        for (i, cell) in real_cells(by_class(&el, "chartml-table-header")[0]).iter().enumerate() {
+            let min = get(scroll, &format!("--chartml-table-min-{}", i + 1)).unwrap();
+            assert!(min.ends_with("+ 12px + 12px)"), "column {i}: {min}");
+            // The cell's own minimum is content-only; layout adds the padding
+            // actually applied, so a host override still lays text out
+            // correctly (F1) even though the hint's estimate does not see it.
+            assert!(!get(cell, "min-width").unwrap().ends_with("+ 12px + 12px)"));
+        }
         for row in by_class(&el, "chartml-table-header").into_iter().chain(by_class(&el, "chartml-table-body")) {
             assert_eq!(get(row, "min-width"), Some("min-content"));
         }
     }
 
-    /// Every top-level CSS block of `css` that mentions `needle`, as
-    /// whitespace-normalised text with comments removed. The two stylesheets
-    /// wrap and indent their rules differently and word their comments
-    /// separately; the rules themselves must match.
-    fn css_blocks_mentioning(css: &str, needle: &str) -> Vec<String> {
-        let normalise = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
-        let mut blocks = Vec::new();
-        let mut depth = 0usize;
-        let mut start = 0usize;
-        let mut i = 0usize;
-        while i < css.len() {
-            let ch = css[i..].chars().next().expect("in bounds");
-            // Skip comments so their wording and wrapping never matters.
-            if css[i..].starts_with("/*") {
-                i = css[i..].find("*/").map_or(css.len(), |end| i + end + 2);
-                continue;
-            }
-            match ch {
-                '{' => depth += 1,
-                '}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        let block = &css[start..=i];
-                        if block.contains(needle) {
-                            blocks.push(normalise(block));
-                        }
-                        start = i + 1;
-                    }
-                }
-                _ => {}
-            }
-            i += ch.len_utf8();
-        }
-        blocks
-    }
-
     #[test]
-    fn fade_width_is_driven_by_the_stylesheet_scroll_timeline() {
-        // The published stylesheets (packages/core and chartml-leptos) drive
-        // the fade from real inline overflow with a scroll timeline on the
-        // scroll area, and only where scroll timelines exist. The renderer's
-        // fade track must read that variable, and must not carry an
-        // estimate of its own, so a host padding override can never desync
-        // it.
+    fn fade_estimate_is_rendered_and_the_stylesheets_hold_no_fade_rules() {
+        // The fade is estimated by the renderer from the columns' minimums
+        // plus the theme's horizontal padding (owner decision 2026-11-25),
+        // matching how the other measured table values use theme values. It
+        // must be an inline estimate: neither published stylesheet may carry
+        // fade machinery of its own, so there is no second path.
         let el = wide();
         for row in header_and_rows(&el) {
             let template = get(row, "grid-template-columns").unwrap();
-            assert!(template.ends_with("var(--chartml-table-fade, 0px)"), "{template}");
-            assert!(!template.contains("clamp("), "no estimated fade: {template}");
+            assert!(template.ends_with("var(--chartml-table-fade)"), "{template}");
         }
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        let fade = get(scroll, "--chartml-table-fade").unwrap();
+        assert!(fade.starts_with("clamp(0px,"), "{fade}");
+        assert!(fade.contains("var(--chartml-table-columns-min) - 100cqw"), "{fade}");
+        assert!(fade.ends_with("32px)"), "{fade}");
 
-        // Both stylesheets carry the same fade rules: the registered length,
-        // the keyframes and the @supports block. Comparing the blocks
-        // themselves (not just their presence) makes a drift between the two
-        // files a test failure.
-        let core = include_str!("../../../packages/core/src/chartml.css");
-        let leptos = include_str!("../../chartml-leptos/style/chartml.css");
-        for (name, css) in [("packages/core", core), ("chartml-leptos", leptos)] {
-            // `chartml-table-fade` (one dash) matches the @property name, the
-            // animation name in the @keyframes and @supports blocks, and the
-            // variable the track reads.
-            let blocks = css_blocks_mentioning(css, "chartml-table-fade");
-            assert!(!blocks.is_empty(), "{name}: no fade rules");
-            let all = blocks.join("\n");
-            assert!(all.contains("@property --chartml-table-fade"), "{name}: registered length");
-            assert!(all.contains("@keyframes chartml-table-fade-on"), "{name}: keyframes");
-            assert!(
-                all.contains("@supports (animation-timeline: scroll(self inline))"),
-                "{name}: gated on support"
-            );
-            assert!(
-                all.contains("animation-timeline: scroll(self inline)"),
-                "{name}: the scroll area is the scroller the fade reports"
-            );
-            assert!(!css.contains("--chartml-table-columns-min"), "{name}: no overflow estimate");
+        let sheets = [
+            ("packages/core", include_str!("../../../packages/core/src/chartml.css")),
+            ("chartml-leptos", include_str!("../../chartml-leptos/style/chartml.css")),
+        ];
+        for (name, css) in sheets {
+            assert!(!css.contains("--chartml-table-fade"), "{name}: no fade rules in CSS");
+            assert!(!css.contains("chartml-table-fade-on"), "{name}: no fade animation");
+            assert!(!css.contains("animation-timeline"), "{name}: no scroll timeline");
         }
-        let core_rules: Vec<String> = css_blocks_mentioning(core, "chartml-table-fade");
-        let leptos_rules: Vec<String> = css_blocks_mentioning(leptos, "chartml-table-fade");
+    }
+
+    #[test]
+    fn fade_track_is_zero_when_the_columns_fit_with_room_to_spare() {
+        // Regression for a fade that stuck on after a resize (CHA-22 F4). The
+        // estimate is a pure function of the columns' minimums, so a table
+        // whose columns need less than the visible area has a 0px fade track
+        // — there is no history, no scroll position and no prior overflow
+        // that can keep it on, which is what the scroll-timeline version got
+        // wrong. Narrow-to-just-fits is asserted in the browser:
+        // `grow_to_just_fits_clears_the_fade` in the Leptos suite.
+        let config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        // Three short columns at the default 800px width: their minimums sum
+        // to far less than `100cqw`, so the clamp is at its 0 floor.
+        let fade = get(scroll, "--chartml-table-fade").unwrap();
         assert_eq!(
-            core_rules, leptos_rules,
-            "the fade rules must be identical in packages/core/src/chartml.css and \
-             crates/chartml-leptos/style/chartml.css"
+            fade,
+            "clamp(0px, calc((var(--chartml-table-columns-min) - 100cqw) * 1000), 32px)"
         );
+        // The estimate has no dependency on layout: the same spec renders the
+        // same expression, and the single-column case (no fade possible) has
+        // the identical minimum expression.
+        let single = cfg("type: table\ncolumns: month");
+        let el = TableRenderer::new().render(&data(), &single).unwrap();
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        assert!(get(scroll, "--chartml-table-min-1").unwrap().ends_with("+ 12px + 12px)"));
     }
 
     #[test]
@@ -3459,11 +3469,8 @@ style:
         }
         let el = wide();
         walk(&el);
-        // No viewport units, and no CSS `%`-of-scrollport overflow estimate
-        // either: the fade's width comes from the stylesheet's scroll
-        // timeline, so there is nothing here to go stale.
         let scroll = by_class(&el, "chartml-table-scroll")[0];
-        assert_eq!(get(scroll, "--chartml-table-fade"), None);
+        assert!(get(scroll, "--chartml-table-fade").unwrap().contains("100cqw"));
     }
 
     #[test]

@@ -403,3 +403,96 @@ fn very_narrow_leptos_default_theme() {
 fn very_narrow_svg_transparent_rows() {
     wide(Path::Svg, transparent_theme(), 240, true, false);
 }
+
+/// Regression (CHA-22 F4): a table that overflows in a narrow container and
+/// is then given a wider one must have no sideways scroll and no visible fade.
+/// A fade whose visibility depends on real scroll-time overflow stays on here,
+/// because its own width created the overflow that kept it on; the estimate
+/// cannot, because it is a function of the columns' minimums alone.
+///
+/// The two host paths resize differently — the Leptos mount reflows into the
+/// host's new width, while the SVG's `<foreignObject>` carries the size it was
+/// rendered at — so each path is re-hosted at the wider size the way a host
+/// would (a re-render for the SVG, a resize for the mounted DOM) and measured
+/// after layout settles.
+#[wasm_bindgen_test]
+fn grown_container_fits_without_a_fade() {
+    let spec = wide_spec();
+    let narrow = 375;
+    for path in [Path::Leptos, Path::Svg] {
+        let ctx = format!("{path:?}: grown from {narrow}px to fit");
+        let narrow_host = mount(path, &spec, Theme::default(), narrow);
+        let before = measure_grow(&narrow_host, None);
+        assert!(before.narrow_sideways, "{ctx}: the narrow table must scroll sideways first");
+        assert!(before.narrow_fade > 31.5, "{ctx}: fade {} at {narrow}px", before.narrow_fade);
+
+        // The width the laid-out table actually occupies (columns plus the
+        // fade's track), plus room to spare.
+        let wide = (before.needed_width + 40.0).ceil() as u32;
+        let wide_host = mount(path, &spec, Theme::default(), wide);
+        let after = measure_grow(&wide_host, Some(wide));
+        assert!(!after.narrow_sideways, "{ctx}: sideways scroll {}px at {wide}px", after.narrow_sideways_by);
+        assert!(after.narrow_fade < 0.5, "{ctx}: fade {} at {wide}px", after.narrow_fade);
+    }
+}
+
+/// Measure a freshly mounted table: whether it scrolls sideways, its fade
+/// width, and the width its columns need. `grown_to` sets the host width and
+/// the table's own SVG box, as a host that resizes its container does.
+fn measure_grow(host: &web_sys::HtmlElement, grown_to: Option<u32>) -> GrowResult {
+    let f = js_sys::Function::new_with_args(
+        "host, grownTo",
+        r#"
+        const svg = host.querySelector('svg');
+        const fo = host.querySelector('foreignObject');
+        if (grownTo != null) {
+            // Grow, then keep growing while the columns still overflow: the
+            // columns' minimums are capped against the visible width at
+            // narrow sizes, so one guess can be short.
+            let width = grownTo;
+            for (let i = 0; i < 12; i++) {
+                if (fo) { fo.setAttribute('width', width); svg.setAttribute('width', width); }
+                host.style.width = width + 'px';
+                void host.offsetWidth;
+                const s2 = host.querySelector('.chartml-table-scroll');
+                const over = s2.scrollWidth - s2.clientWidth;
+                if (over <= 0) break;
+                width += over + 8;
+            }
+        }
+        void host.offsetWidth;
+        const sc = host.querySelector('.chartml-table-scroll');
+        const fade = host.querySelector('.chartml-table-fade').getBoundingClientRect();
+        // The width the columns need: the fit box is at least the scroll
+        // area's width, so use the scroll area's own content width, which is
+        // the columns plus the fade track.
+        const columnsPlusFade = sc.scrollWidth;
+        return JSON.stringify({
+            narrowSideways: sc.scrollWidth - sc.clientWidth > 0,
+            narrowSidewaysBy: sc.scrollWidth - sc.clientWidth,
+            narrowFade: fade.width,
+            neededWidth: columnsPlusFade,
+        });
+        "#,
+    );
+    let grown = match grown_to {
+        Some(width) => JsValue::from(width),
+        None => JsValue::NULL,
+    };
+    let json = f
+        .call2(&JsValue::NULL, host, &grown)
+        .expect("grow measurement runs")
+        .as_string()
+        .expect("JSON string");
+    serde_json::from_str(&json).expect("grow result parses")
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct GrowResult {
+    narrow_sideways: bool,
+    narrow_sideways_by: f64,
+    narrow_fade: f64,
+    needed_width: f64,
+}
+

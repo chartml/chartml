@@ -270,29 +270,6 @@
 }
 .chartml-table-pager    { background: var(--chartml-table-header-bg, #f9fafb); }
 .chartml-table-pager-info { color: var(--chartml-text-secondary, #6b7280); }
-/* The right-edge fade: its track is `--chartml-table-fade`, 0 while the
- * table fits and one fade width while columns are hidden to the right. A
- * scroll-driven animation on the scroll area (the scroller itself) sets it
- * from real inline overflow, so padding a host applies through
- * `--chartml-table-cell-padding` is accounted for. Without scroll-timeline
- * support the track stays 0: the table still scrolls, only the hint is off. */
-@property --chartml-table-fade {
-    syntax: "<length>";
-    inherits: true;
-    initial-value: 0px;
-}
-@keyframes chartml-table-fade-on {
-    from,
-    to {
-        --chartml-table-fade: 32px;
-    }
-}
-@supports (animation-timeline: scroll(self inline)) {
-    .chartml-table-scroll {
-        animation: chartml-table-fade-on 1ms linear both;
-        animation-timeline: scroll(self inline);
-    }
-}
 .chartml-table-scroll {
     scrollbar-width: thin;
     scrollbar-color: var(--chartml-table-border, #e5e7eb) transparent;
