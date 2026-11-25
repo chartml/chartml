@@ -1506,9 +1506,10 @@ impl CellPlacement {
 ///
 /// Cell padding comes from `--chartml-table-cell-padding`, with the theme's
 /// `table_cell_padding` as its default — the same way every other
-/// `--chartml-table-*` token is read. The last cell's extra right inset
-/// keeps its content clear of the fade's strip; it is based on the theme's
-/// right padding, as are the column-width measurements (see `render`).
+/// `--chartml-table-*` token is read. The last cell is as wide as its column
+/// plus the fade's strip (so its border runs to the row's end); a transparent
+/// right border of the strip's width keeps its content clear of the strip
+/// without overriding the padding token.
 fn cell_style(
     place: &CellPlacement,
     theme: &Theme,
@@ -1526,10 +1527,7 @@ fn cell_style(
         ("border-bottom", border_bottom),
     ]);
     if place.last {
-        // The last cell reaches under the fade's strip so its border runs to
-        // the row's end; its content stays clear of the strip.
-        let (_, right) = horizontal_padding(&theme.table_cell_padding);
-        map.insert("padding-right".into(), format!("calc({right} + {fade_width})"));
+        map.insert("border-right".into(), format!("{fade_width} solid transparent"));
     }
     map
 }
@@ -2988,12 +2986,13 @@ visualize:
             let cells = real_cells(row);
             for cell in &cells {
                 assert_eq!(get(cell, "padding"), Some("var(--chartml-table-cell-padding, 8px 12px)"));
+                assert_eq!(get(cell, "padding-right"), None, "the token must control every side");
             }
-            // The fade clearance on the last cell's right side is added to
-            // the theme's right padding; the shorthand above still applies.
+            // The fade clearance is a transparent border on the last cell, so
+            // the padding token still applies to its right side.
             assert_eq!(
-                get(cells.last().unwrap(), "padding-right"),
-                Some("calc(12px + var(--chartml-table-fade))")
+                get(cells.last().unwrap(), "border-right"),
+                Some("var(--chartml-table-fade) solid transparent")
             );
         }
         // A host theme that sets its own padding provides that fallback.
@@ -3001,11 +3000,9 @@ visualize:
         config.theme.table_cell_padding = "4px 6px".into();
         let el = TableRenderer::new().render(&data(), &config).unwrap();
         for row in header_and_rows(&el) {
-            let cells = real_cells(row);
-            assert_eq!(get(cells[0], "padding"), Some("var(--chartml-table-cell-padding, 4px 6px)"));
             assert_eq!(
-                get(cells.last().unwrap(), "padding-right"),
-                Some("calc(6px + var(--chartml-table-fade))")
+                get(real_cells(row)[0], "padding"),
+                Some("var(--chartml-table-cell-padding, 4px 6px)")
             );
         }
     }
