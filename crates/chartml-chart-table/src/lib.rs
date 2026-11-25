@@ -3035,7 +3035,11 @@ visualize:
         let page_size = &schema["definitions"]["Style"]["properties"]["pageSize"];
         assert_eq!(page_size["type"], "integer");
         assert_eq!(page_size["minimum"], 1);
-        assert_eq!(page_size["default"], 50);
+        assert_eq!(
+            page_size["default"].as_u64(),
+            Some(DEFAULT_PAGE_SIZE as u64),
+            "the schema default must match the renderer's default page size"
+        );
 
         // Render proof for the documented column properties and pageSize: a
         // spec setting every one produces a header label, a fixed track, an
