@@ -3091,14 +3091,27 @@ visualize:
         }
     }
 
-    const SCHEMA: &str = include_str!("../../../docs/docs/public/chartml_schema.json");
+    /// Read a workspace file at test time. The paths are relative to this
+    /// crate; reading them at run time (not with `include_str!`) keeps the
+    /// crate compilable when it is packaged, where the workspace files are
+    /// not shipped.
+    fn workspace_file(relative: &str) -> String {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+        std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+    }
+
+    fn schema() -> String {
+        workspace_file("../../docs/docs/public/chartml_schema.json")
+    }
 
     #[test]
     fn schema_documents_only_table_properties_the_renderer_reads() {
         // Every property the published schema documents for table columns
         // must be read by the renderer. If a documented property is added,
         // this fails until the renderer (and the render proof below) covers it.
-        let schema: serde_json::Value = serde_json::from_str(SCHEMA).expect("schema is JSON");
+        let schema_json = schema();
+        let schema: serde_json::Value = serde_json::from_str(&schema_json).expect("schema is JSON");
         let mut documented: Vec<&str> = schema["definitions"]["ColumnsObject"]["properties"]
             .as_object()
             .expect("ColumnsObject.properties")
@@ -3175,6 +3188,7 @@ style:
             "chartml-table-row",
             "chartml-table-row-alt",
             "chartml-table-cell",
+            "chartml-table-fit",
             "chartml-table-fade",
             "chartml-table-fade-line",
             "chartml-table-pager",
@@ -3306,11 +3320,10 @@ style:
         assert!(fade.contains("var(--chartml-table-columns-min) - 100cqw"), "{fade}");
         assert!(fade.ends_with("32px)"), "{fade}");
 
-        let sheets = [
-            ("packages/core", include_str!("../../../packages/core/src/chartml.css")),
-            ("chartml-leptos", include_str!("../../chartml-leptos/style/chartml.css")),
-        ];
-        for (name, css) in sheets {
+        let core_css = workspace_file("../../packages/core/src/chartml.css");
+        let leptos_css = workspace_file("../chartml-leptos/style/chartml.css");
+        let sheets = [("packages/core", core_css), ("chartml-leptos", leptos_css)];
+        for (name, css) in &sheets {
             assert!(!css.contains("--chartml-table-fade"), "{name}: no fade rules in CSS");
             assert!(!css.contains("chartml-table-fade-on"), "{name}: no fade animation");
             assert!(!css.contains("animation-timeline"), "{name}: no scroll timeline");
