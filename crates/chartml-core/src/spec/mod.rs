@@ -334,7 +334,6 @@ fonts:
     color: "#333"
   axis:
     size: 12
-    weight: 600
 legend:
   position: top
   orientation: horizontal
@@ -348,12 +347,34 @@ legend:
                 assert_eq!(style.show_dots, Some(true));
                 assert_eq!(style.stroke_width, Some(2.0));
                 let fonts = style.fonts.unwrap();
-                let title = fonts.title.unwrap();
-                assert_eq!(title.family, Some("Inter".to_string()));
-                assert_eq!(title.weight, Some(FontWeight::Text("bold".to_string())));
-                assert_eq!(fonts.axis.unwrap().weight, Some(FontWeight::Number(600.0)));
+                assert_eq!(fonts.title.unwrap().family, Some("Inter".to_string()));
                 let legend = style.legend.unwrap();
                 assert_eq!(legend.position, Some("top".to_string()));
+            }
+            other => panic!("Expected Style, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_style_component_font_weights() {
+        let yaml = r#"
+type: style
+version: 1
+name: weights
+fonts:
+  title:
+    weight: 600
+  axis:
+    weight: bold
+  dataLabel:
+    weight: "500"
+"#;
+        match unwrap_single(parse(yaml).unwrap()) {
+            Component::Style(style) => {
+                let fonts = style.fonts.unwrap();
+                assert_eq!(fonts.title.unwrap().weight, Some(FontWeight::Number(600.0)));
+                assert_eq!(fonts.axis.unwrap().weight, Some(FontWeight::Text("bold".into())));
+                assert_eq!(fonts.data_label.unwrap().weight, Some(FontWeight::Text("500".into())));
             }
             other => panic!("Expected Style, got {:?}", other),
         }
