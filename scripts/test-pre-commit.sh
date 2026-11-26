@@ -1391,6 +1391,75 @@ else
     cat "$scratch/shell-rustflags-committed.log" >&2
 fi
 
+# --- A Cargo config above the lint copy is refused -----------------------
+# Cargo reads .cargo/config.toml from every ancestor of where it runs. The lint
+# copy lives under TMPDIR, so a config above it would decide the verdict without
+# being part of the commit. CARGO_HOME is the one exception: Cargo reads it for
+# every build anyway, and refusing it would block anyone whose TMPDIR sits under
+# their home directory.
+repo="$scratch/ancestor-config"
+new_repo "$repo"
+outer="$scratch/ancestor-config-outer"
+mkdir -p "$outer/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$outer/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_ANCESTOR = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    TMPDIR="$outer" HOOK_TEST_WARN_ON_MARKER='CHA27_ANCESTOR' bash "$hook" > "$scratch/ancestor-config.log" 2>&1
+); then
+    fail 'a Cargo config above the lint copy changed the verdict'
+elif ! grep -q 'above the lint copy' "$scratch/ancestor-config.log"; then
+    fail 'the ancestor-config case was refused for the wrong reason'
+    cat "$scratch/ancestor-config.log" >&2
+else
+    pass 'a Cargo config above the lint copy is refused'
+fi
+if grep -qF "$outer/.cargo/config.toml" "$scratch/ancestor-config.log"; then
+    pass 'the refusal names the config file'
+else
+    fail 'the refusal does not name the config file'
+    cat "$scratch/ancestor-config.log" >&2
+fi
+
+# The CARGO_HOME config must not be refused: Cargo reads it for every build.
+repo="$scratch/cargo-home-config"
+new_repo "$repo"
+home="$scratch/cargo-home"
+mkdir -p "$home/.cargo"
+printf '[alias]\nnoop = "check"\n' > "$home/.cargo/config.toml"
+mkdir -p "$home/.cargo/tmpbase"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+if (
+    cd "$repo"
+    CARGO_HOME="$home/.cargo" TMPDIR="$home/.cargo/tmpbase" bash "$hook" > "$scratch/cargo-home-config.log" 2>&1
+); then
+    pass 'the CARGO_HOME config above the copy is not refused'
+else
+    fail 'the CARGO_HOME config was refused, blocking a normal developer setup'
+    cat "$scratch/cargo-home-config.log" >&2
+fi
+
+# A clean TMPDIR lints exactly as before: a committed warning is still caught.
+repo="$scratch/clean-tmpdir"
+new_repo "$repo"
+clean_tmp="$scratch/clean-tmpdir-base"
+mkdir -p "$clean_tmp"
+printf 'fn tracked() { let CHA27_CLEAN_TMPDIR = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    TMPDIR="$clean_tmp" HOOK_TEST_WARN_ON_MARKER='CHA27_CLEAN_TMPDIR' bash "$hook" > "$scratch/clean-tmpdir.log" 2>&1
+); then
+    fail 'a clean TMPDIR let a committed warning pass'
+elif grep -q 'above the lint copy' "$scratch/clean-tmpdir.log"; then
+    fail 'a clean TMPDIR was refused'
+    cat "$scratch/clean-tmpdir.log" >&2
+else
+    pass 'a clean TMPDIR lints as before'
+fi
+
 if [ "$failures" -ne 0 ]; then
     echo "ERROR: $failures pre-commit test(s) failed" >&2
     exit 1

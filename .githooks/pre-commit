@@ -284,6 +284,33 @@ fi
 snapshot_tree="$snapshot_root/tree"
 snapshot_manifest="$snapshot_tree/Cargo.toml"
 
+# Cargo reads .cargo/config.toml from every ancestor of the directory it runs
+# in, and the lint copy sits under TMPDIR, so a config above the copy would
+# decide the verdict without being part of the commit. The commit's own config
+# is already inside the copy, so anything above it is refused. CARGO_HOME is the
+# exception: Cargo reads that for every build the developer runs anyway, and
+# refusing it would block anyone whose TMPDIR sits under their home directory.
+cargo_home=${CARGO_HOME:-$HOME/.cargo}
+cargo_home=$(cd -- "$cargo_home" 2>/dev/null && pwd -P) || cargo_home=''
+ancestor=$(cd -- "$snapshot_root" && pwd -P) || ancestor=''
+while [ -n "$ancestor" ] && [ "$ancestor" != "/" ]; do
+    ancestor=$(dirname -- "$ancestor")
+    for ancestor_config in "$ancestor/.cargo/config.toml" "$ancestor/.cargo/config"; do
+        [ -f "$ancestor_config" ] || continue
+        resolved_config=$(cd -- "$(dirname -- "$ancestor_config")" && pwd -P)/$(basename -- "$ancestor_config") || resolved_config=$ancestor_config
+        case "$resolved_config" in
+            "$cargo_home"/*) continue ;;
+        esac
+        echo ""
+        echo "❌ A Cargo config above the lint copy would decide this commit's verdict:"
+        echo "   $resolved_config"
+        echo "   It is not part of the commit, so the hook cannot lint the commit's own"
+        echo "   content reliably. Move TMPDIR somewhere with no .cargo directory above"
+        echo "   it, or remove that file, and commit again."
+        exit 1
+    done
+done
+
 echo "🔍 Running cargo clippy on the committed content..."
 echo "   lint copy:  $snapshot_tree"
 echo "   target dir: $target_dir"
