@@ -1391,6 +1391,230 @@ else
     cat "$scratch/shell-rustflags-committed.log" >&2
 fi
 
+# --- A Cargo config above the lint copy is refused -----------------------
+# Cargo reads .cargo/config.toml from every ancestor of where it runs. The lint
+# copy lives under TMPDIR, so a config above it would decide the verdict without
+# being part of the commit. CARGO_HOME is the one exception: Cargo reads it for
+# every build anyway, and refusing it would block anyone whose TMPDIR sits under
+# their home directory.
+repo="$scratch/ancestor-config"
+new_repo "$repo"
+outer="$scratch/ancestor-config-outer"
+mkdir -p "$outer/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$outer/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_ANCESTOR = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    TMPDIR="$outer" HOOK_TEST_WARN_ON_MARKER='CHA27_ANCESTOR' bash "$hook" > "$scratch/ancestor-config.log" 2>&1
+); then
+    fail 'a Cargo config above the lint copy changed the verdict'
+elif ! grep -q 'above the lint copy' "$scratch/ancestor-config.log"; then
+    fail 'the ancestor-config case was refused for the wrong reason'
+    cat "$scratch/ancestor-config.log" >&2
+else
+    pass 'a Cargo config above the lint copy is refused'
+fi
+# Following the advice in the message must work: after TMPDIR moves, the same
+# repository commits again and the refused copy is gone.
+printf 'fn tracked() {}\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+moved_tmp="$scratch/ancestor-config-moved"
+mkdir -p "$moved_tmp"
+if (
+    cd "$repo"
+    TMPDIR="$moved_tmp" bash "$hook" > "$scratch/ancestor-config-moved.log" 2>&1
+) && [ -z "$(find "$outer" -maxdepth 1 -name 'chartml-pre-commit.*' 2>/dev/null)" ]; then
+    pass 'after TMPDIR moves, the refusal clears and the refused copy is removed'
+else
+    fail 'the refusal persisted after TMPDIR moved, or left its copy behind'
+    cat "$scratch/ancestor-config-moved.log" >&2
+fi
+if grep -qF "$outer/.cargo/config.toml" "$scratch/ancestor-config.log"; then
+    pass 'the refusal names the config file'
+else
+    fail 'the refusal does not name the config file'
+    cat "$scratch/ancestor-config.log" >&2
+fi
+
+# The CARGO_HOME config must not be refused: Cargo reads it for every build.
+repo="$scratch/cargo-home-config"
+new_repo "$repo"
+home="$scratch/cargo-home"
+mkdir -p "$home/.cargo"
+printf '[alias]\nnoop = "check"\n' > "$home/.cargo/config.toml"
+mkdir -p "$home/.cargo/tmpbase"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+if (
+    cd "$repo"
+    CARGO_HOME="$home/.cargo" TMPDIR="$home/.cargo/tmpbase" bash "$hook" > "$scratch/cargo-home-config.log" 2>&1
+); then
+    pass 'the CARGO_HOME config above the copy is not refused'
+else
+    fail 'the CARGO_HOME config was refused, blocking a normal developer setup'
+    cat "$scratch/cargo-home-config.log" >&2
+fi
+
+# A symlinked CARGO_HOME (dotfile managers do this) is still CARGO_HOME.
+real_home="$scratch/cargo-home-real"
+link_home="$scratch/cargo-home-link"
+mkdir -p "$real_home" "$link_home"
+printf '[alias]\nnoop = "check"\n' > "$real_home/config.toml"
+ln -s "$real_home" "$link_home/.cargo"
+repo="$scratch/cargo-home-symlink"
+new_repo "$repo"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+if (
+    cd "$repo"
+    CARGO_HOME="$link_home/.cargo" TMPDIR="$link_home" bash "$hook" > "$scratch/cargo-home-symlink.log" 2>&1
+); then
+    pass 'a symlinked CARGO_HOME config above the copy is not refused'
+else
+    fail 'a symlinked CARGO_HOME config was refused'
+    cat "$scratch/cargo-home-symlink.log" >&2
+fi
+
+# The commit's own .cargo/config.toml lives inside the copy, not above it: it
+# applies as in CI and is never refused.
+repo="$scratch/own-config"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_OWN_CONFIG = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+own_tmp="$scratch/own-config-base"
+mkdir -p "$own_tmp"
+# Run once so the next run reuses a copy that already holds the config.
+(
+    cd "$repo"
+    TMPDIR="$own_tmp" bash "$hook" > /dev/null 2>&1
+) || true
+if (
+    cd "$repo"
+    TMPDIR="$own_tmp" HOOK_TEST_WARN_ON_MARKER='CHA27_OWN_CONFIG' bash "$hook" > "$scratch/own-config.log" 2>&1
+) && ! grep -q 'above the lint copy' "$scratch/own-config.log"; then
+    pass "a commit's own .cargo/config.toml is applied, not refused"
+else
+    fail "a commit's own .cargo/config.toml was refused or ignored"
+    cat "$scratch/own-config.log" >&2
+fi
+
+# An unresolvable CARGO_HOME exempts nothing: the ancestor config is still refused.
+repo="$scratch/ancestor-config-nohome"
+new_repo "$repo"
+printf 'fn tracked() { let CHA27_NOHOME = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    CARGO_HOME="$scratch/does-not-exist" TMPDIR="$outer" HOOK_TEST_WARN_ON_MARKER='CHA27_NOHOME' bash "$hook" > "$scratch/ancestor-config-nohome.log" 2>&1
+); then
+    fail 'an unresolvable CARGO_HOME exempted an ancestor config'
+elif grep -q 'above the lint copy' "$scratch/ancestor-config-nohome.log"; then
+    pass 'an unresolvable CARGO_HOME exempts nothing'
+else
+    fail 'the unresolvable-CARGO_HOME case was refused for the wrong reason'
+    cat "$scratch/ancestor-config-nohome.log" >&2
+fi
+
+# The legacy .cargo/config name is refused too, and so is a config in a
+# directory that is not CARGO_HOME even when CARGO_HOME exists.
+legacy="$scratch/ancestor-config-legacy"
+mkdir -p "$legacy/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$legacy/.cargo/config"
+repo="$scratch/ancestor-config-legacy-repo"
+new_repo "$repo"
+printf 'fn tracked() { let CHA27_LEGACY = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    CARGO_HOME="$home/.cargo" TMPDIR="$legacy" HOOK_TEST_WARN_ON_MARKER='CHA27_LEGACY' bash "$hook" > "$scratch/ancestor-config-legacy.log" 2>&1
+); then
+    fail 'a legacy .cargo/config above the lint copy changed the verdict'
+elif grep -qF "$legacy/.cargo/config" "$scratch/ancestor-config-legacy.log"; then
+    pass 'a legacy .cargo/config above the lint copy is refused'
+else
+    fail 'the legacy-config case was refused for the wrong reason'
+    cat "$scratch/ancestor-config-legacy.log" >&2
+fi
+
+# The hook deletes only copies it made: a pointer with a ".." component that
+# leads out of a chartml-pre-commit.* directory must never be followed or removed.
+repo="$scratch/pointer-escape"
+new_repo "$repo"
+victim="$scratch/pointer-escape-victim"
+mkdir -p "$victim/tree" "$scratch/pointer-escape-base/chartml-pre-commit.fake"
+printf 'keep\n' > "$victim/tree/keep.txt"
+git_dir=$(git -C "$repo" rev-parse --absolute-git-dir)
+mkdir -p "$git_dir/chartml-pre-commit"
+printf '%s\n' "$scratch/pointer-escape-base/chartml-pre-commit.fake/../../pointer-escape-victim" > "$git_dir/chartml-pre-commit/snapshot-dir"
+printf 'fn tracked() {}\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+(
+    cd "$repo"
+    TMPDIR="$outer" bash "$hook" > "$scratch/pointer-escape.log" 2>&1
+) || true
+if [ -f "$victim/tree/keep.txt" ]; then
+    pass 'a pointer that escapes its chartml-pre-commit directory is not followed or deleted'
+else
+    fail 'the hook deleted a directory outside its own lint copies'
+fi
+
+# A subpath of a chartml-pre-commit.* directory, and a trailing-slash symlink to
+# a directory, are not the hook's own copies either.
+for escape in sub link; do
+    repo="$scratch/pointer-$escape"
+    new_repo "$repo"
+    victim="$scratch/pointer-$escape-victim"
+    mkdir -p "$victim/precious" "$scratch/pointer-$escape-base/chartml-pre-commit.abcdef"
+    printf 'keep\n' > "$victim/precious/keep.txt"
+    printf 'keep\n' > "$scratch/pointer-$escape-base/chartml-pre-commit.abcdef/keep.txt"
+    ln -s "$victim" "$scratch/pointer-$escape-base/chartml-pre-commit.linkxx"
+    git_dir=$(git -C "$repo" rev-parse --absolute-git-dir)
+    mkdir -p "$git_dir/chartml-pre-commit"
+    if [ "$escape" = sub ]; then
+        pointed="$scratch/pointer-$escape-base/chartml-pre-commit.abcdef/precious-sub"
+        mkdir -p "$pointed"
+        printf 'keep\n' > "$pointed/keep.txt"
+    else
+        pointed="$scratch/pointer-$escape-base/chartml-pre-commit.linkxx/"
+    fi
+    printf '%s\n' "$pointed" > "$git_dir/chartml-pre-commit/snapshot-dir"
+    printf 'fn tracked() {}\n' > "$repo/tracked.rs"
+    git -C "$repo" add tracked.rs
+    (
+        cd "$repo"
+        TMPDIR="$outer" bash "$hook" > "$scratch/pointer-$escape.log" 2>&1
+    ) || true
+    # Reuse would make the hook build its lint tree inside the pointed directory.
+    if [ -f "$victim/precious/keep.txt" ] && [ ! -e "$victim/tree" ] && [ ! -e "$pointed/tree" ] &&
+        { [ "$escape" = link ] || [ -f "$pointed/keep.txt" ]; }; then
+        pass "a $escape pointer that is not a bare mktemp copy is neither reused nor deleted"
+    else
+        fail "the hook deleted something that was not its own lint copy ($escape)"
+    fi
+done
+
+# A clean TMPDIR lints exactly as before: a committed warning is still caught.
+repo="$scratch/clean-tmpdir"
+new_repo "$repo"
+clean_tmp="$scratch/clean-tmpdir-base"
+mkdir -p "$clean_tmp"
+printf 'fn tracked() { let CHA27_CLEAN_TMPDIR = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    TMPDIR="$clean_tmp" HOOK_TEST_WARN_ON_MARKER='CHA27_CLEAN_TMPDIR' bash "$hook" > "$scratch/clean-tmpdir.log" 2>&1
+); then
+    fail 'a clean TMPDIR let a committed warning pass'
+elif grep -q 'above the lint copy' "$scratch/clean-tmpdir.log"; then
+    fail 'a clean TMPDIR was refused'
+    cat "$scratch/clean-tmpdir.log" >&2
+else
+    pass 'a clean TMPDIR lints as before'
+fi
+
 if [ "$failures" -ne 0 ]; then
     echo "ERROR: $failures pre-commit test(s) failed" >&2
     exit 1
