@@ -41,9 +41,7 @@ jobs:
 
       - name: Build docs
         working-directory: docs
-        run: |
-          npm install --legacy-peer-deps
-          npm run docs:build
+        run: npm run docs:build
 
       - name: Deploy
         run: |
