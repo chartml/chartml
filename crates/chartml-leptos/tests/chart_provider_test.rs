@@ -297,8 +297,6 @@ fn mount_chart_with_refresh_trigger(
 /// `.chartml-svg-host`. Smoke test for the entire wiring.
 #[wasm_bindgen_test]
 async fn test_chart_fetches_via_provider() {
-    // CHA-26 red-CI proof: deliberate test-target warning; reverted in the next commit.
-    let deliberately_unused = 0;
     let root = fresh_mount_root();
     let provider = RecordingProvider::new(sample_table());
     let calls = provider.calls_handle();
