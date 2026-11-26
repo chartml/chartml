@@ -38,6 +38,11 @@
   --chartml-table-surface: #ffffff;
   --chartml-table-border: #e5e7eb;
   --chartml-table-text: #374151;
+  /* Cell padding. Lengths only — px, em or rem (or unitless 0). The table
+   * renderer measures this padding to size its columns, so a percentage is
+   * not supported: it cannot be resolved during that measurement and would
+   * make columns overlap their neighbours. A percentage fails with a clear
+   * error instead of rendering. */
   --chartml-table-cell-padding: 8px 12px;
   --chartml-table-font-size: 13px;
 }

@@ -279,6 +279,12 @@ pub struct Theme {
     /// Text color for body cells.
     pub table_text: String,
     /// CSS shorthand padding for body cells (e.g. `"8px 12px"`).
+    ///
+    /// The table renderer measures this padding to size its columns, so only
+    /// absolute lengths are supported: `px`, `em` and `rem` (and unitless
+    /// zero). A percentage cannot be resolved where the measurement happens,
+    /// so the renderer rejects it rather than producing columns that overlap
+    /// their neighbours.
     pub table_cell_padding: String,
     /// CSS font size for table text (e.g. `"13px"`).
     pub table_font_size: String,
@@ -356,6 +362,33 @@ impl Default for Theme {
 }
 
 impl Theme {
+    /// Reject a `table_cell_padding` the table renderer cannot measure.
+    ///
+    /// Returns the offending component when any part of the shorthand is a
+    /// percentage (or another unit the renderer cannot size columns from), so
+    /// a misconfigured theme fails with a clear message instead of rendering
+    /// overlapping columns.
+    pub fn validate_table_cell_padding(&self) -> Result<(), String> {
+        for part in self.table_cell_padding.split_whitespace() {
+            let value = part.trim();
+            if value.is_empty() {
+                continue;
+            }
+            let unit = value.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == '-' || c == '+');
+            let unsupported = value.ends_with('%')
+                || !(unit.is_empty()
+                    || unit.eq_ignore_ascii_case("px")
+                    || unit.eq_ignore_ascii_case("em")
+                    || unit.eq_ignore_ascii_case("rem"));
+            if unsupported {
+                return Err(format!(
+                    "table_cell_padding: `{value}` is not a supported length; use px, em or rem (a percentage cannot size a table column)"
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Dark mode theme — matches the `chartml.css` dark-mode custom properties.
     ///
     /// Typography and shape defaults are identical to `Theme::default()`;
@@ -538,5 +571,27 @@ mod tests {
         assert_eq!(custom.dot_radius, 5.0);
         assert_eq!(custom.title_font_size, 14.0);
         assert_eq!(custom.axis_line, "#374151");
+    }
+}
+
+#[cfg(test)]
+mod table_cell_padding_tests {
+    use super::Theme;
+
+    #[test]
+    fn accepts_length_units() {
+        for padding in ["8px 12px", "8px", "0", "10px 20px 4px 6px", "0.5em", "1rem 2rem", "8PX 12px"] {
+            let theme = Theme { table_cell_padding: padding.into(), ..Theme::default() };
+            assert!(theme.validate_table_cell_padding().is_ok(), "{padding} must be accepted");
+        }
+    }
+
+    #[test]
+    fn rejects_percentages_and_unmeasurable_units() {
+        for padding in ["0 50%", "10% 20%", "8px 12%", "2vw 3px", "1in 1px"] {
+            let theme = Theme { table_cell_padding: padding.into(), ..Theme::default() };
+            let err = theme.validate_table_cell_padding().expect_err(padding);
+            assert!(err.contains("not a supported length"), "{padding}: {err}");
+        }
     }
 }

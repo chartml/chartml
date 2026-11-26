@@ -243,6 +243,12 @@
 }
 
 /* ── Table chart ──
+ *
+ * `--chartml-table-cell-padding` takes lengths only — px, em or rem (or
+ * unitless 0). The renderer measures that padding to size its columns, so a
+ * percentage is not supported: it cannot be resolved during the measurement
+ * and would make columns overlap their neighbours; the renderer rejects it.
+ *
  * The Rust renderer emits inline `style` on table elements with CSS custom
  * property values (e.g. `color: var(--chartml-table-text, #hex)`). These class
  * rules below are NOT needed for the inline-style override to work — they exist

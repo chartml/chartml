@@ -1688,6 +1688,13 @@ impl ChartRenderer for TableRenderer {
         // the viewport: `em` resolves where a property is used (rows and the
         // body carry the table font) and `100cqw` is the scroll area's visible
         // width (it is an inline-size container for everything inside it).
+        // Column sizes are measured from this padding, so a percentage (or any
+        // unit the measurement cannot resolve) is rejected here rather than
+        // rendered as columns that overlap their neighbours. The published
+        // token's contract is lengths only: px, em and rem.
+        theme
+            .validate_table_cell_padding()
+            .map_err(ChartError::InvalidSpec)?;
         let (pad_left, pad_right) = horizontal_padding(&theme.table_cell_padding);
         let header = header_text(theme);
         let texts: Vec<ColumnText> = columns
@@ -3395,6 +3402,31 @@ style:
         let el = TableRenderer::new().render(&data(), &single).unwrap();
         let scroll = by_class(&el, "chartml-table-scroll")[0];
         assert!(get(scroll, "--chartml-table-min-1").unwrap().ends_with("+ 12px + 12px)"));
+    }
+
+    #[test]
+    fn percentage_cell_padding_is_rejected_not_rendered_as_overlap() {
+        // Columns are sized from this padding, and a percentage cannot be
+        // resolved where that measurement happens, so it would render cells
+        // wider than their tracks. The token's documented contract is lengths
+        // only (px, em, rem), and anything else fails with a clear error.
+        for padding in ["0 50%", "8px 12%", "10% 20%"] {
+            let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+            config.theme.table_cell_padding = padding.into();
+            let err = TableRenderer::new()
+                .render(&data(), &config)
+                .expect_err("a percentage padding must not render");
+            assert!(
+                matches!(&err, ChartError::InvalidSpec(msg) if msg.contains("not a supported length")),
+                "{padding}: got {err:?}"
+            );
+        }
+        // Supported lengths render.
+        for padding in ["8px 12px", "0.5em", "1rem 2rem"] {
+            let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+            config.theme.table_cell_padding = padding.into();
+            assert!(TableRenderer::new().render(&data(), &config).is_ok(), "{padding}");
+        }
     }
 
     #[test]
