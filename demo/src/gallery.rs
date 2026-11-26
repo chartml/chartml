@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 
 // ─── Specs copied verbatim from chartml JS examples page ───
-// Source: docs/docs/examples.md in the chartml JS repository
+// Source: docs/docs/examples.md
 // Only charts with inline data (no named sources / transforms in v0.1)
 
 pub const DEFAULT_SPEC: &str = r##"type: chart
