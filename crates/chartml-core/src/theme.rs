@@ -395,7 +395,7 @@ impl Theme {
                 "table_header_letter_spacing: `{value}` is not a supported letter-spacing; use `normal`, `0`, or a number in em, % or px (px needs a px table_font_size). Viewport units, rem, ch and calc() cannot be measured on the server"
             )
         };
-        if value == "normal" {
+        if value.eq_ignore_ascii_case("normal") {
             return Ok(0.0);
         }
         let (sign, unsigned) = match value.as_bytes().first() {
@@ -423,6 +423,7 @@ impl Theme {
             let font_px = self
                 .table_font_size
                 .trim()
+                .to_ascii_lowercase()
                 .strip_suffix("px")
                 .and_then(|f| f.trim().parse::<f64>().ok())
                 .filter(|f| *f > 0.0);
@@ -774,6 +775,7 @@ mod table_header_letter_spacing_tests {
         // the same width as 0.1em and, at 13px, 1.3px).
         for (spacing, font, expected) in [
             ("normal", "13px", 0.0),
+            ("NORMAL", "13px", 0.0),
             (" normal ", "13px", 0.0),
             ("0", "13px", 0.0),
             ("0.0", "13px", 0.0),
@@ -788,6 +790,7 @@ mod table_header_letter_spacing_tests {
             ("1.3px", "13px", 0.1),
             ("-1.3px", "13px", -0.1),
             ("2px", "20px", 0.1),
+            ("1.3PX", "13PX", 0.1),
             ("0px", "13px", 0.0),
             ("0.1em", "0.8rem", 0.1),
             ("10%", "1rem", 0.1),

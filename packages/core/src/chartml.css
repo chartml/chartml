@@ -47,6 +47,12 @@
    * validated: it reaches the browser as written. */
   --chartml-table-cell-padding: 8px 12px;
   --chartml-table-font-size: 13px;
+  /* Header letter-spacing (--chartml-table-header-letter-spacing, set by the
+   * renderer from the theme): `normal`, unitless 0, or a number in em, % (of
+   * the header's own font size: 10% is 0.1em) or px (px needs a px table font
+   * size). The renderer resolves it to a number on the server to size header
+   * columns, so viewport units, rem, ch and calc() are rejected with an error
+   * on the theme value. A host override of the variable is never validated. */
 }
 
 .dark {
