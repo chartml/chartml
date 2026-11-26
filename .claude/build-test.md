@@ -9,14 +9,20 @@
 - Serve for testing: trunk serve --address 0.0.0.0 --port 8642 &>/tmp/chartml-demo.log &
 
 ## Test Commands
-- Rust unit tests (as CI): cargo test --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion
-- Lint (as CI): cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion -- -D warnings
+- CI commands (source of truth: .github/workflows/ci.yml; see "Checks CI runs" in CONTRIBUTING.md):
+  - Rust unit tests: cargo test --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion
+  - Clippy lane 1: cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion --all-targets -- -D warnings
+  - Clippy lane 2: cargo clippy -p chartml-core --all-targets --target wasm32-unknown-unknown --features wasm-indexeddb -- -D warnings
+  - Clippy lane 3: cargo clippy -p chartml-leptos -p chartml-wasm -p chartml-wasm-datafusion --all-targets --target wasm32-unknown-unknown -- -D warnings
+  - Browser tests (headless Chrome): see "Running the browser tests locally" in CONTRIBUTING.md
+  - Markdown fences: python3 scripts/tests/test_check_md_fences.py && python3 scripts/check-md-fences.py docs
+  - Docs charts: npm run docs:build && python3 scripts/tests/test_check_docs_chart_errors.py && python3 scripts/check-docs-chart-errors.py
 - Golden baseline tests: cargo run -p chartml-test-runner
 - npm/WASM tests: npm run test
 
 ## Verification
 - Run cargo check --workspace before every commit
-- Run the Rust unit test command above to verify no regressions
+- Run the CI commands above that cover your change to verify no regressions
 - For chart rendering changes: run chartml-test-runner to verify golden baselines
 - For WASM/npm changes: run npm run test
 - Post verification report as Trakkt ticket comment

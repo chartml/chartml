@@ -69,21 +69,95 @@ git config core.hooksPath .githooks
 # Run JS/WASM tests
 npm test
 
-# Run Rust tests (exactly what CI runs)
-cargo test --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion
-
-# Lint (exactly what CI runs)
-cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion -- -D warnings
-
-# Pre-commit hook outcomes (CI runs this in the lint-policy job)
-bash scripts/test-pre-commit.sh
-
-# Packed @chartml/core style.css check (CI runs this after building WASM)
-bash scripts/check-npm-pack.sh
-
 # Start documentation site
 cd docs && npm run docs:dev
 ```
+
+### Checks CI runs
+
+`.github/workflows/ci.yml` is the source of truth. If anything below differs from it, ci.yml wins; please fix this section. Each command is listed under the CI job that runs it. Run them from the repository root.
+
+**Lint Suppression Policy** (pull requests only)
+
+```bash
+bash scripts/test-pre-commit.sh
+python3 scripts/tests/test_check_md_fences.py
+python3 scripts/check-md-fences.py docs
+```
+
+The job also rejects any new `#[allow(` in `.rs` files and any new `= "allow"` in `Cargo.toml` files in your diff.
+
+**Clippy**
+
+```bash
+cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion --all-targets -- -D warnings
+cargo clippy -p chartml-core --all-targets --target wasm32-unknown-unknown --features wasm-indexeddb -- -D warnings
+cargo clippy -p chartml-leptos -p chartml-wasm -p chartml-wasm-datafusion --all-targets --target wasm32-unknown-unknown -- -D warnings
+```
+
+**Rust Tests**
+
+```bash
+cargo test --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion
+```
+
+The same job then runs four browser (`wasm-bindgen-test`) suites in headless Chrome; see [Running the browser tests locally](#running-the-browser-tests-locally).
+
+**WASM Build**
+
+```bash
+npm ci
+bash packages/core/build.sh
+bash packages/datafusion/build.sh
+bash scripts/check-npm-pack.sh
+npm run docs:build
+python3 scripts/tests/test_check_docs_chart_errors.py
+python3 scripts/check-docs-chart-errors.py
+```
+
+### Running the browser tests locally
+
+The `wasm_bindgen_test` suites only run in a real browser. CI pins a runner, Chrome and chromedriver; locally you need the same pieces:
+
+1. A `wasm-bindgen-test-runner` that exactly matches the `wasm-bindgen` version in `Cargo.lock`:
+
+   ```bash
+   WASM_BINDGEN_VERSION="$(cargo metadata --locked --format-version 1 \
+     | python3 -c 'import json, sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "wasm-bindgen"))')"
+   cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+   ```
+
+2. [Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/) and its matching chromedriver. CI uses version `158.0.8127.88` (`CHROME_VERSION` in ci.yml); pick the `mac-arm64`, `mac-x64` or `linux64` download for your machine.
+
+3. A WebDriver config that starts Chrome headless. Point `binary` at your Chrome for Testing executable. On macOS also add `--use-mock-keychain` and `--password-store=basic` to `args`, or Chrome asks for keychain access.
+
+   ```bash
+   cat > /tmp/chartml-webdriver.json <<'JSON'
+   {
+     "goog:chromeOptions": {
+       "binary": "/path/to/chrome-for-testing/chrome",
+       "args": ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+     }
+   }
+   JSON
+   ```
+
+4. Run the suites with the same environment as CI. A suite with no tests exits 0, so check that each reports the passing count below:
+
+   ```bash
+   export CHROMEDRIVER=/path/to/chromedriver
+   export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner
+   export WASM_BINDGEN_TEST_TIMEOUT=120
+   export WASM_BINDGEN_TEST_DRIVER_TIMEOUT=30
+   export WASM_BINDGEN_TEST_WEBDRIVER_JSON=/tmp/chartml-webdriver.json
+
+   cargo test --target wasm32-unknown-unknown -p chartml-wasm --test web                                          # 12 tests
+   cargo test --target wasm32-unknown-unknown -p chartml-leptos --test table_layout_test                           # 9 tests
+   cargo test --target wasm32-unknown-unknown -p chartml-leptos --test chart_provider_test                         # 6 tests
+   cargo test --target wasm32-unknown-unknown -p chartml-core --features wasm-indexeddb --test indexeddb_test      # 7 tests
+   ```
+
+   The expected counts live in `run_suite` calls in ci.yml and change when a suite gains or loses a test.
 
 ## Project Structure
 
@@ -142,7 +216,7 @@ git checkout -b fix/bug-description
 ### 3. Test Your Changes
 
 ```bash
-# Run tests for all packages
+# Run JS tests for all packages
 npm test
 
 # Run tests for specific package
@@ -152,6 +226,8 @@ npm test
 # Build to ensure no errors
 npm run build
 ```
+
+Before opening a pull request, run the commands under [Checks CI runs](#checks-ci-runs) that cover what you changed.
 
 ### 4. Update Documentation
 
