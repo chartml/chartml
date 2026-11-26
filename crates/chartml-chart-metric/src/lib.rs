@@ -268,6 +268,48 @@ mod tests {
         }
     }
 
+    /// Render a metric card with the given title/label and return the label
+    /// span's content (the card's first child).
+    fn rendered_label(title: Option<&str>, label: Option<&str>) -> String {
+        let label_line = label.map(|l| format!("label: \"{l}\"\n")).unwrap_or_default();
+        let viz: chartml_core::spec::VisualizeSpec =
+            serde_yaml::from_str(&format!("type: metric\nvalue: total_revenue\n{label_line}"))
+                .expect("metric VisualizeSpec YAML should parse");
+        let config = ChartConfig {
+            visualize: viz,
+            title: title.map(str::to_string),
+            width: 300.0,
+            height: 150.0,
+            colors: vec![],
+            theme: chartml_core::theme::Theme::default(),
+        };
+        let rows: Vec<Row> = vec![[("total_revenue".to_string(), json!(1234567))].into_iter().collect()];
+        let data = DataTable::from_rows(&rows).expect("DataTable::from_rows should succeed");
+        let element = MetricRenderer::new().render(&data, &config).expect("metric must render");
+        let children = match element {
+            ChartElement::Div { children, .. } => children,
+            other => panic!("root must be Div, got {other:?}"),
+        };
+        match children.first() {
+            Some(ChartElement::Span { class, content, .. }) => {
+                assert_eq!(class, "chartml-metric-label");
+                content.clone()
+            }
+            other => panic!("label child must be Span, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn metric_label_falls_back_to_the_field_name() {
+        // CHA-41: `docs/docs/spec.md` states that with neither `visualize.label`
+        // nor a chart title the card shows the value field's name as its label.
+        assert_eq!(rendered_label(None, None), "total_revenue");
+        // Precedence the spec documents: label, then title, then field name.
+        assert_eq!(rendered_label(Some("Q3"), None), "Q3");
+        assert_eq!(rendered_label(Some("Q3"), Some("Revenue")), "Revenue");
+        assert_eq!(rendered_label(None, Some("Revenue")), "Revenue");
+    }
+
     #[test]
     fn metric_without_format_shows_the_raw_number() {
         // CHA-29: with no `visualize.format` the card prints the raw f64 via

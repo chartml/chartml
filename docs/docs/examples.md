@@ -244,12 +244,12 @@ This metric shows error rate where a decrease is positive (green) and an increas
 Metric cards support two optional label locations:
 - **`chart.title`** → Label shown **above** the card (like all chart types)
 - **`visualize.label`** → Label shown **inside** the card (metric-specific feature)
-- If neither specified → Only the formatted value is shown
+- If neither specified → The label falls back to the name of the `value` field (here `revenue`), so a card always shows a label
 
 **Examples:**
 
 ```chartml
-# Just the number (no labels)
+# No title or label: the card shows the field name "revenue" as its label
 type: chart
 version: 1
 data:

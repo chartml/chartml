@@ -582,7 +582,7 @@ visualize:
 **Metric Labeling:**
 - `chart.title` (optional) → Label shown **above** card (consistent with all chart types)
 - `visualize.label` (optional) → Label shown **inside** card (metric-specific)
-- If neither specified, only the formatted value is shown
+- If neither is specified, the label falls back to the name of the `value` field (e.g. `total_revenue`), so a card always shows a label
 
 **Metric Value Formatting:**
 
