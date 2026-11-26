@@ -146,9 +146,41 @@ export default defineConfig({
     config: (md) => {
       // Load the Node.js WASM target synchronously (uses readFileSync internally)
       const wasm = require('@chartml/core/wasm');
-      const chartml = new wasm.WasmChartML();
+
+      // Registered components (sources, params, ...) live on a renderer. A
+      // page gets its own renderer, created when its render starts, so what
+      // one page registers can never reach another page.
+      md.core.ruler.before('normalize', 'chartml_page_renderer', (state) => {
+        state.env.chartml = new wasm.WasmChartML();
+      });
+
+      // A fence whose documents (split on `---` lines, as the renderer
+      // does, see split_yaml_documents in crates/chartml-core/src/spec/mod.rs) are all
+      // one of these types defines named components for the
+      // charts after it. Any other fence, including a mixed one, is rendered
+      // as a whole, which resolves sources defined in the same fence.
+      const COMPONENT_TYPES = new Set(['source', 'style', 'config', 'params']);
+      const documentType = (doc) => (/^type:\s*([A-Za-z_]+)/m.exec(doc) || [])[1];
+      const componentTypes = (yaml) => {
+        const types = yaml
+          .split(/^---[ \t]*$/m)
+          .filter((doc) => doc.trim() !== '')
+          .map(documentType);
+        return types.length > 0 && types.every((t) => COMPONENT_TYPES.has(t)) ? types : null;
+      };
 
       const defaultFence = md.renderer.rules.fence;
+
+      // scripts/check-docs-chart-errors.py matches the error box built here.
+      const errorBox = (e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        const escaped = msg
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+        return `<div class="chartml-chart chartml-error" style="color: #dc3545; font-family: monospace; padding: 12px; background: #fff5f5; border: 1px solid #dc3545; border-radius: 4px;">Chart error: ${escaped}</div>`;
+      };
 
       md.renderer.rules.fence = (tokens, idx, opts, env, self) => {
         const token = tokens[idx];
@@ -156,17 +188,27 @@ export default defineConfig({
 
         if (info === 'chartml' || info === 'chartml-yaml') {
           const yaml = token.content;
+          const chartml = env.chartml;
+          const types = componentTypes(yaml);
+          if (types) {
+            try {
+              chartml.registerComponent(yaml);
+              // Params always draw their controls. Source, style and config
+              // definitions draw nothing, so they are shown as highlighted YAML.
+              if (types.includes('params')) {
+                return `<div class="chartml-chart">${chartml.renderToSvg(yaml, {})}</div>`;
+              }
+            } catch (e) {
+              return errorBox(e);
+            }
+            token.info = 'yaml';
+            return defaultFence(tokens, idx, opts, env, self);
+          }
           try {
             const svg = chartml.renderToSvg(yaml, {});
             return `<div class="chartml-chart">${svg}</div>`;
           } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            const escaped = msg
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;');
-            return `<div class="chartml-chart chartml-error" style="color: #dc3545; font-family: monospace; padding: 12px; background: #fff5f5; border: 1px solid #dc3545; border-radius: 4px;">Chart error: ${escaped}</div>`;
+            return errorBox(e);
           }
         }
 

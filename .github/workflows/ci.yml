@@ -185,3 +185,12 @@ jobs:
       - run: bash packages/datafusion/build.sh
       - name: Check packed @chartml/core style.css matches source
         run: bash scripts/check-npm-pack.sh
+      # The docs render every `chartml` fence at build time with the WASM
+      # package built above. A fence that fails shows a "Chart error" box in
+      # the page but does not fail the build, so scan the built pages for them.
+      - name: Build docs
+        run: npm run docs:build
+      - name: Check built docs for chart errors
+        run: |
+          python3 scripts/tests/test_check_docs_chart_errors.py
+          python3 scripts/check-docs-chart-errors.py
