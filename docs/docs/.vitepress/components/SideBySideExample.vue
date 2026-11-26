@@ -64,9 +64,6 @@ const copied = ref(false);
 const renderTime = ref(null);
 let editorView = null;
 let debounceTimeout = null;
-// Detaches the table pager controllers of the current preview (attachTablePager in @chartml/core).
-let detachPagers = [];
-let attachPager = null;
 let chartmlInstance = null;
 
 const copyCode = async () => {
@@ -119,9 +116,7 @@ async function renderPreview() {
   renderTime.value = null;
 
   try {
-    // Clear previous content (and the pagers on it)
-    detachPagers.forEach((detach) => detach());
-    detachPagers = [];
+    // Clear previous content
     previewContainer.value.innerHTML = '';
 
     // Get current editor content
@@ -137,9 +132,8 @@ async function renderPreview() {
 
     // Initialize ChartML WASM instance if needed
     if (!chartmlInstance) {
-      const { ChartML, attachTablePager } = await import('@chartml/core');
+      const { ChartML } = await import('@chartml/core');
       chartmlInstance = await ChartML.create();
-      attachPager = attachTablePager;
     }
 
     // Render each block to SVG
@@ -150,12 +144,6 @@ async function renderPreview() {
       try {
         const svg = chartmlInstance.renderToSvg(block);
         chartContainer.innerHTML = svg;
-        // A paginated table's Previous/Next buttons: render the page asked for.
-        detachPagers.push(
-          attachPager(chartContainer, (page) => {
-            chartContainer.innerHTML = chartmlInstance.renderToSvg(block, { tablePage: page });
-          })
-        );
       } catch (err) {
         console.error('Error rendering ChartML block:', err);
         chartContainer.style.cssText = 'padding: 1rem; background: #fef2f2; color: #991b1b; border-left: 4px solid #dc2626; border-radius: 4px; margin-bottom: 1rem;';
@@ -237,8 +225,6 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  detachPagers.forEach((detach) => detach());
-  detachPagers = [];
   if (editorView) {
     editorView.destroy();
   }
