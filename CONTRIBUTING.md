@@ -55,14 +55,25 @@ npm ci
 npm run build
 ```
 
+### Enable the pre-commit hook
+
+The repo's hook rejects new `#[allow(...)]` lint suppressions and compiler/Clippy warnings, as CI does. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ### Development Workflow
 
 ```bash
 # Run JS/WASM tests
 npm test
 
-# Run Rust tests (what CI runs)
-npm run test:rust
+# Run Rust tests (exactly what CI runs)
+cargo test --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion
+
+# Lint (exactly what CI runs)
+cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion -- -D warnings
 
 # Start documentation site
 cd docs && npm run docs:dev
@@ -72,30 +83,37 @@ cd docs && npm run docs:dev
 
 ```
 chartml/
-├── packages/
-│   ├── core/              # @chartml/core - Core library
-│   ├── chart-pie/         # @chartml/chart-pie - Pie chart plugin
-│   ├── chart-scatter/     # @chartml/chart-scatter - Scatter plot plugin
-│   ├── chart-metric/      # @chartml/chart-metric - Metric card plugin
+├── crates/                # Rust crates (the rendering engine)
+│   ├── chartml-core/
+│   ├── chartml-forecast/
+│   ├── chartml-chart-cartesian/ chartml-chart-metric/ chartml-chart-pie/
+│   │   chartml-chart-scatter/ chartml-chart-table/
+│   ├── chartml-datafusion/
+│   ├── chartml-render/    # server-side SVG rendering
+│   ├── chartml-leptos/
+│   ├── chartml-wasm/ chartml-wasm-datafusion/   # WASM bindings
+│   └── chartml-test-runner/                     # golden-baseline runner
+├── packages/              # npm workspaces
+│   ├── core/              # @chartml/core - WASM bindings + JS/TS wrapper
+│   ├── datafusion/        # @chartml/datafusion - DataFusion WASM add-on
 │   ├── react/             # @chartml/react - React wrapper
-│   ├── markdown-it/       # @chartml/markdown-it - Markdown-it plugin
-│   ├── markdown-react/    # @chartml/markdown-react - React-markdown plugin
-│   └── markdown-common/   # @chartml/markdown-common - Shared utilities
+│   ├── markdown-it/       # @chartml/markdown-it - markdown-it plugin
+│   └── markdown-react/    # @chartml/markdown-react - react-markdown plugin
+├── demo/                  # Leptos demo app (trunk build)
 ├── docs/                  # VitePress documentation site
+├── tests/charts/          # YAML chart specs
+├── test-output/golden/    # golden SVG baselines
 └── README.md
 ```
 
 ### Package Dependencies
 
 ```
-core (base package)
-  ├── chart-pie (plugin)
-  ├── chart-scatter (plugin)
-  ├── chart-metric (plugin)
-  ├── react (framework integration)
-  └── markdown-common (shared utilities)
-      ├── markdown-react (framework integration)
-      └── markdown-it (framework integration)
+@chartml/core (base package)
+  ├── @chartml/datafusion (peer: core)
+  ├── @chartml/react (peer: core)
+  └── @chartml/markdown-it (peer: core)
+      └── @chartml/markdown-react (peer: core, markdown-it)
 ```
 
 ## Making Changes

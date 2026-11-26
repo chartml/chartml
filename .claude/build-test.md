@@ -1,6 +1,6 @@
 ## Worktree Setup
 - Not required — ChartML does not use worktrees for backlog work
-- Work directly in /home/jason/repos/chartml on a feature branch
+- Work on a feature branch in your checkout (any path)
 
 ## Build Commands
 - Quick check: cargo check --workspace
@@ -9,13 +9,14 @@
 - Serve for testing: trunk serve --address 0.0.0.0 --port 8642 &>/tmp/chartml-demo.log &
 
 ## Test Commands
-- Rust unit tests: cargo test --workspace
+- Rust unit tests (as CI): cargo test --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion
+- Lint (as CI): cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion -- -D warnings
 - Golden baseline tests: cargo run -p chartml-test-runner
 - npm/WASM tests: npm run test
 
 ## Verification
 - Run cargo check --workspace before every commit
-- Run cargo test --workspace to verify no regressions
+- Run the Rust unit test command above to verify no regressions
 - For chart rendering changes: run chartml-test-runner to verify golden baselines
 - For WASM/npm changes: run npm run test
 - Post verification report as Trakkt ticket comment
