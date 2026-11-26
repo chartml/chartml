@@ -16,7 +16,9 @@ use chartml_core::element::*;
 use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
 use chartml_core::plugin::{ChartConfig, ChartRenderer};
-use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec, VisualizeSpec};
+use chartml_core::spec::{
+    ColumnAlign, ColumnWidth, FieldRef, FieldRefItem, FieldSpec, VisualizeSpec,
+};
 use chartml_core::theme::{TextTransform, Theme};
 
 const DEFAULT_PAGE_SIZE: usize = 50;
@@ -49,11 +51,14 @@ const TEXT_WIDTH_SLACK: f64 = 1.05;
 /// (see `fade_cell`).
 const FADE_WIDTH_PX: u32 = 32;
 
-/// Resolved column: the source field name + display label + optional format.
+/// Resolved column: the source field name + display label + optional format,
+/// width and alignment.
 struct Column {
     field: String,
     label: String,
     format: Option<String>,
+    width: Option<ColumnWidth>,
+    align: Option<ColumnAlign>,
 }
 
 impl Column {
@@ -62,6 +67,8 @@ impl Column {
             field: field.to_string(),
             label: field.to_string(),
             format: None,
+            width: None,
+            align: None,
         }
     }
 
@@ -73,6 +80,8 @@ impl Column {
             label: spec.label.clone().unwrap_or_else(|| field.clone()),
             field,
             format: spec.format.clone(),
+            width: spec.width,
+            align: spec.align,
         })
     }
 }
@@ -1432,14 +1441,44 @@ fn word_em(word: &str, text: &str, header: &HeaderText) -> f64 {
     }
 }
 
-/// Left and right components of a CSS `padding` shorthand (1–4 values).
+/// A column's explicit CSS `text-align` value, if it sets one.
+fn align_css(align: ColumnAlign) -> &'static str {
+    match align {
+        ColumnAlign::Left => "left",
+        ColumnAlign::Center => "center",
+        ColumnAlign::Right => "right",
+    }
+}
+
+/// Left and right components of a CSS `padding` shorthand (1–4 values), as
+/// operands for `calc()`.
+///
+/// `calc()` requires a unit on every `+` operand, so a unitless zero — legal
+/// in the shorthand and accepted by
+/// [`Theme::validate_table_cell_padding`](chartml_core::theme::Theme::validate_table_cell_padding)
+/// — is normalised to `0px`. Without that, `calc(0 + 0)` is invalid CSS and
+/// the browser drops the whole declaration, taking the column minimums and
+/// the fade estimate with it.
 fn horizontal_padding(shorthand: &str) -> (String, String) {
+    fn operand(value: &str) -> String {
+        if value.parse::<f64>() == Ok(0.0) {
+            "0px".to_string()
+        } else {
+            value.to_string()
+        }
+    }
     let parts: Vec<&str> = shorthand.split_whitespace().collect();
     match parts.as_slice() {
         [] => ("0px".into(), "0px".into()),
-        [all] => ((*all).into(), (*all).into()),
-        [_, x] | [_, x, _] => ((*x).into(), (*x).into()),
-        [_, right, _, left, ..] => ((*left).into(), (*right).into()),
+        [all] => {
+            let pad = operand(all);
+            (pad.clone(), pad)
+        }
+        [_, x] | [_, x, _] => {
+            let pad = operand(x);
+            (pad.clone(), pad)
+        }
+        [_, right, _, left, ..] => (operand(left), operand(right)),
     }
 }
 
@@ -1464,46 +1503,53 @@ fn opaque_bg(colour: &str, theme: &Theme) -> String {
 }
 
 /// Grid placement of a header or body cell. Each row is its own grid with
-/// the same column tracks, so header and body always line up. The last
-/// column also spans the fade's track (see `fade_cell`).
+/// the same column tracks, so header and body always line up.
 struct CellPlacement {
     /// 1-based grid column.
     column: usize,
-    last: bool,
-    numeric: bool,
+    /// CSS `text-align` value.
+    align: &'static str,
 }
 
 impl CellPlacement {
     fn grid_column(&self) -> String {
-        if self.last {
-            format!("{} / span 2", self.column)
-        } else {
-            self.column.to_string()
-        }
+        self.column.to_string()
     }
 }
 
 /// Styles common to header and body cells.
+///
+/// Cell padding comes from `--chartml-table-cell-padding`, with the theme's
+/// `table_cell_padding` as its default — the same way every other
+/// `--chartml-table-*` token is read. An auto column's cells are
+/// `content-box` with a `min-width` for the measured text, so the padding
+/// actually applied — including a host's token override — widens the column
+/// instead of squeezing or clipping the text. A fixed column's cells are
+/// `border-box` at the declared `width`, so its padding always fits inside the
+/// column and the cell can never reach into its neighbour.
 fn cell_style(
     place: &CellPlacement,
-    padding: &str,
-    border_bottom: &str,
-    fade_width: &str,
+    theme: &Theme,
+    min_width: &str,
+    width: Option<&str>,
 ) -> HashMap<String, String> {
+    let padding = format!("var(--chartml-table-cell-padding, {})", theme.table_cell_padding);
     let mut map = style(&[
         ("grid-column", &place.grid_column()),
         ("grid-row", "1"),
-        ("min-width", "0"),
-        ("box-sizing", "border-box"),
-        ("padding", padding),
-        ("text-align", if place.numeric { "right" } else { "left" }),
-        ("border-bottom", border_bottom),
+        ("min-width", min_width),
+        ("box-sizing", "content-box"),
+        ("padding", &padding),
+        ("text-align", place.align),
     ]);
-    if place.last {
-        // The last cell reaches under the fade's strip so its border runs to
-        // the row's end; its content stays clear of the strip.
-        let (_, right) = horizontal_padding(padding);
-        map.insert("padding-right".into(), format!("calc({right} + {fade_width})"));
+    if let Some(width) = width {
+        // A fixed column: the cell is `border-box` at `width`, so its padding
+        // sits inside that box and the cell never grows past its own padding.
+        // The column's track is `max-content`, i.e. the larger of `width` and
+        // that padding, so a declared width narrower than the padding still has
+        // a track that holds it.
+        map.insert("width".into(), width.to_string());
+        map.insert("box-sizing".into(), "border-box".to_string());
     }
     map
 }
@@ -1511,7 +1557,13 @@ fn cell_style(
 /// Build a header cell. The column is sized to fit the label; should the
 /// font run wider than estimated, the label wraps (as before) rather than
 /// being cut off.
-fn header_cell(label: &str, place: &CellPlacement, theme: &Theme, fade_width: &str) -> ChartElement {
+fn header_cell(
+    label: &str,
+    place: &CellPlacement,
+    theme: &Theme,
+    min_width: &str,
+    width: Option<&str>,
+) -> ChartElement {
     let header_text_var = format!("var(--chartml-table-header-text, {})", theme.table_header_text);
     let weight_var = format!(
         "var(--chartml-table-header-font-weight, {})",
@@ -1525,7 +1577,7 @@ fn header_cell(label: &str, place: &CellPlacement, theme: &Theme, fade_width: &s
         "var(--chartml-table-header-text-transform, {})",
         theme.table_header_text_transform,
     );
-    let mut cell_style = cell_style(place, &theme.table_cell_padding, &header_border(theme), fade_width);
+    let mut cell_style = cell_style(place, theme, min_width, width);
     cell_style.extend(style(&[
         ("font-weight", &weight_var),
         ("letter-spacing", &spacing_var),
@@ -1544,9 +1596,15 @@ fn header_cell(label: &str, place: &CellPlacement, theme: &Theme, fade_width: &s
 /// fit it on one line, and a value wider than the column (beyond
 /// `MAX_MIN_TEXT_EM`, wider than the visible area, or when the font runs
 /// wider than estimated) wraps onto more lines instead of being cut off.
-fn body_cell(content: &str, place: &CellPlacement, theme: &Theme, fade_width: &str) -> ChartElement {
+fn body_cell(
+    content: &str,
+    place: &CellPlacement,
+    theme: &Theme,
+    min_width: &str,
+    width: Option<&str>,
+) -> ChartElement {
     let text_var = format!("var(--chartml-table-text, {})", theme.table_text);
-    let mut cell_style = cell_style(place, &theme.table_cell_padding, &body_border(theme), fade_width);
+    let mut cell_style = cell_style(place, theme, min_width, width);
     cell_style.extend(style(&[
         ("color", &text_var),
         ("overflow-wrap", "anywhere"),
@@ -1562,15 +1620,16 @@ fn body_cell(content: &str, place: &CellPlacement, theme: &Theme, fade_width: &s
 /// track, held at the right edge of the visible area (sticky) while columns
 /// are hidden to the right. It takes the row's current, opaque background
 /// (`inherit`, so a consumer's hover shows) masked from transparent to
-/// solid, and stops 1px short of the row's bottom so the cells' border lines
-/// are never faded.
+/// solid. Its 1px bottom margin leaves the row's bottom rule uncovered, so
+/// the rule is never faded (the row draws that rule; the fade sits inside
+/// the row's box, where a grid item cannot reach it).
 ///
-/// The track is `fade_width` wide: `FADE_WIDTH_PX` while the columns at
-/// their minimum are wider than the scroll area (the table scrolls), 0
-/// otherwise (nothing overflows, nothing is drawn and no width is taken
-/// from the columns). Scrolled to the right end, the fade sits over its own
-/// strip, which holds only the last cell's extra padding, so it covers no
-/// content.
+/// The track's width is `--chartml-table-fade`, computed by `render` from the
+/// columns' estimated minimums: `FADE_WIDTH_PX` while the columns at their
+/// minimum are wider than the scroll area (the table scrolls), 0 otherwise
+/// (nothing overflows, nothing is drawn and no width is taken from the
+/// columns). Scrolled to the right end the fade is held over the row's own
+/// empty strip, so it covers no text and no cell.
 fn fade_cell(column: usize) -> ChartElement {
     ChartElement::Span {
         class: "chartml-table-fade".to_string(),
@@ -1638,18 +1697,26 @@ impl ChartRenderer for TableRenderer {
             .collect();
 
         // ── Column tracks ──
-        // Each column is at least as wide as its header label or widest
-        // value on the page (plus padding) and otherwise takes an equal
-        // share of the width. No column is pinned: when the columns don't
-        // all fit, the whole table scrolls sideways (header and body rows
-        // are at least the sum of the minimums plus the fade).
+        // A column with a fixed `width` keeps that width. Every other column
+        // is at least as wide as its header label or widest value on the page
+        // and otherwise takes an equal share of the width. The minimum is a
+        // content-box `min-width` on each cell, so the padding actually
+        // applied by `--chartml-table-cell-padding` is added by layout — a
+        // host that widens the padding widens the column instead of squeezing
+        // its text. No column is pinned: when the columns don't all fit, the
+        // whole table scrolls sideways (see the fade track below).
         //
-        // The expressions are set once, as custom properties on the scroll
-        // area, and used by every row. Everything is relative to the
-        // table's own container and font, never the viewport: `em` resolves
-        // where a property is used (rows and the body carry the table
-        // font) and `100cqw` is the scroll area's visible width (it is an
-        // inline-size container for everything inside it).
+        // Everything is relative to the table's own container and font, never
+        // the viewport: `em` resolves where a property is used (rows and the
+        // body carry the table font) and `100cqw` is the scroll area's visible
+        // width (it is an inline-size container for everything inside it).
+        // Column sizes are measured from this padding, so a percentage (or any
+        // unit the measurement cannot resolve) is rejected here rather than
+        // rendered as columns that overlap their neighbours. The published
+        // token's contract is lengths only: px, em and rem.
+        theme
+            .validate_table_cell_padding()
+            .map_err(ChartError::InvalidSpec)?;
         let (pad_left, pad_right) = horizontal_padding(&theme.table_cell_padding);
         let header = header_text(theme);
         let texts: Vec<ColumnText> = columns
@@ -1657,49 +1724,104 @@ impl ChartRenderer for TableRenderer {
             .enumerate()
             .map(|(i, c)| column_text(&c.label, &header, cells.iter().map(|r| r[i].as_str())))
             .collect();
-        let width = |em: f64| format!("calc({em:.2}em + {pad_left} + {pad_right})");
+        // Each column's track and its cell minimum: a fixed `width` column's
+        // track is `max(width, its padding)` and wraps its content; every other
+        // column is at least its measured content width and shares the rest.
+        // `column_mins` is the per-column minimum used to decide whether the
+        // columns overflow the visible area (see the fade below).
+        let mut tracks: Vec<String> = Vec::with_capacity(columns.len() + 1);
+        let mut cell_mins: Vec<String> = Vec::with_capacity(columns.len());
+        let mut fixed_widths: Vec<Option<String>> = vec![None; columns.len()];
+        let mut column_mins: Vec<String> = Vec::with_capacity(columns.len());
         let min_var = |i: usize| format!("--chartml-table-min-{}", i + 1);
         let mut sizing: Vec<(String, String)> = Vec::new();
-        if columns.len() > 1 {
-            // Every column fits in the visible area (less the fade) so its
-            // values can be seen whole — wrapping at spaces if they must —
-            // but is never narrower than its widest word.
-            for (i, text) in texts.iter().enumerate() {
-                sizing.push((
-                    min_var(i),
-                    format!(
-                        "max({}, min({}, calc(100cqw - {FADE_WIDTH_PX}px)))",
-                        width(text.word),
-                        width(text.line),
-                    ),
-                ));
+        for (i, column) in columns.iter().enumerate() {
+            let fixed = match column.width {
+                Some(ColumnWidth::Pixels(px)) => {
+                    if !(px.is_finite() && px > 0.0) {
+                        return Err(ChartError::InvalidSpec(format!(
+                            "table column '{}': width must be a positive number of pixels or \"auto\"",
+                            column.field
+                        )));
+                    }
+                    Some(format!("{px:.2}px"))
+                }
+                _ => None,
+            };
+            match fixed {
+                Some(px) => {
+                    // A fixed `width` is the column's width and the cell is
+                    // `border-box` at it, so its padding (`px`, `em` or `rem`)
+                    // sits inside the column. The track is `max-content`, which
+                    // CSS resolves to `max(width, the cell's own padding)`: a
+                    // declared width narrower than the padding still gets a
+                    // track that holds it, and no supported padding can make the
+                    // cell wider than its track. The fade estimate counts the
+                    // theme padding, like the other measured values (owner
+                    // decision 2026-11-25).
+                    fixed_widths[i] = Some(px.clone());
+                    cell_mins.push("0".to_string());
+                    // The track is `max-content`, i.e. `max(width, padding)` —
+                    // so the width alone would under-count a column whose
+                    // padding is wider, and width+padding over-counts every
+                    // other one (turning the fade on for a table that fits).
+                    // Count the same `max()` the track resolves to.
+                    column_mins.push(format!("max({px}, calc({pad_left} + {pad_right}))"));
+                    tracks.push("minmax(max-content, max-content)".to_string());
+                }
+                None => {
+                    let text = &texts[i];
+                    let content_min = if columns.len() > 1 {
+                        // Every content-sized column fits in the visible area
+                        // (less the fade and its own padding) so its values
+                        // can be seen whole — wrapping at spaces if they
+                        // must — but is never narrower than its widest word.
+                        format!(
+                            "max({:.2}em, min({:.2}em, calc(100cqw - {FADE_WIDTH_PX}px - {pad_left} - {pad_right})))",
+                            text.word, text.line,
+                        )
+                    } else {
+                        format!("{:.2}em", text.line)
+                    };
+                    // The overflow estimate adds the theme's horizontal
+                    // padding to the content minimum, the same way the other
+                    // measured `--chartml-table-*` values use theme values.
+                    // Owner decision 2026-11-25: the fade hint is estimated
+                    // from theme padding, so a host padding override can leave
+                    // it off when the table nearly fits.
+                    sizing.push((
+                        min_var(i),
+                        format!("calc({content_min} + {pad_left} + {pad_right})"),
+                    ));
+                    column_mins.push(format!("var({})", min_var(i)));
+                    cell_mins.push(content_min);
+                    fixed_widths[i] = None;
+                    tracks.push("minmax(auto, 1fr)".to_string());
+                }
             }
-        } else {
-            sizing.push((min_var(0), width(texts[0].line)));
         }
-        // The fade: `FADE_WIDTH_PX` once the columns at their minimum are
-        // wider than the scroll area (the step completes within 0.04px),
-        // otherwise 0. Rows are at least the columns plus the fade, so when
-        // the table scrolls its right end shows the fade's own empty strip.
-        let all_mins: Vec<String> = (0..columns.len()).map(|i| format!("var({})", min_var(i))).collect();
-        sizing.push(("--chartml-table-columns-min".into(), format!("calc({})", all_mins.join(" + "))));
+        // ── The fade's width, from the estimated columns' minimum ──
+        // `FADE_WIDTH_PX` once the columns at their minimum are wider than the
+        // scroll area (`100cqw`; the step completes within 0.04px), 0
+        // otherwise. Rows are `min-content` wide, so when the table scrolls
+        // its right end shows the fade's own empty strip; scrolled to the
+        // right end the fade is held over that strip, so it covers no text.
+        sizing.push((
+            "--chartml-table-columns-min".into(),
+            format!("calc({})", column_mins.join(" + ")),
+        ));
         sizing.push((
             "--chartml-table-fade".into(),
             format!("clamp(0px, calc((var(--chartml-table-columns-min) - 100cqw) * 1000), {FADE_WIDTH_PX}px)"),
         ));
-        let fade_width = "var(--chartml-table-fade)".to_string();
-        let row_min = "calc(var(--chartml-table-columns-min) + var(--chartml-table-fade))".to_string();
-        let template = all_mins
-            .iter()
-            .map(|min| format!("minmax({min}, 1fr)"))
-            .chain(std::iter::once(fade_width.clone()))
-            .collect::<Vec<_>>()
-            .join(" ");
+        tracks.push("var(--chartml-table-fade)".to_string());
+        let template = tracks.join(" ");
         let fade_column = columns.len() + 1;
         let place = |i: usize| CellPlacement {
             column: i + 1,
-            last: i + 1 == columns.len(),
-            numeric: numeric[i],
+            align: columns[i]
+                .align
+                .map_or_else(|| if numeric[i] { "right" } else { "left" }, align_css),
         };
 
         // The table font: the size the `em` minimums resolve against and the
@@ -1712,10 +1834,19 @@ impl ChartRenderer for TableRenderer {
         // ── Header row (sticky to the top of the scroll area, above the
         // body rows; opaque, so rows scrolling under it never show
         // through) ──
+        let header_border_bottom = header_border(theme);
         let mut header_children: Vec<ChartElement> = columns
                 .iter()
                 .enumerate()
-                .map(|(i, c)| header_cell(&c.label, &place(i), theme, &fade_width))
+                .map(|(i, c)| {
+                    header_cell(
+                        &c.label,
+                        &place(i),
+                        theme,
+                        &cell_mins[i],
+                        fixed_widths[i].as_deref(),
+                    )
+                })
                 .collect();
         header_children.push(fade_cell(fade_column));
         let header_row = ChartElement::Div {
@@ -1723,11 +1854,15 @@ impl ChartRenderer for TableRenderer {
             style: style(&[
                 ("display", "grid"),
                 ("grid-template-columns", &template),
-                ("min-width", &row_min),
+                ("min-width", "min-content"),
                 ("position", "sticky"),
                 ("top", "0"),
                 ("z-index", "3"),
                 ("background", &opaque_bg(&header_bg_var, theme)),
+                // The row owns the bottom rule, so it spans the row's full
+                // width — including the fade's strip and any space past the
+                // last fixed column — instead of stopping at the last cell.
+                ("border-bottom", &header_border_bottom),
                 ("font-size", &font_size_var),
                 ("font-family", &theme.label_font_family),
             ]),
@@ -1735,6 +1870,7 @@ impl ChartRenderer for TableRenderer {
         };
 
         // ── Body rows ──
+        let body_border_bottom = body_border(theme);
         let mut body_children: Vec<ChartElement> = Vec::with_capacity(end);
         for (row_idx, row_cells) in cells.iter().enumerate() {
             let is_alt = row_idx % 2 == 1;
@@ -1747,7 +1883,15 @@ impl ChartRenderer for TableRenderer {
             let mut children: Vec<ChartElement> = row_cells
                 .iter()
                 .enumerate()
-                .map(|(i, text)| body_cell(text, &place(i), theme, &fade_width))
+                .map(|(i, text)| {
+                    body_cell(
+                        text,
+                        &place(i),
+                        theme,
+                        &cell_mins[i],
+                        fixed_widths[i].as_deref(),
+                    )
+                })
                 .collect();
             children.push(fade_cell(fade_column));
             body_children.push(ChartElement::Div {
@@ -1755,7 +1899,9 @@ impl ChartRenderer for TableRenderer {
                 style: style(&[
                     ("display", "grid"),
                     ("grid-template-columns", &template),
+                    ("min-width", "min-content"),
                     ("background", &opaque_bg(bg, theme)),
+                    ("border-bottom", &body_border_bottom),
                     ("font-size", &font_size_var),
                     ("font-family", &theme.label_font_family),
                 ]),
@@ -1767,30 +1913,57 @@ impl ChartRenderer for TableRenderer {
             style: style(&[
                 ("display", "flex"),
                 ("flex-direction", "column"),
-                // `em` in `row_min` resolves against this element's font,
-                // which must be the table font as on the header and rows.
-                ("min-width", &row_min),
+                // `em` in the cells' minimums resolves against this element's
+                // font, which must be the table font as on the header and rows.
+                ("min-width", "min-content"),
                 ("font-size", &font_size_var),
             ]),
             children: body_children,
         };
 
+        // ── Fit box: as wide as the columns need, never narrower than the
+        // scroll area. The scroll area is a grid whose single track is
+        // `minmax(min-content, 100%)`: the box spans the visible width (so
+        // every row's background and bottom border reach the row's end, even
+        // when every column is fixed) and it grows past it to the columns'
+        // minimum when they need more (so the table scrolls). `min-width` is
+        // its own floor for the intrinsic pass. ──
+        let fit = ChartElement::Div {
+            class: "chartml-table-fit".to_string(),
+            style: style(&[
+                ("display", "flex"),
+                ("flex-direction", "column"),
+                ("min-width", "min-content"),
+                ("font-size", &font_size_var),
+            ]),
+            children: vec![header_row, body],
+        };
+
         // ── Scroll area: header + body scroll together on both axes, so the
         // header stays aligned with its columns when scrolled sideways and
         // stays on top (sticky) when the rows scroll vertically. `isolation`
-        // keeps the sticky layers' z-indexes inside the table. ──
+        // keeps the sticky layers' z-indexes inside the table, and the
+        // `--chartml-table-min-N`, `--chartml-table-columns-min` and
+        // `--chartml-table-fade` expressions live here and are read by every
+        // row's track list. ──
         let mut scroll_style = style(&[
             ("flex", "1 1 0"),
             ("min-height", "0"),
             ("overflow", "auto"),
             ("isolation", "isolate"),
             ("container-type", "inline-size"),
+            // One column, at least the columns' intrinsic minimum and at
+            // most the visible width: `minmax(min-content, 100%)`. (An
+            // intrinsic keyword is a track breadth, not a `max()` argument, so
+            // `max(100%, min-content)` is invalid CSS and is dropped.)
+            ("display", "grid"),
+            ("grid-template-columns", "minmax(min-content, 100%)"),
         ]);
         scroll_style.extend(sizing);
         let scroll = ChartElement::Div {
             class: "chartml-table-scroll".to_string(),
             style: scroll_style,
-            children: vec![header_row, body],
+            children: vec![fit],
         };
 
         // ── Pager footer (shown when there are more rows than one page),
@@ -2741,10 +2914,66 @@ style:
     #[test]
     fn padding_shorthand_left_and_right() {
         assert_eq!(horizontal_padding("8px"), ("8px".into(), "8px".into()));
-        assert_eq!(horizontal_padding("8px 12px"), ("12px".into(), "12px".into()));
-        assert_eq!(horizontal_padding("8px 12px 4px"), ("12px".into(), "12px".into()));
-        assert_eq!(horizontal_padding("1px 2px 3px 4px"), ("4px".into(), "2px".into()));
+        assert_eq!(
+            horizontal_padding("8px 12px"),
+            ("12px".into(), "12px".into())
+        );
+        assert_eq!(
+            horizontal_padding("8px 12px 4px"),
+            ("12px".into(), "12px".into())
+        );
+        assert_eq!(
+            horizontal_padding("1px 2px 3px 4px"),
+            ("4px".into(), "2px".into())
+        );
         assert_eq!(horizontal_padding(""), ("0px".into(), "0px".into()));
+        // `calc()` needs a unit on every `+` operand, so a unitless zero — a
+        // documented shorthand value — becomes `0px` here. `calc(0 + 0)` is
+        // invalid CSS and the browser drops the declaration, taking the column
+        // minimums and the fade estimate with it.
+        assert_eq!(horizontal_padding("0"), ("0px".into(), "0px".into()));
+        assert_eq!(horizontal_padding("0 0"), ("0px".into(), "0px".into()));
+        assert_eq!(horizontal_padding("0.0"), ("0px".into(), "0px".into()));
+        assert_eq!(horizontal_padding("8px 0"), ("0px".into(), "0px".into()));
+        assert_eq!(
+            horizontal_padding("1px 2px 3px 0"),
+            ("0px".into(), "2px".into())
+        );
+        // Non-zero and already-united values pass through untouched.
+        assert_eq!(
+            horizontal_padding("8px 0.5em"),
+            ("0.5em".into(), "0.5em".into())
+        );
+    }
+
+    #[test]
+    fn a_unitless_zero_padding_still_emits_a_valid_column_minimum() {
+        // Zero padding is documented as supported, so the calc() the estimate
+        // and the cell minimums use must be valid CSS: `calc(0 + 0)` is not,
+        // and the browser silently drops every declaration built from it (no
+        // column minimums, no fade hint, words breaking mid-word). The
+        // renderer normalises the zero to `0px`.
+        for (padding, suffix) in [
+            ("0", "+ 0px + 0px)"),
+            ("0 0", "+ 0px + 0px)"),
+            ("0.0", "+ 0px + 0px)"),
+            ("8px 0", "+ 0px + 0px)"),
+            ("1px 2px 3px 0", "+ 0px + 2px)"),
+        ] {
+            let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+            config.theme.table_cell_padding = padding.into();
+            let el = TableRenderer::new().render(&data(), &config).unwrap();
+            let scroll = by_class(&el, "chartml-table-scroll")[0];
+            // Auto columns carry the padding in their own minimum; the overall
+            // estimate sums those variables.
+            for var in ["--chartml-table-min-1", "--chartml-table-min-2"] {
+                let value = get(scroll, var).unwrap();
+                assert!(
+                    value.ends_with(suffix),
+                    "{padding}: {var} = {value}, expected the padding operands to end {suffix}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -2807,6 +3036,278 @@ style:
     }
 
     #[test]
+    fn column_align_overrides_type_based_default() {
+        // Schema `align` is read for columns and rows: it replaces the
+        // type-based default on both the header and every body cell (here a
+        // text category forced right and numeric measures forced left/center).
+        let config = cfg(
+            r#"
+type: table
+columns:
+  - field: month
+    align: right
+rows:
+  - field: revenue
+    label: Revenue
+    align: left
+  - field: cost
+    label: Cost
+    align: center
+"#,
+        );
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        let rows = header_and_rows(&el);
+        assert_eq!(rows.len(), 4, "header + three body rows");
+        for row in rows {
+            let got: Vec<&str> = real_cells(row).iter().map(|c| get(c, "text-align").unwrap()).collect();
+            assert_eq!(got, vec!["right", "left", "center"]);
+        }
+    }
+
+    #[test]
+    fn fixed_column_width_sets_the_track_and_keeps_the_scroll_layout() {
+        // Schema `width` is read: a number is that column's exact grid track
+        // (header and body cells included); `auto` keeps the measured
+        // content minimum. Fixed widths join the existing scroll machinery,
+        // so the table still scrolls sideways and no column is pinned.
+        let config = cfg(
+            r#"
+type: table
+columns:
+  - field: month
+    width: 120
+rows:
+  - field: revenue
+    label: Revenue
+    width: auto
+  - field: cost
+    label: Cost
+    width: 90.5
+"#,
+        );
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        // A fixed width is the column's width, its cells are `border-box` at
+        // it, and its track is `max-content` — the larger of the width and the
+        // cell's own padding, whichever unit that padding uses.
+        let template = "minmax(max-content, max-content) minmax(auto, 1fr) minmax(max-content, max-content) var(--chartml-table-fade)";
+        for row in header_and_rows(&el) {
+            assert_eq!(get(row, "grid-template-columns"), Some(template));
+            for cell in real_cells(row) {
+                for key in ["position", "left", "z-index"] {
+                    assert_eq!(get(cell, key), None, "{key} must stay unset");
+                }
+            }
+        }
+        let rows = header_and_rows(&el);
+        let body = by_class(&el, "chartml-table-body")[0];
+        assert_eq!(get(rows[0], "min-width"), get(body, "min-width"));
+        assert_eq!(get(rows[0], "min-width"), Some("min-content"));
+        // A fixed column is `border-box` at its declared width in a
+        // `max-content` track, so no padding — absolute, em or percentage, and
+        // even wider than the declared width — can make the cell wider than its
+        // track; an auto column is `content-box` with its measured text as the
+        // minimum layout adds padding to.
+        let header = by_class(&el, "chartml-table-header")[0];
+        let cells = real_cells(header);
+        assert_eq!(get(cells[0], "width"), Some("120.00px"));
+        assert_eq!(get(cells[0], "box-sizing"), Some("border-box"));
+        assert!(get(cells[1], "min-width").unwrap().starts_with("max("));
+        assert_eq!(get(cells[1], "box-sizing"), Some("content-box"));
+        assert_eq!(get(cells[2], "width"), Some("90.50px"));
+        assert_eq!(get(cells[2], "box-sizing"), Some("border-box"));
+        assert_eq!(get(cells[1], "width"), None, "auto columns declare no width");
+        for row in header_and_rows(&el) {
+            let boxes: Vec<&str> = real_cells(row).iter().map(|c| get(c, "box-sizing").unwrap()).collect();
+            assert_eq!(boxes, vec!["border-box", "content-box", "border-box"]);
+        }
+    }
+
+    /// Render a chart spec through the public path so parse errors surface
+    /// exactly as consumers see them.
+    fn render_yaml(yaml: &str) -> Result<ChartElement, ChartError> {
+        use chartml_core::ChartML;
+        let mut chartml = ChartML::new();
+        chartml.register_renderer("table", TableRenderer::new());
+        chartml.render_from_yaml(yaml)
+    }
+
+    #[test]
+    fn invalid_column_width_errors_like_other_mistyped_fields() {
+        // A width that is neither a number nor "auto" is a type error, as any
+        // other mistyped FieldSpec value is; a non-positive pixel width is
+        // rejected when rendering instead of emitting invalid CSS.
+        let spec = |width: &str| {
+            format!(
+                r#"
+type: chart
+version: 1
+data:
+  provider: inline
+  rows:
+    - {{ month: "Jan", revenue: 1200 }}
+visualize:
+  type: table
+  columns:
+    - field: month
+      width: {width}
+  rows: revenue
+"#
+            )
+        };
+        let err = render_yaml(&spec("\"100%\"")).expect_err("a percentage is not documented");
+        assert!(matches!(err, ChartError::YamlParse(_)), "got {err:?}");
+        let err = render_yaml(&spec("0")).expect_err("zero pixels is not a usable width");
+        assert!(
+            matches!(&err, ChartError::InvalidSpec(msg) if msg.contains("positive number of pixels")),
+            "got {err:?}"
+        );
+        // A width narrower than the table's padding is legal: the column's
+        // track is `max-content`, so it grows to hold the padding instead of
+        // overflowing into the next column.
+        let el = render_yaml(&spec("10")).expect("10px is a legal width");
+        let header = by_class(&el, "chartml-table-header")[0];
+        assert_eq!(get(real_cells(header)[0], "width"), Some("10.00px"));
+    }
+
+    #[test]
+    fn cell_padding_reads_the_css_variable_with_the_theme_default() {
+        // The published --chartml-table-cell-padding token has no effect when
+        // the renderer hardcodes the theme's padding inline. It is now read
+        // like every other --chartml-table-* token, with the theme value as
+        // the fallback, so a host stylesheet can override it.
+        let config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        for row in header_and_rows(&el) {
+            let cells = real_cells(row);
+            for cell in &cells {
+                assert_eq!(get(cell, "padding"), Some("var(--chartml-table-cell-padding, 8px 12px)"));
+                assert_eq!(get(cell, "padding-right"), None, "the token must control every side");
+                assert_eq!(get(cell, "box-sizing"), Some("content-box"));
+            }
+            // The row owns the bottom rule and spans the fade's strip, so no
+            // cell carries a wide border or padding override.
+            assert_eq!(get(cells.last().unwrap(), "border-right"), None);
+        }
+        // The minimums are content-only; layout adds the padding actually
+        // applied, so a wider token widens the column instead of wrapping
+        // words. The header's label minimum and the body's value minimum are
+        // the same expression per column.
+        let header = by_class(&el, "chartml-table-header")[0];
+        for cell in real_cells(header) {
+            let min = get(cell, "min-width").unwrap();
+            assert!(
+                !min.ends_with("+ 12px + 12px)"),
+                "padding must not be added to the content minimum: {min}"
+            );
+            assert!(min.contains("calc(100cqw - 32px - 12px - 12px)"), "{min}");
+        }
+        // A host theme that sets its own padding provides that fallback.
+        let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+        config.theme.table_cell_padding = "4px 6px".into();
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        for row in header_and_rows(&el) {
+            assert_eq!(
+                get(real_cells(row)[0], "padding"),
+                Some("var(--chartml-table-cell-padding, 4px 6px)")
+            );
+        }
+    }
+
+    /// Read a workspace file at test time. The paths are relative to this
+    /// crate; reading them at run time (not with `include_str!`) keeps the
+    /// crate compilable when it is packaged, where the workspace files are
+    /// not shipped.
+    fn workspace_file(relative: &str) -> String {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+        std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+    }
+
+    fn schema() -> String {
+        workspace_file("../../docs/docs/public/chartml_schema.json")
+    }
+
+    #[test]
+    fn schema_documents_only_table_properties_the_renderer_reads() {
+        // Every property the published schema documents for table columns
+        // must be read by the renderer. If a documented property is added,
+        // this fails until the renderer (and the render proof below) covers it.
+        let schema_json = schema();
+        let schema: serde_json::Value = serde_json::from_str(&schema_json).expect("schema is JSON");
+        let mut documented: Vec<&str> = schema["definitions"]["ColumnsObject"]["properties"]
+            .as_object()
+            .expect("ColumnsObject.properties")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        documented.sort_unstable();
+        assert_eq!(documented, vec!["align", "field", "format", "label", "width"]);
+
+        // Table measures come from `rows` too, so the same width/align are
+        // documented there; the renderer reads them from either.
+        let row_properties = schema["definitions"]["RowsObject"]["properties"]
+            .as_object()
+            .expect("RowsObject.properties");
+        assert!(row_properties.contains_key("width"), "rows must document width");
+        assert!(row_properties.contains_key("align"), "rows must document align");
+
+        let page_size = &schema["definitions"]["Style"]["properties"]["pageSize"];
+        assert_eq!(page_size["type"], "integer");
+        assert_eq!(page_size["minimum"], 1);
+        assert_eq!(
+            page_size["default"].as_u64(),
+            Some(DEFAULT_PAGE_SIZE as u64),
+            "the schema default must match the renderer's default page size"
+        );
+
+        // Render proof for the documented column properties and pageSize: a
+        // spec setting every one produces a header label, a fixed track, an
+        // alignment, a formatted cell and a paginated row count.
+        let config = cfg(
+            r#"
+type: table
+columns:
+  - field: month
+    label: Month
+    width: 100
+    align: center
+rows:
+  - field: revenue
+    label: Revenue
+    format: "$,.0f"
+    width: auto
+    align: left
+style:
+  pageSize: 2
+"#,
+        );
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        let mut contents = Vec::new();
+        find_contents(&el, &mut contents);
+        assert!(contents.iter().any(|c| c == "Month"), "{contents:?}");
+        assert!(contents.iter().any(|c| c == "Revenue"), "{contents:?}");
+        assert!(contents.iter().any(|c| c == "$1,200"), "{contents:?}");
+        assert!(!contents.iter().any(|c| c == "Mar"), "pageSize 2 must hide Mar: {contents:?}");
+        let rows = header_and_rows(&el);
+        assert_eq!(rows.len(), 3, "header + two body rows");
+        for row in rows {
+            let cells = real_cells(row);
+            assert_eq!(get(cells[0], "grid-column"), Some("1"));
+            assert_eq!(get(cells[0], "text-align"), Some("center"));
+            assert_eq!(get(cells[1], "text-align"), Some("left"), "rows align is read");
+            // `width: 100` on the column is the cell's width, `width: auto`
+            // on the row declares none, and the fixed column gets a
+            // `max-content` track while the auto one stays flexible.
+            assert_eq!(get(cells[0], "width"), Some("100.00px"), "column width is read");
+            assert_eq!(get(cells[1], "width"), None, "width: auto declares no width");
+            assert_eq!(
+                get(row, "grid-template-columns"),
+                Some("minmax(max-content, max-content) minmax(auto, 1fr) var(--chartml-table-fade)")
+            );
+        }
+    }
+
+    #[test]
     fn existing_class_names_kept() {
         // Point 6: consumer CSS overrides keep applying.
         let el = wide();
@@ -2815,9 +3316,12 @@ style:
             "chartml-table-header",
             "chartml-table-header-cell",
             "chartml-table-body",
+            "chartml-table-scroll",
             "chartml-table-row",
             "chartml-table-row-alt",
             "chartml-table-cell",
+            "chartml-table-fit",
+            "chartml-table-fade",
             "chartml-table-pager",
             "chartml-table-pager-info",
         ] {
@@ -2837,8 +3341,14 @@ style:
         let scroll = scroll[0];
         assert_eq!(get(scroll, "overflow"), Some("auto"));
         assert_eq!(get(scroll, "container-type"), Some("inline-size"));
+        // Header and body sit together in the fit box, which is the scroll
+        // area's only child, so both scroll on both axes as one.
         let kids: Vec<&str> = children_of(scroll).iter().map(class_of).collect();
-        assert_eq!(kids, vec!["chartml-table-header", "chartml-table-body"]);
+        assert_eq!(kids, vec!["chartml-table-fit"]);
+        let fit = &children_of(scroll)[0];
+        let inner: Vec<&str> = children_of(fit).iter().map(class_of).collect();
+        assert_eq!(inner, vec!["chartml-table-header", "chartml-table-body"]);
+        assert_eq!(get(fit, "min-width"), Some("min-content"));
         let rows = header_and_rows(&el);
         let template = get(rows[0], "grid-template-columns");
         assert!(template.is_some());
@@ -2862,7 +3372,6 @@ style:
         // uses the same tracks, in column order, ending with the fade.
         let data = wide_data();
         let el = TableRenderer::new().render(&data, &cfg(WIDE_SPEC)).unwrap();
-        let scroll = by_class(&el, "chartml-table-scroll")[0];
         let header = header_text(&Theme::default());
         let columns = resolve_columns(&cfg(WIDE_SPEC).visualize, &data);
         let rows = header_and_rows(&el);
@@ -2871,12 +3380,19 @@ style:
             let values: Vec<String> = (0..body_rows.len()).map(|r| format_cell(&data, r, c)).collect();
             let t = column_text(&c.label, &header, values.iter().map(String::as_str));
             assert!(t.line > 0.0, "{}", c.label);
-            let min = get(scroll, &format!("--chartml-table-min-{}", i + 1)).unwrap();
-            assert!(min.contains(&format!("calc({:.2}em + 12px + 12px)", t.line)), "{}: {min}", c.label);
-            assert!(min.contains(&format!("calc({:.2}em + 12px + 12px)", t.word)), "{}: {min}", c.label);
+            // Each cell's minimum is its measured one-line width and widest
+            // word, content-only: layout adds whatever padding
+            // `--chartml-table-cell-padding` applies, so an override widens
+            // the column instead of squeezing the text.
+            for row in &rows {
+                let cell_min = get(real_cells(row)[i], "min-width").unwrap();
+                assert!(cell_min.contains(&format!("{:.2}em", t.line)), "{}: {cell_min}", c.label);
+                assert!(cell_min.contains(&format!("{:.2}em", t.word)), "{}: {cell_min}", c.label);
+                assert!(!cell_min.contains("px),"), "{cell_min}");
+            }
         }
-        let expected: Vec<String> = (1..=columns.len())
-            .map(|i| format!("minmax(var(--chartml-table-min-{i}), 1fr)"))
+        let expected: Vec<String> = (0..columns.len())
+            .map(|_| "minmax(auto, 1fr)".to_string())
             .chain(std::iter::once("var(--chartml-table-fade)".to_string()))
             .collect();
         for row in &rows {
@@ -2888,20 +3404,215 @@ style:
     fn fade_turns_on_only_when_the_columns_overflow() {
         // Point 4: the fade's width is 0 unless the sum of all column
         // minimums is wider than the scroll area (`100cqw`), when it is
-        // `FADE_WIDTH_PX`; rows are at least the columns plus the fade.
+        // `FADE_WIDTH_PX`. Each content-sized column's minimum is its content
+        // minimum plus the theme's horizontal padding (owner decision
+        // 2026-11-25: the hint is estimated from theme padding, like the other
+        // measured values); a fixed column's is `max(width, padding)` (see
+        // `a_fixed_column_is_counted_once_in_the_fade_estimate`).
+        // Rows are `min-content` wide, so their background and border span
+        // the scrolled width including the fade's strip.
         let el = wide();
         let scroll = by_class(&el, "chartml-table-scroll")[0];
         let all: Vec<String> = (1..=12).map(|i| format!("var(--chartml-table-min-{i})")).collect();
-        assert_eq!(get(scroll, "--chartml-table-columns-min"), Some(format!("calc({})", all.join(" + ")).as_str()));
+        assert_eq!(
+            get(scroll, "--chartml-table-columns-min"),
+            Some(format!("calc({})", all.join(" + ")).as_str())
+        );
         assert_eq!(
             get(scroll, "--chartml-table-fade"),
             Some("clamp(0px, calc((var(--chartml-table-columns-min) - 100cqw) * 1000), 32px)")
         );
+        for (i, cell) in real_cells(by_class(&el, "chartml-table-header")[0]).iter().enumerate() {
+            let min = get(scroll, &format!("--chartml-table-min-{}", i + 1)).unwrap();
+            assert!(min.ends_with("+ 12px + 12px)"), "column {i}: {min}");
+            // The cell's own minimum is content-only; layout adds the padding
+            // actually applied, so a host override still lays text out
+            // correctly even though the hint's estimate does not see it.
+            assert!(!get(cell, "min-width").unwrap().ends_with("+ 12px + 12px)"));
+        }
         for row in by_class(&el, "chartml-table-header").into_iter().chain(by_class(&el, "chartml-table-body")) {
-            assert_eq!(
-                get(row, "min-width"),
-                Some("calc(var(--chartml-table-columns-min) + var(--chartml-table-fade))")
+            assert_eq!(get(row, "min-width"), Some("min-content"));
+        }
+    }
+
+    #[test]
+    fn fade_estimate_is_rendered_and_the_stylesheets_hold_no_fade_rules() {
+        // The fade is estimated by the renderer from the columns' minimums
+        // plus the theme's horizontal padding (owner decision 2026-11-25),
+        // matching how the other measured table values use theme values. It
+        // must be an inline estimate: neither published stylesheet may carry
+        // fade machinery of its own, so there is no second path.
+        let el = wide();
+        for row in header_and_rows(&el) {
+            let template = get(row, "grid-template-columns").unwrap();
+            assert!(template.ends_with("var(--chartml-table-fade)"), "{template}");
+        }
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        let fade = get(scroll, "--chartml-table-fade").unwrap();
+        assert!(fade.starts_with("clamp(0px,"), "{fade}");
+        assert!(fade.contains("var(--chartml-table-columns-min) - 100cqw"), "{fade}");
+        assert!(fade.ends_with("32px)"), "{fade}");
+
+        let core_css = workspace_file("../../packages/core/src/chartml.css");
+        let leptos_css = workspace_file("../chartml-leptos/style/chartml.css");
+        let sheets = [("packages/core", core_css), ("chartml-leptos", leptos_css)];
+        for (name, css) in &sheets {
+            assert!(!css.contains("--chartml-table-fade"), "{name}: no fade rules in CSS");
+            assert!(!css.contains("chartml-table-fade-on"), "{name}: no fade animation");
+            assert!(!css.contains("animation-timeline"), "{name}: no scroll timeline");
+        }
+    }
+
+    #[test]
+    fn fade_track_is_zero_when_the_columns_fit_with_room_to_spare() {
+        // Regression for a fade that stuck on after a resize. The
+        // estimate is a pure function of the columns' minimums, so a table
+        // whose columns need less than the visible area has a 0px fade track
+        // — there is no history, no scroll position and no prior overflow
+        // that can keep it on, which is what the scroll-timeline version got
+        // wrong. The browser suite's `resized_to_fit_clears_the_fade` covers
+        // the same shape end to end (narrow, then resized in place to fit).
+        //
+        // The estimate uses the theme's horizontal padding, so a host that
+        // overrides `--chartml-table-cell-padding` can leave the hint off (or,
+        // with a narrower padding, on) while the columns nearly fit. The owner
+        // accepted that on 2026-11-25; layout is unaffected because the cells
+        // carry content-only minimums and take the applied padding.
+        let config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        // Three short columns at the default 800px width: their minimums sum
+        // to far less than `100cqw`, so the clamp is at its 0 floor.
+        let fade = get(scroll, "--chartml-table-fade").unwrap();
+        assert_eq!(
+            fade,
+            "clamp(0px, calc((var(--chartml-table-columns-min) - 100cqw) * 1000), 32px)"
+        );
+        // The estimate has no dependency on layout: the same spec renders the
+        // same expression, and the single-column case (no fade possible) has
+        // the identical minimum expression.
+        let single = cfg("type: table\ncolumns: month");
+        let el = TableRenderer::new().render(&data(), &single).unwrap();
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        assert!(get(scroll, "--chartml-table-min-1").unwrap().ends_with("+ 12px + 12px)"));
+    }
+
+    #[test]
+    fn unsupported_cell_padding_is_rejected_not_rendered_as_overlap() {
+        // Columns are sized from this padding, and a percentage cannot be
+        // resolved where that measurement happens, so it would render cells
+        // wider than their tracks. The token's documented contract is lengths
+        // only (px, em, rem, unitless 0), and anything else fails with a clear
+        // error instead of emitting a `calc()` the browser drops.
+        for padding in [
+            "0 50%",
+            "8px 12%",
+            "10% 20%",
+            "8",
+            ".5",
+            "px",
+            "1.2.3px",
+            "-8px",
+            "1px 2px 3px 4px 5px",
+        ] {
+            let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+            config.theme.table_cell_padding = padding.into();
+            let err = TableRenderer::new()
+                .render(&data(), &config)
+                .expect_err("an unsupported padding must not render");
+            assert!(
+                matches!(
+                    &err,
+                    ChartError::InvalidSpec(msg)
+                        if msg.contains("not a supported length") || msg.contains("takes 1 to 4")
+                ),
+                "{padding}: got {err:?}"
             );
+        }
+        // Supported lengths render.
+        for padding in ["8px 12px", "0.5em", "1rem 2rem"] {
+            let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+            config.theme.table_cell_padding = padding.into();
+            assert!(TableRenderer::new().render(&data(), &config).is_ok(), "{padding}");
+        }
+    }
+
+    #[test]
+    fn a_fixed_column_is_counted_once_in_the_fade_estimate() {
+        // A fixed column's track is `max-content`, i.e. `max(width, padding)`.
+        // The estimate must count that same value: width+padding would over-count
+        // by min(width, padding) and turn the fade on (with an empty scroll strip)
+        // for a table whose columns all fit.
+        const ALL_FIXED_FITS: &str = r#"
+type: table
+columns:
+  - field: month
+    width: 100
+rows:
+  - { field: revenue, width: 120 }
+  - { field: cost, width: 90 }
+"#;
+        let config = cfg(ALL_FIXED_FITS);
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        let columns_min = get(scroll, "--chartml-table-columns-min").unwrap();
+        // The track is `max-content`, so the estimate is the same `max(width,
+        // padding)` the track resolves to — the width alone when it is wider
+        // (every column here), never width plus padding.
+        assert_eq!(
+            columns_min,
+            "calc(max(100.00px, calc(12px + 12px)) + max(120.00px, calc(12px + 12px)) + max(90.00px, calc(12px + 12px)))"
+        );
+        // With padding wider than a column, the estimate counts the padding, the
+        // same value the max-content track resolves to.
+        const PADDING_WIDER_THAN_WIDTH: &str = r#"
+type: table
+columns:
+  - field: month
+    width: 10
+rows:
+  - { field: revenue, width: 20 }
+"#;
+        let mut config = cfg(PADDING_WIDER_THAN_WIDTH);
+        config.theme.table_cell_padding = "8px 40px".into();
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        assert_eq!(
+            get(scroll, "--chartml-table-columns-min"),
+            Some("calc(max(10.00px, calc(40px + 40px)) + max(20.00px, calc(40px + 40px)))")
+        );
+    }
+
+    #[test]
+    fn rows_fill_the_scroll_area_even_when_every_column_is_fixed() {
+        // Regression (CHA-22 lifecycle): with every column fixed-width, rows
+        // whose only floor was `min-content` shrank to the sum of the fixed
+        // tracks, so their background and bottom border stopped short of the
+        // row's end. The scroll area is a grid with one track of
+        // `minmax(min-content, 100%)`, so the fit box and every row span at
+        // least the visible width while still growing to the columns' minimum.
+        let config = cfg(
+            r#"type: table
+columns:
+  - field: month
+    width: 100
+rows:
+  - { field: revenue, width: 120 }
+  - { field: cost, width: 90 }
+"#,
+        );
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        assert_eq!(get(scroll, "display"), Some("grid"));
+        assert_eq!(get(scroll, "grid-template-columns"), Some("minmax(min-content, 100%)"));
+        let fit = &children_of(scroll)[0];
+        assert_eq!(class_of(fit), "chartml-table-fit");
+        for row in header_and_rows(&el) {
+            // The row itself must not be pinned to its content: it tracks
+            // the fit box, which is at least the visible width.
+            assert_eq!(get(row, "min-width"), Some("min-content"));
+            let tracks = get(row, "grid-template-columns").unwrap();
+            assert_eq!(tracks, "minmax(max-content, max-content) minmax(max-content, max-content) minmax(max-content, max-content) var(--chartml-table-fade)");
         }
     }
 
@@ -2943,18 +3654,21 @@ style:
         }
         let scroll = by_class(&el, "chartml-table-scroll")[0];
         assert!(!style_of(scroll).keys().any(|k| k.contains("frozen")), "{:?}", style_of(scroll).keys());
+        let rows = header_and_rows(&el);
         let header = header_text(&Theme::default());
         for (i, c) in resolve_columns(&cfg(WIDE_SPEC).visualize, &table).iter().enumerate() {
             let values: Vec<String> = (0..3).map(|r| format_cell(&table, r, c)).collect();
             let t = column_text(&c.label, &header, values.iter().map(String::as_str));
+            // Every column fits the visible area less the fade and its own
+            // padding, but is never narrower than its widest word. The
+            // subtraction of the padding is what keeps it reachable when a
+            // host's padding is wider than the theme's.
+            let cell_min = get(real_cells(rows[0])[i], "min-width").unwrap();
             assert_eq!(
-                get(scroll, &format!("--chartml-table-min-{}", i + 1)),
-                Some(
-                    format!(
-                        "max(calc({:.2}em + 12px + 12px), min(calc({:.2}em + 12px + 12px), calc(100cqw - 32px)))",
-                        t.word, t.line
-                    )
-                    .as_str()
+                cell_min,
+                format!(
+                    "max({:.2}em, min({:.2}em, calc(100cqw - 32px - 12px - 12px)))",
+                    t.word, t.line
                 ),
                 "{}",
                 c.label
@@ -2963,15 +3677,21 @@ style:
     }
 
     #[test]
-    fn fade_is_the_last_cell_of_every_row() {
-        // Point 4: every header and body row ends with a fade in its own
-        // grid track: sticky at the right edge, the row's background masked
-        // into a gradient, no border of its own, ignoring the pointer. The
-        // last real cell reaches under that track so its border runs to the
-        // row's end.
+    fn every_row_ends_with_the_fade_and_owns_its_bottom_border() {
+        // The row itself draws the bottom rule, so it spans the row's full
+        // width — past the last cell, over the fade's strip and any space a
+        // fixed-column table leaves — instead of stopping where the cells do.
+        // Cells draw no bottom rule of their own, and the fade is the row's
+        // last child, sticky at the right edge.
         let el = wide();
         for row in header_and_rows(&el) {
-            let fade = children_of(row).last().unwrap();
+            assert!(
+                get(row, "border-bottom").unwrap().starts_with("1px solid var(--chartml-table-"),
+                "{:?}",
+                get(row, "border-bottom")
+            );
+            let children = children_of(row);
+            let fade = children.last().unwrap();
             assert_eq!(class_of(fade), "chartml-table-fade");
             assert_eq!(get(fade, "grid-column"), Some("13"));
             assert_eq!(get(fade, "position"), Some("sticky"));
@@ -2979,9 +3699,10 @@ style:
             assert_eq!(get(fade, "background"), Some("inherit"));
             assert_eq!(get(fade, "mask-image"), Some("linear-gradient(to right, transparent, #000)"));
             assert_eq!(get(fade, "pointer-events"), Some("none"));
-            assert_eq!(get(fade, "border-bottom"), None);
-            let last = *real_cells(row).last().unwrap();
-            assert_eq!(get(last, "grid-column"), Some("12 / span 2"));
+            for cell in real_cells(row) {
+                assert_eq!(get(cell, "border-bottom"), None, "cells must not draw the rule");
+                assert_eq!(get(cell, "border-right"), None);
+            }
         }
     }
 

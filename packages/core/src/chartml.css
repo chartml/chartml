@@ -38,6 +38,13 @@
   --chartml-table-surface: #ffffff;
   --chartml-table-border: #e5e7eb;
   --chartml-table-text: #374151;
+  /* Cell padding: one to four lengths, in px, em or rem (or unitless 0).
+   * The table renderer measures this padding to size its columns, so a
+   * percentage is not supported: it cannot be resolved during that
+   * measurement and would make columns overlap their neighbours. The Rust
+   * renderer enforces this on the theme value (an unsupported theme value
+   * fails with an error). A host override of this variable is never
+   * validated: it reaches the browser as written. */
   --chartml-table-cell-padding: 8px 12px;
   --chartml-table-font-size: 13px;
 }
@@ -116,15 +123,16 @@
 }
 .chartml-table-header {
   background: var(--chartml-table-header-bg);
+  border-bottom-color: var(--chartml-table-border);
 }
 .chartml-table-header-cell {
   color: var(--chartml-table-header-text);
   padding: var(--chartml-table-cell-padding);
   font-size: var(--chartml-table-font-size);
-  border-bottom-color: var(--chartml-table-border);
 }
 .chartml-table-row {
   background: var(--chartml-table-row-bg);
+  border-bottom-color: var(--chartml-table-border);
 }
 .chartml-table-row-alt {
   background: var(--chartml-table-row-bg-alt);
@@ -133,7 +141,6 @@
   color: var(--chartml-table-text);
   padding: var(--chartml-table-cell-padding);
   font-size: var(--chartml-table-font-size);
-  border-bottom-color: var(--chartml-table-border);
 }
 .chartml-table-pager {
   background: var(--chartml-table-header-bg);

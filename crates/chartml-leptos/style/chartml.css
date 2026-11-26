@@ -243,6 +243,15 @@
 }
 
 /* ── Table chart ──
+ *
+ * `--chartml-table-cell-padding` takes one to four lengths — px, em or rem
+ * (or unitless 0). The renderer measures that padding to size its columns, so
+ * a percentage is not supported: it cannot be resolved during the measurement
+ * and would make columns overlap their neighbours. The Rust renderer enforces
+ * this on the theme value (an unsupported theme value fails with an error). A
+ * host override of this variable is never validated: it reaches the browser as
+ * written.
+ *
  * The Rust renderer emits inline `style` on table elements with CSS custom
  * property values (e.g. `color: var(--chartml-table-text, #hex)`). These class
  * rules below are NOT needed for the inline-style override to work — they exist
@@ -257,16 +266,20 @@
  * over it, so the sticky header and the right-edge fade stay opaque; set it
  * to match that surface when the header or row colours are transparent.
  */
-.chartml-table-header   { background: var(--chartml-table-header-bg, #f9fafb); }
-.chartml-table-header-cell {
-    color: var(--chartml-table-header-text, #1f2937);
+.chartml-table-header {
+    background: var(--chartml-table-header-bg, #f9fafb);
     border-bottom-color: var(--chartml-table-border, #e5e7eb);
 }
-.chartml-table-row      { background: var(--chartml-table-row-bg, #ffffff); }
+.chartml-table-header-cell {
+    color: var(--chartml-table-header-text, #1f2937);
+}
+.chartml-table-row {
+    background: var(--chartml-table-row-bg, #ffffff);
+    border-bottom-color: var(--chartml-table-border, #e5e7eb);
+}
 .chartml-table-row-alt  { background: var(--chartml-table-row-bg-alt, #f9fafb); }
 .chartml-table-cell {
     color: var(--chartml-table-text, #374151);
-    border-bottom-color: var(--chartml-table-border, #e5e7eb);
 }
 .chartml-table-pager    { background: var(--chartml-table-header-bg, #f9fafb); }
 .chartml-table-pager-info { color: var(--chartml-text-secondary, #6b7280); }

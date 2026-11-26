@@ -137,6 +137,33 @@ pub enum FieldRefItem {
     Detailed(Box<FieldSpec>),
 }
 
+/// Table-only: a column's width. A number is a fixed width in CSS pixels;
+/// `auto` sizes the column from its header label and values, which is also
+/// the behaviour when the width is omitted.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum ColumnWidth {
+    Pixels(f64),
+    Auto(AutoWidth),
+}
+
+/// The `auto` keyword of [`ColumnWidth`].
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AutoWidth {
+    Auto,
+}
+
+/// Table-only: a column's text alignment. Overrides the type-based default
+/// (numeric columns right-aligned, everything else left-aligned).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ColumnAlign {
+    Left,
+    Center,
+    Right,
+}
+
 /// A row/column field specification.
 ///
 /// `field` is `Option<String>` rather than `String` because range marks —
@@ -161,6 +188,10 @@ pub struct FieldSpec {
     pub lower: Option<String>,
     /// Fill opacity for range marks (default 0.15)
     pub opacity: Option<f64>,
+    /// Table-only: fixed pixel width, or `auto` to size from content.
+    pub width: Option<ColumnWidth>,
+    /// Table-only: text alignment, overriding the type-based default.
+    pub align: Option<ColumnAlign>,
 }
 
 
