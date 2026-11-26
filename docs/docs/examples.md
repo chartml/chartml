@@ -242,14 +242,14 @@ This metric shows error rate where a decrease is positive (green) and an increas
 **Metric Label Rules:**
 
 Metric cards support two optional label locations:
-- **`chart.title`** → Label shown **above** the card (like all chart types)
-- **`visualize.label`** → Label shown **inside** the card (metric-specific feature)
-- If neither specified → Only the formatted value is shown
+- **`chart.title`** → Title shown **above** the card by the browser components (like all chart types); not part of the rendered SVG. When `visualize.label` is not set, the title is also used as the in-card label
+- **`visualize.label`** → Label shown **inside** the card (metric-specific feature); takes precedence over the title for the in-card label
+- If neither specified → The in-card label is the name of the `value` field (here `revenue`), so a card always shows a label
 
 **Examples:**
 
 ```chartml
-# Just the number (no labels)
+# No title or label: the card shows the field name "revenue" as its label
 type: chart
 version: 1
 data:

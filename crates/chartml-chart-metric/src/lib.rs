@@ -268,6 +268,62 @@ mod tests {
         }
     }
 
+    /// Render a metric card with the given title/label and return the label
+    /// span's content (the card's first child).
+    fn rendered_card(title: Option<&str>, label: Option<&str>) -> ChartElement {
+        let label_line = label.map(|l| format!("label: \"{l}\"\n")).unwrap_or_default();
+        let viz: chartml_core::spec::VisualizeSpec =
+            serde_yaml::from_str(&format!("type: metric\nvalue: total_revenue\n{label_line}"))
+                .expect("metric VisualizeSpec YAML should parse");
+        let config = ChartConfig {
+            visualize: viz,
+            title: title.map(str::to_string),
+            width: 300.0,
+            height: 150.0,
+            colors: vec![],
+            theme: chartml_core::theme::Theme::default(),
+        };
+        let rows: Vec<Row> = vec![[("total_revenue".to_string(), json!(1234567))].into_iter().collect()];
+        let data = DataTable::from_rows(&rows).expect("DataTable::from_rows should succeed");
+        MetricRenderer::new().render(&data, &config).expect("metric must render")
+    }
+
+    /// The label span's content (the card's first child).
+    fn rendered_label(title: Option<&str>, label: Option<&str>) -> String {
+        let children = match rendered_card(title, label) {
+            ChartElement::Div { children, .. } => children,
+            other => panic!("root must be Div, got {other:?}"),
+        };
+        match children.first() {
+            Some(ChartElement::Span { class, content, .. }) => {
+                assert_eq!(class, "chartml-metric-label");
+                content.clone()
+            }
+            other => panic!("label child must be Span, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn metric_label_falls_back_to_the_field_name() {
+        // CHA-41: `docs/docs/spec.md` states that with neither `visualize.label`
+        // nor a chart title the card shows the value field's name as its label.
+        assert_eq!(rendered_label(None, None), "total_revenue");
+        // Precedence (docs/docs/spec.md, schema `label`): label, then title,
+        // then field name. A title-only card uses the title as its in-card
+        // label; the title is drawn above the card by the browser components,
+        // not by this renderer, so the card itself holds it only once.
+        assert_eq!(rendered_label(Some("Q3"), None), "Q3");
+        assert_eq!(rendered_label(Some("Q3"), Some("Revenue")), "Revenue");
+        assert_eq!(rendered_label(None, Some("Revenue")), "Revenue");
+        // The renderer emits no chart-title element: the title reaches the
+        // card only as the in-card label, once, and never beside a `label`.
+        let titled = rendered_card(Some("Q3"), None);
+        assert_eq!(count_elements(&titled, &|e| matches!(e, ChartElement::Text { class, .. } if class == "chart-title")), 0);
+        assert_eq!(count_elements(&titled, &|e| matches!(e, ChartElement::Span { content, .. } if content == "Q3")), 1);
+        let both = rendered_card(Some("Q3"), Some("Revenue"));
+        assert_eq!(count_elements(&both, &|e| matches!(e, ChartElement::Span { content, .. } if content == "Q3")), 0);
+    }
+
     #[test]
     fn metric_without_format_shows_the_raw_number() {
         // CHA-29: with no `visualize.format` the card prints the raw f64 via
