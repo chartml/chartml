@@ -72,20 +72,46 @@ if [ -n "${HOOK_TEST_REPO_ROOT:-}" ]; then
     esac
 fi
 printf '%s\n' "${HOOK_TEST_OUTPUT:-}"
-# Emulate Cargo's own config discovery: a .cargo/config.toml in the linted
-# directory (or an ancestor) with rustflags that silence warnings really does
-# suppress them, so tests can prove the copy is linted with the commit's own
-# configuration.
+# Emulate Cargo's precedence: RUSTFLAGS in the environment, when set, makes
+# Cargo ignore build.rustflags from every config file. Otherwise a
+# .cargo/config.toml in the linted directory (or an ancestor) applies. Both
+# directions matter: without this, forcing RUSTFLAGS in the hook — which drops a
+# committed config — would leave the suite green.
 suppress=0
-check_dir=$PWD
-while :; do
-    if [ -f "$check_dir/.cargo/config.toml" ] && grep -qE -- '-A"?,? ?"warnings|allow' "$check_dir/.cargo/config.toml" 2>/dev/null; then
-        suppress=1
-        break
-    fi
-    [ "$check_dir" = "/" ] && break
-    check_dir=$(dirname -- "$check_dir")
-done
+deny=0
+if [ -n "${RUSTFLAGS+set}" ]; then
+    case "${RUSTFLAGS:-}" in
+        *-A*warnings*|*allow*) suppress=1 ;;
+        *-D*|*deny*) deny=1 ;;
+    esac
+else
+    check_dir=$PWD
+    while :; do
+        config_file=''
+        if [ -f "$check_dir/.cargo/config.toml" ]; then
+            config_file="$check_dir/.cargo/config.toml"
+        elif [ -f "$check_dir/.cargo/config" ]; then
+            config_file="$check_dir/.cargo/config"
+        fi
+        if [ -n "$config_file" ]; then
+            if grep -qE -- '-A"?,? ?"warnings|allow' "$config_file" 2>/dev/null; then
+                suppress=1
+                break
+            fi
+            if grep -qE -- '-D|deny' "$config_file" 2>/dev/null; then
+                deny=1
+                break
+            fi
+        fi
+        [ "$check_dir" = "/" ] && break
+        check_dir=$(dirname -- "$check_dir")
+    done
+fi
+# A deny turns even a clean lint into a failure, as a real denied lint does.
+if [ "$deny" -eq 1 ]; then
+    printf 'error: lint denied by rustflags\n'
+    exit 101
+fi
 # Emit a warning when the linted content itself contains a marker, so tests
 # can prove the verdict follows the linted content and nothing else.
 if [ -n "${HOOK_TEST_WARN_ON_MARKER:-}" ] && [ "$suppress" -eq 0 ] && grep -rqF -- "$HOOK_TEST_WARN_ON_MARKER" .; then
@@ -1007,6 +1033,23 @@ else
     cat "$scratch/committed-config-honoured.log" >&2
 fi
 
+# The other direction: a committed deny must be enforced, so the hook cannot
+# simply ignore every config and still pass both cases.
+repo="$scratch/committed-config-denied"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = ["-D", "warnings"]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_DENIED = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+if (
+    cd "$repo"
+    HOOK_TEST_WARN_ON_MARKER='CHA27_DENIED' bash "$hook" > "$scratch/committed-config-denied.log" 2>&1
+); then
+    fail 'a rustflags committed deny was not enforced'
+else
+    pass 'a rustflags committed in .cargo/config.toml that denies is enforced'
+fi
+
 # --- An interrupted run leaves no temporary files behind ----------------
 # The hook creates temporary indexes and a listing outside the state dir. The
 # signal has to land while one of them exists, so `git` is stood in for by a
@@ -1200,6 +1243,56 @@ if [ "$race_failures" -eq 0 ] && [ "$overlap_seen" -eq 0 ]; then
     pass 'hooks racing one dead lock reclaim it without overlapping'
 else
     fail "racing reclaim overlapped ($overlap_seen rounds) or failed ($race_failures rounds)"
+fi
+
+# --- The developer'"'"'s shell cannot decide the verdict ------------------
+# A RUSTFLAGS in the environment makes Cargo ignore build.rustflags from every
+# config file, so leaving it set would let the shell silence a committed
+# warning or deny a clean commit. The hook unsets it for the lint run only.
+repo="$scratch/shell-rustflags-allow"
+new_repo "$repo"
+printf 'fn tracked() { let CHA27_SHELL_ALLOW = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    RUSTFLAGS='-A warnings' HOOK_TEST_WARN_ON_MARKER='CHA27_SHELL_ALLOW' \
+        bash "$hook" > "$scratch/shell-rustflags-allow.log" 2>&1
+); then
+    fail 'a shell RUSTFLAGS=-A warnings suppressed a committed warning'
+else
+    pass 'a shell RUSTFLAGS=-A warnings cannot suppress a committed warning'
+fi
+
+repo="$scratch/shell-rustflags-deny"
+new_repo "$repo"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+if (
+    cd "$repo"
+    RUSTFLAGS='-D clippy::pedantic' bash "$hook" > "$scratch/shell-rustflags-deny.log" 2>&1
+); then
+    pass 'a shell RUSTFLAGS=-D clippy::pedantic cannot block a clean commit'
+else
+    fail 'a shell RUSTFLAGS blocked a clean commit'
+    cat "$scratch/shell-rustflags-deny.log" >&2
+fi
+
+# A committed config must still work in both directions after that unset.
+repo="$scratch/shell-rustflags-committed"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_SHELL_COMMITTED = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+if (
+    cd "$repo"
+    RUSTFLAGS='-D clippy::pedantic' HOOK_TEST_WARN_ON_MARKER='CHA27_SHELL_COMMITTED' \
+        bash "$hook" > "$scratch/shell-rustflags-committed.log" 2>&1
+); then
+    pass 'a shell RUSTFLAGS cannot override the commit'"'"'s own configuration'
+else
+    fail 'a shell RUSTFLAGS overrode the commit'"'"'s own configuration'
+    cat "$scratch/shell-rustflags-committed.log" >&2
 fi
 
 if [ "$failures" -ne 0 ]; then

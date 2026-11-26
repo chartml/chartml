@@ -377,9 +377,16 @@ fi
 # Clippy runs from the lint copy with an explicit manifest. Because the copy
 # holds the commit's own files — including a .cargo/config.toml if the commit
 # has one — Cargo resolves exactly the configuration that belongs to the
-# commit, and cannot reach the working tree's. The developer's own environment
-# (CARGO_HOME, RUSTFLAGS, a compiler wrapper) applies, as it does to any build
-# they run, and is not this hook's business to override.
+# commit, and cannot reach the working tree's.
+#
+# rustflags from the developer's shell are unset, not set to something: a
+# RUSTFLAGS in the environment makes Cargo ignore build.rustflags from every
+# config file, so leaving it in place would let the shell decide the verdict —
+# silencing a committed warning or denying a clean commit. Unsetting them keeps
+# the commit's own configuration authoritative in both directions. Nothing else
+# about the environment is touched: CARGO_HOME, RUSTC_WRAPPER (sccache) and the
+# toolchain are the developer's, exactly as for a build they run themselves.
+unset RUSTFLAGS CARGO_BUILD_RUSTFLAGS 2>/dev/null || true
 ( cd -- "$snapshot_tree" && CARGO_TARGET_DIR="$target_dir" cargo clippy --manifest-path "$snapshot_manifest" --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion ) > "$clippy_log" 2>&1 &
 cargo_pid=$!
 clippy_status=0
