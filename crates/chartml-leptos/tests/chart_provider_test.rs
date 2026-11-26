@@ -62,6 +62,11 @@ struct RecordingProvider {
     table: DataTable,
     calls: Arc<Mutex<u32>>,
     fail_first: Option<u32>,
+    /// Artificial latency before the fetch resolves. Real providers always
+    /// take at least a network round trip; a non-zero delay lets a test
+    /// observe the in-flight `.chartml-loading` marker instead of racing an
+    /// already-resolved fetch.
+    delay_ms: u32,
 }
 
 impl RecordingProvider {
@@ -70,11 +75,17 @@ impl RecordingProvider {
             table,
             calls: Arc::new(Mutex::new(0)),
             fail_first: None,
+            delay_ms: 0,
         }
     }
 
     fn fail_first(mut self, n: u32) -> Self {
         self.fail_first = Some(n);
+        self
+    }
+
+    fn with_delay(mut self, ms: u32) -> Self {
+        self.delay_ms = ms;
         self
     }
 
@@ -86,6 +97,9 @@ impl RecordingProvider {
 #[async_trait(?Send)]
 impl DataSourceProvider for RecordingProvider {
     async fn fetch(&self, _request: FetchRequest) -> Result<FetchResult, FetchError> {
+        if self.delay_ms > 0 {
+            gloo_timers::future::TimeoutFuture::new(self.delay_ms).await;
+        }
         let prev = {
             let mut c = self
                 .calls
@@ -335,7 +349,9 @@ async fn test_chart_fetches_via_provider() {
 #[wasm_bindgen_test]
 async fn test_chart_shows_loading_state() {
     let root = fresh_mount_root();
-    let provider = RecordingProvider::new(sample_table());
+    // Hold the fetch open long enough that the initial observation happens
+    // while the request is genuinely in flight.
+    let provider = RecordingProvider::new(sample_table()).with_delay(100);
     let provider_ref: ProviderRef = Arc::new(provider);
 
     let _handle = mount_chart_with_provider(
@@ -358,8 +374,9 @@ async fn test_chart_shows_loading_state() {
         "loading marker must be present immediately after mount",
     );
 
-    // Wait for fetch + transform + render. Loading marker should clear.
-    yield_to_event_loop(250).await;
+    // Wait for the 100ms fetch + transform + render. Loading marker should
+    // clear; 500ms leaves headroom for a slow shared CI runner.
+    yield_to_event_loop(500).await;
     assert!(
         root
             .query_selector(".chartml-loading")

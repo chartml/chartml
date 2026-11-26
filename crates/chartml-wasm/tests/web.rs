@@ -27,7 +27,7 @@ visualize:
     assert!(result.is_ok(), "render_to_svg failed: {:?}", result.err());
     let svg = result.expect("render_to_svg must return the rendered SVG string");
     assert!(svg.contains("<svg"), "Expected SVG root element");
-    assert!(svg.contains(r#"class="bar""#), "Expected bar rect elements");
+    assert!(svg.contains(r#"class="bar bar-rect""#), "Expected bar rect elements");
 }
 
 #[wasm_bindgen_test]
@@ -54,7 +54,10 @@ visualize:
     assert!(result.is_ok(), "Line chart render failed: {:?}", result.err());
     let svg = result.expect("render_to_svg must return the rendered SVG string");
     assert!(svg.contains("<svg"), "Expected SVG root element");
-    assert!(svg.contains(r#"class="line""#), "Expected line path element");
+    assert!(
+        svg.contains(r#"class="chartml-line-path series-line""#),
+        "Expected line path element"
+    );
 }
 
 #[wasm_bindgen_test]
@@ -81,7 +84,7 @@ visualize:
     assert!(result.is_ok(), "Area chart render failed: {:?}", result.err());
     let svg = result.expect("render_to_svg must return the rendered SVG string");
     assert!(svg.contains("<svg"), "Expected SVG root element");
-    assert!(svg.contains(r#"class="area""#), "Expected area path element");
+    assert!(svg.contains(r#"class="chartml-area-path""#), "Expected area path element");
 }
 
 #[wasm_bindgen_test]
@@ -203,6 +206,7 @@ visualize:
   type: metric
   columns: label
   value: value
+  format: ",.0f"
 "#;
     let result = chartml.render_to_svg(yaml, JsValue::UNDEFINED);
     assert!(result.is_ok(), "Metric card render failed: {:?}", result.err());
