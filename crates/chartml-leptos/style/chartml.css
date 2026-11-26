@@ -252,6 +252,14 @@
  * host override of this variable is never validated: it reaches the browser as
  * written.
  *
+ * `--chartml-table-header-letter-spacing` is resolved to a number on the
+ * server to size header columns, so it takes `normal`, unitless 0, or a number
+ * in em, % (of the header's own font size: 10% is 0.1em) or px (px needs a px
+ * table font size). Viewport units, rem, ch and calc() are rejected by the
+ * Rust renderer on the theme value, because the server cannot resolve them
+ * (rem is accepted for padding only because padding is passed to CSS calc()).
+ * A host override of the variable is likewise never validated.
+ *
  * The Rust renderer emits inline `style` on table elements with CSS custom
  * property values (e.g. `color: var(--chartml-table-text, #hex)`). These class
  * rules below are NOT needed for the inline-style override to work — they exist
