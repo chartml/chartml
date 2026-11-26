@@ -1456,6 +1456,51 @@ else
     cat "$scratch/cargo-home-config.log" >&2
 fi
 
+# A symlinked CARGO_HOME (dotfile managers do this) is still CARGO_HOME.
+real_home="$scratch/cargo-home-real"
+link_home="$scratch/cargo-home-link"
+mkdir -p "$real_home" "$link_home"
+printf '[alias]\nnoop = "check"\n' > "$real_home/config.toml"
+ln -s "$real_home" "$link_home/.cargo"
+repo="$scratch/cargo-home-symlink"
+new_repo "$repo"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+if (
+    cd "$repo"
+    CARGO_HOME="$link_home/.cargo" TMPDIR="$link_home" bash "$hook" > "$scratch/cargo-home-symlink.log" 2>&1
+); then
+    pass 'a symlinked CARGO_HOME config above the copy is not refused'
+else
+    fail 'a symlinked CARGO_HOME config was refused'
+    cat "$scratch/cargo-home-symlink.log" >&2
+fi
+
+# The commit's own .cargo/config.toml lives inside the copy, not above it: it
+# applies as in CI and is never refused.
+repo="$scratch/own-config"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_OWN_CONFIG = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+own_tmp="$scratch/own-config-base"
+mkdir -p "$own_tmp"
+# Run once so the next run reuses a copy that already holds the config.
+(
+    cd "$repo"
+    TMPDIR="$own_tmp" bash "$hook" > /dev/null 2>&1
+) || true
+if (
+    cd "$repo"
+    TMPDIR="$own_tmp" HOOK_TEST_WARN_ON_MARKER='CHA27_OWN_CONFIG' bash "$hook" > "$scratch/own-config.log" 2>&1
+) && ! grep -q 'above the lint copy' "$scratch/own-config.log"; then
+    pass "a commit's own .cargo/config.toml is applied, not refused"
+else
+    fail "a commit's own .cargo/config.toml was refused or ignored"
+    cat "$scratch/own-config.log" >&2
+fi
+
 # An unresolvable CARGO_HOME exempts nothing: the ancestor config is still refused.
 repo="$scratch/ancestor-config-nohome"
 new_repo "$repo"

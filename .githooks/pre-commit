@@ -301,15 +301,17 @@ while [ -n "$ancestor" ]; do
         [ -f "$ancestor_cargo_dir/$config_name" ] || continue
         # The CARGO_HOME config is exempt by exact path. An unresolvable
         # CARGO_HOME exempts nothing.
-        if [ -n "$cargo_home" ] && [ "$ancestor_cargo_dir" = "$cargo_home" ]; then
+        # .cargo itself may be a symlink, so compare its real path.
+        real_cargo_dir=$(cd -- "$ancestor_cargo_dir" 2>/dev/null && pwd -P) || real_cargo_dir=''
+        if [ -n "$cargo_home" ] && [ "$real_cargo_dir" = "$cargo_home" ]; then
             continue
         fi
         # The copy is reused through the pointer, so leaving it would keep
         # refusing after TMPDIR is moved. Drop it and its pointer; the next run
         # makes a fresh copy under whatever TMPDIR then is.
-        rm -f -- "$pointer"
+        rm -f -- "$pointer" || true
         case "$snapshot_root" in
-            */chartml-pre-commit.*) rm -rf -- "$snapshot_root" ;;
+            */chartml-pre-commit.*) rm -rf -- "$snapshot_root" || true ;;
         esac
         echo ""
         echo "❌ A Cargo config above the lint copy would decide this commit's verdict:"
