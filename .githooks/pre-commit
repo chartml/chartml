@@ -1,7 +1,12 @@
 #!/bin/bash
 # Pre-commit hook: blocks lint suppressions and clippy warnings.
+#
+# Clippy lints an isolated copy of the tree the commit will record, never the
+# working tree, so the verdict depends only on the content being committed.
+# Unstaged and untracked changes are neither read nor modified, whatever the
+# outcome.
 
-set -e
+set -eu
 
 # --- Check 1: Reject new lint suppressions in staged files ---
 echo "🔍 Checking for new lint suppressions..."
@@ -23,12 +28,392 @@ fi
 
 echo "✅ No new lint suppressions."
 
-# --- Check 2: Cargo clippy ---
-echo "🔍 Running cargo clippy..."
+# --- Check 2: Cargo clippy on the committed content ---
+# Two separate directories are involved:
+#   * the lint copy, which must live OUTSIDE the repository so Cargo's upward
+#     search for a manifest and for .cargo/config.toml cannot reach the
+#     working tree (that search is how unstaged files leaked into the verdict);
+#   * the state directory inside this worktree's Git directory, which holds
+#     the lock and the Cargo target dir. The target dir is reused between runs
+#     so linting stays incremental.
 
-if ! clippy_output=$(cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion 2>&1); then
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+git_dir=$(cd -- "$(git rev-parse --git-dir)" && pwd)
+state_dir="$git_dir/chartml-pre-commit"
+target_dir="$state_dir/target"
+lock_file="$state_dir/lock"
+clippy_log="$state_dir/clippy.$$.log"
+
+lock_held=0
+cargo_pid=''
+temp_files=()
+
+lock_owner() {
+    cat -- "$lock_file" 2>/dev/null || true
+}
+
+# A reclaim guard is a directory holding the pid of the hook inside it. It can
+# be cleared only when its owner is dead. Pass "held" when this hook holds the
+# lint lock: no one else can be reclaiming then, so any guard is dead.
+clear_dead_guard() {
+    local guard=$state_dir/lock.reclaim owner
+    [ -d "$guard" ] || return 0
+    if [ "${1:-}" = "held" ]; then
+        rm -rf -- "$guard"
+        return 0
+    fi
+    owner=$(cat -- "$guard/owner" 2>/dev/null || true)
+    case "$owner" in
+        ''|*[!0-9]*) owner='' ;;
+    esac
+    if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then
+        rm -rf -- "$guard"
+    fi
+}
+
+release_lock() {
+    [ "$lock_held" -eq 1 ] || return 0
+    if [ "$(lock_owner)" = "$$" ]; then
+        rm -f -- "$lock_file"
+    fi
+    lock_held=0
+}
+
+cleanup() {
+    # Never leave cargo linting a copy that the next hook will replace.
+    if [ -n "$cargo_pid" ] && kill -0 "$cargo_pid" 2>/dev/null; then
+        kill -TERM "$cargo_pid" 2>/dev/null || true
+        wait "$cargo_pid" 2>/dev/null || true
+    fi
+    # Temporary indexes and listings live outside the state dir, so an
+    # interrupt would otherwise leave them in TMPDIR. They are held as separate
+    # array elements so a TMPDIR containing spaces cannot split a path.
+    if [ "${#temp_files[@]}" -gt 0 ]; then
+        rm -f -- "${temp_files[@]}"
+    fi
+    [ -d "$state_dir" ] || return 0
+    rm -f -- "$clippy_log"
+    # The guard is only ours if we hold the lint lock; another hook may be
+    # inside its own reclaim, so it is never cleared from here otherwise.
+    if [ "$lock_held" -eq 1 ]; then
+        clear_dead_guard held
+    fi
+    release_lock
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
+mkdir -p -- "$state_dir" 2>/dev/null || true
+if [ ! -d "$state_dir" ] || [ ! -w "$state_dir" ]; then
+    echo ""
+    echo "❌ Cannot write the lint state at $state_dir."
+    echo "   The hook refuses to lint anything but the commit's content, so it cannot continue."
+    echo "   Check permissions on $state_dir and try again."
+    exit 1
+fi
+
+# The lock is taken before anything reads the index, so two hooks starting at
+# the same moment cannot collide in `git write-tree`. A guard directory left by
+# a hook killed mid-reclaim would otherwise disable reclamation, so one whose
+# owner is dead is cleared before waiting.
+clear_dead_guard
+#
+# The lock is a FILE whose content is the owner's pid, created with noclobber:
+# the create is atomic, needs no hard links (exFAT, some network mounts), and —
+# unlike renaming a directory aside — can never "succeed" by nesting inside an
+# existing lock. Release and reclaim both re-read the owner and act only on the
+# pid they saw, and never rename a live lock into place.
+waited=0
+reclaimed=0
+while :; do
+    if ( set -C; printf '%s\n' "$$" > "$lock_file" ) 2>/dev/null; then
+        lock_held=1
+        # A killed hook cannot clean up after itself. Nothing is linting while
+        # we hold the lock, so a clippy log this run does not own belongs to a
+        # dead run.
+        for leftover in "$state_dir"/clippy.*.log; do
+            [ -e "$leftover" ] || continue
+            leftover_pid=${leftover##*/}
+            leftover_pid=${leftover_pid#clippy.}
+            leftover_pid=${leftover_pid%.log}
+            [ "$leftover_pid" = "$$" ] && continue
+            case "$leftover_pid" in
+                ''|*[!0-9]*) rm -rf -- "$leftover"; continue ;;
+            esac
+            if ! kill -0 "$leftover_pid" 2>/dev/null; then
+                rm -rf -- "$leftover"
+            fi
+        done
+        # A hook killed while it held the reclaim guard leaves it behind, and no
+        # hook can reclaim while it exists. Nothing is reclaiming now that we
+        # hold the lock.
+        clear_dead_guard held
+        break
+    fi
+    holder=$(lock_owner)
+    holder_pid=$holder
+    case "$holder_pid" in
+        ''|*[!0-9]*) holder_pid='' ;;
+    esac
+    if [ -z "$holder" ] || [ -z "$holder_pid" ] || ! kill -0 "$holder_pid" 2>/dev/null; then
+        # Removing the lock has to be safe against another hook doing the same
+        # thing: two reclaimers could both see a dead pid and both delete, and
+        # the second could delete the lock a third hook had just created. A
+        # short-lived guard directory makes the verify-and-delete a single
+        # operation. A guard found alongside a stale lock, with nobody alive to
+        # hold it, is left by a killed run and is cleared so reclamation can
+        # proceed.
+        reclaim_guard="$state_dir/lock.reclaim"
+        clear_dead_guard
+        if mkdir -- "$reclaim_guard" 2>/dev/null; then
+            printf '%s\n' "$$" > "$reclaim_guard/owner"
+            # Re-read inside the guard: this is the value being acted on. A
+            # lock whose content is not a live pid — including garbage, which
+            # this hook never writes — is stale.
+            current=$(lock_owner)
+            current_pid=$current
+            case "$current_pid" in
+                ''|*[!0-9]*) current_pid='' ;;
+            esac
+            if [ "$current" = "$holder" ] &&
+                { [ -z "$current_pid" ] || ! kill -0 "$current_pid" 2>/dev/null; }; then
+                rm -f -- "$lock_file"
+                echo "   removed stale lint lock${current_pid:+ left by pid $current_pid}"
+                reclaimed=1
+            fi
+            rm -f -- "$reclaim_guard/owner"
+            rmdir -- "$reclaim_guard" 2>/dev/null || true
+        fi
+    fi
+    if [ "$waited" -ge 60 ]; then
+        echo ""
+        if [ -n "$holder" ]; then
+            echo "❌ Another pre-commit hook is still using this lint lock (owner: ${holder})."
+        else
+            echo "❌ Could not take the lint lock at $lock_file."
+        fi
+        echo "   Remove $lock_file and retry."
+        exit 1
+    fi
+    if [ "$waited" -eq 0 ] && [ "$reclaimed" -eq 0 ]; then
+        echo "⏳ Waiting for another pre-commit hook to finish${holder:+ (pid $holder)}..."
+    fi
+    sleep 1
+    waited=$((waited + 1))
+done
+
+if ! index_tree=$(git write-tree 2>/dev/null); then
+    echo ""
+    if [ -n "$(git ls-files -u 2>/dev/null | head -1)" ]; then
+        echo "❌ Cannot lint the committed content — the index has unresolved conflicts."
+        echo "   Resolve them, stage the results, and commit again."
+    else
+        echo "❌ Cannot read the index to determine what this commit would contain."
+        git write-tree || true
+        echo "   Nothing was linted; the commit is blocked."
+    fi
+    exit 1
+fi
+
+# Reuse one lint copy per worktree so Cargo's fingerprints stay valid and
+# linting stays incremental. It is recreated from the commit's tree on every
+# run, so a deleted or renamed file can never survive in it.
+#
+# The copy must never be inside the repository: Cargo searches upwards from it
+# for a manifest and for .cargo/config.toml, and finding the working tree's
+# ones is exactly how unstaged files used to change the verdict.
+inside_repo() {
+    # Decide on the resolved path only: TMPDIR can be spelled with ".." or
+    # through the /var symlink, and refusing a path that merely looks like it
+    # is under the repository would block a legal TMPDIR.
+    resolved=$(cd -- "$1" 2>/dev/null && pwd -P) || resolved=''
+    if [ -z "$resolved" ]; then
+        # Cannot resolve it, so treat an unreachable path as outside: creating
+        # a copy there fails loudly on its own.
+        return 1
+    fi
+    case "$resolved/" in
+        "$repo_root"/*) return 0 ;;
+    esac
+    return 1
+}
+
+usable_outside_repo() {
+    [ -n "$1" ] && [ -d "$1" ] && [ -w "$1" ] && ! inside_repo "$1"
+}
+
+pointer="$state_dir/snapshot-dir"
+snapshot_root=''
+if [ -f "$pointer" ]; then
+    candidate=$(cat -- "$pointer" 2>/dev/null || true)
+    if usable_outside_repo "$candidate"; then
+        snapshot_root=$candidate
+    fi
+fi
+if [ -z "$snapshot_root" ]; then
+    temp_base=${TMPDIR:-/tmp}
+    temp_base=${temp_base%/}
+    if inside_repo "$temp_base"; then
+        echo ""
+        echo "❌ TMPDIR ($temp_base) is inside this repository, so a lint copy there"
+        echo "   would let Cargo read the working tree instead of just the commit."
+        echo "   Point TMPDIR somewhere outside $repo_root and commit again."
+        exit 1
+    fi
+    snapshot_root=$(mktemp -d "$temp_base/chartml-pre-commit.XXXXXX") || snapshot_root=''
+    if ! usable_outside_repo "$snapshot_root"; then
+        echo ""
+        echo "❌ Cannot create a lint copy outside this repository (tried $temp_base)."
+        echo "   Set TMPDIR to a writable directory outside $repo_root and try again."
+        exit 1
+    fi
+    # Replace the previous copy once the new one is usable, so one worktree
+    # keeps at most one copy even when TMPDIR changes between runs.
+    previous=$(cat -- "$pointer" 2>/dev/null || true)
+    if [ -n "$previous" ] && [ "$previous" != "$snapshot_root" ] && ! inside_repo "$previous"; then
+        case "$previous" in
+            */chartml-pre-commit.*) rm -rf -- "$previous" ;;
+        esac
+    fi
+    printf '%s\n' "$snapshot_root" > "$pointer"
+fi
+snapshot_tree="$snapshot_root/tree"
+snapshot_manifest="$snapshot_tree/Cargo.toml"
+
+echo "🔍 Running cargo clippy on the committed content..."
+echo "   lint copy:  $snapshot_tree"
+echo "   target dir: $target_dir"
+echo "   remove them: rm -rf -- $snapshot_root $target_dir"
+
+rm -rf -- "$snapshot_tree"
+mkdir -p -- "$snapshot_tree"
+verify_index=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-index.XXXXXX")
+temp_files+=("$verify_index")
+rm -f -- "$verify_index"
+abs_git_dir=$(cd -- "$(git rev-parse --git-dir)" && pwd)
+if ! (
+    export GIT_INDEX_FILE="$verify_index"
+    git read-tree "$index_tree" &&
+        git checkout-index -a -f --prefix="$snapshot_tree/"
+); then
+    rm -f -- "$verify_index"
+    echo ""
+    echo "❌ Could not materialise the committed content at $snapshot_tree."
+    echo "   Remove $state_dir and try again."
+    exit 1
+fi
+rm -f -- "$verify_index"
+
+# Prove the copy holds exactly the commit's content before linting it. A
+# mismatch (for example a smudge filter) fails the commit instead of linting
+# something else. Content is compared, not the tree id: clippy reads bytes, so
+# an executable bit that the filesystem cannot represent (core.filemode=false,
+# Git for Windows) must not refuse every commit.
+verify_index=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-verify.XXXXXX")
+temp_files+=("$verify_index")
+rm -f -- "$verify_index"
+listing_file=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-listing.XXXXXX")
+temp_files+=("$listing_file")
+(
+    cd -- "$snapshot_tree" || exit 1
+    GIT_INDEX_FILE="$verify_index" git --git-dir="$abs_git_dir" --work-tree="$snapshot_tree" add -A -f -- . &&
+        GIT_INDEX_FILE="$verify_index" git --git-dir="$abs_git_dir" --work-tree="$snapshot_tree" ls-files -s
+) > "$listing_file" || : > "$listing_file"
+rm -f -- "$verify_index"
+
+# Normalise both sides to "path<TAB>object<TAB>kind" so modes, index stages and
+# ordering differences cannot mask or invent a content difference. Submodules
+# (gitlinks) are not materialised, so they are not part of the linted content.
+content_of_tree() {
+    git ls-tree -r "$1" | awk -F'\t' '{
+        split($1, meta, " ")
+        kind = (meta[1] == "120000") ? "symlink" : "file"
+        if (meta[2] == "blob") printf "%s\t%s\t%s\n", $2, meta[3], kind
+    }' | LC_ALL=C sort
+}
+content_of_listing() {
+    awk -F'\t' '{
+        split($1, meta, " ")
+        if (meta[3] != "0") next
+        kind = (meta[1] == "120000") ? "symlink" : "file"
+        printf "%s\t%s\t%s\n", $2, meta[2], kind
+    }' "$1" | LC_ALL=C sort
+}
+
+index_content=$(content_of_tree "$index_tree")
+snapshot_content=$(content_of_listing "$listing_file")
+rm -f -- "$listing_file"
+if [ "$index_content" != "$snapshot_content" ]; then
+    echo ""
+    echo "❌ The lint copy does not match the committed content."
+    if [ -z "$snapshot_content" ]; then
+        echo "   The copy at $snapshot_tree could not be read."
+    elif [ -z "$index_content" ]; then
+        echo "   The commit has no content to lint."
+    else
+        diff <(printf '%s\n' "$index_content") <(printf '%s\n' "$snapshot_content") | head -20
+        echo ""
+        echo "   This means checking out the commit's files does not reproduce the"
+        echo "   content git stores for it — normally a smudge/clean filter in"
+        echo "   .gitattributes (filter.*) or a submodule. The hook cannot lint the"
+        echo "   commit reliably, so it stops here instead of guessing."
+        echo "   Fix or remove the filter, or review the staged diff carefully and"
+        echo "   commit with --no-verify."
+    fi
+    exit 1
+fi
+
+if [ ! -f "$snapshot_manifest" ]; then
+    echo ""
+    echo "❌ This commit has no Cargo.toml, so there is nothing for clippy to lint."
+    echo "   The hook only lints the commit's own content."
+    exit 1
+fi
+
+# Clippy runs from the lint copy with an explicit manifest. Because the copy
+# holds the commit's own files — including a .cargo/config.toml if the commit
+# has one — Cargo resolves exactly the configuration that belongs to the
+# commit, and cannot reach the working tree's.
+#
+# rustflags from the developer's shell are unset, not set to something: any of
+# them makes Cargo ignore build.rustflags from every config file, so leaving one
+# in place would let the shell decide the verdict — silencing a committed
+# warning or denying a clean commit. Cargo honours three plain spellings plus a
+# per-target family (CARGO_TARGET_<TRIPLE>_RUSTFLAGS), so the whole family is
+# unset rather than a list that would go stale with the next spelling. Unsetting
+# keeps the commit's own configuration authoritative in both directions.
+# Nothing else about the environment is touched: CARGO_HOME, RUSTC_WRAPPER
+# (sccache) and the toolchain are the developer's, as for any build they run.
+unset RUSTFLAGS CARGO_BUILD_RUSTFLAGS CARGO_ENCODED_RUSTFLAGS 2>/dev/null || true
+for rustflags_var in $(env | sed -n 's/^\(CARGO_TARGET_[A-Za-z0-9_]*_RUSTFLAGS\)=.*/\1/p'); do
+    unset "$rustflags_var"
+done
+( cd -- "$snapshot_tree" && CARGO_TARGET_DIR="$target_dir" cargo clippy --manifest-path "$snapshot_manifest" --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion ) > "$clippy_log" 2>&1 &
+cargo_pid=$!
+clippy_status=0
+# A trapped signal can make `wait` return early while cargo is still running,
+# so wait until the child is really gone. `kill -0` is the loop condition
+# because after the child is reaped `wait` keeps returning the same >128
+# status forever, which would otherwise spin here.
+while kill -0 "$cargo_pid" 2>/dev/null; do
+    sleep 0.05
+done
+wait "$cargo_pid" || clippy_status=$?
+cargo_pid=''
+clippy_output=$(cat -- "$clippy_log")
+rm -f -- "$clippy_log"
+
+if [ "$clippy_status" -ne 0 ]; then
     printf '%s\n' "$clippy_output"
-    echo "❌ Cargo clippy failed — commit blocked."
+    if [ "$clippy_status" -gt 128 ]; then
+        echo "❌ Cargo clippy was killed by a signal (status $clippy_status) — commit blocked."
+    else
+        echo "❌ Cargo clippy failed on the committed content — commit blocked."
+    fi
     exit 1
 fi
 
