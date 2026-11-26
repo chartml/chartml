@@ -86,7 +86,7 @@ jobs:
       # Browser tests: the `wasm_bindgen_test` suites below only run in a real
       # browser, so they live in this required job rather than native
       # `cargo test`. Both the runner and the browser/driver are pinned so a
-      # run is repeatable; the tests themselves are the changes' acceptance.
+      # run is repeatable.
       - name: Install wasm-bindgen test runner
         run: |
           # `wasm-bindgen-test-runner` must exactly match the wasm-bindgen

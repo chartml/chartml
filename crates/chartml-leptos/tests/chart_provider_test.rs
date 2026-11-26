@@ -374,8 +374,9 @@ async fn test_chart_shows_loading_state() {
         "loading marker must be present immediately after mount",
     );
 
-    // Wait for fetch + transform + render. Loading marker should clear.
-    yield_to_event_loop(250).await;
+    // Wait for the 100ms fetch + transform + render. Loading marker should
+    // clear; 500ms leaves headroom for a slow shared CI runner.
+    yield_to_event_loop(500).await;
     assert!(
         root
             .query_selector(".chartml-loading")
