@@ -23,6 +23,11 @@ jobs:
       - name: Test pre-commit hook outcomes
         run: bash scripts/test-pre-commit.sh
 
+      - name: Check markdown code fences are closed
+        run: |
+          python3 scripts/tests/test_check_md_fences.py
+          python3 scripts/check-md-fences.py docs
+
       - name: Reject new lint suppressions
         run: |
           BASE="${{ github.event.pull_request.base.sha }}"

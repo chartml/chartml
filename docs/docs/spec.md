@@ -612,10 +612,9 @@ visualize:
   value: current_value
   # No format: the card shows 1234567, not 1,234,567
 ```
-```
 
 5. **Dual-Axis Chart**
-```chartml
+```yaml
 visualize:
   type: bar
   columns: month
@@ -1289,7 +1288,6 @@ Charts using source and parameters:
     rows: unique_customers
     style:
       height: 400
-```
 ```
 
 ---
