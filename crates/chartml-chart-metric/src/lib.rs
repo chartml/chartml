@@ -304,7 +304,7 @@ mod tests {
         // CHA-41: `docs/docs/spec.md` states that with neither `visualize.label`
         // nor a chart title the card shows the value field's name as its label.
         assert_eq!(rendered_label(None, None), "total_revenue");
-        // Precedence the spec documents: label, then title, then field name.
+        // Full precedence, as the schema describes it: label, then title, then field name.
         assert_eq!(rendered_label(Some("Q3"), None), "Q3");
         assert_eq!(rendered_label(Some("Q3"), Some("Revenue")), "Revenue");
         assert_eq!(rendered_label(None, Some("Revenue")), "Revenue");
