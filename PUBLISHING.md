@@ -48,11 +48,10 @@ Decide which packages need publishing and bump their versions:
 
 ```bash
 # Bump a single package
-cd /home/jason/repos/chartml/packages/core
-npm version patch  # 1.4.0 → 1.4.1 (or 'minor' or 'major')
+cd packages/core
+npm version patch  # 5.2.1 → 5.2.2 (or 'minor' or 'major')
 
-# Or bump multiple packages
-cd /home/jason/repos/chartml
+# Or bump multiple packages (from the repository root)
 npm version patch --workspaces  # Bumps all workspace packages
 ```
 
@@ -118,10 +117,8 @@ This lets you verify everything works before publishing.
 Packages are automatically published in the correct dependency order:
 
 1. **@chartml/core** (no dependencies)
-2. **@chartml/chart-pie**, **@chartml/chart-scatter**, **@chartml/chart-metric** (depend on core)
-3. **@chartml/markdown-common** (depends on core)
-4. **@chartml/react** (depends on core + chart-*)
-5. **@chartml/markdown-it**, **@chartml/markdown-react** (depend on markdown-common, core, chart-*)
+2. **@chartml/datafusion**, **@chartml/markdown-it**, **@chartml/react** (peer-depend on core)
+3. **@chartml/markdown-react** (peer-depends on core and markdown-it)
 
 ## Troubleshooting
 
@@ -152,7 +149,7 @@ git push
 **Solution**: The workflow automatically fixes these, but you can permanently fix:
 ```bash
 # Edit package.json dependencies
-"@chartml/core": "^1.4.0"  # Instead of "file:../core"
+"@chartml/core": "^5.0.0"  # Instead of "file:../core"
 ```
 
 ### Missing .d.ts files error
@@ -173,23 +170,32 @@ git push
 If you need to publish manually without the workflow:
 
 ```bash
-cd /home/jason/repos/chartml
-
-# Build all packages
+# From the repository root
 npm run build
 
-# Publish each package in order
+# Publish each npm package in order
 cd packages/core && npm publish --access public
-cd ../chart-pie && npm publish --access public
-cd ../chart-scatter && npm publish --access public
-cd ../chart-metric && npm publish --access public
-cd ../markdown-common && npm publish --access public
-cd ../react && npm publish --access public
+cd ../datafusion && npm publish --access public
 cd ../markdown-it && npm publish --access public
+cd ../react && npm publish --access public
 cd ../markdown-react && npm publish --access public
+cd ../..
+
+# Publish the Rust crates to crates.io in dependency order
+cargo publish -p chartml-core
+cargo publish -p chartml-forecast
+cargo publish -p chartml-chart-cartesian
+cargo publish -p chartml-chart-metric
+cargo publish -p chartml-chart-pie
+cargo publish -p chartml-chart-scatter
+cargo publish -p chartml-chart-table
+cargo publish -p chartml-datafusion
+cargo publish -p chartml-render
+cargo publish -p chartml-leptos
+# Wait about a minute between crates so the crates.io index catches up (CI sleeps 60s).
 
 # Create git tags manually
-git tag @chartml/core@1.4.1
+git tag @chartml/core@5.2.2
 git push origin --tags
 ```
 

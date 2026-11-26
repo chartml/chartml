@@ -36,8 +36,9 @@ Look for issues labeled [`good first issue`](https://github.com/chartml/chartml/
 
 ### Prerequisites
 
-- Node.js 18+
-- pnpm 8+ (recommended for monorepo management)
+- Node.js 18+ (CI uses 22) with npm 9+. The repo is an npm workspace with a committed `package-lock.json`; do not use pnpm or yarn.
+- Rust (stable) with the `wasm32-unknown-unknown` target: `rustup target add wasm32-unknown-unknown`
+- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/), which the package build scripts call
 - Git
 
 ### Clone and Install
@@ -47,54 +48,154 @@ Look for issues labeled [`good first issue`](https://github.com/chartml/chartml/
 git clone https://github.com/chartml/chartml.git
 cd chartml
 
-# Install dependencies (all packages)
-pnpm install
+# Install dependencies (all packages) exactly as pinned in package-lock.json
+npm ci
 
-# Build all packages
-pnpm build
+# Build all packages (WASM via packages/*/build.sh, then TypeScript)
+npm run build
+```
+
+### Enable the pre-commit hook
+
+The repo's hook rejects new `#[allow(...)]` lint suppressions and compiler/Clippy warnings, as CI does. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
 ```
 
 ### Development Workflow
 
 ```bash
-# Build all packages in watch mode
-pnpm dev
-
-# Run tests
-pnpm test
+# Run JS/WASM tests
+npm test
 
 # Start documentation site
 cd docs && npm run docs:dev
 ```
 
+### Checks CI runs
+
+`.github/workflows/ci.yml` is the source of truth. If anything below differs from it, ci.yml wins; please fix this section. Each command is listed under the CI job that runs it. Run them from the repository root.
+
+**Lint Suppression Policy** (pull requests only)
+
+```bash
+bash scripts/test-pre-commit.sh
+python3 scripts/tests/test_check_md_fences.py
+python3 scripts/check-md-fences.py docs
+python3 scripts/tests/test_check_spec_chart_types.py
+python3 scripts/check-spec-chart-types.py
+```
+
+The job also rejects any new `#[allow(` in `.rs` files and any new `= "allow"` in `Cargo.toml` files in your diff.
+
+**Clippy**
+
+```bash
+cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion --all-targets -- -D warnings
+cargo clippy -p chartml-core --all-targets --target wasm32-unknown-unknown --features wasm-indexeddb -- -D warnings
+cargo clippy -p chartml-leptos -p chartml-wasm -p chartml-wasm-datafusion --all-targets --target wasm32-unknown-unknown -- -D warnings
+```
+
+**Rust Tests**
+
+```bash
+cargo test --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion
+```
+
+The same job then runs four browser (`wasm-bindgen-test`) suites in headless Chrome; see [Running the browser tests locally](#running-the-browser-tests-locally).
+
+**WASM Build**
+
+```bash
+npm ci
+bash packages/core/build.sh
+bash packages/datafusion/build.sh
+bash scripts/check-npm-pack.sh
+npm run docs:build
+python3 scripts/tests/test_check_docs_chart_errors.py
+python3 scripts/check-docs-chart-errors.py
+```
+
+### Running the browser tests locally
+
+The `wasm_bindgen_test` suites only run in a real browser. CI pins a runner, Chrome and chromedriver; locally you need the same pieces:
+
+1. A `wasm-bindgen-test-runner` that exactly matches the `wasm-bindgen` version in `Cargo.lock`:
+
+   ```bash
+   WASM_BINDGEN_VERSION="$(cargo metadata --locked --format-version 1 \
+     | python3 -c 'import json, sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "wasm-bindgen"))')"
+   cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+   ```
+
+2. [Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/) and its matching chromedriver. CI pins the version in `CHROME_VERSION` in ci.yml; pick the `mac-arm64`, `mac-x64` or `linux64` download for your machine.
+
+3. A WebDriver config that starts Chrome headless. Point `binary` at your Chrome for Testing executable. The last two flags (not in CI) stop Chrome asking for keychain access on macOS.
+
+   ```bash
+   cat > /tmp/chartml-webdriver.json <<'JSON'
+   {
+     "goog:chromeOptions": {
+       "binary": "/path/to/chrome-for-testing/chrome",
+       "args": ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--use-mock-keychain", "--password-store=basic"]
+     }
+   }
+   JSON
+   ```
+
+4. Run the suites with the same environment as CI. A suite with no tests exits 0, so check that each reports the expected number of passing tests (the `run_suite` lines in ci.yml give the count for each):
+
+   ```bash
+   export CHROMEDRIVER=/path/to/chromedriver
+   export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner
+   export WASM_BINDGEN_TEST_TIMEOUT=120
+   export WASM_BINDGEN_TEST_DRIVER_TIMEOUT=30
+   export WASM_BINDGEN_TEST_WEBDRIVER_JSON=/tmp/chartml-webdriver.json
+
+   cargo test --target wasm32-unknown-unknown -p chartml-wasm --test web
+   cargo test --target wasm32-unknown-unknown -p chartml-leptos --test table_layout_test
+   cargo test --target wasm32-unknown-unknown -p chartml-leptos --test chart_provider_test
+   cargo test --target wasm32-unknown-unknown -p chartml-core --features wasm-indexeddb --test indexeddb_test
+   ```
+
+   The counts change when a suite gains or loses a test, so they are not repeated here.
+
 ## Project Structure
 
 ```
 chartml/
-├── packages/
-│   ├── core/              # @chartml/core - Core library
-│   ├── chart-pie/         # @chartml/chart-pie - Pie chart plugin
-│   ├── chart-scatter/     # @chartml/chart-scatter - Scatter plot plugin
-│   ├── chart-metric/      # @chartml/chart-metric - Metric card plugin
+├── crates/                # Rust crates (the rendering engine)
+│   ├── chartml-core/
+│   ├── chartml-forecast/
+│   ├── chartml-chart-cartesian/ chartml-chart-metric/ chartml-chart-pie/
+│   │   chartml-chart-scatter/ chartml-chart-table/
+│   ├── chartml-datafusion/
+│   ├── chartml-render/    # server-side SVG rendering
+│   ├── chartml-leptos/
+│   ├── chartml-wasm/ chartml-wasm-datafusion/   # WASM bindings
+│   └── chartml-test-runner/                     # golden-baseline runner
+├── packages/              # npm workspaces
+│   ├── core/              # @chartml/core - WASM bindings + JS/TS wrapper
+│   ├── datafusion/        # @chartml/datafusion - DataFusion WASM add-on
 │   ├── react/             # @chartml/react - React wrapper
-│   ├── markdown-it/       # @chartml/markdown-it - Markdown-it plugin
-│   ├── markdown-react/    # @chartml/markdown-react - React-markdown plugin
-│   └── markdown-common/   # @chartml/markdown-common - Shared utilities
+│   ├── markdown-it/       # @chartml/markdown-it - markdown-it plugin
+│   └── markdown-react/    # @chartml/markdown-react - react-markdown plugin
+├── demo/                  # Leptos demo app (trunk build)
 ├── docs/                  # VitePress documentation site
+├── tests/charts/          # YAML chart specs
+├── test-output/golden/    # golden SVG baselines
 └── README.md
 ```
 
 ### Package Dependencies
 
 ```
-core (base package)
-  ├── chart-pie (plugin)
-  ├── chart-scatter (plugin)
-  ├── chart-metric (plugin)
-  ├── react (framework integration)
-  └── markdown-common (shared utilities)
-      ├── markdown-react (framework integration)
-      └── markdown-it (framework integration)
+@chartml/core (base package)
+  ├── @chartml/datafusion (peer: core)
+  ├── @chartml/react (peer: core)
+  └── @chartml/markdown-it (peer: core)
+      └── @chartml/markdown-react (peer: core, markdown-it)
 ```
 
 ## Making Changes
@@ -117,16 +218,18 @@ git checkout -b fix/bug-description
 ### 3. Test Your Changes
 
 ```bash
-# Run tests for all packages
-pnpm test
+# Run JS tests for all packages
+npm test
 
 # Run tests for specific package
 cd packages/core
 npm test
 
 # Build to ensure no errors
-pnpm build
+npm run build
 ```
+
+Before opening a pull request, run the commands under [Checks CI runs](#checks-ci-runs) that cover what you changed.
 
 ### 4. Update Documentation
 
@@ -143,7 +246,7 @@ If your change affects user-facing behavior:
 
 ```bash
 # All packages
-pnpm test
+npm test
 
 # Specific package
 cd packages/core && npm test

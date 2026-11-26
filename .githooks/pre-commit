@@ -451,7 +451,7 @@ unset RUSTFLAGS CARGO_BUILD_RUSTFLAGS CARGO_ENCODED_RUSTFLAGS 2>/dev/null || tru
 for rustflags_var in $(env | sed -n 's/^\(CARGO_TARGET_[A-Za-z0-9_]*_RUSTFLAGS\)=.*/\1/p'); do
     unset "$rustflags_var"
 done
-( cd -- "$snapshot_tree" && CARGO_TARGET_DIR="$target_dir" cargo clippy --manifest-path "$snapshot_manifest" --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion ) > "$clippy_log" 2>&1 &
+( cd -- "$snapshot_tree" && CARGO_TARGET_DIR="$target_dir" exec cargo clippy --manifest-path "$snapshot_manifest" --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion ) > "$clippy_log" 2>&1 &
 cargo_pid=$!
 clippy_status=0
 # A trapped signal can make `wait` return early while cargo is still running,

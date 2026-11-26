@@ -22,8 +22,9 @@ ChartML v3 — Rust/WASM chart rendering engine. Publishes to both npm and crate
 ```bash
 # Rust
 cargo build                    # build all crates
-cargo test --workspace         # run all tests
-cargo clippy --workspace       # lint
+# Tests, clippy (three lanes) and the other CI checks: see "Checks CI runs" in
+# CONTRIBUTING.md. .github/workflows/ci.yml is the source of truth.
+cargo test --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion   # run all tests (as CI)
 
 # WASM (for npm packages)
 bash packages/core/build.sh          # builds @chartml/core WASM (web + nodejs)
@@ -110,7 +111,7 @@ Lint suppressions (`#[allow(...)]` in .rs files, `= "allow"` in Cargo.toml) are 
 3. Tag: `git tag v3.x.x && git push --tags`
 
 ### crates.io
-`cargo publish` in dependency order: core → forecast → chart-* → datafusion → render
+`cargo publish` in dependency order: core → forecast → chart-* → datafusion → render → leptos (full list in PUBLISHING.md "Manual Publishing")
 
 ### Post-Release (Kyomi)
 Update Kyomi's lockfile to reference the new @chartml/core version.
