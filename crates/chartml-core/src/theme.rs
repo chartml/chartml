@@ -278,18 +278,28 @@ pub struct Theme {
     pub table_border: String,
     /// Text color for body cells.
     pub table_text: String,
-    /// CSS shorthand padding for body cells (e.g. `"8px 12px"`).
+    /// CSS shorthand padding for body cells (e.g. `"8px 12px"`), one to four
+    /// lengths.
     ///
     /// The table renderer measures this padding to size its columns, so only
-    /// absolute lengths are supported: `px`, `em` and `rem` (and unitless
-    /// zero). A percentage cannot be resolved where the measurement happens,
-    /// so the renderer rejects it rather than producing columns that overlap
-    /// their neighbours.
+    /// lengths are supported: `px`, `em` and `rem`, plus a unitless `0`.
+    /// A percentage cannot be resolved where the measurement happens, so the
+    /// renderer rejects it — and anything else it cannot measure — rather than
+    /// producing columns that overlap their neighbours.
     pub table_cell_padding: String,
     /// CSS font size for table text (e.g. `"13px"`).
     pub table_font_size: String,
     /// CSS border-radius for the table root container (e.g. `"4px"`, `"0"`).
     pub table_border_radius: String,
+}
+
+/// Split a CSS length into its numeric part and its unit (`12px` -> `12`,
+/// `px`; `0` -> `0`, ``).
+fn split_length(value: &str) -> (&str, &str) {
+    let end = value
+        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .unwrap_or(value.len());
+    (&value[..end], &value[end..])
 }
 
 impl Default for Theme {
@@ -369,18 +379,33 @@ impl Theme {
     /// a misconfigured theme fails with a clear message instead of rendering
     /// overlapping columns.
     pub fn validate_table_cell_padding(&self) -> Result<(), String> {
-        for part in self.table_cell_padding.split_whitespace() {
-            let value = part.trim();
-            if value.is_empty() {
-                continue;
-            }
-            let unit = value.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == '-' || c == '+');
-            let unsupported = value.ends_with('%')
-                || !(unit.is_empty()
-                    || unit.eq_ignore_ascii_case("px")
+        let parts: Vec<&str> = self.table_cell_padding.split_whitespace().collect();
+        if parts.len() > 4 {
+            return Err(format!(
+                "table_cell_padding: `{}` has {} values; a CSS padding shorthand takes 1 to 4",
+                self.table_cell_padding,
+                parts.len()
+            ));
+        }
+        for value in parts {
+            // A CSS length: digits with at most one decimal point, and nothing,
+            // `px`, `em` or `rem` as the unit. Anything else — a percentage,
+            // another unit, a bare `.`, a second dot, a sign, `px` alone —
+            // cannot be measured, so it is rejected rather than rendered.
+            let (number, unit) = split_length(value);
+            let is_number = !number.is_empty()
+                && number.chars().filter(|c| *c == '.').count() <= 1
+                && number.chars().all(|c| c.is_ascii_digit() || c == '.');
+            // A unitless value is only legal as zero: `8` is not a length, and
+            // emitting `calc(x + 8 + 8)` would be invalid CSS.
+            let unit_ok = if unit.is_empty() {
+                number.parse::<f64>() == Ok(0.0)
+            } else {
+                unit.eq_ignore_ascii_case("px")
                     || unit.eq_ignore_ascii_case("em")
-                    || unit.eq_ignore_ascii_case("rem"));
-            if unsupported {
+                    || unit.eq_ignore_ascii_case("rem")
+            };
+            if !is_number || !unit_ok {
                 return Err(format!(
                     "table_cell_padding: `{value}` is not a supported length; use px, em or rem (a percentage cannot size a table column)"
                 ));
@@ -588,10 +613,18 @@ mod table_cell_padding_tests {
 
     #[test]
     fn rejects_percentages_and_unmeasurable_units() {
-        for padding in ["0 50%", "10% 20%", "8px 12%", "2vw 3px", "1in 1px"] {
+        for padding in [
+            "0 50%", "10% 20%", "8px 12%", "2vw 3px", "1in 1px",
+            // Malformed shorthands the old unit-only check let through, all of
+            // which poison the calc() the renderer builds from them.
+            "8", ".5", "px", "1.2.3px", "-8px", "1px 2px 3px 4px 5px",
+        ] {
             let theme = Theme { table_cell_padding: padding.into(), ..Theme::default() };
             let err = theme.validate_table_cell_padding().expect_err(padding);
-            assert!(err.contains("not a supported length"), "{padding}: {err}");
+            assert!(
+                err.contains("not a supported length") || err.contains("takes 1 to 4"),
+                "{padding}: {err}"
+            );
         }
     }
 }

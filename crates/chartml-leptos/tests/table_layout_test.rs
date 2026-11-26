@@ -669,19 +669,23 @@ fn measure_row_span(host: &web_sys::HtmlElement) -> RowSpanState {
 }
 
 /// CHA-22 line 1 and line 4: a fixed `width` is the column's width and its
-/// cells are `border-box` at exactly that, so the track is that width and the
-/// cell never reaches into the next column — with length, em or percentage
-/// padding alike. A `content-box` fixed cell instead grew by its padding; with
-/// percentages, which intrinsic sizing cannot resolve, it overlapped by up to
-/// the whole column (60px at `0 50%`).
+/// cells are `border-box` at it, in a `max-content` track — the larger of the
+/// width and the cell's own padding — so the cell never reaches into the next
+/// column, for any supported padding (`px`, `em`, `rem`) however large.
+/// A `content-box` fixed cell instead grew by its padding and overlapped its
+/// neighbour.
+///
+/// The percentage paddings below are set as raw CSS, outside the published
+/// token contract (the renderer rejects a percentage from a theme); they are
+/// here only because a host can still set them, and the layout survives them.
 #[wasm_bindgen_test]
 fn fixed_width_cells_stay_inside_their_track() {
     let spec = narrow_fixed_width_spec();
     for path in [Path::Leptos, Path::Svg] {
         let host = mount(path, &spec, Theme::default(), 800);
-        // Lengths, an em value and percentage paddings: a percentage cannot be
-        // resolved during intrinsic sizing, so only a `border-box` fixed column
-        // can contain it.
+        // Lengths, an em value and percentage paddings. The percentages are
+        // raw CSS outside the token contract; the fixed column is `border-box`
+        // in a `max-content` track, so the cell still stays inside its track.
         for padding in [None, Some("8px 40px"), Some("0 2em"), Some("0 25%"), Some("0 50%")] {
             let state = measure_fixed_tracks(&host, padding);
             let ctx = format!("{path:?}: 120px fixed column with padding {padding:?}");

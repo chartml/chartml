@@ -1522,10 +1522,11 @@ fn cell_style(
         ("text-align", place.align),
     ]);
     if let Some(width) = width {
-        // A fixed column: `width` is the cell's final width, padding and
-        // border inside it (`border-box`), so no padding — absolute, em or
-        // percentage — can make the cell wider than its track. The track is
-        // exactly that width, so a fixed column never overlaps its neighbour.
+        // A fixed column: the cell is `border-box` at `width`, so its padding
+        // sits inside that box and the cell never grows past its own padding.
+        // The column's track is `max-content`, i.e. the larger of `width` and
+        // that padding, so a declared width narrower than the padding still has
+        // a track that holds it.
         map.insert("width".into(), width.to_string());
         map.insert("box-sizing".into(), "border-box".to_string());
     }
@@ -1702,9 +1703,9 @@ impl ChartRenderer for TableRenderer {
             .enumerate()
             .map(|(i, c)| column_text(&c.label, &header, cells.iter().map(|r| r[i].as_str())))
             .collect();
-        // Each column's track and its cell minimum: a fixed `width` column is
-        // exactly that wide and wraps its content; every other column is at
-        // least its measured content width and shares the remaining space.
+        // Each column's track and its cell minimum: a fixed `width` column's
+        // track is `max(width, its padding)` and wraps its content; every other
+        // column is at least its measured content width and shares the rest.
         // `column_mins` is the per-column minimum used to decide whether the
         // columns overflow the visible area (see the fade below).
         let mut tracks: Vec<String> = Vec::with_capacity(columns.len() + 1);
@@ -1729,18 +1730,22 @@ impl ChartRenderer for TableRenderer {
             match fixed {
                 Some(px) => {
                     // A fixed `width` is the column's width and the cell is
-                    // `border-box` at it, so its padding — length, em or a
-                    // percentage, which intrinsic sizing cannot resolve — sits
-                    // inside the column. The track is `max-content`, which CSS
-                    // resolves to `max(width, the cell's own padding)`: a
+                    // `border-box` at it, so its padding (`px`, `em` or `rem`)
+                    // sits inside the column. The track is `max-content`, which
+                    // CSS resolves to `max(width, the cell's own padding)`: a
                     // declared width narrower than the padding still gets a
-                    // track that holds it, and no padding unit can make the cell
-                    // wider than its track. The fade estimate counts the theme
-                    // padding, like the other measured values (owner decision
-                    // 2026-11-25).
+                    // track that holds it, and no supported padding can make the
+                    // cell wider than its track. The fade estimate counts the
+                    // theme padding, like the other measured values (owner
+                    // decision 2026-11-25).
                     fixed_widths[i] = Some(px.clone());
                     cell_mins.push("0".to_string());
-                    column_mins.push(format!("calc({px} + {pad_left} + {pad_right})"));
+                    // The track is `max-content`, i.e. `max(width, padding)` —
+                    // so the width alone would under-count a column whose
+                    // padding is wider, and width+padding over-counts every
+                    // other one (turning the fade on for a table that fits).
+                    // Count the same `max()` the track resolves to.
+                    column_mins.push(format!("max({px}, calc({pad_left} + {pad_right}))"));
                     tracks.push("minmax(max-content, max-content)".to_string());
                 }
                 None => {
@@ -3313,9 +3318,11 @@ style:
     fn fade_turns_on_only_when_the_columns_overflow() {
         // Point 4: the fade's width is 0 unless the sum of all column
         // minimums is wider than the scroll area (`100cqw`), when it is
-        // `FADE_WIDTH_PX`. Each column's minimum is its content minimum plus
-        // the theme's horizontal padding (owner decision 2026-11-25: the hint
-        // is estimated from theme padding, like the other measured values).
+        // `FADE_WIDTH_PX`. Each content-sized column's minimum is its content
+        // minimum plus the theme's horizontal padding (owner decision
+        // 2026-11-25: the hint is estimated from theme padding, like the other
+        // measured values); a fixed column's is `max(width, padding)` (see
+        // `a_fixed_column_is_counted_once_in_the_fade_estimate`).
         // Rows are `min-content` wide, so their background and border span
         // the scrolled width including the fade's strip.
         let el = wide();
@@ -3405,19 +3412,34 @@ style:
     }
 
     #[test]
-    fn percentage_cell_padding_is_rejected_not_rendered_as_overlap() {
+    fn unsupported_cell_padding_is_rejected_not_rendered_as_overlap() {
         // Columns are sized from this padding, and a percentage cannot be
         // resolved where that measurement happens, so it would render cells
         // wider than their tracks. The token's documented contract is lengths
-        // only (px, em, rem), and anything else fails with a clear error.
-        for padding in ["0 50%", "8px 12%", "10% 20%"] {
+        // only (px, em, rem, unitless 0), and anything else fails with a clear
+        // error instead of emitting a `calc()` the browser drops.
+        for padding in [
+            "0 50%",
+            "8px 12%",
+            "10% 20%",
+            "8",
+            ".5",
+            "px",
+            "1.2.3px",
+            "-8px",
+            "1px 2px 3px 4px 5px",
+        ] {
             let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
             config.theme.table_cell_padding = padding.into();
             let err = TableRenderer::new()
                 .render(&data(), &config)
-                .expect_err("a percentage padding must not render");
+                .expect_err("an unsupported padding must not render");
             assert!(
-                matches!(&err, ChartError::InvalidSpec(msg) if msg.contains("not a supported length")),
+                matches!(
+                    &err,
+                    ChartError::InvalidSpec(msg)
+                        if msg.contains("not a supported length") || msg.contains("takes 1 to 4")
+                ),
                 "{padding}: got {err:?}"
             );
         }
@@ -3430,6 +3452,52 @@ style:
     }
 
     #[test]
+    fn a_fixed_column_is_counted_once_in_the_fade_estimate() {
+        // A fixed column's track is `max-content`, i.e. `max(width, padding)`.
+        // The estimate must count that same value: width+padding would over-count
+        // by min(width, padding) and turn the fade on (with an empty scroll strip)
+        // for a table whose columns all fit.
+        const ALL_FIXED_FITS: &str = r#"
+type: table
+columns:
+  - field: month
+    width: 100
+rows:
+  - { field: revenue, width: 120 }
+  - { field: cost, width: 90 }
+"#;
+        let config = cfg(ALL_FIXED_FITS);
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        let columns_min = get(scroll, "--chartml-table-columns-min").unwrap();
+        // The track is `max-content`, so the estimate is the same `max(width,
+        // padding)` the track resolves to — the width alone when it is wider
+        // (every column here), never width plus padding.
+        assert_eq!(
+            columns_min,
+            "calc(max(100.00px, calc(12px + 12px)) + max(120.00px, calc(12px + 12px)) + max(90.00px, calc(12px + 12px)))"
+        );
+        // With padding wider than a column, the estimate counts the padding, the
+        // same value the max-content track resolves to.
+        const PADDING_WIDER_THAN_WIDTH: &str = r#"
+type: table
+columns:
+  - field: month
+    width: 10
+rows:
+  - { field: revenue, width: 20 }
+"#;
+        let mut config = cfg(PADDING_WIDER_THAN_WIDTH);
+        config.theme.table_cell_padding = "8px 40px".into();
+        let el = TableRenderer::new().render(&data(), &config).unwrap();
+        let scroll = by_class(&el, "chartml-table-scroll")[0];
+        assert_eq!(
+            get(scroll, "--chartml-table-columns-min"),
+            Some("calc(max(10.00px, calc(40px + 40px)) + max(20.00px, calc(40px + 40px)))")
+        );
+    }
+
+    #[test]
     fn rows_fill_the_scroll_area_even_when_every_column_is_fixed() {
         // Regression (CHA-22 lifecycle): with every column fixed-width, rows
         // whose only floor was `min-content` shrank to the sum of the fixed
@@ -3438,8 +3506,7 @@ style:
         // `minmax(min-content, 100%)`, so the fit box and every row span at
         // least the visible width while still growing to the columns' minimum.
         let config = cfg(
-            r#"
-type: table
+            r#"type: table
 columns:
   - field: month
     width: 100
