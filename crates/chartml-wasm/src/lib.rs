@@ -551,7 +551,8 @@ fn parse_render_options(options: &JsValue) -> (Option<f64>, Option<f64>) {
     (width, height)
 }
 
-/// `tablePage` from a JS options object: `None` when it is not set, else a
+/// `tablePage` from a JS options object: `None` when it is not set (a static
+/// render: page 0, pager buttons disabled), else a
 /// non-negative integer from 0. Anything else is an error, not 0.
 fn parse_table_page(options: &JsValue) -> Result<Option<usize>, JsValue> {
     if options.is_undefined() || options.is_null() {

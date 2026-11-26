@@ -9,9 +9,10 @@ export interface RenderOptions {
    */
   params?: Record<string, unknown>;
   /**
-   * Which page of a paginated `table` to render, a non-negative integer from 0
-   * (default 0). Only that page's rows are rendered; a page past the last
-   * throws. Other chart types ignore it. See `attachTablePager`.
+   * Which page of a paginated `table` to render, a non-negative integer from 0.
+   * Pass it (even 0) when a host drives the pager with `attachTablePager`; omit
+   * it for a static render (page 1, buttons disabled). Only that page's rows
+   * are rendered; a page past the last throws. Other chart types ignore it. See `attachTablePager`.
    */
   tablePage?: number;
 }
