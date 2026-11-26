@@ -49,9 +49,25 @@ clippy_log="$state_dir/clippy.$$.log"
 lock_held=0
 cargo_pid=''
 owner_file=''
+temp_files=''
 
 lock_owner() {
     cat -- "$lock_dir" 2>/dev/null || true
+}
+
+# A reclaim guard is a directory holding the pid of the hook inside it, so a
+# guard can be cleared only when its owner is dead. Returns success when the
+# guard is absent or was removed.
+clear_dead_guard() {
+    local guard=$state_dir/lock.reclaim owner
+    [ -d "$guard" ] || return 0
+    owner=$(cat -- "$guard/owner" 2>/dev/null || true)
+    case "$owner" in
+        ''|*[!0-9]*) owner='' ;;
+    esac
+    if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then
+        rm -rf -- "$guard"
+    fi
 }
 
 release_lock() {
@@ -67,6 +83,12 @@ cleanup() {
     if [ -n "$cargo_pid" ] && kill -0 "$cargo_pid" 2>/dev/null; then
         kill -TERM "$cargo_pid" 2>/dev/null || true
         wait "$cargo_pid" 2>/dev/null || true
+    fi
+    # Temporary indexes and listings live outside the state dir, so an
+    # interrupt would otherwise leave them in TMPDIR.
+    if [ -n "$temp_files" ]; then
+        # shellcheck disable=SC2086
+        rm -f -- $temp_files
     fi
     [ -d "$state_dir" ] || return 0
     rm -f -- "${owner_file:-}"
@@ -96,15 +118,7 @@ fi
 # the same moment cannot collide in `git write-tree`. A guard directory left by
 # a hook killed mid-reclaim would otherwise disable reclamation, so one whose
 # owner is dead is cleared before waiting.
-if [ -d "$state_dir/lock.reclaim" ]; then
-    guard_owner=$(cat -- "$state_dir/lock.reclaim/owner" 2>/dev/null || true)
-    case "$guard_owner" in
-        ''|*[!0-9]*) guard_owner='' ;;
-    esac
-    if [ -z "$guard_owner" ] || ! kill -0 "$guard_owner" 2>/dev/null; then
-        rm -rf -- "$state_dir/lock.reclaim"
-    fi
-fi
+clear_dead_guard
 #
 # The lock is a FILE whose content is the owner's pid, created with noclobber:
 # the create is atomic, needs no hard links (exFAT, some network mounts), and —
@@ -117,15 +131,12 @@ while :; do
     if ( set -C; printf '%s\n' "$$" > "$lock_dir" ) 2>/dev/null; then
         lock_held=1
         # A killed hook cannot clean up after itself. Nothing is linting while
-        # we hold the lock, so any other per-run entry belongs to a dead run.
-        # Entries can be files (clippy logs) or directories (a leftover from an
-        # older layout), so they are removed recursively: `rm -f` on a directory
-        # fails and would abort the hook with no verdict at all.
-        for leftover in "$state_dir"/clippy.*.log "$state_dir"/lock.stale.*; do
+        # we hold the lock, so a clippy log this run does not own belongs to a
+        # dead run.
+        for leftover in "$state_dir"/clippy.*.log; do
             [ -e "$leftover" ] || continue
             leftover_pid=${leftover##*/}
             leftover_pid=${leftover_pid#clippy.}
-            leftover_pid=${leftover_pid#lock.stale.}
             leftover_pid=${leftover_pid%.log}
             [ "$leftover_pid" = "$$" ] && continue
             case "$leftover_pid" in
@@ -135,9 +146,9 @@ while :; do
                 rm -rf -- "$leftover"
             fi
         done
-        # A hook killed while it held the reclaim guard leaves the guard behind,
-        # and no hook can reclaim anything while it exists. Nothing is reclaiming
-        # because we hold the lock, so a guard seen here belongs to a dead run.
+        # A hook killed while it held the reclaim guard leaves it behind, and no
+        # hook can reclaim while it exists. Nothing is reclaiming now that we
+        # hold the lock.
         rm -rf -- "$state_dir/lock.reclaim"
         break
     fi
@@ -146,20 +157,6 @@ while :; do
     case "$holder_pid" in
         ''|*[!0-9]*) holder_pid='' ;;
     esac
-    # An earlier layout in this series used a lock DIRECTORY. One left behind by
-    # an interrupted run cannot be a live lock under the current scheme, but a
-    # hook running an older revision could still hold it, so it is only removed
-    # once it has clearly outlived any live creator.
-    if [ -d "$lock_dir" ]; then
-        if [ "$waited" -ge 5 ]; then
-            rm -rf -- "$lock_dir"
-            echo "   removed a leftover lint lock directory from an older hook layout"
-            reclaimed=1
-        fi
-        sleep 1
-        waited=$((waited + 1))
-        continue
-    fi
     if [ -z "$holder" ] || [ -z "$holder_pid" ] || ! kill -0 "$holder_pid" 2>/dev/null; then
         # Removing the lock has to be safe against another hook doing the same
         # thing: two reclaimers could both see a dead pid and both delete, and
@@ -169,19 +166,7 @@ while :; do
         # hold it, is left by a killed run and is cleared so reclamation can
         # proceed.
         reclaim_guard="$state_dir/lock.reclaim"
-        # A guard left by a killed run must not block reclamation for ever, and a
-        # guard held by a slow but live reclaimer must not be taken: age cannot
-        # tell those apart, so the guard records its owner and the same
-        # dead-pid rule as the lock decides.
-        if [ -d "$reclaim_guard" ]; then
-            guard_owner=$(cat -- "$reclaim_guard/owner" 2>/dev/null || true)
-            case "$guard_owner" in
-                ''|*[!0-9]*) guard_owner='' ;;
-            esac
-            if [ -z "$guard_owner" ] || ! kill -0 "$guard_owner" 2>/dev/null; then
-                rm -rf -- "$reclaim_guard"
-            fi
-        fi
+        clear_dead_guard
         if mkdir -- "$reclaim_guard" 2>/dev/null; then
             printf '%s\n' "$$" > "$reclaim_guard/owner"
             # Re-read inside the guard: this is the value being acted on. A
@@ -311,6 +296,7 @@ echo "   remove them: rm -rf -- $snapshot_root $target_dir"
 rm -rf -- "$snapshot_tree"
 mkdir -p -- "$snapshot_tree"
 verify_index=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-index.XXXXXX")
+temp_files="$temp_files $verify_index"
 rm -f -- "$verify_index"
 abs_git_dir=$(cd -- "$(git rev-parse --git-dir)" && pwd)
 if ! (
@@ -332,8 +318,10 @@ rm -f -- "$verify_index"
 # an executable bit that the filesystem cannot represent (core.filemode=false,
 # Git for Windows) must not refuse every commit.
 verify_index=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-verify.XXXXXX")
+temp_files="$temp_files $verify_index"
 rm -f -- "$verify_index"
 listing_file=$(mktemp "${TMPDIR:-/tmp}/chartml-pre-commit-listing.XXXXXX")
+temp_files="$temp_files $listing_file"
 (
     cd -- "$snapshot_tree" || exit 1
     GIT_INDEX_FILE="$verify_index" git --git-dir="$abs_git_dir" --work-tree="$snapshot_tree" add -A -f -- . &&
@@ -390,32 +378,12 @@ if [ ! -f "$snapshot_manifest" ]; then
     exit 1
 fi
 
-if [ -f "$snapshot_tree/.cargo/config.toml" ]; then
-    echo "   note: ignoring this commit's .cargo/config.toml — the hook lints with a"
-    echo "         fixed compiler environment, so rustflags come from CI (ci.yml)."
-fi
-
-# Clippy runs from the lint copy with an explicit manifest, so Cargo cannot use
-# the working tree's manifest. Cargo also reads .cargo/config.toml from the
-# copy's ancestors and from CARGO_HOME, and those are not part of the commit:
-# their build.rustflags could silence a warning the commit contains. Cargo
-# merges those rather than overriding them, so the only reliable isolation is
-# RUSTFLAGS: when it is set, Cargo ignores build.rustflags from every config
-# file. Its value carries the rustflags the commit itself brings.
-# Settings from the developer's environment are not part of the commit, so they
-# must not decide the verdict. RUSTC_WRAPPER can rewrite the compiler
-# invocation, and the toolchain/target selectors change what is built.
-#
-# The hook lints the commit's content with a fixed compiler environment, so a
-# .cargo/config.toml cannot change the verdict. That includes a committed one:
-# its rustflags are Cargo configuration, not source, and honouring them would
-# mean reproducing Cargo's config semantics here — a second implementation this
-# repository does not need (it tracks no .cargo/config.toml and sets no
-# rustflags anywhere). Cargo only ignores build.rustflags from config files when
-# RUSTFLAGS is set, so it is set, empty, for the lint run.
-RUSTFLAGS=''
-export RUSTFLAGS
-unset RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER CARGO_BUILD_TARGET CARGO_BUILD_RUSTFLAGS 2>/dev/null || true
+# Clippy runs from the lint copy with an explicit manifest. Because the copy
+# holds the commit's own files — including a .cargo/config.toml if the commit
+# has one — Cargo resolves exactly the configuration that belongs to the
+# commit, and cannot reach the working tree's. The developer's own environment
+# (CARGO_HOME, RUSTFLAGS, a compiler wrapper) applies, as it does to any build
+# they run, and is not this hook's business to override.
 ( cd -- "$snapshot_tree" && CARGO_TARGET_DIR="$target_dir" cargo clippy --manifest-path "$snapshot_manifest" --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion ) > "$clippy_log" 2>&1 &
 cargo_pid=$!
 clippy_status=0

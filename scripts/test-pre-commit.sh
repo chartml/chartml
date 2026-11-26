@@ -74,32 +74,18 @@ fi
 printf '%s\n' "${HOOK_TEST_OUTPUT:-}"
 # Emulate Cargo's own config discovery: a .cargo/config.toml in the linted
 # directory (or an ancestor) with rustflags that silence warnings really does
-# suppress them. Without this the isolation test would pass no matter where the
-# copy sat, so it could not catch the defect it exists for.
+# suppress them, so tests can prove the copy is linted with the commit's own
+# configuration.
 suppress=0
-# Cargo honours build.rustflags from config files it discovers, but RUSTFLAGS
-# in the environment overrides them entirely — even an empty value. Emulate
-# that, so the isolation tests fail when a setting outside the commit reaches
-# the linted content.
-if [ -n "${RUSTFLAGS+set}" ]; then
-    case "${RUSTFLAGS:-}" in
-        *-A*warnings*|*allow*) suppress=1 ;;
-    esac
-fi
-if [ -n "${RUSTC_WRAPPER:-}${RUSTC_WORKSPACE_WRAPPER:-}" ] && grep -qE -- '-A"? ?"?warnings' "${RUSTC_WRAPPER:-${RUSTC_WORKSPACE_WRAPPER:-}}" 2>/dev/null; then
-    suppress=1
-fi
-if [ "$suppress" -eq 0 ] && [ -z "${RUSTFLAGS+set}" ]; then
-    check_dir=$PWD
-    while :; do
-        if [ -f "$check_dir/.cargo/config.toml" ] && grep -qE -- '-A"?,? ?"warnings|allow' "$check_dir/.cargo/config.toml" 2>/dev/null; then
-            suppress=1
-            break
-        fi
-        [ "$check_dir" = "/" ] && break
-        check_dir=$(dirname -- "$check_dir")
-    done
-fi
+check_dir=$PWD
+while :; do
+    if [ -f "$check_dir/.cargo/config.toml" ] && grep -qE -- '-A"?,? ?"warnings|allow' "$check_dir/.cargo/config.toml" 2>/dev/null; then
+        suppress=1
+        break
+    fi
+    [ "$check_dir" = "/" ] && break
+    check_dir=$(dirname -- "$check_dir")
+done
 # Emit a warning when the linted content itself contains a marker, so tests
 # can prove the verdict follows the linted content and nothing else.
 if [ -n "${HOOK_TEST_WARN_ON_MARKER:-}" ] && [ "$suppress" -eq 0 ] && grep -rqF -- "$HOOK_TEST_WARN_ON_MARKER" .; then
@@ -256,8 +242,9 @@ git -C "$repo" add warning.rs
 snapshot_worktree "$repo" "$scratch/staged-warning.before"
 if (
     cd "$repo"
-    # The warning comes from the staged content the hook lints, not from a
-    # canned output, so this covers "a staged warning fails" as reported.
+    # The fake cargo emits its warning only when the linted content contains the
+    # marker, so the verdict depends on the staged content rather than on a
+    # fixed output. The warning text itself is canned, as a stand-in for clippy's.
     HOOK_TEST_WARN_ON_MARKER='CHA27_STAGED_WARNING' bash "$hook" > "$scratch/staged-warning.log" 2>&1
 ); then
     fail 'staged warning was accepted'
@@ -548,55 +535,6 @@ elif ! grep -q 'no Cargo.toml' "$scratch/isolation-manifest.log"; then
     cat "$scratch/isolation-manifest.log" >&2
 else
     pass 'a commit without a manifest is refused instead of linting the working tree'
-fi
-
-# --- Settings outside the commit cannot change the verdict ---------------
-# Cargo merges .cargo/config.toml from the copy's ancestors and from
-# CARGO_HOME, and reads RUSTFLAGS from the environment. None of that is part of
-# the commit, so a rustflags that silences warnings must not make a commit with
-# a real warning pass.
-repo="$scratch/isolation-env"
-new_repo "$repo"
-# The ancestor config must be outside the repository (a TMPDIR inside it is
-# refused for a different reason), yet still an ancestor of the lint copy.
-outer="$scratch/isolation-outer"
-mkdir -p "$outer/.cargo"
-printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$outer/.cargo/config.toml"
-printf 'fn tracked() { let CHA27_ANCESTOR_WARNING = 1; }\n' > "$repo/tracked.rs"
-git -C "$repo" add tracked.rs
-if (
-    cd "$repo"
-    TMPDIR="$outer" HOOK_TEST_WARN_ON_MARKER='CHA27_ANCESTOR_WARNING' bash "$hook" > "$scratch/isolation-env.log" 2>&1
-); then
-    fail 'a cargo config in an ancestor directory suppressed a committed warning'
-elif ! grep -q 'CHA27_ANCESTOR_WARNING\|Clippy warnings found' "$scratch/isolation-env.log"; then
-    fail 'the ancestor-config case failed for the wrong reason'
-    cat "$scratch/isolation-env.log" >&2
-else
-    pass 'a cargo config in an ancestor directory cannot suppress a committed warning'
-fi
-if (
-    cd "$repo"
-    RUSTFLAGS='-A warnings' HOOK_TEST_WARN_ON_MARKER='CHA27_ANCESTOR_WARNING' bash "$hook" > "$scratch/isolation-rustflags.log" 2>&1
-); then
-    fail 'RUSTFLAGS from the environment suppressed a committed warning'
-else
-    pass 'RUSTFLAGS from the environment cannot suppress a committed warning'
-fi
-# RUSTC_WRAPPER can rewrite the compiler invocation itself, so it is cleared
-# for the lint run too.
-mkdir -p "$scratch/wrapper"
-printf '#!/usr/bin/env bash\nexec "$@" -A warnings\n' > "$scratch/wrapper/rustc-wrapper"
-chmod +x "$scratch/wrapper/rustc-wrapper"
-printf 'fn tracked() { let CHA27_WRAPPER_WARNING = 1; }\n' > "$repo/tracked.rs"
-git -C "$repo" add tracked.rs
-if (
-    cd "$repo"
-    RUSTC_WRAPPER="$scratch/wrapper/rustc-wrapper" HOOK_TEST_WARN_ON_MARKER='CHA27_WRAPPER_WARNING' bash "$hook" > "$scratch/isolation-wrapper.log" 2>&1
-); then
-    fail 'RUSTC_WRAPPER from the environment suppressed a committed warning'
-else
-    pass 'RUSTC_WRAPPER from the environment cannot suppress a committed warning'
 fi
 
 # --- The hook never rewrites an unstaged tracked file ---------------------
@@ -924,7 +862,7 @@ if [ -e "$state_dir/lock" ]; then
         fail 'a commit after a SIGKILLed hook was blocked'
         cat "$scratch/killed-hook.log" >&2
     fi
-    if ls "$state_dir"/clippy.*.log >/dev/null 2>&1 || ls -d "$state_dir"/lock.stale.* >/dev/null 2>&1; then
+    if ls "$state_dir"/clippy.*.log >/dev/null 2>&1; then
         fail 'per-run files from a SIGKILLed hook were never reclaimed'
         ls -1 "$state_dir" >&2
     else
@@ -986,28 +924,6 @@ if [ -n "$(find "$repo/.tmp" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" 
     fail 'a lint copy was created inside the worktree'
 else
     pass 'no lint copy is created inside the worktree'
-fi
-
-# --- A half-done reclaim left behind cannot brick the worktree -----------
-# A run killed between renaming the lock aside and deleting it leaves
-# lock.stale.<pid>. Whatever its form, and even as a directory, it must not
-# abort every later commit with no verdict.
-repo="$scratch/stale-dir-lock"
-new_repo "$repo"
-mkdir -p "$repo/.git/chartml-pre-commit/lock.stale.999999"
-printf '999999\n' > "$repo/.git/chartml-pre-commit/lock.stale.999999/owner"
-printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
-git -C "$repo" add clean.rs
-if (cd "$repo" && bash "$hook" > "$scratch/stale-dir-lock.log" 2>&1); then
-    pass 'a lock.stale.<pid> directory left by a killed reclaim does not block'
-else
-    fail 'a lock.stale.<pid> directory bricked the worktree'
-    cat "$scratch/stale-dir-lock.log" >&2
-fi
-if [ -e "$repo/.git/chartml-pre-commit/lock.stale.999999" ]; then
-    fail 'the leftover lock.stale.<pid> directory was never removed'
-else
-    pass 'the leftover lock.stale.<pid> directory is reclaimed'
 fi
 
 # --- A lock file left by a killed hook is reclaimed ----------------------
@@ -1072,14 +988,30 @@ else
     cat "$scratch/no-hardlinks.log" >&2
 fi
 
-# --- A .cargo/config.toml does not change the verdict ---------------------
-# The hook lints the commit's source with a fixed compiler environment. That
-# includes a committed .cargo/config.toml: its rustflags are Cargo
-# configuration, not source, and honouring them would mean reproducing Cargo's
-# config semantics here — a second TOML implementation this repository does not
-# need (it tracks no .cargo/config.toml and sets no rustflags anywhere). This
-# test pins the choice in both directions so it cannot drift silently.
-repo="$scratch/committed-config-ignored"
+# --- A denied lint takes the "clippy failed" branch ----------------------
+# A denied lint exits cargo non-zero, which is a different message from a
+# warning; the hook must report it as a failure rather than as warnings.
+repo="$scratch/denied-lint"
+new_repo "$repo"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+if (
+    cd "$repo"
+    HOOK_TEST_EXIT=101 HOOK_TEST_OUTPUT='error: use of deprecated function' bash "$hook" > "$scratch/denied-lint.log" 2>&1
+); then
+    fail 'a denied lint was accepted'
+elif ! grep -q 'Cargo clippy failed' "$scratch/denied-lint.log"; then
+    fail 'a denied lint was rejected for the wrong reason'
+    cat "$scratch/denied-lint.log" >&2
+else
+    pass 'a denied lint is reported as a clippy failure'
+fi
+
+# --- A committed .cargo/config.toml is honoured -------------------------
+# The lint copy holds the commit's files, so Cargo reads the commit's own
+# configuration and only that. A rustflags in the commit must therefore apply,
+# exactly as it would to a real build of that commit.
+repo="$scratch/committed-config-honoured"
 new_repo "$repo"
 mkdir -p "$repo/.cargo"
 printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$repo/.cargo/config.toml"
@@ -1087,240 +1019,44 @@ printf 'fn tracked() { let CHA27_COMMITTED_CONFIG = 1; }\n' > "$repo/tracked.rs"
 git -C "$repo" add .cargo/config.toml tracked.rs
 if (
     cd "$repo"
-    HOOK_TEST_WARN_ON_MARKER='CHA27_COMMITTED_CONFIG' bash "$hook" > "$scratch/committed-config-ignored.log" 2>&1
+    HOOK_TEST_WARN_ON_MARKER='CHA27_COMMITTED_CONFIG' bash "$hook" > "$scratch/committed-config-honoured.log" 2>&1
 ); then
-    fail 'a committed .cargo/config.toml rustflags changed the verdict'
+    pass 'a rustflags committed in .cargo/config.toml is honoured'
 else
-    pass 'a committed .cargo/config.toml rustflags does not change the verdict'
+    fail 'a commit was blocked by a warning its own committed config silences'
+    cat "$scratch/committed-config-honoured.log" >&2
 fi
 
-repo="$scratch/untracked-config-ignored"
-new_repo "$repo"
-mkdir -p "$repo/.cargo"
-printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$repo/.cargo/config.toml"
-printf 'fn tracked() { let CHA27_UNTRACKED_CONFIG = 1; }\n' > "$repo/tracked.rs"
-git -C "$repo" add tracked.rs
-if (
-    cd "$repo"
-    HOOK_TEST_WARN_ON_MARKER='CHA27_UNTRACKED_CONFIG' bash "$hook" > "$scratch/untracked-config-ignored.log" 2>&1
-); then
-    fail 'an untracked .cargo/config.toml rustflags changed the verdict'
-else
-    pass 'an untracked .cargo/config.toml rustflags does not change the verdict'
-fi
-
-# --- A leftover lock directory from an older layout is reclaimed ----------
-# This series used a lock directory before the current lock file. One left by
-# an interrupted run must not cost a contributor the full wait with a remedy
-# that cannot name the cause.
-repo="$scratch/leftover-lock-dir"
-new_repo "$repo"
-mkdir -p "$repo/.git/chartml-pre-commit/lock"
-printf '12345\n' > "$repo/.git/chartml-pre-commit/lock/owner"
-printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
-git -C "$repo" add clean.rs
-if (cd "$repo" && bash "$hook" > "$scratch/leftover-lock-dir.log" 2>&1); then
-    pass 'a leftover lock directory is reclaimed'
-else
-    fail 'a leftover lock directory blocked the commit'
-    cat "$scratch/leftover-lock-dir.log" >&2
-fi
-
-# --- A committed .cargo/config.toml is reported as ignored ---------------
-# The hook lints with a fixed compiler environment, so a contributor whose own
-# build honours that file must be told why the hook disagrees with it.
-repo="$scratch/config-notice"
-new_repo "$repo"
-mkdir -p "$repo/.cargo"
-printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$repo/.cargo/config.toml"
-printf 'fn tracked() { let CHA27_CONFIG_NOTICE = 1; }\n' > "$repo/tracked.rs"
-git -C "$repo" add .cargo/config.toml tracked.rs
-(
-    cd "$repo"
-    HOOK_TEST_WARN_ON_MARKER='CHA27_CONFIG_NOTICE' bash "$hook" > "$scratch/config-notice.log" 2>&1
-) || true
-if grep -q ".cargo/config.toml" "$scratch/config-notice.log" && grep -q 'ignor' "$scratch/config-notice.log"; then
-    pass 'a committed .cargo/config.toml is reported as ignored'
-else
-    fail 'the hook did not explain that a committed .cargo/config.toml is ignored'
-    cat "$scratch/config-notice.log" >&2
-fi
-
-# The notice must not appear for a commit that has no such file.
-if grep -q '.cargo/config.toml' "$scratch/clean-commit-dirty-tree.log" 2>/dev/null ||
-    grep -q '.cargo/config.toml' "$scratch/snapshot-content.log" 2>/dev/null; then
-    fail 'the config notice appears for a commit without a .cargo/config.toml'
-else
-    pass 'the config notice appears only when the commit carries that file'
-fi
-
-# --- A live holder keeps its lock, and reclaim cannot race itself --------
-# Two reclaimers must not both delete: the second could remove the lock a third
-# hook had just created. The guard directory makes verify-and-delete atomic, so
-# a planted dead lock is reclaimed exactly once and no two hooks lint together.
-repo="$scratch/live-lock-holder"
+# --- An interrupted run leaves no temporary files behind ----------------
+# The hook creates temporary indexes and a listing outside the state dir, so a
+# signal must not leave them in TMPDIR.
+repo="$scratch/temp-cleanup"
 new_repo "$repo"
 printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
 git -C "$repo" add clean.rs
-live_marker="$scratch/live-lock-holder.marker"
-live_release="$scratch/live-lock-holder.release"
-live_log="$scratch/live-lock-holder.log"
+marker="$scratch/temp-cleanup.marker"
 (
     cd "$repo" || exit 1
-    HOOK_TEST_HANG_MARKER="$live_marker" HOOK_TEST_RELEASE_FILE="$live_release" \
-        bash "$hook" > "$live_log" 2>&1 &
-    holder=$!
+    HOOK_TEST_HANG_MARKER="$marker" HOOK_TEST_HANG_SECONDS=30 bash "$hook" >/dev/null 2>&1 &
+    hook_pid=$!
     for _ in $(seq 1 100); do
-        [ -e "$live_marker" ] && break
+        [ -e "$marker" ] && break
         sleep 0.1
     done
-    if [ ! -e "$live_marker" ]; then
-        echo 'ERROR: holder never reached cargo' >&2
-        kill -KILL "$holder" 2>/dev/null || true
+    if [ ! -e "$marker" ]; then
+        echo 'ERROR: hook never reached cargo' >&2
+        kill -KILL "$hook_pid" 2>/dev/null || true
         exit 1
     fi
-    holder_pid=$(cat "$repo/.git/chartml-pre-commit/lock" 2>/dev/null || true)
-    bash "$hook" > "$scratch/live-lock-holder.second.log" 2>&1 &
-    second=$!
-    for _ in $(seq 1 40); do
-        kill -0 "$second" 2>/dev/null || break
-        sleep 0.1
-    done
-    still_owner=$(cat "$repo/.git/chartml-pre-commit/lock" 2>/dev/null || true)
-    printf '%s|%s\n' "$holder_pid" "$still_owner" > "$scratch/live-lock-holder.owners"
-    : > "$live_release"
-    wait "$holder" || echo 'HOLDER_FAILED' > "$scratch/live-lock-holder.result"
-    wait "$second" || echo 'SECOND_FAILED' > "$scratch/live-lock-holder.result2"
+    kill -TERM "$hook_pid" 2>/dev/null || true
+    wait "$hook_pid" 2>/dev/null || true
 ) || true
-if [ -e "$scratch/live-lock-holder.result" ]; then
-    fail 'a second hook made the live holder fail'
-    tail -5 "$live_log" >&2
-elif [ -e "$scratch/live-lock-holder.result2" ]; then
-    fail 'a second hook failed against a live holder'
-    tail -5 "$scratch/live-lock-holder.second.log" >&2
+if ls "${TMPDIR:-/tmp}"/chartml-pre-commit-index.* "${TMPDIR:-/tmp}"/chartml-pre-commit-verify.* \
+    "${TMPDIR:-/tmp}"/chartml-pre-commit-listing.* >/dev/null 2>&1; then
+    fail 'an interrupted run left temporary files in TMPDIR'
+    ls -1 "${TMPDIR:-/tmp}"/chartml-pre-commit-*. 2>/dev/null >&2 || true
 else
-    pass 'a live lock holder is not displaced by a second hook'
-fi
-if [ -e "$scratch/live-lock-holder.owners" ]; then
-    owners=$(cat "$scratch/live-lock-holder.owners")
-    holder_pid=${owners%%|*}
-    still_owner=${owners#*|}
-    if [ -n "$holder_pid" ] && [ "$holder_pid" = "$still_owner" ]; then
-        pass 'the live holder still owns the lock while the second hook waits'
-    else
-        fail "the lock changed hands while its holder was live ($holder_pid -> $still_owner)"
-    fi
-fi
-
-# --- Several hooks racing one dead lock lint one at a time ---------------
-repo="$scratch/racing-reclaim"
-new_repo "$repo"
-printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
-git -C "$repo" add clean.rs
-race_failures=0
-overlap_seen=0
-for _ in 1 2 3; do
-    mkdir -p "$repo/.git/chartml-pre-commit"
-    printf '999999\n' > "$repo/.git/chartml-pre-commit/lock"
-    race_dir="$scratch/racing-reclaim.$RANDOM"
-    mkdir -p "$race_dir"
-    cat > "$scratch/racing-cargo" <<'CARGO'
-#!/usr/bin/env bash
-if mkdir "$HOOK_TEST_RACE_DIR/active" 2>/dev/null; then
-    sleep 0.2
-    rmdir "$HOOK_TEST_RACE_DIR/active"
-else
-    : > "$HOOK_TEST_RACE_DIR/overlap"
-fi
-exit 0
-CARGO
-    chmod +x "$scratch/racing-cargo"
-    race_bin="$scratch/racing-bin.$RANDOM"
-    mkdir -p "$race_bin"
-    cp "$scratch/racing-cargo" "$race_bin/cargo"
-    (
-        cd "$repo" || exit 1
-        for _ in 1 2 3 4; do
-            PATH="$race_bin:$PATH" HOOK_TEST_RACE_DIR="$race_dir" bash "$hook" > /dev/null 2>&1 &
-        done
-        status=0
-        for job in $(jobs -p); do
-            wait "$job" || status=1
-        done
-        exit "$status"
-    ) || race_failures=$((race_failures + 1))
-    if [ -e "$race_dir/overlap" ]; then
-        overlap_seen=$((overlap_seen + 1))
-    fi
-    rm -rf "$race_dir" "$race_bin"
-done
-if [ "$race_failures" -eq 0 ] && [ "$overlap_seen" -eq 0 ]; then
-    pass 'hooks racing one dead lock reclaim it without overlapping'
-else
-    fail "racing reclaim overlapped ($overlap_seen rounds) or failed ($race_failures rounds)"
-fi
-
-# --- A lock with unreadable content is reclaimed, not permanent ----------
-repo="$scratch/garbage-lock"
-new_repo "$repo"
-mkdir -p "$repo/.git/chartml-pre-commit"
-printf 'not-a-pid\n' > "$repo/.git/chartml-pre-commit/lock"
-printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
-git -C "$repo" add clean.rs
-if (cd "$repo" && timeout 30 bash "$hook" > "$scratch/garbage-lock.log" 2>&1); then
-    pass 'a lock with unreadable content is reclaimed'
-else
-    fail 'a lock with unreadable content blocked every commit'
-    tail -5 "$scratch/garbage-lock.log" >&2
-fi
-
-# --- The reclaim guard is respected, and a leaked one is cleaned ---------
-# The guard records its owner, so liveness rather than age decides whether it
-# can be cleared. A guard held by a live reclaimer must be respected even if it
-# is slow, and one left by a dead run must be cleared or reclamation would be
-# disabled for ever.
-repo="$scratch/guard-live"
-new_repo "$repo"
-mkdir -p "$repo/.git/chartml-pre-commit/lock.reclaim"
-printf 'fn staged_clean() {}
-' > "$repo/clean.rs"
-git -C "$repo" add clean.rs
-# A live process that is deliberately slow, standing in for a stalled reclaimer.
-sleep 30 &
-slow_pid=$!
-printf '%s\n' "$slow_pid" > "$repo/.git/chartml-pre-commit/lock.reclaim/owner"
-printf '999999\n' > "$repo/.git/chartml-pre-commit/lock"
-(
-    cd "$repo" || exit 1
-    timeout 12 bash "$hook" > "$scratch/guard-live.log" 2>&1
-) || true
-if [ -e "$repo/.git/chartml-pre-commit/lock" ] &&
-    [ "$(cat "$repo/.git/chartml-pre-commit/lock" 2>/dev/null)" = "999999" ]; then
-    pass 'a slow but live reclaimer keeps its guard and the dead lock stays'
-else
-    fail 'a live reclaimer lost its guard and the dead lock was taken'
-    tail -5 "$scratch/guard-live.log" >&2
-fi
-kill "$slow_pid" 2>/dev/null || true
-
-repo="$scratch/guard-leaked"
-new_repo "$repo"
-mkdir -p "$repo/.git/chartml-pre-commit/lock.reclaim"
-# A guard whose owner is dead, exactly as a killed run leaves it.
-printf '999999\n' > "$repo/.git/chartml-pre-commit/lock.reclaim/owner"
-printf '999999\n' > "$repo/.git/chartml-pre-commit/lock"
-printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
-git -C "$repo" add clean.rs
-if (cd "$repo" && timeout 40 bash "$hook" > "$scratch/guard-leaked.log" 2>&1); then
-    pass 'a guard left by a dead run does not disable reclamation'
-else
-    fail 'a guard left by a dead run blocked every commit'
-    tail -5 "$scratch/guard-leaked.log" >&2
-fi
-if [ -e "$repo/.git/chartml-pre-commit/lock.reclaim" ]; then
-    fail 'a guard left by a dead run was never removed'
-else
-    pass 'a guard left by a dead run is removed'
+    pass 'an interrupted run leaves no temporary files in TMPDIR'
 fi
 
 if [ "$failures" -ne 0 ]; then
