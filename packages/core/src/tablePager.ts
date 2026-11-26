@@ -35,29 +35,36 @@ const TARGET_SELECTOR = `[${TABLE_PAGER.ATTR_TARGET_PAGE}]`;
  * Make the paged tables in `container` work, now and whenever one is mounted
  * into it later (a re-render replaces the table).
  *
- * `onPageChange` is called with the page (from 0) a pressed button goes to;
- * render that page (`tablePage` in the render options). Returns a function
- * that detaches the controller; call it when the host unmounts the container.
+ * `onPageChange` is called with the page (from 0) a pressed button goes to and
+ * the table (`.chartml-table`) it belongs to; render that page
+ * (`tablePage` in the render options). With several tables in one container
+ * the table says which one to render. Returns a function that detaches the
+ * controller; call it when the host unmounts the container.
  */
 export function attachTablePager(
   container: Element,
-  onPageChange: (page: number) => void,
+  onPageChange: (page: number, table: Element) => void,
 ): () => void {
-  // Which button was pressed, until the table has been re-rendered.
-  let pendingFocus: string | null = null;
+  // Which button of which table was pressed, until it has been re-rendered.
+  let pending: { action: string; table: number } | null = null;
 
-  const prepare = (): void => {
-    for (const button of container.querySelectorAll(ACTION_SELECTOR)) {
-      if (button.hasAttribute(TABLE_PAGER.ATTR_TARGET_PAGE)) button.removeAttribute('disabled');
-    }
-    if (pendingFocus === null) return;
-    const pressed = pendingFocus;
-    pendingFocus = null;
+  const tables = (): Element[] => [...container.querySelectorAll(`.${TABLE_PAGER.CLASS_TABLE}`)];
+
+  const restoreFocus = (): void => {
+    if (pending === null) return;
+    const { action: pressed, table: index } = pending;
+    pending = null;
+    // A re-render drops focus to the page body. Put it back only if that is
+    // where it went: never take it from something the user moved on to.
+    const active = document.activeElement;
+    if (active && active !== document.body && !container.contains(active)) return;
+    const table = tables()[index];
+    if (!table) return;
     const other =
       pressed === TABLE_PAGER.ACTION_PREV ? TABLE_PAGER.ACTION_NEXT : TABLE_PAGER.ACTION_PREV;
     // The pressed button again if it still has somewhere to go, else the other.
     for (const action of [pressed, other]) {
-      const el = container.querySelector<HTMLElement>(
+      const el = table.querySelector<HTMLElement>(
         `[${TABLE_PAGER.ATTR_ACTION}="${action}"]${TARGET_SELECTOR}`,
       );
       if (el) {
@@ -67,15 +74,24 @@ export function attachTablePager(
     }
   };
 
+  const prepare = (): void => {
+    for (const button of container.querySelectorAll(ACTION_SELECTOR)) {
+      if (button.hasAttribute(TABLE_PAGER.ATTR_TARGET_PAGE)) button.removeAttribute('disabled');
+    }
+    restoreFocus();
+  };
+
   const onClick = (event: Event): void => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const button = target.closest(TARGET_SELECTOR);
     if (!button || !container.contains(button) || button.hasAttribute('disabled')) return;
     const page = Number.parseInt(button.getAttribute(TABLE_PAGER.ATTR_TARGET_PAGE) ?? '', 10);
-    if (Number.isNaN(page)) return;
-    pendingFocus = button.getAttribute(TABLE_PAGER.ATTR_ACTION);
-    onPageChange(page);
+    const table = button.closest(`.${TABLE_PAGER.CLASS_TABLE}`);
+    const action = button.getAttribute(TABLE_PAGER.ATTR_ACTION);
+    if (Number.isNaN(page) || !table || !action) return;
+    pending = { action, table: tables().indexOf(table) };
+    onPageChange(page, table);
   };
 
   container.addEventListener('click', onClick);

@@ -46,6 +46,10 @@ const copied = ref(false);
 
 let editorView = null;
 let renderDebounce = null;
+// Detaches the table pager controller on the preview (attachTablePager in @chartml/core).
+let detachPager = null;
+// The YAML of each chart in the preview, by position, so a page change renders that chart again.
+let chartYamls = [];
 let chartmlInstance = null;
 
 onMounted(async () => {
@@ -79,6 +83,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  detachPager?.();
+  detachPager = null;
   if (editorView) {
     editorView.destroy();
   }
@@ -97,8 +103,17 @@ async function renderPreview() {
 
     // Initialize ChartML WASM instance if needed (web target, async init)
     if (!chartmlInstance) {
-      const { ChartML } = await import('@chartml/core');
+      const { ChartML, attachTablePager } = await import('@chartml/core');
       chartmlInstance = await ChartML.create();
+      // A paginated table's Previous/Next buttons: render the page asked for
+      // in the chart the table is in. The controller also prepares each re-render.
+      detachPager = attachTablePager(previewContainer.value, (page, table) => {
+        const chart = table.closest('.chartml-chart');
+        const yaml = chart && chartYamls[Number(chart.dataset.chartIndex)];
+        if (yaml !== undefined) {
+          chart.innerHTML = chartmlInstance.renderToSvg(yaml, { tablePage: page });
+        }
+      });
     }
 
     // Import markdown-it
@@ -111,6 +126,8 @@ async function renderPreview() {
       typographer: true
     });
 
+    chartYamls = [];
+
     // Override the fence rule to render chartml blocks as inline SVG
     const defaultFence = md.renderer.rules.fence;
     md.renderer.rules.fence = (tokens, idx, opts, env, self) => {
@@ -121,7 +138,8 @@ async function renderPreview() {
         const yaml = token.content;
         try {
           const svg = chartmlInstance.renderToSvg(yaml);
-          return `<div class="chartml-chart">${svg}</div>`;
+          chartYamls.push(yaml);
+          return `<div class="chartml-chart" data-chart-index="${chartYamls.length - 1}">${svg}</div>`;
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           return `<div class="chartml-chart chartml-error" style="color: #dc3545; font-family: monospace; padding: 12px; background: #fff5f5; border: 1px solid #dc3545; border-radius: 4px;">Chart error: ${msg}</div>`;

@@ -116,6 +116,14 @@ fn prepare(container: &web_sys::Element, pending_focus: &Rc<RefCell<Option<Strin
     let Some(pressed) = pending_focus.borrow_mut().take() else {
         return;
     };
+    // A re-render drops focus to the page body. Put it back only if that is
+    // where it went: never take it from something the user moved on to.
+    if let Some(active) = container.owner_document().and_then(|d| d.active_element()) {
+        let in_body = active.tag_name().eq_ignore_ascii_case("body");
+        if !in_body && !container.contains(Some(&active)) {
+            return;
+        }
+    }
     let other = if pressed == ACTION_PREV { ACTION_NEXT } else { ACTION_PREV };
     // The pressed button again if it still has somewhere to go, else the other.
     for action in [pressed.as_str(), other] {

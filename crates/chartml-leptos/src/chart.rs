@@ -834,6 +834,9 @@ pub fn ChartMLChart(
                         return;
                     }
                 };
+                // The new data starts at page 0, whatever was clicked while it
+                // was loading (the click may be past the end of the new data).
+                table_page.set(0);
                 resolved.set(Some(ResolvedChart {
                     prepared,
                     svg,
@@ -879,6 +882,7 @@ pub fn ChartMLChart(
                         width,
                         page,
                     }));
+                    last_error.set(None);
                 }
                 Err(err) => {
                     last_error.set(Some(format!("{}", err)));

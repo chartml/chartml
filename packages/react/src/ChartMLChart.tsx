@@ -28,6 +28,10 @@ export function ChartMLChart({ spec, chartml, width, height, className, style, o
   // against it first.
   const [pageState, setPageState] = useState<{ spec: string; page: number }>({ spec, page: 0 });
   const page = pageState.spec === spec ? pageState.page : 0;
+  useEffect(() => {
+    // The page chosen for an earlier spec is dropped, so coming back to it starts at page 0.
+    setPageState((s) => (s.spec === spec ? s : { spec, page: 0 }));
+  }, [spec]);
 
   // Track container width for responsive sizing
   const [containerWidth, setContainerWidth] = useState<number>(0);

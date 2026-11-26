@@ -342,7 +342,9 @@ impl ChartML {
 
     /// Like [`ChartML::render_from_yaml_with_params`], rendering page
     /// `table_page` (from 0) of a paginated `table`. A page past the last is
-    /// an error. Other chart types ignore it.
+    /// an error. Other chart types ignore it. A document with more than one
+    /// chart renders every table at page 0, because one page number cannot say
+    /// which table it is for.
     pub fn render_from_yaml_with_params_page(
         &self,
         yaml: &str,
@@ -452,10 +454,13 @@ impl ChartML {
         if chart_specs.len() == 1 {
             self.render_chart_internal(chart_specs[0], container_width, container_height, &sources, table_page)
         } else {
-            // Multiple charts — render each and wrap in a grid container
+            // Multiple charts — render each and wrap in a grid container.
+            // `table_page` is one number for the whole document, so it cannot
+            // say which table it is for: every table in a multi-chart
+            // document is rendered at page 0 (a static first page).
             let mut children = Vec::new();
             for spec in chart_specs {
-                match self.render_chart_internal(spec, container_width, container_height, &sources, table_page) {
+                match self.render_chart_internal(spec, container_width, container_height, &sources, 0) {
                     Ok(element) => children.push(element),
                     Err(e) => {
                         // Continue rendering other charts even if one fails
@@ -1661,6 +1666,45 @@ visualize:
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("not found"), "Expected 'not found' error, got: {}", err);
+    }
+
+    /// Renders a `div` whose class is the table page it was asked for.
+    struct PageRecorder;
+
+    impl ChartRenderer for PageRecorder {
+        fn render(&self, _data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
+            Ok(ChartElement::Div {
+                class: format!("page-{}", config.table_page),
+                style: HashMap::new(),
+                children: vec![],
+            })
+        }
+    }
+
+    #[test]
+    fn a_single_chart_gets_the_requested_table_page_and_a_multi_chart_document_gets_page_zero() {
+        let mut chartml = ChartML::new();
+        chartml.register_renderer("bar", PageRecorder);
+        let one = "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n    - { x: A, y: 1 }\nvisualize:\n  type: bar\n  columns: x\n  rows: y\n";
+        match chartml.render_from_yaml_with_params_page(one, None, None, None, 3).unwrap() {
+            ChartElement::Div { class, .. } => assert_eq!(class, "page-3"),
+            other => panic!("{other:?}"),
+        }
+        let two = format!("- {}\n- {}", one.replace('\n', "\n  ").trim_end(), one.replace('\n', "\n  ").trim_end());
+        match chartml.render_from_yaml_with_params_page(&two, None, None, None, 3).unwrap() {
+            ChartElement::Div { class, children, .. } => {
+                assert_eq!(class, "chartml-multi-chart");
+                let pages: Vec<String> = children
+                    .iter()
+                    .map(|c| match c {
+                        ChartElement::Div { class, .. } => class.clone(),
+                        other => panic!("{other:?}"),
+                    })
+                    .collect();
+                assert_eq!(pages, ["page-0", "page-0"]);
+            }
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]

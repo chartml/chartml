@@ -167,15 +167,48 @@ describe('attachTablePager on the real renderer output', () => {
     expect(btn(h.container, 'next').disabled, 'a re-render is not prepared after detach').toBe(true);
   });
 
-  it('two tables in one container report their own page', async () => {
+  it('two tables in one container report their own page and table', async () => {
     const c = document.createElement('div');
     c.innerHTML = render(5, 2, 0) + render(4, 2, 1);
     document.body.appendChild(c);
     const seen = [];
-    attachTablePager(c, (p) => seen.push(p));
+    attachTablePager(c, (p, table) => seen.push([p, table]));
     const [a, b] = c.querySelectorAll('.chartml-table');
     a.querySelector(`[${TABLE_PAGER.ATTR_ACTION}="next"]`).click();
     b.querySelector(`[${TABLE_PAGER.ATTR_ACTION}="prev"]`).click();
-    expect(seen).toEqual([1, 0]);
+    expect(seen).toEqual([[1, a], [0, b]]);
+  });
+
+  it('puts focus back in the table that was pressed, not the first one', async () => {
+    const c = document.createElement('div');
+    const html = [render(5, 2, 0), render(5, 2, 0)];
+    c.innerHTML = html.join('');
+    document.body.appendChild(c);
+    attachTablePager(c, (p, table) => {
+      const index = [...c.querySelectorAll('.chartml-table')].indexOf(table);
+      html[index] = render(5, 2, p);
+      c.innerHTML = html.join('');
+    });
+    const second = c.querySelectorAll('.chartml-table')[1];
+    const next = second.querySelector(`[${TABLE_PAGER.ATTR_ACTION}="next"]`);
+    next.focus();
+    next.click();
+    await settle();
+    const tables = c.querySelectorAll('.chartml-table');
+    expect(document.activeElement).toBe(tables[1].querySelector(`[${TABLE_PAGER.ATTR_ACTION}="next"]`));
+  });
+
+  it('does not take focus from something the user moved on to', async () => {
+    const h = host(5, 2);
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    attachTablePager(h.container, (p) => {
+      // A host whose re-render lands after the user clicked elsewhere.
+      input.focus();
+      h.onPage(p);
+    });
+    btn(h.container, 'next').click();
+    await settle();
+    expect(document.activeElement).toBe(input);
   });
 });

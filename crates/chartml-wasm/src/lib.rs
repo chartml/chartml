@@ -89,7 +89,7 @@ impl WasmChartML {
     #[wasm_bindgen(js_name = "renderToSvg")]
     pub fn render_to_svg(&self, yaml: &str, options: JsValue) -> Result<String, JsValue> {
         let (width, height) = parse_render_options(&options);
-        let table_page = parse_table_page(&options)?;
+        let table_page = parse_table_page(&options)?.unwrap_or(0);
         with_inner(self, |chartml| {
             let element = chartml
                 .render_from_yaml_with_params_page(yaml, width, height, None, table_page)
@@ -104,7 +104,7 @@ impl WasmChartML {
     #[wasm_bindgen(js_name = "renderToElement")]
     pub fn render_to_element(&self, yaml: &str, options: JsValue) -> Result<JsValue, JsValue> {
         let (width, height) = parse_render_options(&options);
-        let table_page = parse_table_page(&options)?;
+        let table_page = parse_table_page(&options)?.unwrap_or(0);
         with_inner(self, |chartml| {
             let element = chartml
                 .render_from_yaml_with_params_page(yaml, width, height, None, table_page)
@@ -393,8 +393,8 @@ impl WasmChartML {
         if height.is_some() {
             render_opts.height = height;
         }
-        if has_table_page(&opts) {
-            render_opts.table_page = parse_table_page(&opts)?;
+        if let Some(page) = parse_table_page(&opts)? {
+            render_opts.table_page = page;
         }
         with_inner(self, |chartml| {
             chartml
@@ -551,29 +551,18 @@ fn parse_render_options(options: &JsValue) -> (Option<f64>, Option<f64>) {
     (width, height)
 }
 
-/// Whether a JS options object sets `tablePage` (so `renderPreparedToSvg` can
-/// tell "render page 0" from "keep the page the chart was fetched with").
-fn has_table_page(options: &JsValue) -> bool {
+/// `tablePage` from a JS options object: `None` when it is not set, else a
+/// non-negative integer from 0. Anything else is an error, not 0.
+fn parse_table_page(options: &JsValue) -> Result<Option<usize>, JsValue> {
     if options.is_undefined() || options.is_null() {
-        return false;
-    }
-    js_sys::Reflect::get(options, &"tablePage".into())
-        .map(|v| !v.is_undefined() && !v.is_null())
-        .unwrap_or(false)
-}
-
-/// `tablePage` from a JS options object: a non-negative integer, from 0
-/// (default 0). Anything else is an error, not 0.
-fn parse_table_page(options: &JsValue) -> Result<usize, JsValue> {
-    if options.is_undefined() || options.is_null() {
-        return Ok(0);
+        return Ok(None);
     }
     let value = js_sys::Reflect::get(options, &"tablePage".into()).unwrap_or(JsValue::UNDEFINED);
     if value.is_undefined() || value.is_null() {
-        return Ok(0);
+        return Ok(None);
     }
     match value.as_f64() {
-        Some(n) if n >= 0.0 && n.fract() == 0.0 && n <= f64::from(u32::MAX) => Ok(n as usize),
+        Some(n) if n >= 0.0 && n.fract() == 0.0 && n <= f64::from(u32::MAX) => Ok(Some(n as usize)),
         _ => Err(JsValue::from_str("`tablePage` must be a non-negative integer")),
     }
 }
@@ -588,7 +577,7 @@ fn parse_full_render_options(options: &JsValue) -> Result<chartml_core::RenderOp
         width,
         height,
         params: None,
-        table_page: parse_table_page(options).map_err(|e| format!("{e:?}"))?,
+        table_page: parse_table_page(options).map_err(|e| format!("{e:?}"))?.unwrap_or(0),
     };
     if !options.is_undefined() && !options.is_null() && options.is_object() {
         let params_js = js_sys::Reflect::get(options, &JsValue::from_str("params"))

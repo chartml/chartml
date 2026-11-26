@@ -1883,9 +1883,7 @@ impl ChartRenderer for TableRenderer {
         };
 
         // ── Body rows ──
-        // Rows are grouped by page when there is more than one page. A group
-        // is a plain block (`hidden` hides it), so the rows keep their own
-        // grid layout. Striping restarts on each page.
+        // This page's rows only. Striping restarts on each page.
         let body_border_bottom = body_border(theme);
         let paged = page_count > 1;
         let mut body_children: Vec<ChartElement> = Vec::with_capacity(end - first);
@@ -2177,21 +2175,6 @@ mod tests {
         }
     }
 
-    /// The text a viewer sees: like `find_contents`, minus anything inside an
-    /// element marked `hidden`.
-    fn visible_contents(el: &ChartElement, out: &mut Vec<String>) {
-        match el {
-            ChartElement::Span { content, .. } => out.push(content.clone()),
-            ChartElement::Html { attrs, .. } if attrs.iter().any(|(k, _)| k == "hidden") => {}
-            ChartElement::Div { children, .. } | ChartElement::Html { children, .. } => {
-                for c in children {
-                    visible_contents(c, out);
-                }
-            }
-            _ => {}
-        }
-    }
-
     #[test]
     fn renders_drop_in_bar_spec() {
         // Same spec a bar chart would use — just type: table.
@@ -2254,7 +2237,7 @@ style:
         );
         let element = TableRenderer::new().render(&data(), &config).unwrap();
         let mut contents = Vec::new();
-        visible_contents(&element, &mut contents);
+        find_contents(&element, &mut contents);
         // Page size clamped to 1 → only Jan visible, pager shows page 1 of 3.
         assert!(contents.iter().any(|c| c == "Jan"));
         assert!(!contents.iter().any(|c| c == "Feb"));
@@ -2275,7 +2258,7 @@ style:
         );
         let element = TableRenderer::new().render(&data(), &config).unwrap();
         let mut contents = Vec::new();
-        visible_contents(&element, &mut contents);
+        find_contents(&element, &mut contents);
         // Only first two month values present
         assert!(contents.iter().any(|c| c == "Jan"));
         assert!(contents.iter().any(|c| c == "Feb"));
@@ -3408,7 +3391,7 @@ style:
         );
         let el = TableRenderer::new().render(&data(), &config).unwrap();
         let mut contents = Vec::new();
-        visible_contents(&el, &mut contents);
+        find_contents(&el, &mut contents);
         assert!(contents.iter().any(|c| c == "Month"), "{contents:?}");
         assert!(contents.iter().any(|c| c == "Revenue"), "{contents:?}");
         assert!(contents.iter().any(|c| c == "$1,200"), "{contents:?}");
