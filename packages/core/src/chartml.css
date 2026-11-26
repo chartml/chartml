@@ -41,8 +41,10 @@
   /* Cell padding: one to four lengths, in px, em or rem (or unitless 0).
    * The table renderer measures this padding to size its columns, so a
    * percentage is not supported: it cannot be resolved during that
-   * measurement and would make columns overlap their neighbours. An
-   * unsupported value fails with a clear error instead of rendering. */
+   * measurement and would make columns overlap their neighbours. The Rust
+   * renderer enforces this on the theme value (an unsupported theme value
+   * fails with an error). A host override of this variable is never
+   * validated: it reaches the browser as written. */
   --chartml-table-cell-padding: 8px 12px;
   --chartml-table-font-size: 13px;
 }

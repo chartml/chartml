@@ -247,8 +247,10 @@
  * `--chartml-table-cell-padding` takes one to four lengths — px, em or rem
  * (or unitless 0). The renderer measures that padding to size its columns, so
  * a percentage is not supported: it cannot be resolved during the measurement
- * and would make columns overlap their neighbours; the renderer rejects an
- * unsupported value with a clear error instead of rendering it.
+ * and would make columns overlap their neighbours. The Rust renderer enforces
+ * this on the theme value (an unsupported theme value fails with an error). A
+ * host override of this variable is never validated: it reaches the browser as
+ * written.
  *
  * The Rust renderer emits inline `style` on table elements with CSS custom
  * property values (e.g. `color: var(--chartml-table-text, #hex)`). These class

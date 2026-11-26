@@ -3295,6 +3295,15 @@ style:
             assert_eq!(get(cells[0], "grid-column"), Some("1"));
             assert_eq!(get(cells[0], "text-align"), Some("center"));
             assert_eq!(get(cells[1], "text-align"), Some("left"), "rows align is read");
+            // `width: 100` on the column is the cell's width, `width: auto`
+            // on the row declares none, and the fixed column gets a
+            // `max-content` track while the auto one stays flexible.
+            assert_eq!(get(cells[0], "width"), Some("100.00px"), "column width is read");
+            assert_eq!(get(cells[1], "width"), None, "width: auto declares no width");
+            assert_eq!(
+                get(row, "grid-template-columns"),
+                Some("minmax(max-content, max-content) minmax(auto, 1fr) var(--chartml-table-fade)")
+            );
         }
     }
 
