@@ -25,7 +25,7 @@ visualize:
 "#;
     let result = chartml.render_to_svg(yaml, JsValue::UNDEFINED);
     assert!(result.is_ok(), "render_to_svg failed: {:?}", result.err());
-    let svg = result.unwrap();
+    let svg = result.expect("render_to_svg must return the rendered SVG string");
     assert!(svg.contains("<svg"), "Expected SVG root element");
     assert!(svg.contains(r#"class="bar""#), "Expected bar rect elements");
 }
@@ -52,7 +52,7 @@ visualize:
 "#;
     let result = chartml.render_to_svg(yaml, JsValue::UNDEFINED);
     assert!(result.is_ok(), "Line chart render failed: {:?}", result.err());
-    let svg = result.unwrap();
+    let svg = result.expect("render_to_svg must return the rendered SVG string");
     assert!(svg.contains("<svg"), "Expected SVG root element");
     assert!(svg.contains(r#"class="line""#), "Expected line path element");
 }
@@ -79,7 +79,7 @@ visualize:
 "#;
     let result = chartml.render_to_svg(yaml, JsValue::UNDEFINED);
     assert!(result.is_ok(), "Area chart render failed: {:?}", result.err());
-    let svg = result.unwrap();
+    let svg = result.expect("render_to_svg must return the rendered SVG string");
     assert!(svg.contains("<svg"), "Expected SVG root element");
     assert!(svg.contains(r#"class="area""#), "Expected area path element");
 }
@@ -104,7 +104,7 @@ visualize:
 "#;
     let result = chartml.render_to_svg(yaml, JsValue::UNDEFINED);
     assert!(result.is_ok(), "Pie chart render failed: {:?}", result.err());
-    let svg = result.unwrap();
+    let svg = result.expect("render_to_svg must return the rendered SVG string");
     assert!(svg.contains("<svg"), "Expected SVG root element");
     // Pie slices are rendered as path elements with arc commands
     assert!(svg.contains("<path"), "Expected path elements for pie slices");
@@ -131,7 +131,7 @@ visualize:
 "#;
     let result = chartml.render_to_svg(yaml, JsValue::UNDEFINED);
     assert!(result.is_ok(), "Doughnut chart render failed: {:?}", result.err());
-    let svg = result.unwrap();
+    let svg = result.expect("render_to_svg must return the rendered SVG string");
     assert!(svg.contains("<svg"), "Expected SVG root element");
     assert!(svg.contains("<path"), "Expected path elements for doughnut slices");
 }
@@ -156,7 +156,7 @@ visualize:
 "#;
     let result = chartml.render_to_svg(yaml, JsValue::UNDEFINED);
     assert!(result.is_ok(), "Scatter chart render failed: {:?}", result.err());
-    let svg = result.unwrap();
+    let svg = result.expect("render_to_svg must return the rendered SVG string");
     assert!(svg.contains("<circle"), "Expected circle elements for scatter points");
 }
 
@@ -184,7 +184,7 @@ visualize:
 "#;
     let result = chartml.render_to_svg(yaml, JsValue::UNDEFINED);
     assert!(result.is_ok(), "Bubble chart render failed: {:?}", result.err());
-    let svg = result.unwrap();
+    let svg = result.expect("render_to_svg must return the rendered SVG string");
     assert!(svg.contains("<circle"), "Expected circle elements for bubble chart");
 }
 
@@ -206,7 +206,7 @@ visualize:
 "#;
     let result = chartml.render_to_svg(yaml, JsValue::UNDEFINED);
     assert!(result.is_ok(), "Metric card render failed: {:?}", result.err());
-    let svg = result.unwrap();
+    let svg = result.expect("render_to_svg must return the rendered SVG string");
     // Metric cards render as HTML (div/span) wrapped in SVG foreignObject
     assert!(svg.contains("1,234,567"),
         "Expected formatted metric value '1,234,567' in output");
@@ -230,7 +230,7 @@ visualize:
 "#;
     let result = chartml.render_to_element(yaml, JsValue::UNDEFINED);
     assert!(result.is_ok(), "render_to_element failed: {:?}", result.err());
-    let element = result.unwrap();
+    let element = result.expect("render_to_element must return the element object");
     assert!(!element.is_undefined(), "Element should not be undefined");
     assert!(!element.is_null(), "Element should not be null");
     // ChartElement is serialized as a JSON object with a "type" field
@@ -254,12 +254,14 @@ visualize:
   rows: y
 "#;
     let options = js_sys::Object::new();
-    js_sys::Reflect::set(&options, &"width".into(), &600.0.into()).unwrap();
-    js_sys::Reflect::set(&options, &"height".into(), &300.0.into()).unwrap();
+    js_sys::Reflect::set(&options, &"width".into(), &600.0.into())
+        .expect("set width on the render options object");
+    js_sys::Reflect::set(&options, &"height".into(), &300.0.into())
+        .expect("set height on the render options object");
 
     let result = chartml.render_to_svg(yaml, options.into());
     assert!(result.is_ok(), "Render with options failed: {:?}", result.err());
-    let svg = result.unwrap();
+    let svg = result.expect("render_to_svg must return the rendered SVG string");
     // element_to_svg serializes f64 dimensions as integers when they have no fractional part
     assert!(svg.contains(r#"width="600""#), "Expected width=600 in SVG");
     assert!(svg.contains(r#"height="300""#), "Expected height=300 in SVG");

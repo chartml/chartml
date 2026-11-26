@@ -87,7 +87,10 @@ impl RecordingProvider {
 impl DataSourceProvider for RecordingProvider {
     async fn fetch(&self, _request: FetchRequest) -> Result<FetchResult, FetchError> {
         let prev = {
-            let mut c = self.calls.lock().unwrap();
+            let mut c = self
+                .calls
+                .lock()
+                .expect("provider call counter mutex should not be poisoned");
             let prev = *c;
             *c = c.checked_add(1).unwrap_or(u32::MAX);
             prev
@@ -177,16 +180,32 @@ fn build_chartml() -> ChartMLRef {
     ChartMLRef::new(c)
 }
 
+/// Browser test document; panics with a clear message when the harness has
+/// no DOM (these tests must run under `wasm-bindgen-test` in a browser).
+fn browser_document() -> web_sys::Document {
+    web_sys::window()
+        .expect("browser tests require a window")
+        .document()
+        .expect("browser tests require a document")
+}
+
 /// Build a fresh `<div>` appended to `document.body`, sized so the
 /// container's `client_width` resolves to a non-zero value (the chart
 /// pipeline gates rendering on `width > 0`).
 fn fresh_mount_root() -> web_sys::HtmlDivElement {
-    let document = web_sys::window().unwrap().document().unwrap();
-    let div = document.create_element("div").unwrap();
+    let document = browser_document();
+    let div = document
+        .create_element("div")
+        .expect("create the mount-root div");
     div.set_attribute("style", "width: 800px; height: 400px;")
-        .unwrap();
-    document.body().unwrap().append_child(&div).unwrap();
-    div.dyn_into::<web_sys::HtmlDivElement>().unwrap()
+        .expect("size the mount root so it has a non-zero client width");
+    document
+        .body()
+        .expect("browser tests require a document body")
+        .append_child(&div)
+        .expect("append the mount root to the document body");
+    div.dyn_into::<web_sys::HtmlDivElement>()
+        .expect("created element is an HtmlDivElement")
 }
 
 /// Sleep that yields back to the JS event loop so `spawn_local` futures
@@ -303,7 +322,7 @@ async fn test_chart_fetches_via_provider() {
         host.inner_html().chars().take(120).collect::<String>(),
     );
     assert_eq!(
-        *calls.lock().unwrap(),
+        *calls.lock().expect("provider call counter mutex should not be poisoned"),
         1,
         "provider must be called exactly once for the initial fetch",
     );
@@ -330,7 +349,10 @@ async fn test_chart_shows_loading_state() {
     // marker. Yield only one microtask tick so the resize observer has
     // measured but the spawn_local fetch hasn't resolved.
     yield_to_event_loop(0).await;
-    let loading_present = root.query_selector(".chartml-loading").unwrap().is_some();
+    let loading_present = root
+        .query_selector(".chartml-loading")
+        .expect("query_selector accepts a static selector")
+        .is_some();
     assert!(
         loading_present,
         "loading marker must be present immediately after mount",
@@ -339,7 +361,10 @@ async fn test_chart_shows_loading_state() {
     // Wait for fetch + transform + render. Loading marker should clear.
     yield_to_event_loop(250).await;
     assert!(
-        root.query_selector(".chartml-loading").unwrap().is_none(),
+        root
+            .query_selector(".chartml-loading")
+            .expect("query_selector accepts a static selector")
+            .is_none(),
         "loading marker must clear after the async pipeline resolves",
     );
 }
@@ -368,17 +393,23 @@ async fn test_chart_shows_error_state_with_retry() {
     // must exist, no SVG host yet.
     let error_div = root
         .query_selector(".chartml-error")
-        .unwrap()
+        .expect("query_selector accepts a static selector")
         .expect("error region must be present after the first failed fetch");
     assert!(
         rendered_svg_host(&root).is_none(),
         "no SVG host should be populated while the chart is in the error state",
     );
-    assert_eq!(*calls.lock().unwrap(), 1, "provider was called once before retry");
+    assert_eq!(
+        *calls
+            .lock()
+            .expect("provider call counter mutex should not be poisoned"),
+        1,
+        "provider was called once before retry"
+    );
 
     let retry_button = error_div
         .query_selector(".chartml-retry-button")
-        .unwrap()
+        .expect("query_selector accepts a static selector")
         .expect("retry button must exist inside the error region");
     let html_button: web_sys::HtmlElement = retry_button
         .dyn_into::<web_sys::HtmlElement>()
@@ -388,12 +419,15 @@ async fn test_chart_shows_error_state_with_retry() {
     yield_to_event_loop(250).await;
 
     assert_eq!(
-        *calls.lock().unwrap(),
+        *calls.lock().expect("provider call counter mutex should not be poisoned"),
         2,
         "retry button click must trigger a second provider fetch",
     );
     assert!(
-        root.query_selector(".chartml-error").unwrap().is_none(),
+        root
+            .query_selector(".chartml-error")
+            .expect("query_selector accepts a static selector")
+            .is_none(),
         "error region must clear after a successful retry",
     );
     assert!(
@@ -421,7 +455,7 @@ async fn test_chart_auto_refresh_fires() {
 
     // Initial fetch settles within ~250ms.
     yield_to_event_loop(300).await;
-    let initial_calls = *calls.lock().unwrap();
+    let initial_calls = *calls.lock().expect("provider call counter mutex should not be poisoned");
     assert_eq!(
         initial_calls, 1,
         "provider should be called once for the initial fetch (got {initial_calls})",
@@ -431,7 +465,7 @@ async fn test_chart_auto_refresh_fires() {
     // should produce at least 2 ticks even with timer jitter).
     yield_to_event_loop(2400).await;
 
-    let final_calls = *calls.lock().unwrap();
+    let final_calls = *calls.lock().expect("provider call counter mutex should not be poisoned");
     assert!(
         final_calls >= 3,
         "auto-refresh must fire ≥2 times in a 2.4s window with a 1s TTL (initial=1, refreshes≥2; got total={final_calls})",
@@ -462,7 +496,7 @@ async fn test_chart_auto_refresh_paused_when_hidden() {
 
     // Initial fetch settles.
     yield_to_event_loop(300).await;
-    let baseline = *calls.lock().unwrap();
+    let baseline = *calls.lock().expect("provider call counter mutex should not be poisoned");
     assert_eq!(baseline, 1, "initial fetch should fire once");
 
     // Flip visibility to hidden + dispatch the event.
@@ -472,7 +506,7 @@ async fn test_chart_auto_refresh_paused_when_hidden() {
     // Wait through one would-be tick window. Provider call count must NOT
     // change while the document is hidden.
     yield_to_event_loop(1500).await;
-    let hidden_calls = *calls.lock().unwrap();
+    let hidden_calls = *calls.lock().expect("provider call counter mutex should not be poisoned");
     assert_eq!(
         hidden_calls, baseline,
         "no auto-refresh fetches should fire while the document is hidden \
@@ -485,7 +519,7 @@ async fn test_chart_auto_refresh_paused_when_hidden() {
     dispatch_visibility_change();
 
     yield_to_event_loop(1500).await;
-    let resumed_calls = *calls.lock().unwrap();
+    let resumed_calls = *calls.lock().expect("provider call counter mutex should not be poisoned");
     assert!(
         resumed_calls > hidden_calls,
         "auto-refresh must resume after visibilitychange → 'visible' \
@@ -518,7 +552,7 @@ async fn test_chart_refresh_trigger_invalidates_and_refetches() {
     // Initial fetch settles within the same window the smoke test uses.
     yield_to_event_loop(300).await;
     assert_eq!(
-        *calls.lock().unwrap(),
+        *calls.lock().expect("provider call counter mutex should not be poisoned"),
         1,
         "initial mount must fetch once before any trigger bump",
     );
@@ -528,7 +562,7 @@ async fn test_chart_refresh_trigger_invalidates_and_refetches() {
     refresh.update(|c| *c = c.wrapping_add(1));
     yield_to_event_loop(300).await;
     assert_eq!(
-        *calls.lock().unwrap(),
+        *calls.lock().expect("provider call counter mutex should not be poisoned"),
         2,
         "first refresh_trigger bump must fire one extra provider call",
     );
@@ -537,7 +571,7 @@ async fn test_chart_refresh_trigger_invalidates_and_refetches() {
     refresh.update(|c| *c = c.wrapping_add(1));
     yield_to_event_loop(300).await;
     assert_eq!(
-        *calls.lock().unwrap(),
+        *calls.lock().expect("provider call counter mutex should not be poisoned"),
         3,
         "second refresh_trigger bump must fire one more provider call",
     );
@@ -558,7 +592,7 @@ extern "C" {
 /// string like `"hidden"` or `"visible"`). Re-callable — each call
 /// overrides the previous descriptor.
 fn set_document_visibility(value: &str) {
-    let document = web_sys::window().unwrap().document().unwrap();
+    let document = browser_document();
     let descriptor = js_sys::Object::new();
     let value_owned = value.to_string();
     let getter = Closure::<dyn Fn() -> JsValue>::new(move || {
@@ -569,13 +603,13 @@ fn set_document_visibility(value: &str) {
         &JsValue::from_str("get"),
         getter.as_ref().unchecked_ref(),
     )
-    .unwrap();
+    .expect("define the visibilityState getter descriptor");
     js_sys::Reflect::set(
         &descriptor,
         &JsValue::from_str("configurable"),
         &JsValue::from_bool(true),
     )
-    .unwrap();
+    .expect("mark the visibilityState descriptor configurable");
     let document_value: JsValue = document.into();
     define_property(&document_value, "visibilityState", &descriptor.into());
     // Leak the closure — the test process exits when wasm-bindgen-test
@@ -589,10 +623,12 @@ fn set_document_visibility(value: &str) {
 /// Browsers' built-in `visibilityState` lives on the `Document.prototype`
 /// chain, so deleting our own-property descriptor exposes it again.
 fn restore_document_visibility() {
-    let document = web_sys::window().unwrap().document().unwrap();
+    let document = browser_document();
     let document_value: JsValue = document.into();
     let _ = js_sys::Reflect::delete_property(
-        &document_value.dyn_into::<js_sys::Object>().unwrap(),
+        &document_value
+            .dyn_into::<js_sys::Object>()
+            .expect("document converts to a JS object"),
         &JsValue::from_str("visibilityState"),
     );
 }
@@ -601,7 +637,10 @@ fn restore_document_visibility() {
 /// `ChartMLChart` registered on mount sees the (already-shimmed)
 /// `visibilityState` change.
 fn dispatch_visibility_change() {
-    let document = web_sys::window().unwrap().document().unwrap();
-    let event = web_sys::Event::new("visibilitychange").unwrap();
-    document.dispatch_event(&event).unwrap();
+    let document = browser_document();
+    let event = web_sys::Event::new("visibilitychange")
+        .expect("create the synthetic visibilitychange event");
+    document
+        .dispatch_event(&event)
+        .expect("dispatch the synthetic visibilitychange event");
 }

@@ -8,6 +8,13 @@
 //! before reading the collected events. This is the same coordination
 //! consumer code would do in production (e.g., a Leptos progress bar
 //! subscribes via a channel).
+//!
+//! Native-only: the hooks exercised here are installed on the native
+//! resolver path, and this file uses the `Arc`-based cache handles and the
+//! `chartml-datafusion` middleware that only exist off wasm32. It compiles as
+//! an empty test crate on `wasm32-unknown-unknown`, which is what lets the
+//! wasm32 Clippy lane lint this crate with `--all-targets`.
+#![cfg(not(target_arch = "wasm32"))]
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
