@@ -1361,6 +1361,10 @@ fn header_text(theme: &Theme) -> HeaderText {
     let spacing = theme.table_header_letter_spacing.trim();
     let letter_spacing_em = if let Some(n) = spacing.strip_suffix("em").and_then(|n| n.trim().parse::<f64>().ok()) {
         n
+    } else if let Some(n) = spacing.strip_suffix('%').and_then(|n| n.trim().parse::<f64>().ok()) {
+        // A percentage letter-spacing is a percentage of the header's own font
+        // size, so it is `n / 100` em (measured in headless Chromium).
+        n / 100.0
     } else if let (Some(n), Some(font)) = (px(spacing), px(&theme.table_font_size)) {
         n / font
     } else {
@@ -2460,6 +2464,21 @@ style:
         theme.table_header_letter_spacing = "1.3px".into();
         theme.table_font_size = "13px".into();
         assert!((header_text(&theme).letter_spacing_em - 0.1).abs() < 1e-9);
+    }
+
+    /// CHA-36 line 1: a percentage letter-spacing is a percentage of the
+    /// header's own font size, so `n%` is exactly `n/100` em. Measured in
+    /// chrome-headless-shell 1217 (13px sans-serif 600, "Customers"): `10%` painted
+    /// 79.609px, the same as `0.1em` and `1.3px`; `25%` 97.172px; `50%` 126.422px;
+    /// `-10%` 56.219px; `normal` 67.922px.
+    #[test]
+    fn percentage_letter_spacing_is_a_percentage_of_the_font_size() {
+        for (spacing, em) in [("10%", 0.1), ("25%", 0.25), ("50%", 0.5), ("-10%", -0.1), ("0%", 0.0), ("12.5%", 0.125)] {
+            let mut theme = Theme::default();
+            theme.table_header_letter_spacing = spacing.into();
+            let got = header_text(&theme).letter_spacing_em;
+            assert!((got - em).abs() < 1e-12, "{spacing}: {got} != {em}");
+        }
     }
 
     /// The owner's ruling: text outside the Latin scope must lay out exactly as
