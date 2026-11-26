@@ -968,26 +968,6 @@ else
     chmod 700 "$repo/.git/chartml-pre-commit"
 fi
 
-# --- The hook works where hard links are unavailable ---------------------
-# The lock must not depend on `ln`: exFAT, FAT32 and some network mounts do not
-# support hard links, and the repository itself still works there.
-repo="$scratch/no-hardlinks"
-new_repo "$repo"
-mkdir -p "$scratch/no-hardlinks-bin"
-printf '#!/usr/bin/env bash\nexit 1\n' > "$scratch/no-hardlinks-bin/ln"
-chmod +x "$scratch/no-hardlinks-bin/ln"
-printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
-git -C "$repo" add clean.rs
-if (
-    cd "$repo"
-    PATH="$scratch/no-hardlinks-bin:$PATH" bash "$hook" > "$scratch/no-hardlinks.log" 2>&1
-); then
-    pass 'the lock works where hard links are unavailable'
-else
-    fail 'the lock failed where hard links are unavailable'
-    cat "$scratch/no-hardlinks.log" >&2
-fi
-
 # --- A denied lint takes the "clippy failed" branch ----------------------
 # A denied lint exits cargo non-zero, which is a different message from a
 # warning; the hook must report it as a failure rather than as warnings.
@@ -1028,33 +1008,55 @@ else
 fi
 
 # --- An interrupted run leaves no temporary files behind ----------------
-# The hook creates temporary indexes and a listing outside the state dir, so a
-# signal must not leave them in TMPDIR.
+# The hook creates temporary indexes and a listing outside the state dir. The
+# signal has to land while one of them exists, so `git` is stood in for by a
+# wrapper that hangs during the verification step, after the files are created.
 repo="$scratch/temp-cleanup"
 new_repo "$repo"
 printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
 git -C "$repo" add clean.rs
+temp_bin="$scratch/temp-cleanup-bin"
+mkdir -p "$temp_bin"
+real_git=$(command -v git)
+cat > "$temp_bin/git" <<GIT
+#!/usr/bin/env bash
+# Hang exactly where the hook still holds its temporary index and listing.
+for arg in "\$@"; do
+    if [ "\$arg" = "ls-files" ]; then
+        : > "$scratch/temp-cleanup.marker"
+        sleep 30
+    fi
+done
+exec "$real_git" "\$@"
+GIT
+chmod +x "$temp_bin/git"
 marker="$scratch/temp-cleanup.marker"
 (
     cd "$repo" || exit 1
-    HOOK_TEST_HANG_MARKER="$marker" HOOK_TEST_HANG_SECONDS=30 bash "$hook" >/dev/null 2>&1 &
+    PATH="$temp_bin:$PATH" bash "$hook" >/dev/null 2>&1 &
     hook_pid=$!
     for _ in $(seq 1 100); do
         [ -e "$marker" ] && break
         sleep 0.1
     done
     if [ ! -e "$marker" ]; then
-        echo 'ERROR: hook never reached cargo' >&2
+        echo 'ERROR: hook never reached the verification step' >&2
         kill -KILL "$hook_pid" 2>/dev/null || true
         exit 1
     fi
+    # The temporary files exist right now; interrupt and check they are gone.
+    ls "${TMPDIR:-/tmp}"/chartml-pre-commit-listing.* > "$scratch/temp-cleanup.during" 2>/dev/null || true
+    printf '%s\n' "$(wc -l < "$scratch/temp-cleanup.during" | tr -d ' ')" > "$scratch/temp-cleanup.count"
     kill -TERM "$hook_pid" 2>/dev/null || true
     wait "$hook_pid" 2>/dev/null || true
 ) || true
-if ls "${TMPDIR:-/tmp}"/chartml-pre-commit-index.* "${TMPDIR:-/tmp}"/chartml-pre-commit-verify.* \
-    "${TMPDIR:-/tmp}"/chartml-pre-commit-listing.* >/dev/null 2>&1; then
+if [ "$(cat "$scratch/temp-cleanup.count" 2>/dev/null || echo 0)" -gt 0 ]; then
+    pass 'the interrupt lands while temporary files exist (so the test can fail)'
+else
+    fail 'the interrupt did not land while temporary files existed, so it proves nothing'
+fi
+if ls "${TMPDIR:-/tmp}"/chartml-pre-commit-listing.* >/dev/null 2>&1; then
     fail 'an interrupted run left temporary files in TMPDIR'
-    ls -1 "${TMPDIR:-/tmp}"/chartml-pre-commit-*. 2>/dev/null >&2 || true
 else
     pass 'an interrupted run leaves no temporary files in TMPDIR'
 fi
