@@ -111,7 +111,7 @@ Lint suppressions (`#[allow(...)]` in .rs files, `= "allow"` in Cargo.toml) are 
 3. Tag: `git tag v3.x.x && git push --tags`
 
 ### crates.io
-`cargo publish` in dependency order: core → forecast → chart-* → datafusion → render
+`cargo publish` in dependency order: core → forecast → chart-* → datafusion → render → leptos (full list in PUBLISHING.md "Manual Publishing")
 
 ### Post-Release (Kyomi)
 Update Kyomi's lockfile to reference the new @chartml/core version.

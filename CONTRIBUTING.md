@@ -127,7 +127,7 @@ The `wasm_bindgen_test` suites only run in a real browser. CI pins a runner, Chr
    cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
    ```
 
-2. [Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/) and its matching chromedriver. CI uses version `158.0.8127.88` (`CHROME_VERSION` in ci.yml); pick the `mac-arm64`, `mac-x64` or `linux64` download for your machine.
+2. [Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/) and its matching chromedriver. CI pins the version in `CHROME_VERSION` in ci.yml; pick the `mac-arm64`, `mac-x64` or `linux64` download for your machine.
 
 3. A WebDriver config that starts Chrome headless. Point `binary` at your Chrome for Testing executable. The last two flags (not in CI) stop Chrome asking for keychain access on macOS.
 
