@@ -1450,14 +1450,35 @@ fn align_css(align: ColumnAlign) -> &'static str {
     }
 }
 
-/// Left and right components of a CSS `padding` shorthand (1–4 values).
+/// Left and right components of a CSS `padding` shorthand (1–4 values), as
+/// operands for `calc()`.
+///
+/// `calc()` requires a unit on every `+` operand, so a unitless zero — legal
+/// in the shorthand and accepted by
+/// [`Theme::validate_table_cell_padding`](chartml_core::theme::Theme::validate_table_cell_padding)
+/// — is normalised to `0px`. Without that, `calc(0 + 0)` is invalid CSS and
+/// the browser drops the whole declaration, taking the column minimums and
+/// the fade estimate with it.
 fn horizontal_padding(shorthand: &str) -> (String, String) {
+    fn operand(value: &str) -> String {
+        if value.parse::<f64>() == Ok(0.0) {
+            "0px".to_string()
+        } else {
+            value.to_string()
+        }
+    }
     let parts: Vec<&str> = shorthand.split_whitespace().collect();
     match parts.as_slice() {
         [] => ("0px".into(), "0px".into()),
-        [all] => ((*all).into(), (*all).into()),
-        [_, x] | [_, x, _] => ((*x).into(), (*x).into()),
-        [_, right, _, left, ..] => ((*left).into(), (*right).into()),
+        [all] => {
+            let pad = operand(all);
+            (pad.clone(), pad)
+        }
+        [_, x] | [_, x, _] => {
+            let pad = operand(x);
+            (pad.clone(), pad)
+        }
+        [_, right, _, left, ..] => (operand(left), operand(right)),
     }
 }
 
@@ -2893,10 +2914,36 @@ style:
     #[test]
     fn padding_shorthand_left_and_right() {
         assert_eq!(horizontal_padding("8px"), ("8px".into(), "8px".into()));
-        assert_eq!(horizontal_padding("8px 12px"), ("12px".into(), "12px".into()));
-        assert_eq!(horizontal_padding("8px 12px 4px"), ("12px".into(), "12px".into()));
-        assert_eq!(horizontal_padding("1px 2px 3px 4px"), ("4px".into(), "2px".into()));
+        assert_eq!(
+            horizontal_padding("8px 12px"),
+            ("12px".into(), "12px".into())
+        );
+        assert_eq!(
+            horizontal_padding("8px 12px 4px"),
+            ("12px".into(), "12px".into())
+        );
+        assert_eq!(
+            horizontal_padding("1px 2px 3px 4px"),
+            ("4px".into(), "2px".into())
+        );
         assert_eq!(horizontal_padding(""), ("0px".into(), "0px".into()));
+        // `calc()` needs a unit on every `+` operand, so a unitless zero — a
+        // documented shorthand value — becomes `0px` here. `calc(0 + 0)` is
+        // invalid CSS and the browser drops the declaration, taking the column
+        // minimums and the fade estimate with it.
+        assert_eq!(horizontal_padding("0"), ("0px".into(), "0px".into()));
+        assert_eq!(horizontal_padding("0 0"), ("0px".into(), "0px".into()));
+        assert_eq!(horizontal_padding("0.0"), ("0px".into(), "0px".into()));
+        assert_eq!(horizontal_padding("8px 0"), ("0px".into(), "0px".into()));
+        assert_eq!(
+            horizontal_padding("1px 2px 3px 0"),
+            ("0px".into(), "2px".into())
+        );
+        // Non-zero and already-united values pass through untouched.
+        assert_eq!(
+            horizontal_padding("8px 0.5em"),
+            ("0.5em".into(), "0.5em".into())
+        );
     }
 
     #[test]

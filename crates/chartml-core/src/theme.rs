@@ -388,16 +388,19 @@ impl Theme {
             ));
         }
         for value in parts {
-            // A CSS length: digits with at most one decimal point, and nothing,
-            // `px`, `em` or `rem` as the unit. Anything else — a percentage,
-            // another unit, a bare `.`, a second dot, a sign, `px` alone —
-            // cannot be measured, so it is rejected rather than rendered.
+            // A CSS length: digits with at most one decimal point that ends in
+            // a digit, and nothing, `px`, `em` or `rem` as the unit. Anything
+            // else — a percentage, another unit, a bare `.`, a trailing `.`, a
+            // second dot, a sign, `px` alone — cannot be measured, so it is
+            // rejected rather than rendered.
             let (number, unit) = split_length(value);
             let is_number = !number.is_empty()
                 && number.chars().filter(|c| *c == '.').count() <= 1
-                && number.chars().all(|c| c.is_ascii_digit() || c == '.');
+                && number.chars().all(|c| c.is_ascii_digit() || c == '.')
+                && !number.ends_with('.');
             // A unitless value is only legal as zero: `8` is not a length, and
-            // emitting `calc(x + 8 + 8)` would be invalid CSS.
+            // emitting `calc(x + 8 + 8)` would be invalid CSS. The renderer
+            // normalises that zero to `0px` where it builds the calc.
             let unit_ok = if unit.is_empty() {
                 number.parse::<f64>() == Ok(0.0)
             } else {
@@ -605,21 +608,70 @@ mod table_cell_padding_tests {
 
     #[test]
     fn accepts_length_units() {
-        for padding in ["8px 12px", "8px", "0", "10px 20px 4px 6px", "0.5em", "1rem 2rem", "8PX 12px"] {
-            let theme = Theme { table_cell_padding: padding.into(), ..Theme::default() };
-            assert!(theme.validate_table_cell_padding().is_ok(), "{padding} must be accepted");
+        for padding in [
+            "8px 12px",
+            "8px",
+            "0",
+            "10px 20px 4px 6px",
+            "0.5em",
+            "1rem 2rem",
+            "8PX 12px",
+        ] {
+            let theme = Theme {
+                table_cell_padding: padding.into(),
+                ..Theme::default()
+            };
+            assert!(
+                theme.validate_table_cell_padding().is_ok(),
+                "{padding} must be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_unitless_zero_and_redundant_zeros() {
+        // A unitless zero is a documented shorthand value, and leading or
+        // trailing zeros in a number are legal CSS.
+        for padding in ["0 0", "0.0", "1px 2px 3px 0", "00.00px"] {
+            let theme = Theme {
+                table_cell_padding: padding.into(),
+                ..Theme::default()
+            };
+            assert!(
+                theme.validate_table_cell_padding().is_ok(),
+                "{padding} must be accepted"
+            );
         }
     }
 
     #[test]
     fn rejects_percentages_and_unmeasurable_units() {
         for padding in [
-            "0 50%", "10% 20%", "8px 12%", "2vw 3px", "1in 1px",
+            "0 50%",
+            "10% 20%",
+            "8px 12%",
+            "2vw 3px",
+            "1in 1px",
             // Malformed shorthands the old unit-only check let through, all of
             // which poison the calc() the renderer builds from them.
-            "8", ".5", "px", "1.2.3px", "-8px", "1px 2px 3px 4px 5px",
+            "8",
+            ".5",
+            "px",
+            "1.2.3px",
+            "-8px",
+            "1px 2px 3px 4px 5px",
+            // A numeric part ending in a dot is not a CSS number either: the
+            // browser drops `calc(1. + 0px)` just as it drops `calc(0 + 0)`.
+            // (`00.00px` is not in this list: its digits end in a zero, which
+            // is a legal CSS number, just written with redundant zeros.)
+            "1.px",
+            "0.",
+            "1.px 2.px",
         ] {
-            let theme = Theme { table_cell_padding: padding.into(), ..Theme::default() };
+            let theme = Theme {
+                table_cell_padding: padding.into(),
+                ..Theme::default()
+            };
             let err = theme.validate_table_cell_padding().expect_err(padding);
             assert!(
                 err.contains("not a supported length") || err.contains("takes 1 to 4"),

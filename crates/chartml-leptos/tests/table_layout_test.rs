@@ -852,6 +852,103 @@ fn measure_with_padding(host: &web_sys::HtmlElement, padding: &str) -> PaddedSta
     serde_json::from_str(&json).expect("padded state parses")
 }
 
+/// The computed `padding-left`/`padding-right` of the table's first cell, as
+/// `"<left> <right>"`.
+fn computed_cell_padding(host: &web_sys::HtmlElement) -> String {
+    let f = js_sys::Function::new_with_args(
+        "host",
+        r#"
+        const cell = host.querySelector('.chartml-table-header-cell, .chartml-table-cell');
+        const s = getComputedStyle(cell);
+        return `${s.paddingLeft} ${s.paddingRight}`;
+        "#,
+    );
+    f.call1(&JsValue::NULL, host)
+        .expect("padding measurement runs")
+        .as_string()
+        .expect("padding string")
+}
+
+/// A zero cell padding is a documented theme value (unitless `0`). The `calc()`
+/// the renderer builds for the column minimums and the fade estimate needs a
+/// unit on every `+` operand, so a unitless zero is normalised to `0px`. Left
+/// as `0`, the browser drops each declaration built from it: the columns lose
+/// their `min-width`, words break mid-word, and the fade hint disappears while
+/// columns are still hidden. `0px` is the control — it must behave identically.
+#[wasm_bindgen_test]
+fn zero_cell_padding_keeps_columns_and_text_intact() {
+    let spec = wide_spec();
+    for (padding, expected_padding) in [
+        ("0", "0px 0px"),
+        ("0px", "0px 0px"),
+        ("8px 0", "0px 0px"),
+        ("1px 2px 3px 0", "0px 2px"),
+    ] {
+        let mut theme = Theme::default();
+        theme.table_cell_padding = padding.into();
+        for path in [Path::Leptos, Path::Svg] {
+            let ctx = format!("{path:?}: --chartml-table-cell-padding: {padding} at 375px");
+            let host = mount(path, &spec, theme.clone(), 375);
+            // The theme value really reached the cells (otherwise the rest of
+            // this test is vacuous): the horizontal padding is the one the
+            // theme asked for, not the 12px default.
+            let applied = computed_cell_padding(&host);
+            assert_eq!(
+                applied, expected_padding,
+                "{ctx}: the theme padding did not reach the cells"
+            );
+            let Measurements { states, .. } = measure(&host);
+            for s in &states {
+                let at = format!("{ctx}, scrollLeft {}", s.scroll_left);
+                assert!(
+                    s.rows_span_scroll_width,
+                    "{at}: a row is narrower than the scrolled width"
+                );
+                assert!(
+                    s.misalign_px < 0.5,
+                    "{at}: header and body columns misaligned by {}px",
+                    s.misalign_px
+                );
+                assert_eq!(
+                    s.clipped_cells, 0,
+                    "{at}: {} cells cut off",
+                    s.clipped_cells
+                );
+                // The failure mode of the dropped `min-width`: words break
+                // mid-word instead of wrapping at their spaces.
+                assert!(
+                    s.broken_words.is_empty(),
+                    "{at}: words broken across lines: {:?}",
+                    s.broken_words
+                );
+                assert!(
+                    s.wrapped_cells.is_empty(),
+                    "{at}: wrapped although sized to fit: {:?}",
+                    s.wrapped_cells
+                );
+            }
+            // The table needs more width than 375px, so the columns overflow and
+            // the fade must be on: `--chartml-table-columns-min` has to survive
+            // as valid CSS, or nothing signals the hidden columns.
+            let end = states.last().expect("measured states");
+            assert!(
+                end.max_scroll_left > 0.0,
+                "{ctx}: the 12 columns must overflow 375px"
+            );
+            assert!(
+                (end.fade_width - 32.0).abs() < 0.5,
+                "{ctx}: fade {}px while columns overflow",
+                end.fade_width
+            );
+            assert!(
+                end.fade_covers_text_px < 0.5,
+                "{ctx}: fade covers {}px of text",
+                end.fade_covers_text_px
+            );
+        }
+    }
+}
+
 /// Regression (CHA-22 F4): a table that overflows in a narrow container and is
 /// then resized in place to a width where its columns fit must have no sideways
 /// scroll and no visible fade. This is the resize path a dashboard tile takes
