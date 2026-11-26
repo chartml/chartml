@@ -34,7 +34,8 @@ export function ChartMLChart({ spec, chartml, width, height, className, style, o
   // The page of a paginated table, from 0. It belongs to one spec: a new spec
   // starts at page 0 (it may have fewer pages), without rendering the old page
   // against it first.
-  const pageKey = `${idOf(chartml)}:${spec}`;
+  // `chartml` is null until the WASM is ready (see `useChartML`).
+  const pageKey = `${chartml ? idOf(chartml) : 'none'}:${spec}`;
   const [pageState, setPageState] = useState<{ key: string; page: number }>({ key: pageKey, page: 0 });
   const page = pageState.key === pageKey ? pageState.page : 0;
   useEffect(() => {
