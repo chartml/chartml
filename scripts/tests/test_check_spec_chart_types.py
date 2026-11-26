@@ -66,6 +66,13 @@ class TypeListTests(unittest.TestCase):
             make_docs(Path(tmp), "no lists here\n")
             self.assertIn("no chart-type list found", checker.problems(tmp)[0])
 
+    def test_page_with_only_a_parameter_list_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            make_docs(Path(tmp), "  type: select | multiselect | text\n")
+            found = checker.problems(tmp)
+            self.assertEqual(len(found), 1)
+            self.assertIn("spec.md: no chart-type list found", found[0])
+
     def test_empty_schema_enum_is_reported(self):
         with tempfile.TemporaryDirectory() as tmp:
             make_docs(Path(tmp), "  type: bar | line | table\n")

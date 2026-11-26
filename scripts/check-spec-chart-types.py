@@ -15,8 +15,9 @@ Lists recognised, per page:
 A list that shares no value with the enum is another kind of list (the spec's
 parameter types are one) and is skipped.
 
-Each page named below must contain at least one list, so a reworded page cannot
-pass by having nothing left to check. Order is not compared, only the set.
+Each page named below must contain at least one chart-type list (one that
+shares a value with the enum), so a reworded page cannot pass by having nothing
+left to check. Order is not compared, only the set.
 
 Usage: check-spec-chart-types.py [DOCS_DIR]   (default: docs/docs)
 """
@@ -61,11 +62,12 @@ def problems(docs_dir):
     out = []
     for page in PAGES:
         lists = type_lists((docs / page).read_text(encoding="utf-8"))
-        if not lists:
+        # A list that shares no value with the enum is another kind of list
+        # (the spec's parameter types are one) and is not checked.
+        chart_lists = [(n, listed) for n, listed in lists if listed & expected]
+        if not chart_lists:
             out.append(f"{page}: no chart-type list found, so nothing was checked")
-        for number, listed in lists:
-            if not listed & expected:
-                continue  # another kind of list, e.g. the parameter types
+        for number, listed in chart_lists:
             missing = sorted(expected - listed)
             extra = sorted(listed - expected)
             if missing or extra:
