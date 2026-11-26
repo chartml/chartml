@@ -87,9 +87,9 @@ data:
 }
 
 /// A single column of long names: it stretches to the container's width, so at
-/// 375px each name shows on one line. (The longest name is over the 18em
-/// cap, so the column's minimum width is capped; the name still fits on one
-/// line here because the column is wider than its minimum.)
+/// 375px each name shows on one line. (The longest name is 18.92em, under the
+/// 20em cap, so the column's minimum asks for its whole width; the name fits on
+/// one line either way, because the column is wider than its minimum.)
 fn one_column_spec() -> String {
     r#"type: chart
 version: 1
