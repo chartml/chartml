@@ -30,34 +30,11 @@ fonts:
     weight: 600
 ```
 
-```chartml
-type: style
-version: 1
-name: corporate_theme
-colors: ["#4285f4", "#ea4335", "#fbbc04", "#34a853"]
-grid:
-  y: true
-  color: "#e0e0e0"
-  opacity: 0.5
-height: 400
-fonts:
-  title:
-    family: "Inter, sans-serif"
-    size: 18
-    weight: 600
-```
-
 ### Set Dashboard-Level Default Style
 
 All charts below will inherit `corporate_theme` automatically:
 
 ```yaml
-type: config
-version: 1
-style: corporate_theme
-```
-
-```chartml
 type: config
 version: 1
 style: corporate_theme
