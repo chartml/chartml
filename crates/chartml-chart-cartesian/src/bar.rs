@@ -464,6 +464,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
                 height: config.height,
                 colors,
                 theme: config.theme.clone(),
+                table_page: 0,
             };
             return render_bar(&long_data, &long_config);
         }

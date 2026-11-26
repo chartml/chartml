@@ -13,6 +13,7 @@ pub mod transform;
 pub mod params;
 pub mod theme;
 pub mod svg;
+pub mod table_pager;
 pub mod pipeline;
 pub mod resolver;
 
@@ -336,6 +337,20 @@ impl ChartML {
         container_height: Option<f64>,
         param_overrides: Option<&params::ParamValues>,
     ) -> Result<ChartElement, ChartError> {
+        self.render_from_yaml_with_params_page(yaml, container_width, container_height, param_overrides, 0)
+    }
+
+    /// Like [`ChartML::render_from_yaml_with_params`], rendering page
+    /// `table_page` (from 0) of a paginated `table`. A page past the last is
+    /// an error. Other chart types ignore it.
+    pub fn render_from_yaml_with_params_page(
+        &self,
+        yaml: &str,
+        container_width: Option<f64>,
+        container_height: Option<f64>,
+        param_overrides: Option<&params::ParamValues>,
+        table_page: usize,
+    ) -> Result<ChartElement, ChartError> {
         // Step 1: Collect ALL param values — defaults + overrides.
         // Priority: overrides > persistent defaults > inline defaults
         let mut all_params = self.param_values.clone();
@@ -435,12 +450,12 @@ impl ChartML {
         }
 
         if chart_specs.len() == 1 {
-            self.render_chart_internal(chart_specs[0], container_width, container_height, &sources)
+            self.render_chart_internal(chart_specs[0], container_width, container_height, &sources, table_page)
         } else {
             // Multiple charts — render each and wrap in a grid container
             let mut children = Vec::new();
             for spec in chart_specs {
-                match self.render_chart_internal(spec, container_width, container_height, &sources) {
+                match self.render_chart_internal(spec, container_width, container_height, &sources, table_page) {
                     Ok(element) => children.push(element),
                     Err(e) => {
                         // Continue rendering other charts even if one fails
@@ -482,7 +497,7 @@ impl ChartML {
         container_height: Option<f64>,
     ) -> Result<ChartElement, ChartError> {
         let sources = HashMap::new();
-        self.render_chart_internal(chart_spec, container_width, container_height, &sources)
+        self.render_chart_internal(chart_spec, container_width, container_height, &sources, 0)
     }
 
     /// Internal render method that accepts named sources for resolution.
@@ -499,6 +514,7 @@ impl ChartML {
         container_width: Option<f64>,
         container_height: Option<f64>,
         sources: &HashMap<String, DataTable>,
+        table_page: usize,
     ) -> Result<ChartElement, ChartError> {
         // Resolve every declared source into an ordered map. Inline / Named /
         // single-entry NamedMap collapse to a 1-entry map; multi-entry NamedMap
@@ -512,7 +528,7 @@ impl ChartML {
         let data = self.run_sync_transform_pipeline(chart_spec, &chart_sources)?;
 
         let (element, _, _) =
-            self.build_and_render(chart_spec, &data, container_width, container_height)?;
+            self.build_and_render(chart_spec, &data, container_width, container_height, table_page)?;
         Ok(element)
     }
 
@@ -1106,6 +1122,7 @@ impl ChartML {
             &prepared.data,
             opts.width,
             opts.height,
+            opts.table_page,
         )?;
         Ok(svg::element_to_svg(&element, svg_width, svg_height))
     }
@@ -1146,6 +1163,7 @@ impl ChartML {
             width: container_width,
             height: container_height,
             params: param_overrides.cloned(),
+            table_page: 0,
         };
         let fetched = self.fetch(yaml, &opts).await?;
         let prepared = self.transform(fetched, &opts).await?;
@@ -1154,6 +1172,7 @@ impl ChartML {
             &prepared.data,
             opts.width,
             opts.height,
+            opts.table_page,
         )?;
         Ok(element)
     }
@@ -1304,7 +1323,7 @@ impl ChartML {
         };
 
         let (element, _, _) =
-            self.build_and_render(chart_spec, &transformed_data, None, None)?;
+            self.build_and_render(chart_spec, &transformed_data, None, None, 0)?;
         Ok(element)
     }
 
@@ -1367,6 +1386,7 @@ impl ChartML {
         data: &DataTable,
         container_width: Option<f64>,
         container_height: Option<f64>,
+        table_page: usize,
     ) -> Result<(ChartElement, f64, f64), ChartError> {
         let chart_type = &chart_spec.visualize.chart_type;
         let renderer = self.registry.get_renderer(chart_type)
@@ -1398,6 +1418,7 @@ impl ChartML {
             height,
             colors,
             theme: self.theme.clone(),
+            table_page,
         };
 
         let element = renderer.render(data, &config)?;

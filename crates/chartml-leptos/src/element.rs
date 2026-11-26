@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use leptos::tachys::html::attribute::custom::custom_attribute;
 use chartml_core::element::*;
 use crate::tooltip::{TooltipState, use_tooltip};
 
@@ -236,6 +237,37 @@ pub fn render_element(element: &ChartElement) -> AnyView {
                     {children_views}
                 </div>
             }.into_any()
+        }
+
+        ChartElement::Html { tag, class, style, attrs, children } => {
+            let class = class.clone();
+            let mut pairs: Vec<_> = style.iter().collect();
+            pairs.sort_by_key(|(k, _)| (*k).clone());
+            let style_str = pairs.iter()
+                .map(|(k, v)| format!("{}: {}", k, v))
+                .collect::<Vec<_>>()
+                .join("; ");
+            let children_views: Vec<AnyView> = children.iter().map(render_element).collect();
+
+            let mut view = match tag {
+                HtmlTag::Div => view! {
+                    <div class=class style=style_str>{children_views}</div>
+                }.into_any(),
+                HtmlTag::Nav => view! {
+                    <nav class=class style=style_str>{children_views}</nav>
+                }.into_any(),
+                HtmlTag::Button => view! {
+                    <button type="button" class=class style=style_str>{children_views}</button>
+                }.into_any(),
+            };
+            for (key, value) in attrs {
+                if chartml_core::svg::is_attr_name(key) {
+                    view = view
+                        .add_any_attr(custom_attribute(key.clone(), value.clone()))
+                        .into_any();
+                }
+            }
+            view
         }
 
         ChartElement::Span { class, style, content } => {

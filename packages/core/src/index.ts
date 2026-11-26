@@ -32,6 +32,7 @@ export type {
   LineElement,
   TextElement,
   DivElement,
+  HtmlTagElement,
   SpanElement,
   // chartml 5.0
   FetchRequest,
@@ -48,6 +49,8 @@ export type {
   FetchedChart,
   PreparedChart,
 } from './types.js';
+
+export { attachTablePager, TABLE_PAGER } from './tablePager.js';
 
 // Single init promise — ensures WASM is initialized exactly once,
 // even under concurrent create() calls.

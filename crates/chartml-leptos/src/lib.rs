@@ -2,10 +2,14 @@ pub mod chart;
 pub mod element;
 pub mod hooks;
 pub mod params_ui;
+#[cfg(target_arch = "wasm32")]
+pub mod table_pager;
 pub mod tooltip;
 
 pub use chart::{ChartMLChart, TooltipRenderer};
 pub use element::render_element;
+#[cfg(target_arch = "wasm32")]
+pub use table_pager::TablePager;
 
 /// Shared-ownership wrapper around `ChartML` used by every Leptos hook,
 /// component, and view in this crate. `Arc` on native targets so it can be

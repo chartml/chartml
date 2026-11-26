@@ -217,6 +217,7 @@ mod tests {
             height: 150.0,
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
+            table_page: 0,
         }
     }
 
@@ -252,6 +253,7 @@ mod tests {
             height: 150.0,
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
+            table_page: 0,
         };
 
         let element = MetricRenderer::new()
@@ -282,6 +284,7 @@ mod tests {
             height: 150.0,
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
+            table_page: 0,
         };
         let rows: Vec<Row> = vec![[("total_revenue".to_string(), json!(1234567))].into_iter().collect()];
         let data = DataTable::from_rows(&rows).expect("DataTable::from_rows should succeed");
@@ -388,6 +391,7 @@ mod tests {
             height: 150.0,
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
+            table_page: 0,
         };
         // Error rate going down (0.023 < 0.031) should be green with invertTrend
         let rows: Vec<Row> = vec![
@@ -434,6 +438,7 @@ mod tests {
             height: 150.0,
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
+            table_page: 0,
         };
 
         let renderer = MetricRenderer::new();
@@ -481,6 +486,7 @@ mod tests {
             height: 150.0,
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
+            table_page: 0,
         };
 
         let renderer = MetricRenderer::new();
@@ -596,6 +602,7 @@ mod tests {
             height,
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
+            table_page: 0,
         };
 
         let rows: Vec<Row> = vec![[

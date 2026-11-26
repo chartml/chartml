@@ -302,6 +302,8 @@ struct ResolvedChart {
     prepared: PreparedChart,
     svg: String,
     width: f64,
+    /// The table page `svg` was rendered at, from 0.
+    page: usize,
 }
 
 /// Phase 4 props for [`ChartMLChart`]. Held in one struct so the docs stay
@@ -682,6 +684,43 @@ pub fn ChartMLChart(
         });
     }
 
+    // The page of a paginated table to show, from 0. The table pager
+    // controller sets it; a fetch starts again at page 0 (the new data may
+    // have fewer pages), and the resize effect below renders the page from the
+    // cached `PreparedChart`, so a page change never re-fetches.
+    let table_page: RwSignal<usize> = RwSignal::new(0);
+
+    // ── Table pager ──────────────────────────────────────────────────────
+    //
+    // A paginated table renders one page with Previous and Next buttons;
+    // `TablePager` is the delegated controller that reports the page a pressed
+    // button goes to, and `table_page` re-renders it (CHA-30). It prepares
+    // tables mounted into the container after it was attached (every
+    // `inner_html` re-render) and is dropped, removing its listener and
+    // observer, when the component unmounts.
+    #[cfg(target_arch = "wasm32")]
+    {
+        let pager: SendWrapper<Rc<RefCell<Option<crate::table_pager::TablePager>>>> =
+            SendWrapper::new(Rc::new(RefCell::new(None)));
+        let pager_for_effect = pager.clone();
+        let pager_for_cleanup = pager.clone();
+        Effect::new(move || {
+            let Some(el) = container_ref.get() else { return };
+            if pager_for_effect.borrow().is_some() {
+                return;
+            }
+            let element: web_sys::Element = el.into();
+            if let Ok(controller) = crate::table_pager::TablePager::attach(&element, move |page| {
+                table_page.set(page);
+            }) {
+                *pager_for_effect.borrow_mut() = Some(controller);
+            }
+        });
+        on_cleanup(move || {
+            pager_for_cleanup.borrow_mut().take();
+        });
+    }
+
     let container_class = if class.is_empty() {
         "chartml-container".to_string()
     } else {
@@ -741,6 +780,7 @@ pub fn ChartMLChart(
 
             is_loading.set(true);
             last_error.set(None);
+            table_page.set(0);
 
             let chartml_async = chartml.clone();
             let yaml_owned = yaml.clone();
@@ -756,6 +796,7 @@ pub fn ChartMLChart(
                     width: if initial_width > 0.0 { Some(initial_width) } else { None },
                     height: None,
                     params: params_owned,
+                    table_page: 0,
                 };
                 let fetch_result = chartml_async.fetch(&yaml_owned, &opts).await;
                 if gen_ref.get() != my_gen { return; }
@@ -797,6 +838,7 @@ pub fn ChartMLChart(
                     prepared,
                     svg,
                     width: initial_width,
+                    page: 0,
                 }));
                 last_error.set(None);
                 is_loading.set(false);
@@ -818,18 +860,24 @@ pub fn ChartMLChart(
         Effect::new(move || {
             let Some(width) = container_width.try_get() else { return };
             if width <= 0.0 { return; }
+            let Some(page) = table_page.try_get() else { return };
             let Some(current) = resolved.try_get().flatten() else { return; };
-            if (current.width - width).abs() < 0.5 {
-                // Already rendered at this width (within sub-pixel tolerance).
+            if (current.width - width).abs() < 0.5 && current.page == page {
+                // Already rendered at this width (within sub-pixel tolerance)
+                // and this table page.
                 return;
             }
-            let opts = RenderOptions::with_size(Some(width), None);
+            let opts = RenderOptions {
+                table_page: page,
+                ..RenderOptions::with_size(Some(width), None)
+            };
             match chartml.render_prepared_to_svg(&current.prepared, &opts) {
                 Ok(svg) => {
                     resolved.set(Some(ResolvedChart {
                         prepared: current.prepared,
                         svg,
                         width,
+                        page,
                     }));
                 }
                 Err(err) => {

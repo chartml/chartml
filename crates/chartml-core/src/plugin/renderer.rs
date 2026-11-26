@@ -23,6 +23,11 @@ pub struct ChartConfig {
     /// Not serialized — set at render time by the consuming application.
     #[serde(skip, default)]
     pub theme: Theme,
+    /// Which page of a paginated chart to render, from 0. Only the `table`
+    /// renderer pages; every other renderer ignores it. A page past the last
+    /// one is an error, never clamped (CHA-30).
+    #[serde(default)]
+    pub table_page: usize,
 }
 
 /// Chart renderer plugin — converts data + config into a ChartElement tree.

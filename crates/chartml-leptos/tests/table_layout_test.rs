@@ -216,7 +216,7 @@ fn measure(host: &web_sys::HtmlElement) -> Measurements {
         host.scrollIntoView({ block: 'start' });
         const sc = host.querySelector('.chartml-table-scroll');
         const header = host.querySelector('.chartml-table-header');
-        const rows = [...host.querySelectorAll('.chartml-table-row')];
+        const rows = [...[...host.querySelectorAll('.chartml-table-row')].filter(r => r.getClientRects().length)];
         const cellsOf = r => [...r.children].filter(c =>
             c.classList.contains('chartml-table-cell') || c.classList.contains('chartml-table-header-cell'));
         const one = () => {
@@ -294,8 +294,12 @@ struct Case<'a> {
 }
 
 fn check(case: Case<'_>) {
-    let host = mount(case.path, case.spec, case.theme, case.width);
-    let Measurements { states, vertical } = measure(&host);
+    let host = mount(case.path, case.spec, case.theme.clone(), case.width);
+    check_host(&host, &case);
+}
+
+fn check_host(host: &web_sys::HtmlElement, case: &Case<'_>) {
+    let Measurements { states, vertical } = measure(host);
     let ctx = format!("{:?} at {}px", case.path, case.width);
     let overflow = states[0].max_scroll_left > 0.0;
     assert_eq!(overflow, case.expect_sideways, "{ctx}: sideways scroll {overflow}");
@@ -483,7 +487,7 @@ fn measure_align_and_width(host: &web_sys::HtmlElement) -> AlignWidthState {
         r#"
         const sc = host.querySelector('.chartml-table-scroll');
         const header = host.querySelector('.chartml-table-header');
-        const rows = [...host.querySelectorAll('.chartml-table-row')];
+        const rows = [...[...host.querySelectorAll('.chartml-table-row')].filter(r => r.getClientRects().length)];
         const cellsOf = r => [...r.children].filter(c =>
             c.classList.contains('chartml-table-cell') || c.classList.contains('chartml-table-header-cell'));
         const hdr = cellsOf(header);
@@ -618,7 +622,7 @@ fn measure_row_span_with_justify(host: &web_sys::HtmlElement, justify: &str) -> 
         const sc = host.querySelector('.chartml-table-scroll');
         sc.style.justifyContent = justify;
         void host.offsetWidth;
-        const rows = [host.querySelector('.chartml-table-header'), ...host.querySelectorAll('.chartml-table-row')];
+        const rows = [host.querySelector('.chartml-table-header'), ...[...host.querySelectorAll('.chartml-table-row')].filter(r => r.getClientRects().length)];
         return JSON.stringify({
             clientWidth: sc.clientWidth,
             rows: rows.length,
@@ -647,7 +651,7 @@ fn measure_row_span(host: &web_sys::HtmlElement) -> RowSpanState {
         "host",
         r#"
         const sc = host.querySelector('.chartml-table-scroll');
-        const rows = [host.querySelector('.chartml-table-header'), ...host.querySelectorAll('.chartml-table-row')];
+        const rows = [host.querySelector('.chartml-table-header'), ...[...host.querySelectorAll('.chartml-table-row')].filter(r => r.getClientRects().length)];
         return JSON.stringify({
             clientWidth: sc.clientWidth,
             rows: rows.length,
@@ -817,7 +821,7 @@ fn measure_with_padding(host: &web_sys::HtmlElement, padding: &str) -> PaddedSta
         const sc = host.querySelector('.chartml-table-scroll');
         const cellsOf = r => [...r.children].filter(c =>
             c.classList.contains('chartml-table-cell') || c.classList.contains('chartml-table-header-cell'));
-        const rows = [host.querySelector('.chartml-table-header'), ...host.querySelectorAll('.chartml-table-row')];
+        const rows = [host.querySelector('.chartml-table-header'), ...[...host.querySelectorAll('.chartml-table-row')].filter(r => r.getClientRects().length)];
         let overflow = 0;
         for (const r of rows) {
             const rb = r.getBoundingClientRect();
@@ -1048,3 +1052,389 @@ struct GrowResult {
     needed_width: f64,
 }
 
+
+// ── CHA-30: the pager ────────────────────────────────────────────────────
+
+use std::any::Any;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use chartml_leptos::{ChartMLChart, ChartMLRef, TablePager};
+use leptos::prelude::*;
+
+/// `rows` rows, `Row 1`..`Row n`, `page_size` to a page.
+fn paged_spec(rows: usize, page_size: usize) -> String {
+    let data: String = (1..=rows)
+        .map(|i| format!("    - {{ name: \"Row {i}\", value: {i} }}\n"))
+        .collect();
+    format!(
+        "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n{data}visualize:\n  type: table\n  columns: name\n  rows:\n    - value\n  style:\n    pageSize: {page_size}\n"
+    )
+}
+
+fn table_chartml(theme: Theme) -> ChartML {
+    let mut chartml = ChartML::new();
+    chartml.register_renderer("table", TableRenderer::new());
+    chartml.set_theme(theme);
+    chartml
+}
+
+fn render_page(spec: &str, theme: Theme, page: usize) -> Result<chartml_core::element::ChartElement, chartml_core::ChartError> {
+    table_chartml(theme).render_from_yaml_with_params_page(spec, None, None, None, page)
+}
+
+/// A host the way a real one works: it shows one page of the table in a
+/// container through one of the two mount paths, with the pager controller
+/// attached, and shows the page the controller reports. Dropping it detaches
+/// the controller and unmounts the table.
+struct PagedHost {
+    host: web_sys::HtmlElement,
+    _pager: TablePager,
+    /// The pages the controller reported, in order.
+    reported: Rc<RefCell<Vec<usize>>>,
+    // Keeps the mounted Leptos view alive; dropped to unmount it.
+    _mounted: Rc<RefCell<Option<Box<dyn Any>>>>,
+}
+
+fn show(path: Path, host: &web_sys::HtmlElement, spec: &str, theme: &Theme, width: u32, page: usize, slot: &Rc<RefCell<Option<Box<dyn Any>>>>) {
+    let element = render_page(spec, theme.clone(), page).expect("page renders");
+    // Drop the previous view first: that unmounts it and removes its nodes.
+    slot.borrow_mut().take();
+    match path {
+        Path::Leptos => {
+            let handle = leptos::mount::mount_to(host.clone(), move || chartml_leptos::render_element(&element));
+            *slot.borrow_mut() = Some(Box::new(handle));
+        }
+        Path::Svg => host.set_inner_html(&element_to_svg(&element, f64::from(width), 400.0)),
+    }
+}
+
+fn paged_host(path: Path, spec: &str, theme: Theme, width: u32) -> PagedHost {
+    let host = host(width);
+    let slot: Rc<RefCell<Option<Box<dyn Any>>>> = Rc::new(RefCell::new(None));
+    show(path, &host, spec, &theme, width, 0, &slot);
+    let reported = Rc::new(RefCell::new(Vec::new()));
+    let (host2, spec2, slot2, reported2) = (host.clone(), spec.to_string(), slot.clone(), reported.clone());
+    let pager = TablePager::attach(&host, move |page| {
+        reported2.borrow_mut().push(page);
+        show(path, &host2, &spec2, &theme, width, page, &slot2);
+    })
+    .expect("attach");
+    PagedHost { host, _pager: pager, reported, _mounted: slot }
+}
+
+#[derive(Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct PageState {
+    /// The first cell of each body row.
+    visible: Vec<String>,
+    /// The status text.
+    status: Option<String>,
+    prev_disabled: bool,
+    next_disabled: bool,
+    has_pager: bool,
+    header_widths: Vec<f64>,
+    active_action: Option<String>,
+}
+
+fn page_state(host: &web_sys::HtmlElement) -> PageState {
+    let f = js_sys::Function::new_with_args(
+        "host",
+        r#"
+        const rows = [...host.querySelectorAll('.chartml-table-row')];
+        const prev = host.querySelector('[data-chartml-pager-action="prev"]');
+        const next = host.querySelector('[data-chartml-pager-action="next"]');
+        const status = host.querySelector('.chartml-table-pager-info');
+        const hdr = [...host.querySelectorAll('.chartml-table-header-cell')];
+        const active = document.activeElement;
+        return JSON.stringify({
+            visible: rows.map(r => r.firstElementChild.textContent),
+            status: status && status.textContent,
+            prevDisabled: !!prev && prev.disabled,
+            nextDisabled: !!next && next.disabled,
+            hasPager: !!prev,
+            headerWidths: hdr.map(c => Math.round(c.getBoundingClientRect().width * 100) / 100),
+            activeAction: active && active.getAttribute ? active.getAttribute('data-chartml-pager-action') : null,
+        });
+        "#,
+    );
+    let json = f.call1(&JsValue::NULL, host).expect("page state").as_string().expect("JSON string");
+    serde_json::from_str(&json).expect("page state parses")
+}
+
+/// Click a pager button and let the observer prepare the table it re-rendered.
+async fn press(host: &web_sys::HtmlElement, action: &str) {
+    let button = host
+        .query_selector(&format!("[data-chartml-pager-action=\"{action}\"]"))
+        .expect("selector")
+        .expect("pager button");
+    button.dyn_into::<web_sys::HtmlElement>().expect("a button element").click();
+    gloo_timers::future::TimeoutFuture::new(20).await;
+}
+
+/// Click a button even though it is disabled (a controller that is gone does
+/// not enable it, so this is the way to test that its listener is gone).
+async fn press_forced(host: &web_sys::HtmlElement, action: &str) {
+    let button = host
+        .query_selector(&format!("[data-chartml-pager-action=\"{action}\"]"))
+        .expect("selector")
+        .expect("pager button");
+    button.remove_attribute("disabled").expect("enable");
+    button.dyn_into::<web_sys::HtmlElement>().expect("a button element").click();
+    gloo_timers::future::TimeoutFuture::new(20).await;
+}
+
+async fn settle() {
+    gloo_timers::future::TimeoutFuture::new(20).await;
+}
+
+fn rows(names: &[&str]) -> Vec<String> {
+    names.iter().map(|n| (*n).to_string()).collect()
+}
+
+/// Reach every row of a seven-row, three-per-page table through the real
+/// buttons, at both boundaries, by either mount path.
+async fn walk_pages(path: Path) {
+    let h = paged_host(path, &paged_spec(7, 3), Theme::default(), 600);
+    let host = &h.host;
+    settle().await;
+    let p1 = page_state(host);
+    assert_eq!(p1.visible, rows(&["Row 1", "Row 2", "Row 3"]), "{path:?}");
+    assert_eq!(p1.status.as_deref(), Some("Showing 1\u{2013}3 of 7 \u{b7} Page 1 of 3"), "{path:?}");
+    assert!(p1.prev_disabled, "{path:?}: Previous on the first page");
+    assert!(!p1.next_disabled, "{path:?}: Next on the first page");
+    press(host, "prev").await;
+    assert!(h.reported.borrow().is_empty(), "{path:?}: a disabled button reports nothing");
+    press(host, "next").await;
+    let p2 = page_state(host);
+    assert_eq!(p2.visible, rows(&["Row 4", "Row 5", "Row 6"]), "{path:?}");
+    assert_eq!(p2.status.as_deref(), Some("Showing 4\u{2013}6 of 7 \u{b7} Page 2 of 3"), "{path:?}");
+    assert!(!p2.prev_disabled && !p2.next_disabled, "{path:?}: both ways open on a middle page");
+    press(host, "next").await;
+    let p3 = page_state(host);
+    assert_eq!(p3.visible, rows(&["Row 7"]), "{path:?}: the last page is the remainder");
+    assert_eq!(p3.status.as_deref(), Some("Showing 7\u{2013}7 of 7 \u{b7} Page 3 of 3"), "{path:?}");
+    assert!(!p3.prev_disabled && p3.next_disabled, "{path:?}: Next on the last page");
+    press(host, "next").await;
+    assert_eq!(page_state(host).visible, rows(&["Row 7"]), "{path:?}: Next on the last page changes nothing");
+    press(host, "prev").await;
+    press(host, "prev").await;
+    let back = page_state(host);
+    assert_eq!(back.visible, p1.visible, "{path:?}: back to the first page");
+    assert!(back.prev_disabled && !back.next_disabled, "{path:?}");
+    assert_eq!(*h.reported.borrow(), vec![1, 2, 1, 0], "{path:?}: the pages the controller asked for");
+    // Every row was reached.
+    assert_eq!([p1.visible, p2.visible, p3.visible].concat().len(), 7);
+}
+
+#[wasm_bindgen_test]
+async fn pager_reaches_every_row_leptos() {
+    walk_pages(Path::Leptos).await;
+}
+
+#[wasm_bindgen_test]
+async fn pager_reaches_every_row_svg() {
+    walk_pages(Path::Svg).await;
+}
+
+/// With no controller the table is a static render: the first page, and no
+/// button can move it.
+#[wasm_bindgen_test]
+fn a_static_render_shows_the_first_page_with_disabled_buttons() {
+    let host = mount(Path::Svg, &paged_spec(7, 3), Theme::default(), 600);
+    let s = page_state(&host);
+    assert_eq!(s.visible, rows(&["Row 1", "Row 2", "Row 3"]));
+    assert!(s.prev_disabled && s.next_disabled);
+}
+
+#[wasm_bindgen_test]
+fn a_page_past_the_last_is_an_error() {
+    assert!(render_page(&paged_spec(7, 3), Theme::default(), 3).is_err());
+    assert!(render_page(&paged_spec(7, 3), Theme::default(), 2).is_ok());
+}
+
+#[wasm_bindgen_test]
+async fn a_table_that_fits_one_page_has_no_pager() {
+    for (rows_n, size) in [(7, 50), (7, 7), (3, 100)] {
+        let h = paged_host(Path::Svg, &paged_spec(rows_n, size), Theme::default(), 600);
+        settle().await;
+        let state = page_state(&h.host);
+        assert!(!state.has_pager, "{rows_n} rows, pageSize {size}");
+        assert_eq!(state.visible.len(), rows_n, "every row shows");
+    }
+}
+
+#[wasm_bindgen_test]
+async fn pager_is_accessible() {
+    let h = paged_host(Path::Svg, &paged_spec(7, 3), Theme::default(), 600);
+    let host = &h.host;
+    settle().await;
+    let f = js_sys::Function::new_with_args(
+        "host",
+        r#"
+        const nav = host.querySelector('nav.chartml-table-pager');
+        const buttons = [...host.querySelectorAll('.chartml-table-pager-button')];
+        const status = host.querySelector('.chartml-table-pager-info');
+        return JSON.stringify({
+            nav: nav && nav.getAttribute('aria-label'),
+            tags: buttons.map(b => b.tagName),
+            types: buttons.map(b => b.getAttribute('type')),
+            labels: buttons.map(b => b.getAttribute('aria-label')),
+            role: status && status.getAttribute('role'),
+            live: status && status.getAttribute('aria-live'),
+            atomic: status && status.getAttribute('aria-atomic'),
+            focusable: buttons.map(b => b.tabIndex),
+        });
+        "#,
+    );
+    let json = f.call1(&JsValue::NULL, host).expect("a11y").as_string().expect("JSON");
+    let v: serde_json::Value = serde_json::from_str(&json).expect("parse");
+    assert_eq!(v["nav"], "Table pagination");
+    assert_eq!(v["tags"], serde_json::json!(["BUTTON", "BUTTON"]));
+    assert_eq!(v["types"], serde_json::json!(["button", "button"]));
+    assert_eq!(v["labels"], serde_json::json!(["Previous page", "Next page"]));
+    assert_eq!(v["role"], "status");
+    assert_eq!(v["live"], "polite");
+    assert_eq!(v["atomic"], "true");
+    assert_eq!(v["focusable"], serde_json::json!([0, 0]));
+    // Focus stays on the pressed button across the re-render, and moves to
+    // Previous when Next has no page left to go to.
+    let focus = |action: &str| {
+        let el = host
+            .query_selector(&format!("[data-chartml-pager-action=\"{action}\"]"))
+            .expect("sel")
+            .expect("btn");
+        el.dyn_ref::<web_sys::HtmlElement>().expect("el").focus().expect("focus");
+    };
+    focus("next");
+    press(host, "next").await;
+    assert_eq!(page_state(host).active_action.as_deref(), Some("next"), "focus stays on Next");
+    press(host, "next").await;
+    assert!(page_state(host).next_disabled);
+    assert_eq!(
+        page_state(host).active_action.as_deref(),
+        Some("prev"),
+        "focus moves to Previous when Next has no page left"
+    );
+}
+
+/// Every page keeps the table's layout: the same checks as the one-page
+/// layout tests, run on page 1 and on page 2, and the columns are the same
+/// width on every page.
+async fn layout_on_every_page(path: Path, width: u32) {
+    let spec = wide_spec();
+    let case = Case {
+        path,
+        spec: &spec,
+        columns: 12,
+        theme: Theme::default(),
+        width,
+        expect_sideways: true,
+        expect_vertical: true,
+        expect_pager: true,
+        expect_single_line: width >= 375,
+    };
+    let h = paged_host(path, &spec, Theme::default(), width);
+    settle().await;
+    let first = page_state(&h.host);
+    check_host(&h.host, &case);
+    press(&h.host, "next").await;
+    let second = page_state(&h.host);
+    assert_ne!(first.visible, second.visible, "{path:?}: page 2 shows other rows");
+    assert_eq!(second.visible.len(), 5, "{path:?}: 20 rows at 15 a page leave 5");
+    assert_eq!(first.header_widths, second.header_widths, "{path:?}: columns keep their widths");
+    // Page 2 has five rows, so it does not scroll vertically.
+    check_host(&h.host, &Case { expect_vertical: false, ..case });
+    press(&h.host, "prev").await;
+    assert_eq!(page_state(&h.host).visible, first.visible, "{path:?}: back to page 1");
+}
+
+#[wasm_bindgen_test]
+async fn pages_keep_the_layout_leptos_wide() {
+    layout_on_every_page(Path::Leptos, 600).await;
+}
+
+#[wasm_bindgen_test]
+async fn pages_keep_the_layout_svg_narrow() {
+    layout_on_every_page(Path::Svg, 375).await;
+}
+
+/// A dropped controller leaves nothing behind: its click listener and its
+/// observer are gone, so a table put into the container later stays static.
+#[wasm_bindgen_test]
+async fn a_dropped_pager_leaves_nothing_behind() {
+    let spec = paged_spec(7, 3);
+    let host = mount(Path::Svg, &spec, Theme::default(), 600);
+    let reported = Rc::new(RefCell::new(Vec::new()));
+    let reported2 = reported.clone();
+    let pager = TablePager::attach(&host, move |page| reported2.borrow_mut().push(page)).expect("attach");
+    settle().await;
+    assert!(!page_state(&host).next_disabled, "the controller enables Next");
+    drop(pager);
+    press_forced(&host, "next").await;
+    assert!(reported.borrow().is_empty(), "no click listener");
+    host.set_inner_html(&element_to_svg(&render(&spec, Theme::default()), 600.0, 400.0));
+    settle().await;
+    assert!(page_state(&host).next_disabled, "no observer prepares a table mounted after the drop");
+}
+
+async fn until(what: &str, mut ready: impl FnMut() -> bool) {
+    for _ in 0..100 {
+        if ready() {
+            return;
+        }
+        gloo_timers::future::TimeoutFuture::new(50).await;
+    }
+    panic!("timed out waiting for {what}");
+}
+
+/// The real component: it renders the pager's page changes itself, starts a
+/// new spec at page 1 with working buttons, and unmounting it removes the
+/// controller (nothing left on the container).
+#[wasm_bindgen_test]
+async fn chart_component_pages_across_rerenders_and_unmounts_clean() {
+    ensure_stylesheet();
+    let root = host(800);
+    let chartml: ChartMLRef = Rc::new(table_chartml(Theme::default()));
+    let spec = RwSignal::new(paged_spec(7, 3));
+    let handle = leptos::mount::mount_to(root.clone(), move || {
+        let chartml = chartml.clone();
+        view! {
+            <ChartMLChart spec=Signal::derive(move || spec.get()) chartml=chartml />
+        }
+        .into_any()
+    });
+    let container = root.query_selector(".chartml-container").expect("sel").expect("chart container");
+    let container: web_sys::HtmlElement = container.dyn_into().expect("html element");
+    until("the table to render with an enabled Next", || {
+        let s = page_state(&root);
+        s.has_pager && !s.next_disabled
+    })
+    .await;
+    press(&root, "next").await;
+    until("page 2", || page_state(&root).visible == rows(&["Row 4", "Row 5", "Row 6"])).await;
+    until("Next enabled on page 2", || !page_state(&root).next_disabled).await;
+
+    // A new spec re-renders the table: it starts at page 1 with working buttons.
+    spec.set(paged_spec(8, 4));
+    until("the re-rendered table at page 1", || {
+        page_state(&root).status.as_deref() == Some("Showing 1\u{2013}4 of 8 \u{b7} Page 1 of 2")
+    })
+    .await;
+    until("Next enabled after the re-render", || !page_state(&root).next_disabled).await;
+    press(&root, "next").await;
+    until("page 2 of the new table", || {
+        page_state(&root).visible == rows(&["Row 5", "Row 6", "Row 7", "Row 8"])
+    })
+    .await;
+
+    // Unmount: the controller on the container is gone.
+    drop(handle);
+    settle().await;
+    container.set_inner_html(&element_to_svg(&render(&paged_spec(7, 3), Theme::default()), 600.0, 400.0));
+    settle().await;
+    assert!(
+        page_state(&container).next_disabled,
+        "a table mounted into the unmounted chart's container is not prepared"
+    );
+}

@@ -10,6 +10,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import { attachTablePager } from '@chartml/core';
 import yaml from 'js-yaml';
 import { DefaultParamsRenderer } from './DefaultParamsRenderer.jsx';
 import { getColSpanClass } from '@chartml/markdown-common';
@@ -180,6 +181,10 @@ function DefaultParamsRendererBridge({ parameterDefinitions, scope, value, onCha
 export function ChartMLChart({ yaml: yamlText, chartmlInstance, className = '', getParams, subscribe }) {
   const containerRef = useRef(null);
   const [renderError, setRenderError] = useState(null);
+  // The page of a paginated table, from 0, for the YAML it was chosen on: a
+  // new spec starts at page 0 (it may have fewer pages).
+  const [pageState, setPageState] = useState({ yaml: yamlText, page: 0 });
+  const tablePage = pageState.yaml === yamlText ? pageState.page : 0;
   // Bumped on every params change to drive the render effect's dep list.
   const [paramsVersion, setParamsVersion] = useState(0);
 
@@ -192,7 +197,7 @@ export function ChartMLChart({ yaml: yamlText, chartmlInstance, className = '', 
     if (!containerRef.current || !yamlText) return undefined;
     let cancelled = false;
     const params = getParams ? getParams() : {};
-    const opts = Object.keys(params).length > 0 ? { params } : {};
+    const opts = { ...(Object.keys(params).length > 0 ? { params } : {}), tablePage };
     setRenderError(null);
     chartmlInstance
       .renderToSvgAsync(yamlText, opts)
@@ -208,7 +213,18 @@ export function ChartMLChart({ yaml: yamlText, chartmlInstance, className = '', 
     return () => {
       cancelled = true;
     };
-  }, [yamlText, chartmlInstance, paramsVersion, getParams]);
+  }, [yamlText, chartmlInstance, paramsVersion, getParams, tablePage]);
+
+  // A paginated table renders one page with Previous/Next buttons that need a
+  // controller: it reports the page a button goes to, and the render effect
+  // above shows it. It is attached to the container (which re-mounts when an
+  // error clears) and prepares each re-render by itself.
+  useEffect(() => {
+    const container = containerRef.current;
+    return container
+      ? attachTablePager(container, (page) => setPageState({ yaml: yamlText, page }))
+      : undefined;
+  }, [renderError, yamlText]);
 
   if (renderError) {
     return React.createElement(
