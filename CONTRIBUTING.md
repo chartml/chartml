@@ -36,8 +36,9 @@ Look for issues labeled [`good first issue`](https://github.com/chartml/chartml/
 
 ### Prerequisites
 
-- Node.js 18+
-- pnpm 8+ (recommended for monorepo management)
+- Node.js 18+ (CI uses 22) with npm 9+. The repo is an npm workspace with a committed `package-lock.json`; do not use pnpm or yarn.
+- Rust (stable) with the `wasm32-unknown-unknown` target: `rustup target add wasm32-unknown-unknown`
+- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/), which the package build scripts call
 - Git
 
 ### Clone and Install
@@ -47,21 +48,18 @@ Look for issues labeled [`good first issue`](https://github.com/chartml/chartml/
 git clone https://github.com/chartml/chartml.git
 cd chartml
 
-# Install dependencies (all packages)
-pnpm install
+# Install dependencies (all packages) exactly as pinned in package-lock.json
+npm ci
 
-# Build all packages
-pnpm build
+# Build all packages (WASM via packages/*/build.sh, then TypeScript)
+npm run build
 ```
 
 ### Development Workflow
 
 ```bash
-# Build all packages in watch mode
-pnpm dev
-
 # Run tests
-pnpm test
+npm test
 
 # Start documentation site
 cd docs && npm run docs:dev
@@ -118,14 +116,14 @@ git checkout -b fix/bug-description
 
 ```bash
 # Run tests for all packages
-pnpm test
+npm test
 
 # Run tests for specific package
 cd packages/core
 npm test
 
 # Build to ensure no errors
-pnpm build
+npm run build
 ```
 
 ### 4. Update Documentation
@@ -143,7 +141,7 @@ If your change affects user-facing behavior:
 
 ```bash
 # All packages
-pnpm test
+npm test
 
 # Specific package
 cd packages/core && npm test
