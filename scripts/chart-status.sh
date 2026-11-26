@@ -20,13 +20,13 @@ PUBLIC_KEY="-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEA9+py+eA+gdXCxchd6IM+bA0ygA7OtOfk8/cHCnZ1lAo=
 -----END PUBLIC KEY-----"
 
-# Signature verification needs OpenSSL 3 or newer (Ed25519 via `pkeyutl -rawin`).
+# Verifying signatures needs OpenSSL 3 or newer (Ed25519 via `pkeyutl -rawin`).
 # macOS ships LibreSSL, which has no Ed25519: install OpenSSL (`brew install openssl`)
-# and put it first on PATH.
-if ! openssl pkeyutl -help 2>&1 | grep -q -- '-rawin'; then
-    echo "chart-status.sh needs OpenSSL 3+ (Ed25519 support); found: $(openssl version 2>&1)" >&2
-    echo "On macOS: brew install openssl, and put it first on PATH." >&2
-    exit 2
+# and put it first on PATH. Reports with no .sig files do not need it.
+if openssl pkeyutl -help 2>&1 | grep -q -- '-rawin'; then
+    OPENSSL_ED25519=1
+else
+    OPENSSL_ED25519=0
 fi
 
 PUB_FILE=$(mktemp)
@@ -69,6 +69,11 @@ for SVG in $(find "$GOLDEN_DIR" -name "*.svg" -not -name "*.sig" | sort); do
         UNSIGNED=$((UNSIGNED + 1))
         UNSIGNED_LIST="${UNSIGNED_LIST}\n  ${NAME}"
     else
+        if [ "$OPENSSL_ED25519" -ne 1 ]; then
+            echo "chart-status.sh needs OpenSSL 3+ (Ed25519 support) to verify signatures; found: $(openssl version 2>&1)" >&2
+            echo "On macOS: brew install openssl, and put it first on PATH." >&2
+            exit 2
+        fi
         STORED_HASH=$(sed -n '1p' "$SIG_PATH")
         STORED_SIG=$(sed -n '2p' "$SIG_PATH")
         CURRENT_HASH=$(openssl dgst -sha256 "$SVG" | awk '{print $NF}')

@@ -58,8 +58,11 @@ npm run build
 ### Development Workflow
 
 ```bash
-# Run tests
+# Run JS/WASM tests
 npm test
+
+# Run Rust tests (what CI runs)
+npm run test:rust
 
 # Start documentation site
 cd docs && npm run docs:dev
