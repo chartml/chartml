@@ -121,6 +121,17 @@ pub fn element_to_json(element: &ChartElement) -> Value {
             })
         }
 
+        ChartElement::Html { tag, class, style, attrs, children } => {
+            json!({
+                "type": "html",
+                "tag": tag.name(),
+                "class": class,
+                "style": style,
+                "attrs": attrs,
+                "children": children.iter().map(element_to_json).collect::<Vec<_>>()
+            })
+        }
+
         ChartElement::Span { class, style, content } => {
             json!({
                 "type": "span",

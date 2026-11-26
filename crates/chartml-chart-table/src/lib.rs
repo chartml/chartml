@@ -19,6 +19,7 @@ use chartml_core::plugin::{ChartConfig, ChartRenderer};
 use chartml_core::spec::{
     ColumnAlign, ColumnWidth, FieldRef, FieldRefItem, FieldSpec, VisualizeSpec,
 };
+use chartml_core::table_pager;
 use chartml_core::theme::{TextTransform, Theme};
 
 const DEFAULT_PAGE_SIZE: usize = 50;
@@ -1675,9 +1676,9 @@ impl ChartRenderer for TableRenderer {
             .map(|c| is_numeric_column(data, &c.field))
             .collect();
 
-        // Pagination: style.pageSize → how many rows per page, page 0.
-        // Clamp to >= 1 so a malformed `pageSize: 0` cannot divide-by-zero
-        // in the pager footer's `div_ceil`.
+        // Pagination: style.pageSize → rows per page; `config.table_page` →
+        // the page to render, from 0. Clamp the size to >= 1 so a malformed
+        // `pageSize: 0` cannot divide-by-zero in `div_ceil`.
         let page_size = viz
             .style
             .as_ref()
@@ -1685,16 +1686,36 @@ impl ChartRenderer for TableRenderer {
             .unwrap_or(DEFAULT_PAGE_SIZE)
             .max(1);
         let total_rows = data.num_rows();
-        let end = total_rows.min(page_size);
+        let page_count = total_rows.div_ceil(page_size);
+        // `None` is a static render: page 0, and the pager's buttons have no
+        // page to go to (they stay disabled).
+        let interactive = config.table_page.is_some();
+        let page = config.table_page.unwrap_or(0);
+        // A page past the last is an error, never clamped: the host asked for
+        // rows that do not exist. (Page 0 of an empty table is the empty table.)
+        if page > 0 && page >= page_count {
+            return Err(ChartError::InvalidSpec(format!(
+                "table page {page} is out of range: the table has {page_count} page(s), counted from 0"
+            )));
+        }
+        let first = page * page_size;
+        let end = total_rows.min(first + page_size);
 
-        let cells: Vec<Vec<String>> = (0..end)
-            .map(|row| columns.iter().map(|c| format_cell(data, row, c)).collect())
+        // Only this page's rows become elements, but every row's text is
+        // measured below (`column_text`), so the columns are the same width on
+        // every page.
+        let column_values: Vec<Vec<String>> = columns
+            .iter()
+            .map(|c| (0..total_rows).map(|row| format_cell(data, row, c)).collect())
+            .collect();
+        let cells: Vec<Vec<String>> = (first..end)
+            .map(|row| column_values.iter().map(|v| v[row].clone()).collect())
             .collect();
 
         // ── Column tracks ──
         // A column with a fixed `width` keeps that width. Every other column
-        // is at least as wide as its header label or widest value on the page
-        // and otherwise takes an equal share of the width. The minimum is a
+        // is at least as wide as its header label or widest value in the whole
+        // table (every page) and otherwise takes an equal share of the width. The minimum is a
         // content-box `min-width` on each cell, so the padding actually
         // applied by `--chartml-table-cell-padding` is added by layout — a
         // host that widens the padding widens the column instead of squeezing
@@ -1717,7 +1738,7 @@ impl ChartRenderer for TableRenderer {
         let texts: Vec<ColumnText> = columns
             .iter()
             .enumerate()
-            .map(|(i, c)| column_text(&c.label, &header, cells.iter().map(|r| r[i].as_str())))
+            .map(|(i, c)| column_text(&c.label, &header, column_values[i].iter().map(String::as_str)))
             .collect();
         // Each column's track and its cell minimum: a fixed `width` column's
         // track is `max(width, its padding)` and wraps its content; every other
@@ -1865,8 +1886,10 @@ impl ChartRenderer for TableRenderer {
         };
 
         // ── Body rows ──
+        // This page's rows only. Striping restarts on each page.
         let body_border_bottom = body_border(theme);
-        let mut body_children: Vec<ChartElement> = Vec::with_capacity(end);
+        let paged = page_count > 1;
+        let mut body_children: Vec<ChartElement> = Vec::with_capacity(end - first);
         for (row_idx, row_cells) in cells.iter().enumerate() {
             let is_alt = row_idx % 2 == 1;
             let bg = if is_alt { &row_bg_alt_var } else { &row_bg_var };
@@ -1961,35 +1984,91 @@ impl ChartRenderer for TableRenderer {
             children: vec![fit],
         };
 
-        // ── Pager footer (shown when there are more rows than one page),
-        // outside the scroll area so it is always visible. ──
+        // ── Pager footer (shown when there is more than one page), outside
+        // the scroll area so it is always visible. Each button carries the page
+        // it goes to (a button with nowhere to go has none) and starts
+        // disabled: a static render cannot move. A host controller enables the
+        // buttons that have a page and re-renders when one is pressed. ──
         let pager_text_var = format!("var(--chartml-text-secondary, {})", theme.text_secondary);
         let pager_border_var = format!("1px solid var(--chartml-table-border, {})", theme.table_border);
         let mut root_children: Vec<ChartElement> = vec![scroll];
-        if total_rows > page_size {
-            let page_count = total_rows.div_ceil(page_size);
-            let info = ChartElement::Span {
+        if paged {
+            let status = ChartElement::Html {
+                tag: HtmlTag::Div,
                 class: "chartml-table-pager-info".to_string(),
                 style: style(&[
                     ("color", &pager_text_var),
                     ("font-size", &theme.table_font_size),
                     ("font-family", &theme.label_font_family),
                 ]),
-                content: format!(
-                    "Showing {}–{} of {} · Page 1 of {}",
-                    1, end, total_rows, page_count
-                ),
+                attrs: vec![
+                    ("role".to_string(), "status".to_string()),
+                    ("aria-live".to_string(), "polite".to_string()),
+                    ("aria-atomic".to_string(), "true".to_string()),
+                ],
+                children: vec![ChartElement::Span {
+                    class: String::new(),
+                    style: HashMap::new(),
+                    content: format!(
+                        "Showing {}\u{2013}{} of {} \u{b7} Page {} of {}",
+                        first + 1,
+                        end,
+                        total_rows,
+                        page + 1,
+                        page_count
+                    ),
+                }],
             };
-            root_children.push(ChartElement::Div {
+            let button = |action: &str, label: &str, text: &str, target: Option<usize>| {
+                let mut attrs = vec![(table_pager::ATTR_ACTION.to_string(), action.to_string())];
+                if let Some(target) = target {
+                    attrs.push((table_pager::ATTR_TARGET_PAGE.to_string(), target.to_string()));
+                }
+                attrs.push(("aria-label".to_string(), label.to_string()));
+                attrs.push(("disabled".to_string(), String::new()));
+                ChartElement::Html {
+                    tag: HtmlTag::Button,
+                    class: "chartml-table-pager-button".to_string(),
+                    style: style(&[
+                        ("color", &pager_text_var),
+                        ("background", "transparent"),
+                        ("border", &pager_border_var),
+                        ("border-radius", "4px"),
+                        ("padding", "2px 10px"),
+                        ("font-size", &theme.table_font_size),
+                        ("font-family", &theme.label_font_family),
+                    ]),
+                    attrs,
+                    children: vec![ChartElement::Span {
+                        class: String::new(),
+                        style: HashMap::new(),
+                        content: text.to_string(),
+                    }],
+                }
+            };
+            root_children.push(ChartElement::Html {
+                tag: HtmlTag::Nav,
                 class: "chartml-table-pager".to_string(),
                 style: style(&[
                     ("display", "flex"),
+                    ("align-items", "center"),
                     ("justify-content", "flex-end"),
+                    ("gap", "8px"),
                     ("padding", &theme.table_cell_padding),
                     ("border-top", &pager_border_var),
                     ("background", &header_bg_var),
                 ]),
-                children: vec![info],
+                attrs: vec![("aria-label".to_string(), "Table pagination".to_string())],
+                children: vec![
+                    status,
+                    button(table_pager::ACTION_PREV, "Previous page", "Previous", page.checked_sub(1).filter(|_| interactive)),
+                    button(
+                        table_pager::ACTION_NEXT,
+                        "Next page",
+                        "Next",
+                        (interactive && page + 1 < page_count).then_some(page + 1),
+                    ),
+                ],
             });
         }
 
@@ -1999,21 +2078,37 @@ impl ChartRenderer for TableRenderer {
             "var(--chartml-table-border-radius, {})",
             theme.table_border_radius,
         );
-        Ok(ChartElement::Div {
-            class: "chartml-table".to_string(),
-            style: style(&[
-                ("display", "flex"),
-                ("flex-direction", "column"),
-                ("width", "100%"),
-                ("height", "100%"),
-                ("background", &row_bg_var),
-                ("color", &root_text_var),
-                ("border", &root_border_var),
-                ("border-radius", &radius_var),
-                ("overflow", "hidden"),
-                ("box-sizing", "border-box"),
-            ]),
-            children: root_children,
+        let root_style = style(&[
+            ("display", "flex"),
+            ("flex-direction", "column"),
+            ("width", "100%"),
+            ("height", "100%"),
+            ("background", &row_bg_var),
+            ("color", &root_text_var),
+            ("border", &root_border_var),
+            ("border-radius", &radius_var),
+            ("overflow", "hidden"),
+            ("box-sizing", "border-box"),
+        ]);
+        // A table of one page has nothing for a controller to drive and is
+        // the same element it always was; a paged one carries the pager state.
+        Ok(if paged {
+            ChartElement::Html {
+                tag: HtmlTag::Div,
+                class: table_pager::CLASS_TABLE.to_string(),
+                style: root_style,
+                attrs: vec![
+                    (table_pager::ATTR_PAGE_COUNT.to_string(), page_count.to_string()),
+                    (table_pager::ATTR_CURRENT_PAGE.to_string(), page.to_string()),
+                ],
+                children: root_children,
+            }
+        } else {
+            ChartElement::Div {
+                class: table_pager::CLASS_TABLE.to_string(),
+                style: root_style,
+                children: root_children,
+            }
         })
     }
 
@@ -2067,13 +2162,14 @@ mod tests {
             height: 400.0,
             colors: vec![],
             theme: Theme::default(),
+            table_page: None,
         }
     }
 
     fn find_contents(el: &ChartElement, out: &mut Vec<String>) {
         match el {
             ChartElement::Span { content, .. } => out.push(content.clone()),
-            ChartElement::Div { children, .. } => {
+            ChartElement::Div { children, .. } | ChartElement::Html { children, .. } => {
                 for c in children {
                     find_contents(c, out);
                 }
@@ -2291,7 +2387,8 @@ rows:
     /// Collect every Div/Span whose class list contains `class`, in document order.
     fn find_by_class<'a>(el: &'a ChartElement, class: &str, out: &mut Vec<&'a ChartElement>) {
         let (own, children): (&str, Option<&Vec<ChartElement>>) = match el {
-            ChartElement::Div { class, children, .. } => (class, Some(children)),
+            ChartElement::Div { class, children, .. }
+            | ChartElement::Html { class, children, .. } => (class, Some(children)),
             ChartElement::Span { class, .. } => (class, None),
             _ => ("", None),
         };
@@ -2313,21 +2410,25 @@ rows:
 
     fn style_of(el: &ChartElement) -> &HashMap<String, String> {
         match el {
-            ChartElement::Div { style, .. } | ChartElement::Span { style, .. } => style,
+            ChartElement::Div { style, .. }
+            | ChartElement::Html { style, .. }
+            | ChartElement::Span { style, .. } => style,
             _ => panic!("not a Div/Span"),
         }
     }
 
     fn children_of(el: &ChartElement) -> &Vec<ChartElement> {
         match el {
-            ChartElement::Div { children, .. } => children,
+            ChartElement::Div { children, .. } | ChartElement::Html { children, .. } => children,
             _ => panic!("not a Div"),
         }
     }
 
     fn class_of(el: &ChartElement) -> &str {
         match el {
-            ChartElement::Div { class, .. } | ChartElement::Span { class, .. } => class,
+            ChartElement::Div { class, .. }
+            | ChartElement::Html { class, .. }
+            | ChartElement::Span { class, .. } => class,
             _ => panic!("not a Div/Span"),
         }
     }
@@ -3780,7 +3881,7 @@ rows:
                     }
                 }
             }
-            if let ChartElement::Div { children, .. } = el {
+            if let ChartElement::Div { children, .. } | ChartElement::Html { children, .. } = el {
                 children.iter().for_each(walk);
             }
         }
@@ -3797,12 +3898,205 @@ rows:
         let el = wide();
         let kids: Vec<&str> = children_of(&el).iter().map(class_of).collect();
         assert_eq!(kids, vec!["chartml-table-scroll", "chartml-table-pager"]);
+        assert_eq!(el_tag(&children_of(&el)[1]), Some(HtmlTag::Nav));
         let scroll = &children_of(&el)[0];
         assert_eq!(get(scroll, "flex"), Some("1 1 0"));
         assert_eq!(get(scroll, "min-height"), Some("0"));
         let mut contents = Vec::new();
         find_contents(&el, &mut contents);
         assert!(contents.iter().any(|c| c == "Showing 1–3 of 4 · Page 1 of 2"));
+    }
+
+    // ── CHA-30: pager ──
+
+    /// `n` rows: `name` is "Row 1".."Row n", `value` the same number.
+    fn numbered(n: usize) -> DataTable {
+        let rows: Vec<Row> = (1..=n)
+            .map(|i| {
+                [
+                    ("name".to_string(), json!(format!("Row {i}"))),
+                    ("value".to_string(), json!(i as f64)),
+                ]
+                .into_iter()
+                .collect()
+            })
+            .collect();
+        DataTable::from_rows(&rows).unwrap()
+    }
+
+    fn try_page(n: usize, page_size: usize, page: usize) -> Result<ChartElement, ChartError> {
+        let mut config = cfg(&format!(
+            "type: table\ncolumns: name\nrows:\n  - field: value\nstyle:\n  pageSize: {page_size}\n"
+        ));
+        config.table_page = Some(page);
+        TableRenderer::new().render(&numbered(n), &config)
+    }
+
+    fn paged_table(n: usize, page_size: usize, page: usize) -> ChartElement {
+        try_page(n, page_size, page).unwrap()
+    }
+
+    fn attr<'a>(el: &'a ChartElement, name: &str) -> Option<&'a str> {
+        match el {
+            ChartElement::Html { attrs, .. } => attrs
+                .iter()
+                .find(|(k, _)| k == name)
+                .map(|(_, v)| v.as_str()),
+            _ => None,
+        }
+    }
+
+    /// The first cell of each body row.
+    fn row_names(el: &ChartElement) -> Vec<String> {
+        by_class(el, "chartml-table-row")
+            .iter()
+            .map(|row| {
+                let mut c = Vec::new();
+                find_contents(&children_of(row)[0], &mut c);
+                c.concat()
+            })
+            .collect()
+    }
+
+    fn status_text(el: &ChartElement) -> String {
+        let mut c = Vec::new();
+        find_contents(by_class(el, "chartml-table-pager-info")[0], &mut c);
+        c.concat()
+    }
+
+    #[test]
+    fn each_page_renders_only_its_rows_and_every_row_is_on_some_page() {
+        let names = |page| row_names(&paged_table(7, 3, page));
+        assert_eq!(names(0), ["Row 1", "Row 2", "Row 3"]);
+        assert_eq!(names(1), ["Row 4", "Row 5", "Row 6"]);
+        assert_eq!(names(2), ["Row 7"], "the last page holds the remainder");
+        // Output size does not grow with the row count.
+        let size = |n| count_elements(&paged_table(n, 3, 0), &|_| true);
+        assert_eq!(size(7), size(7_000));
+    }
+
+    #[test]
+    fn the_status_names_the_page_and_the_rows_on_it() {
+        assert_eq!(status_text(&paged_table(7, 3, 0)), "Showing 1\u{2013}3 of 7 \u{b7} Page 1 of 3");
+        assert_eq!(status_text(&paged_table(7, 3, 1)), "Showing 4\u{2013}6 of 7 \u{b7} Page 2 of 3");
+        assert_eq!(status_text(&paged_table(7, 3, 2)), "Showing 7\u{2013}7 of 7 \u{b7} Page 3 of 3");
+    }
+
+    #[test]
+    fn a_page_past_the_last_is_an_error_not_a_clamp() {
+        for page in [3, 4, 1000] {
+            let err = try_page(7, 3, page).unwrap_err().to_string();
+            assert!(err.contains("out of range") && err.contains("3 page"), "{err}");
+        }
+        // A table of one page has page 0 only.
+        assert!(try_page(3, 50, 1).is_err());
+        // An empty table renders (page 0), and has no page 1.
+        assert!(try_page(0, 3, 0).is_ok());
+        assert!(try_page(0, 3, 1).is_err());
+    }
+
+    #[test]
+    fn pager_buttons_are_real_disabled_buttons_with_their_target_page() {
+        fn button<'a>(el: &'a ChartElement, action: &str) -> &'a ChartElement {
+            by_class(el, "chartml-table-pager-button")
+                .into_iter()
+                .find(|b| attr(b, table_pager::ATTR_ACTION) == Some(action))
+                .unwrap()
+        }
+        for (page, prev, next) in [(0, None, Some("1")), (1, Some("0"), Some("2")), (2, Some("1"), None)] {
+            let el = paged_table(7, 3, page);
+            assert_eq!(attr(&el, table_pager::ATTR_PAGE_COUNT), Some("3"));
+            assert_eq!(attr(&el, table_pager::ATTR_CURRENT_PAGE), Some(page.to_string().as_str()));
+            let nav = by_class(&el, "chartml-table-pager")[0];
+            assert_eq!(el_tag(nav), Some(HtmlTag::Nav));
+            assert_eq!(attr(nav, "aria-label"), Some("Table pagination"));
+            let (p, n) = (button(&el, table_pager::ACTION_PREV), button(&el, table_pager::ACTION_NEXT));
+            assert_eq!(el_tag(p), Some(HtmlTag::Button));
+            assert_eq!(el_tag(n), Some(HtmlTag::Button));
+            assert_eq!(attr(p, table_pager::ATTR_TARGET_PAGE), prev, "page {page}");
+            assert_eq!(attr(n, table_pager::ATTR_TARGET_PAGE), next, "page {page}");
+            assert_eq!(attr(p, "aria-label"), Some("Previous page"));
+            assert_eq!(attr(n, "aria-label"), Some("Next page"));
+            assert!(
+                attr(p, "disabled").is_some() && attr(n, "disabled").is_some(),
+                "a render with no controller cannot move, so every button starts disabled"
+            );
+            let status = by_class(&el, "chartml-table-pager-info")[0];
+            assert_eq!(attr(status, "role"), Some("status"));
+            assert_eq!(attr(status, "aria-live"), Some("polite"));
+            assert_eq!(attr(status, "aria-atomic"), Some("true"));
+        }
+    }
+
+    #[test]
+    fn a_static_render_is_page_one_and_no_button_has_a_page_to_go_to() {
+        // No `table_page`: the host cannot drive the pager.
+        let config = cfg("type: table\ncolumns: name\nrows:\n  - field: value\nstyle:\n  pageSize: 3\n");
+        let el = TableRenderer::new().render(&numbered(7), &config).unwrap();
+        assert_eq!(row_names(&el), ["Row 1", "Row 2", "Row 3"]);
+        assert_eq!(status_text(&el), "Showing 1\u{2013}3 of 7 \u{b7} Page 1 of 3");
+        let buttons = by_class(&el, "chartml-table-pager-button");
+        assert_eq!(buttons.len(), 2);
+        for b in buttons {
+            assert!(attr(b, "disabled").is_some());
+            assert_eq!(attr(b, table_pager::ATTR_TARGET_PAGE), None, "nothing can move it");
+        }
+    }
+
+    #[test]
+    fn a_table_of_one_page_has_no_pager_and_is_the_element_it_always_was() {
+        // pageSize larger than the row count, equal to it, and a single row.
+        for (n, page_size) in [(7, 50), (7, 7), (1, 1)] {
+            let el = paged_table(n, page_size, 0);
+            assert!(matches!(el, ChartElement::Div { .. }), "{n} rows, pageSize {page_size}");
+            assert!(by_class(&el, "chartml-table-pager").is_empty());
+            assert_eq!(by_class(&el, "chartml-table-row").len(), n);
+        }
+    }
+
+    #[test]
+    fn the_last_full_page_is_exactly_page_count() {
+        let el = paged_table(6, 3, 1);
+        assert_eq!(attr(&el, table_pager::ATTR_PAGE_COUNT), Some("2"));
+        assert_eq!(row_names(&el), ["Row 4", "Row 5", "Row 6"]);
+        assert!(try_page(6, 3, 2).is_err());
+    }
+
+    #[test]
+    fn columns_are_sized_from_every_row_so_every_page_has_the_same_widths() {
+        // The widest value is on page 2.
+        let rows: Vec<Row> = ["a", "b", "c", "a considerably longer value on page two"]
+            .iter()
+            .map(|n| [("name".to_string(), json!(n))].into_iter().collect())
+            .collect();
+        let data = DataTable::from_rows(&rows).unwrap();
+        let min_of = |page: usize, size: usize| {
+            let mut config = cfg(&format!("type: table\ncolumns: name\nstyle:\n  pageSize: {size}\n"));
+            config.table_page = Some(page);
+            let el = TableRenderer::new().render(&data, &config).unwrap();
+            let scroll = by_class(&el, "chartml-table-scroll")[0];
+            style_of(scroll).get("--chartml-table-min-1").cloned().unwrap()
+        };
+        assert_eq!(min_of(0, 2), min_of(1, 2));
+        assert_eq!(min_of(0, 2), min_of(0, 50), "the same as the table on one page");
+    }
+
+    #[test]
+    fn the_page_size_description_in_the_schema_says_how_pages_are_shown() {
+        let schema: serde_json::Value = serde_json::from_str(&schema()).unwrap();
+        let text = schema["definitions"]["Style"]["properties"]["pageSize"]["description"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(text.contains("Previous"), "{text}");
+        assert!(text.contains("first page"), "static and server rendering: {text}");
+    }
+
+    fn el_tag(el: &ChartElement) -> Option<HtmlTag> {
+        match el {
+            ChartElement::Html { tag, .. } => Some(*tag),
+            _ => None,
+        }
     }
 
     #[test]

@@ -291,6 +291,11 @@
 }
 .chartml-table-pager    { background: var(--chartml-table-header-bg, #f9fafb); }
 .chartml-table-pager-info { color: var(--chartml-text-secondary, #6b7280); }
+/* The pager's Previous / Next buttons (CHA-30): disabled at the first and last
+ * page, and in a render nothing can drive (a static SVG or PNG). */
+.chartml-table-pager-button { cursor: pointer; }
+.chartml-table-pager-button:disabled { opacity: 0.4; cursor: default; }
+.chartml-table-pager-button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .chartml-table-scroll {
     scrollbar-width: thin;
     scrollbar-color: var(--chartml-table-border, #e5e7eb) transparent;

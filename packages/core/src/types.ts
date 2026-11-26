@@ -8,6 +8,13 @@ export interface RenderOptions {
    * inside the YAML before fetch dispatch.
    */
   params?: Record<string, unknown>;
+  /**
+   * Which page of a paginated `table` to render, a non-negative integer from 0.
+   * Pass it (even 0) when a host drives the pager with `attachTablePager`; omit
+   * it for a static render (page 1, buttons disabled). Only that page's rows
+   * are rendered; a page past the last throws. Other chart types ignore it. See `attachTablePager`.
+   */
+  tablePage?: number;
 }
 
 // Plugin callback types
@@ -220,6 +227,7 @@ export type ChartElement =
   | LineElement
   | TextElement
   | DivElement
+  | HtmlTagElement
   | SpanElement;
 
 export interface SvgElement {
@@ -304,6 +312,17 @@ export interface DivElement {
   type: 'div';
   class: string;
   style: Record<string, string>;
+  children: ChartElement[];
+}
+
+/** An HTML element that carries attributes: the table pager's buttons and page groups. */
+export interface HtmlTagElement {
+  type: 'html';
+  tag: 'div' | 'nav' | 'button';
+  class: string;
+  style: Record<string, string>;
+  /** `[name, value]`; an empty value is a boolean attribute. */
+  attrs: [string, string][];
   children: ChartElement[];
 }
 

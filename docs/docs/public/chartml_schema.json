@@ -1029,7 +1029,7 @@
           "type": "integer",
           "minimum": 1,
           "default": 50,
-          "description": "Table-only: rows per page (default 50)"
+          "description": "Table-only: rows per page (default 50). A table with more rows than this shows one page at a time, with Previous and Next buttons and the current page in the footer; every row is reachable. Where nothing can run (a static SVG, a PNG, markdown output, server-side rendering) the table shows its first page and the buttons are disabled."
         }
       }
     }

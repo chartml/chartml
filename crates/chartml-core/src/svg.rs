@@ -9,7 +9,7 @@
 //! Follows the same pattern as `chartml-leptos/src/element.rs` but
 //! produces a string instead of Leptos views.
 
-use crate::element::{ChartElement, ElementData};
+use crate::element::{ChartElement, ElementData, HtmlTag};
 use std::fmt::Write;
 
 /// Default font family for SVG text elements.
@@ -268,6 +268,36 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             buf.push_str("</div>");
         }
 
+        ChartElement::Html { tag, class, style, attrs, children } => {
+            let name = tag.name();
+            if matches!(tag, HtmlTag::Div) {
+                buf.push_str(r#"<div xmlns="http://www.w3.org/1999/xhtml""#);
+            } else {
+                write!(buf, r#"<{name} xmlns="http://www.w3.org/1999/xhtml""#)
+                    .expect("writing to String is infallible");
+            }
+            if matches!(tag, HtmlTag::Button) {
+                buf.push_str(r#" type="button""#);
+            }
+            if !class.is_empty() {
+                write!(buf, r#" class="{}""#, xml_escape(class)).expect("writing to String is infallible");
+            }
+            let style_str = style_map_to_string(style);
+            if !style_str.is_empty() {
+                write!(buf, r#" style="{}""#, xml_escape(&style_str)).expect("writing to String is infallible");
+            }
+            for (key, value) in attrs {
+                if is_attr_name(key) {
+                    write!(buf, r#" {}="{}""#, key, xml_escape(value)).expect("writing to String is infallible");
+                }
+            }
+            buf.push('>');
+            for child in children {
+                write_element(buf, child);
+            }
+            write!(buf, "</{name}>").expect("writing to String is infallible");
+        }
+
         ChartElement::Span { class, style, content } => {
             buf.push_str("<span");
             if !class.is_empty() {
@@ -282,6 +312,14 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             buf.push_str("</span>");
         }
     }
+}
+
+/// Whether `name` is safe to write as an attribute name: `[a-z][a-z0-9-]*`.
+#[doc(hidden)]
+pub fn is_attr_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 /// Convert a style HashMap to a CSS string (sorted for deterministic output).
@@ -484,6 +522,43 @@ mod tests {
 
         let svg = element_to_svg(&element, 100.0, 100.0);
         assert!(svg.contains(r##"stroke="red""##));
+    }
+
+    #[test]
+    fn html_element_writes_its_tag_attributes_and_escapes_values() {
+        let button = ChartElement::Html {
+            tag: HtmlTag::Button,
+            class: "b".to_string(),
+            style: std::collections::HashMap::new(),
+            attrs: vec![
+                ("data-chartml-pager-action".to_string(), "next".to_string()),
+                ("aria-label".to_string(), r#"Next "page" <&>"#.to_string()),
+                ("disabled".to_string(), String::new()),
+                // Not a valid attribute name: never written.
+                ("onclick=alert(1) x".to_string(), "1".to_string()),
+                ("Upper".to_string(), "1".to_string()),
+            ],
+            children: vec![ChartElement::Span {
+                class: String::new(),
+                style: std::collections::HashMap::new(),
+                content: "Next".to_string(),
+            }],
+        };
+        let nav = ChartElement::Html {
+            tag: HtmlTag::Nav,
+            class: "n".to_string(),
+            style: std::collections::HashMap::new(),
+            attrs: vec![],
+            children: vec![button],
+        };
+        let svg = element_to_svg(&nav, 100.0, 100.0);
+        assert!(svg.contains(r#"<nav xmlns="http://www.w3.org/1999/xhtml" class="n">"#), "{svg}");
+        assert!(svg.contains(r#"<button xmlns="http://www.w3.org/1999/xhtml" type="button" class="b""#), "{svg}");
+        assert!(svg.contains(r#" data-chartml-pager-action="next""#), "{svg}");
+        assert!(svg.contains(r#" aria-label="Next &quot;page&quot; &lt;&amp;&gt;""#), "{svg}");
+        assert!(svg.contains(r#" disabled="""#), "{svg}");
+        assert!(!svg.contains("onclick") && !svg.contains("Upper"), "{svg}");
+        assert!(svg.contains("<span>Next</span></button></nav>"), "{svg}");
     }
 
     #[test]

@@ -108,12 +108,47 @@ pub enum ChartElement {
         style: HashMap<String, String>,
         children: Vec<ChartElement>,
     },
+    /// An HTML element that carries attributes (`data-*`, `aria-*`, `role`,
+    /// `disabled`). Used where a [`ChartElement::Div`] is not enough: the
+    /// table's pager, whose buttons hosts must find and drive (see
+    /// [`crate::table_pager`]). An attribute with an empty value is a boolean
+    /// attribute (`disabled`). Attribute names are
+    /// written by renderer code, never from spec text, and must match
+    /// `[a-z][a-z0-9-]*`; anything else is not written.
+    Html {
+        tag: HtmlTag,
+        class: String,
+        style: HashMap<String, String>,
+        attrs: Vec<(String, String)>,
+        children: Vec<ChartElement>,
+    },
     /// Raw text node (for metric values, labels in div-based charts)
     Span {
         class: String,
         style: HashMap<String, String>,
         content: String,
     },
+}
+
+/// The HTML tags a [`ChartElement::Html`] can be.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HtmlTag {
+    Div,
+    Nav,
+    /// A `<button type="button">`.
+    Button,
+}
+
+impl HtmlTag {
+    /// The tag name as written in HTML.
+    pub fn name(self) -> &'static str {
+        match self {
+            HtmlTag::Div => "div",
+            HtmlTag::Nav => "nav",
+            HtmlTag::Button => "button",
+        }
+    }
 }
 
 /// Data attached to interactive elements for tooltips.
@@ -235,7 +270,8 @@ where
     match element {
         ChartElement::Svg { children, .. }
         | ChartElement::Group { children, .. }
-        | ChartElement::Div { children, .. } => {
+        | ChartElement::Div { children, .. }
+        | ChartElement::Html { children, .. } => {
             for child in children {
                 count += count_elements(child, predicate);
             }

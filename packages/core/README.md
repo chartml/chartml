@@ -128,6 +128,24 @@ provider: http
 url: "https://api.example.com/sales"
 ```
 
+### Paginated tables
+
+A `table` with more rows than `style.pageSize` renders one page at a time, with Previous and Next buttons. `tablePage` (from 0) in the render options picks the page and tells the renderer that a host is driving the pager; a page past the last throws. Leave it out for a static render (page 1, buttons disabled). The output is an HTML/SVG string, so the buttons need a controller once you mount it. `attachTablePager` calls you back with the page a pressed button goes to, and you render that page again:
+
+```javascript
+import { attachTablePager } from '@chartml/core';
+
+let page = 0;
+const show = (next) => {
+  page = next;
+  container.innerHTML = chartml.renderToSvg(spec, { tablePage: page });
+};
+show(0);
+const detach = attachTablePager(container, show); // call detach() when you remove the container
+```
+
+A render without `tablePage` is static: its buttons stay disabled, even with a controller attached. Start a new spec at page 0. The controller also prepares any chart you render into the container later, and keeps focus on the button that was pressed. Without it (static SVG, markdown rendered to HTML, server-side rendering) the table shows its first page and the buttons are disabled.
+
 ## Plugin System
 
 ### Chart Renderer Plugins

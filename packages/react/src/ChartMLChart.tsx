@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { attachTablePager } from '@chartml/core';
 import type { ChartML } from '@chartml/core';
 
 export interface ChartMLChartProps {
@@ -18,10 +19,29 @@ export interface ChartMLChartProps {
   onError?: (error: Error) => void;
 }
 
+// A small id per object, so a key can tell one ChartML instance from another.
+const ids = new WeakMap<object, number>();
+let nextId = 0;
+function idOf(object: object): number {
+  if (!ids.has(object)) ids.set(object, nextId++);
+  return ids.get(object) as number;
+}
+
 export function ChartMLChart({ spec, chartml, width, height, className, style, onError }: ChartMLChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  // The page of a paginated table, from 0. It belongs to one spec: a new spec
+  // starts at page 0 (it may have fewer pages), without rendering the old page
+  // against it first.
+  // `chartml` is null until the WASM is ready (see `useChartML`).
+  const pageKey = `${chartml ? idOf(chartml) : 'none'}:${spec}`;
+  const [pageState, setPageState] = useState<{ key: string; page: number }>({ key: pageKey, page: 0 });
+  const page = pageState.key === pageKey ? pageState.page : 0;
+  useEffect(() => {
+    // The page chosen for an earlier spec or instance is dropped, so coming back starts at page 0.
+    setPageState((s) => (s.key === pageKey ? s : { key: pageKey, page: 0 }));
+  }, [pageKey]);
 
   // Track container width for responsive sizing
   const [containerWidth, setContainerWidth] = useState<number>(0);
@@ -45,7 +65,7 @@ export function ChartMLChart({ spec, chartml, width, height, className, style, o
     try {
       const effectiveWidth = width ?? containerWidth;
       const effectiveHeight = height ?? Math.round(effectiveWidth * 0.5); // 2:1 default aspect ratio
-      const result = chartml.renderToSvg(spec, { width: effectiveWidth, height: effectiveHeight });
+      const result = chartml.renderToSvg(spec, { width: effectiveWidth, height: effectiveHeight, tablePage: page });
       setSvg(result);
       setError(null);
     } catch (e) {
@@ -53,7 +73,18 @@ export function ChartMLChart({ spec, chartml, width, height, className, style, o
       setError(err.message);
       onError?.(err);
     }
-  }, [spec, chartml, containerWidth, width, height, onError]);
+  }, [spec, chartml, containerWidth, width, height, page, onError]);
+
+  // A paginated table renders one page with Previous/Next buttons that need a
+  // controller: it reports the page a button goes to, and the render effect
+  // above shows it. It is attached to the container (which re-mounts when an
+  // error clears) and prepares each re-render by itself.
+  useEffect(() => {
+    const container = containerRef.current;
+    return container
+      ? attachTablePager(container, (next) => setPageState({ key: pageKey, page: next }))
+      : undefined;
+  }, [error, pageKey]);
 
   if (error) {
     return (
