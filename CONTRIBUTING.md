@@ -75,6 +75,12 @@ cargo test --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion
 # Lint (exactly what CI runs)
 cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion -- -D warnings
 
+# Pre-commit hook outcomes (CI runs this in the lint-policy job)
+bash scripts/test-pre-commit.sh
+
+# Packed @chartml/core style.css check (CI runs this after building WASM)
+bash scripts/check-npm-pack.sh
+
 # Start documentation site
 cd docs && npm run docs:dev
 ```

@@ -49,7 +49,7 @@ Decide which packages need publishing and bump their versions:
 ```bash
 # Bump a single package
 cd packages/core
-npm version patch  # 1.4.0 → 1.4.1 (or 'minor' or 'major')
+npm version patch  # 5.2.1 → 5.2.2 (or 'minor' or 'major')
 
 # Or bump multiple packages (from the repository root)
 npm version patch --workspaces  # Bumps all workspace packages
@@ -149,7 +149,7 @@ git push
 **Solution**: The workflow automatically fixes these, but you can permanently fix:
 ```bash
 # Edit package.json dependencies
-"@chartml/core": "^1.4.0"  # Instead of "file:../core"
+"@chartml/core": "^5.0.0"  # Instead of "file:../core"
 ```
 
 ### Missing .d.ts files error
@@ -192,9 +192,10 @@ cargo publish -p chartml-chart-table
 cargo publish -p chartml-datafusion
 cargo publish -p chartml-render
 cargo publish -p chartml-leptos
+# Wait about a minute between crates so the crates.io index catches up (CI sleeps 60s).
 
 # Create git tags manually
-git tag @chartml/core@1.4.1
+git tag @chartml/core@5.2.2
 git push origin --tags
 ```
 
