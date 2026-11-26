@@ -129,20 +129,20 @@ The `wasm_bindgen_test` suites only run in a real browser. CI pins a runner, Chr
 
 2. [Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/) and its matching chromedriver. CI uses version `158.0.8127.88` (`CHROME_VERSION` in ci.yml); pick the `mac-arm64`, `mac-x64` or `linux64` download for your machine.
 
-3. A WebDriver config that starts Chrome headless. Point `binary` at your Chrome for Testing executable. On macOS also add `--use-mock-keychain` and `--password-store=basic` to `args`, or Chrome asks for keychain access.
+3. A WebDriver config that starts Chrome headless. Point `binary` at your Chrome for Testing executable. The last two flags (not in CI) stop Chrome asking for keychain access on macOS.
 
    ```bash
    cat > /tmp/chartml-webdriver.json <<'JSON'
    {
      "goog:chromeOptions": {
        "binary": "/path/to/chrome-for-testing/chrome",
-       "args": ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+       "args": ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--use-mock-keychain", "--password-store=basic"]
      }
    }
    JSON
    ```
 
-4. Run the suites with the same environment as CI. A suite with no tests exits 0, so check that each reports the passing count below:
+4. Run the suites with the same environment as CI. A suite with no tests exits 0, so check that each reports the expected number of passing tests (the `run_suite` lines in ci.yml give the count for each):
 
    ```bash
    export CHROMEDRIVER=/path/to/chromedriver
@@ -151,13 +151,13 @@ The `wasm_bindgen_test` suites only run in a real browser. CI pins a runner, Chr
    export WASM_BINDGEN_TEST_DRIVER_TIMEOUT=30
    export WASM_BINDGEN_TEST_WEBDRIVER_JSON=/tmp/chartml-webdriver.json
 
-   cargo test --target wasm32-unknown-unknown -p chartml-wasm --test web                                          # 12 tests
-   cargo test --target wasm32-unknown-unknown -p chartml-leptos --test table_layout_test                           # 9 tests
-   cargo test --target wasm32-unknown-unknown -p chartml-leptos --test chart_provider_test                         # 6 tests
-   cargo test --target wasm32-unknown-unknown -p chartml-core --features wasm-indexeddb --test indexeddb_test      # 7 tests
+   cargo test --target wasm32-unknown-unknown -p chartml-wasm --test web
+   cargo test --target wasm32-unknown-unknown -p chartml-leptos --test table_layout_test
+   cargo test --target wasm32-unknown-unknown -p chartml-leptos --test chart_provider_test
+   cargo test --target wasm32-unknown-unknown -p chartml-core --features wasm-indexeddb --test indexeddb_test
    ```
 
-   The expected counts live in `run_suite` calls in ci.yml and change when a suite gains or loses a test.
+   The counts change when a suite gains or loses a test, so they are not repeated here.
 
 ## Project Structure
 
