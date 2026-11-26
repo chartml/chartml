@@ -162,7 +162,7 @@ jobs:
           }
 
           run_suite wasm-api 12 cargo test --target wasm32-unknown-unknown -p chartml-wasm --test web
-          run_suite table-layout 9 cargo test --target wasm32-unknown-unknown -p chartml-leptos --test table_layout_test
+          run_suite table-layout 15 cargo test --target wasm32-unknown-unknown -p chartml-leptos --test table_layout_test
           run_suite chart-provider 6 cargo test --target wasm32-unknown-unknown -p chartml-leptos --test chart_provider_test
           run_suite indexeddb 7 cargo test --target wasm32-unknown-unknown -p chartml-core --features wasm-indexeddb --test indexeddb_test
 
