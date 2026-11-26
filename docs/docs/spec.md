@@ -580,9 +580,9 @@ visualize:
 ```
 
 **Metric Labeling:**
-- `chart.title` (optional) → Label shown **above** card (consistent with all chart types)
-- `visualize.label` (optional) → Label shown **inside** card (metric-specific)
-- If neither is specified, the label falls back to the name of the `value` field (e.g. `total_revenue`), so a card always shows a label
+- `chart.title` (optional) → Title shown **above** the card by the browser components, as for all chart types. It is not part of the rendered SVG. When `visualize.label` is not set, the title is also used as the in-card label
+- `visualize.label` (optional) → Label shown **inside** card (metric-specific); takes precedence over the title for the in-card label
+- If neither is specified, the in-card label is the name of the `value` field (e.g. `total_revenue`), so a card always shows a label
 
 **Metric Value Formatting:**
 
