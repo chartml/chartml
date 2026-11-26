@@ -22,7 +22,7 @@ ChartML v3 — Rust/WASM chart rendering engine. Publishes to both npm and crate
 ```bash
 # Rust
 cargo build                    # build all crates
-cargo test --workspace         # run all tests
+cargo test --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion   # run all tests (as CI)
 cargo clippy --workspace       # lint
 
 # WASM (for npm packages)
