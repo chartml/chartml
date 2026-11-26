@@ -79,8 +79,24 @@ printf '%s\n' "${HOOK_TEST_OUTPUT:-}"
 # committed config — would leave the suite green.
 suppress=0
 deny=0
+# Cargo honours three spellings of environment rustflags, and ANY of them being
+# present — even set to empty — overrides build.rustflags from config files.
+# The hook unsets all three, so "present" here must mean present, not non-empty,
+# or a hook that forced one to an empty value would still look correct.
+env_present=0
+env_rustflags=''
 if [ -n "${RUSTFLAGS+set}" ]; then
-    case "${RUSTFLAGS:-}" in
+    env_present=1
+    env_rustflags=$RUSTFLAGS
+elif [ -n "${CARGO_BUILD_RUSTFLAGS+set}" ]; then
+    env_present=1
+    env_rustflags=$CARGO_BUILD_RUSTFLAGS
+elif [ -n "${CARGO_ENCODED_RUSTFLAGS+set}" ]; then
+    env_present=1
+    env_rustflags=$(printf '%s' "$CARGO_ENCODED_RUSTFLAGS" | tr '\037' ' ')
+fi
+if [ "$env_present" -eq 1 ]; then
+    case "$env_rustflags" in
         *-A*warnings*|*allow*) suppress=1 ;;
         *-D*|*deny*) deny=1 ;;
     esac
@@ -1033,19 +1049,24 @@ else
     cat "$scratch/committed-config-honoured.log" >&2
 fi
 
-# The other direction: a committed deny must be enforced, so the hook cannot
-# simply ignore every config and still pass both cases.
+# The other direction: a committed deny must be enforced. The code here is
+# clean and carries no marker, so the ONLY thing that can fail this commit is
+# the deny in the commit's own config — the failure must come from the clippy
+# failure branch, not from a warning the fixture itself contains.
 repo="$scratch/committed-config-denied"
 new_repo "$repo"
 mkdir -p "$repo/.cargo"
 printf '[build]\nrustflags = ["-D", "warnings"]\n' > "$repo/.cargo/config.toml"
-printf 'fn tracked() { let CHA27_DENIED = 1; }\n' > "$repo/tracked.rs"
-git -C "$repo" add .cargo/config.toml tracked.rs
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add .cargo/config.toml clean.rs
 if (
     cd "$repo"
-    HOOK_TEST_WARN_ON_MARKER='CHA27_DENIED' bash "$hook" > "$scratch/committed-config-denied.log" 2>&1
+    bash "$hook" > "$scratch/committed-config-denied.log" 2>&1
 ); then
     fail 'a rustflags committed deny was not enforced'
+elif ! grep -q 'Cargo clippy failed' "$scratch/committed-config-denied.log"; then
+    fail 'the deny was rejected for the wrong reason'
+    cat "$scratch/committed-config-denied.log" >&2
 else
     pass 'a rustflags committed in .cargo/config.toml that denies is enforced'
 fi
@@ -1261,6 +1282,54 @@ if (
     fail 'a shell RUSTFLAGS=-A warnings suppressed a committed warning'
 else
     pass 'a shell RUSTFLAGS=-A warnings cannot suppress a committed warning'
+fi
+
+# Cargo honours three spellings of environment rustflags; any of them would
+# otherwise override the commit's own configuration.
+repo="$scratch/shell-build-rustflags"
+new_repo "$repo"
+printf 'fn tracked() { let CHA27_BUILD_RUSTFLAGS = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    CARGO_BUILD_RUSTFLAGS='-A warnings' HOOK_TEST_WARN_ON_MARKER='CHA27_BUILD_RUSTFLAGS' \
+        bash "$hook" > "$scratch/shell-build-rustflags.log" 2>&1
+); then
+    fail 'CARGO_BUILD_RUSTFLAGS suppressed a committed warning'
+else
+    pass 'CARGO_BUILD_RUSTFLAGS cannot suppress a committed warning'
+fi
+
+repo="$scratch/shell-encoded-rustflags"
+new_repo "$repo"
+printf 'fn tracked() { let CHA27_ENCODED_RUSTFLAGS = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    CARGO_ENCODED_RUSTFLAGS='-A warnings' HOOK_TEST_WARN_ON_MARKER='CHA27_ENCODED_RUSTFLAGS' \
+        bash "$hook" > "$scratch/shell-encoded-rustflags.log" 2>&1
+); then
+    fail 'CARGO_ENCODED_RUSTFLAGS suppressed a committed warning'
+else
+    pass 'CARGO_ENCODED_RUSTFLAGS cannot suppress a committed warning'
+fi
+
+# A committed allow must survive all three being present in the environment.
+repo="$scratch/encoded-over-committed"
+new_repo "$repo"
+mkdir -p "$repo/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$repo/.cargo/config.toml"
+printf 'fn tracked() { let CHA27_ENCODED_COMMITTED = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add .cargo/config.toml tracked.rs
+if (
+    cd "$repo"
+    CARGO_ENCODED_RUSTFLAGS='-D warnings' HOOK_TEST_WARN_ON_MARKER='CHA27_ENCODED_COMMITTED' \
+        bash "$hook" > "$scratch/encoded-over-committed.log" 2>&1
+); then
+    pass 'CARGO_ENCODED_RUSTFLAGS cannot override the commit'"'"'s own configuration'
+else
+    fail 'CARGO_ENCODED_RUSTFLAGS overrode the commit'"'"'s own configuration'
+    cat "$scratch/encoded-over-committed.log" >&2
 fi
 
 repo="$scratch/shell-rustflags-deny"
