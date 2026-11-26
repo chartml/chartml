@@ -1561,6 +1561,41 @@ else
     fail 'the hook deleted a directory outside its own lint copies'
 fi
 
+# A subpath of a chartml-pre-commit.* directory, and a trailing-slash symlink to
+# a directory, are not the hook's own copies either.
+for escape in sub link; do
+    repo="$scratch/pointer-$escape"
+    new_repo "$repo"
+    victim="$scratch/pointer-$escape-victim"
+    mkdir -p "$victim/precious" "$scratch/pointer-$escape-base/chartml-pre-commit.abcdef"
+    printf 'keep\n' > "$victim/precious/keep.txt"
+    printf 'keep\n' > "$scratch/pointer-$escape-base/chartml-pre-commit.abcdef/keep.txt"
+    ln -s "$victim" "$scratch/pointer-$escape-base/chartml-pre-commit.linkxx"
+    git_dir=$(git -C "$repo" rev-parse --absolute-git-dir)
+    mkdir -p "$git_dir/chartml-pre-commit"
+    if [ "$escape" = sub ]; then
+        pointed="$scratch/pointer-$escape-base/chartml-pre-commit.abcdef/precious-sub"
+        mkdir -p "$pointed"
+        printf 'keep\n' > "$pointed/keep.txt"
+    else
+        pointed="$scratch/pointer-$escape-base/chartml-pre-commit.linkxx/"
+    fi
+    printf '%s\n' "$pointed" > "$git_dir/chartml-pre-commit/snapshot-dir"
+    printf 'fn tracked() {}\n' > "$repo/tracked.rs"
+    git -C "$repo" add tracked.rs
+    (
+        cd "$repo"
+        TMPDIR="$outer" bash "$hook" > "$scratch/pointer-$escape.log" 2>&1
+    ) || true
+    # Reuse would make the hook build its lint tree inside the pointed directory.
+    if [ -f "$victim/precious/keep.txt" ] && [ ! -e "$victim/tree" ] && [ ! -e "$pointed/tree" ] &&
+        { [ "$escape" = link ] || [ -f "$pointed/keep.txt" ]; }; then
+        pass "a $escape pointer that is not a bare mktemp copy is neither reused nor deleted"
+    else
+        fail "the hook deleted something that was not its own lint copy ($escape)"
+    fi
+done
+
 # A clean TMPDIR lints exactly as before: a committed warning is still caught.
 repo="$scratch/clean-tmpdir"
 new_repo "$repo"

@@ -246,14 +246,22 @@ usable_outside_repo() {
     [ -n "$1" ] && [ -d "$1" ] && [ -w "$1" ] && ! inside_repo "$1"
 }
 
-# Only a directory this hook made is ever reused or deleted: its name is
-# chartml-pre-commit.XXXXXX, and a ".." component could point elsewhere.
+# Only a directory this hook made is ever reused or deleted. mktemp names it
+# <dir>/chartml-pre-commit.XXXXXX: an absolute path whose last component is
+# exactly that, not a symlink, with no ".." component and no trailing slash.
 own_copy() {
     case "$1" in
-        */..|*/../*) return 1 ;;
-        */chartml-pre-commit.*) return 0 ;;
+        /*) ;;
+        *) return 1 ;;
     esac
-    return 1
+    case "$1" in
+        */..|*/../*) return 1 ;;
+    esac
+    case "${1##*/}" in
+        chartml-pre-commit.??????) ;;
+        *) return 1 ;;
+    esac
+    [ ! -L "$1" ]
 }
 
 pointer="$state_dir/snapshot-dir"
@@ -317,10 +325,12 @@ while [ -n "$ancestor" ]; do
         # The copy is reused through the pointer, so leaving it would keep
         # refusing after TMPDIR is moved. Drop it and its pointer; the next run
         # makes a fresh copy under whatever TMPDIR then is.
-        rm -f -- "$pointer" || true
+        # The copy goes first: a signal between the two leaves a dangling
+        # pointer, which the next run rejects, never an unreferenced copy.
         if own_copy "$snapshot_root"; then
             rm -rf -- "$snapshot_root" || true
         fi
+        rm -f -- "$pointer" || true
         echo ""
         echo "❌ A Cargo config above the lint copy would decide this commit's verdict:"
         echo "   $ancestor_cargo_dir/$config_name"
