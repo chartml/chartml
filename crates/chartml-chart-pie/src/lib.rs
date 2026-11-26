@@ -204,7 +204,7 @@ mod tests {
             height: 400.0,
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
             theme: chartml_core::theme::Theme::default(),
-            table_page: 0,
+            table_page: None,
         }
     }
 

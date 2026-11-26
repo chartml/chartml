@@ -108,11 +108,11 @@ pub enum ChartElement {
         style: HashMap<String, String>,
         children: Vec<ChartElement>,
     },
-    /// An HTML element that carries attributes (`data-*`, `aria-*`,
-    /// `hidden`, `disabled`). Used where a [`ChartElement::Div`] is not
-    /// enough: the table's pager, whose buttons and page groups hosts must
-    /// find and drive (see [`crate::table_pager`]). An attribute with an empty
-    /// value is a boolean attribute (`hidden`, `disabled`). Attribute names are
+    /// An HTML element that carries attributes (`data-*`, `aria-*`, `role`,
+    /// `disabled`). Used where a [`ChartElement::Div`] is not enough: the
+    /// table's pager, whose buttons hosts must find and drive (see
+    /// [`crate::table_pager`]). An attribute with an empty value is a boolean
+    /// attribute (`disabled`). Attribute names are
     /// written by renderer code, never from spec text, and must match
     /// `[a-z][a-z0-9-]*`; anything else is not written.
     Html {

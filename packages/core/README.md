@@ -144,7 +144,7 @@ show(0);
 const detach = attachTablePager(container, show); // call detach() when you remove the container
 ```
 
-Start a new spec at page 0. The controller also prepares any chart you render into the container later, and keeps focus on the button that was pressed. Without it (static SVG, markdown rendered to HTML, server-side rendering) the table shows its first page and the buttons are disabled.
+A render without `tablePage` is static: its buttons stay disabled, even with a controller attached. Start a new spec at page 0. The controller also prepares any chart you render into the container later, and keeps focus on the button that was pressed. Without it (static SVG, markdown rendered to HTML, server-side rendering) the table shows its first page and the buttons are disabled.
 
 ## Plugin System
 

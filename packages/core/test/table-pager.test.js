@@ -80,6 +80,15 @@ describe('the renderer output', () => {
     expect(btn(c, 'prev').hasAttribute('disabled') && btn(c, 'next').hasAttribute('disabled')).toBe(true);
   });
 
+  it('without tablePage the render is static: page 1 and no button has a target', () => {
+    const c = document.createElement('div');
+    c.innerHTML = new WasmChartML().renderToSvg(spec(7, 3), { width: 600, height: 400 });
+    expect(rowsOf(c)).toEqual(['Row 1', 'Row 2', 'Row 3']);
+    expect(c.querySelectorAll(`[${TABLE_PAGER.ATTR_TARGET_PAGE}]`).length).toBe(0);
+    attachTablePager(c, () => {});
+    expect(btn(c, 'next').disabled, 'the controller leaves it disabled').toBe(true);
+  });
+
   it('a page past the last throws', () => {
     expect(() => render(7, 3, 3)).toThrow(/out of range/);
     expect(() => render(7, 3, -1)).toThrow(/tablePage/);

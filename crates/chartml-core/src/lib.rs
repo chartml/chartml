@@ -337,21 +337,22 @@ impl ChartML {
         container_height: Option<f64>,
         param_overrides: Option<&params::ParamValues>,
     ) -> Result<ChartElement, ChartError> {
-        self.render_from_yaml_with_params_page(yaml, container_width, container_height, param_overrides, 0)
+        self.render_from_yaml_with_params_page(yaml, container_width, container_height, param_overrides, None)
     }
 
     /// Like [`ChartML::render_from_yaml_with_params`], rendering page
-    /// `table_page` (from 0) of a paginated `table`. A page past the last is
-    /// an error. Other chart types ignore it. A document with more than one
-    /// chart renders every table at page 0, because one page number cannot say
-    /// which table it is for.
+    /// `table_page` (from 0) of a paginated `table` for a host that drives the
+    /// pager (`None` is a static render: page 0, buttons disabled). A page past
+    /// the last is an error. Other chart types ignore it. A document with more
+    /// than one chart renders every table static, because one page number
+    /// cannot say which table it is for.
     pub fn render_from_yaml_with_params_page(
         &self,
         yaml: &str,
         container_width: Option<f64>,
         container_height: Option<f64>,
         param_overrides: Option<&params::ParamValues>,
-        table_page: usize,
+        table_page: Option<usize>,
     ) -> Result<ChartElement, ChartError> {
         // Step 1: Collect ALL param values — defaults + overrides.
         // Priority: overrides > persistent defaults > inline defaults
@@ -457,10 +458,10 @@ impl ChartML {
             // Multiple charts — render each and wrap in a grid container.
             // `table_page` is one number for the whole document, so it cannot
             // say which table it is for: every table in a multi-chart
-            // document is rendered at page 0 (a static first page).
+            // document is rendered static (page 0, buttons disabled).
             let mut children = Vec::new();
             for spec in chart_specs {
-                match self.render_chart_internal(spec, container_width, container_height, &sources, 0) {
+                match self.render_chart_internal(spec, container_width, container_height, &sources, None) {
                     Ok(element) => children.push(element),
                     Err(e) => {
                         // Continue rendering other charts even if one fails
@@ -502,7 +503,7 @@ impl ChartML {
         container_height: Option<f64>,
     ) -> Result<ChartElement, ChartError> {
         let sources = HashMap::new();
-        self.render_chart_internal(chart_spec, container_width, container_height, &sources, 0)
+        self.render_chart_internal(chart_spec, container_width, container_height, &sources, None)
     }
 
     /// Internal render method that accepts named sources for resolution.
@@ -519,7 +520,7 @@ impl ChartML {
         container_width: Option<f64>,
         container_height: Option<f64>,
         sources: &HashMap<String, DataTable>,
-        table_page: usize,
+        table_page: Option<usize>,
     ) -> Result<ChartElement, ChartError> {
         // Resolve every declared source into an ordered map. Inline / Named /
         // single-entry NamedMap collapse to a 1-entry map; multi-entry NamedMap
@@ -1168,7 +1169,7 @@ impl ChartML {
             width: container_width,
             height: container_height,
             params: param_overrides.cloned(),
-            table_page: 0,
+            table_page: None,
         };
         let fetched = self.fetch(yaml, &opts).await?;
         let prepared = self.transform(fetched, &opts).await?;
@@ -1328,7 +1329,7 @@ impl ChartML {
         };
 
         let (element, _, _) =
-            self.build_and_render(chart_spec, &transformed_data, None, None, 0)?;
+            self.build_and_render(chart_spec, &transformed_data, None, None, None)?;
         Ok(element)
     }
 
@@ -1391,7 +1392,7 @@ impl ChartML {
         data: &DataTable,
         container_width: Option<f64>,
         container_height: Option<f64>,
-        table_page: usize,
+        table_page: Option<usize>,
     ) -> Result<(ChartElement, f64, f64), ChartError> {
         let chart_type = &chart_spec.visualize.chart_type;
         let renderer = self.registry.get_renderer(chart_type)
@@ -1674,7 +1675,7 @@ visualize:
     impl ChartRenderer for PageRecorder {
         fn render(&self, _data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
             Ok(ChartElement::Div {
-                class: format!("page-{}", config.table_page),
+                class: format!("page-{:?}", config.table_page),
                 style: HashMap::new(),
                 children: vec![],
             })
@@ -1682,16 +1683,16 @@ visualize:
     }
 
     #[test]
-    fn a_single_chart_gets_the_requested_table_page_and_a_multi_chart_document_gets_page_zero() {
+    fn a_single_chart_gets_the_requested_table_page_and_a_multi_chart_document_is_static() {
         let mut chartml = ChartML::new();
         chartml.register_renderer("bar", PageRecorder);
         let one = "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n    - { x: A, y: 1 }\nvisualize:\n  type: bar\n  columns: x\n  rows: y\n";
-        match chartml.render_from_yaml_with_params_page(one, None, None, None, 3).unwrap() {
-            ChartElement::Div { class, .. } => assert_eq!(class, "page-3"),
+        match chartml.render_from_yaml_with_params_page(one, None, None, None, Some(3)).unwrap() {
+            ChartElement::Div { class, .. } => assert_eq!(class, "page-Some(3)"),
             other => panic!("{other:?}"),
         }
         let two = format!("- {}\n- {}", one.replace('\n', "\n  ").trim_end(), one.replace('\n', "\n  ").trim_end());
-        match chartml.render_from_yaml_with_params_page(&two, None, None, None, 3).unwrap() {
+        match chartml.render_from_yaml_with_params_page(&two, None, None, None, Some(3)).unwrap() {
             ChartElement::Div { class, children, .. } => {
                 assert_eq!(class, "chartml-multi-chart");
                 let pages: Vec<String> = children
@@ -1701,7 +1702,7 @@ visualize:
                         other => panic!("{other:?}"),
                     })
                     .collect();
-                assert_eq!(pages, ["page-0", "page-0"]);
+                assert_eq!(pages, ["page-None", "page-None"]);
             }
             other => panic!("{other:?}"),
         }

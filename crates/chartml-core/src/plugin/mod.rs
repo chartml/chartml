@@ -50,7 +50,7 @@ mod tests {
             height: 600.0,
             colors: vec!["#ff0000".to_string(), "#00ff00".to_string()],
             theme: crate::theme::Theme::default(),
-            table_page: 0,
+            table_page: None,
         };
         assert_eq!(config.title, Some("Test Chart".to_string()));
         assert_eq!(config.width, 800.0);

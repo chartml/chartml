@@ -1687,7 +1687,10 @@ impl ChartRenderer for TableRenderer {
             .max(1);
         let total_rows = data.num_rows();
         let page_count = total_rows.div_ceil(page_size);
-        let page = config.table_page;
+        // `None` is a static render: page 0, and the pager's buttons have no
+        // page to go to (they stay disabled).
+        let interactive = config.table_page.is_some();
+        let page = config.table_page.unwrap_or(0);
         // A page past the last is an error, never clamped: the host asked for
         // rows that do not exist. (Page 0 of an empty table is the empty table.)
         if page > 0 && page >= page_count {
@@ -2058,12 +2061,12 @@ impl ChartRenderer for TableRenderer {
                 attrs: vec![("aria-label".to_string(), "Table pagination".to_string())],
                 children: vec![
                     status,
-                    button(table_pager::ACTION_PREV, "Previous page", "Previous", page.checked_sub(1)),
+                    button(table_pager::ACTION_PREV, "Previous page", "Previous", page.checked_sub(1).filter(|_| interactive)),
                     button(
                         table_pager::ACTION_NEXT,
                         "Next page",
                         "Next",
-                        (page + 1 < page_count).then_some(page + 1),
+                        (interactive && page + 1 < page_count).then_some(page + 1),
                     ),
                 ],
             });
@@ -2159,7 +2162,7 @@ mod tests {
             height: 400.0,
             colors: vec![],
             theme: Theme::default(),
-            table_page: 0,
+            table_page: None,
         }
     }
 
@@ -3925,7 +3928,7 @@ rows:
         let mut config = cfg(&format!(
             "type: table\ncolumns: name\nrows:\n  - field: value\nstyle:\n  pageSize: {page_size}\n"
         ));
-        config.table_page = page;
+        config.table_page = Some(page);
         TableRenderer::new().render(&numbered(n), &config)
     }
 
@@ -4026,6 +4029,21 @@ rows:
     }
 
     #[test]
+    fn a_static_render_is_page_one_and_no_button_has_a_page_to_go_to() {
+        // No `table_page`: the host cannot drive the pager.
+        let config = cfg("type: table\ncolumns: name\nrows:\n  - field: value\nstyle:\n  pageSize: 3\n");
+        let el = TableRenderer::new().render(&numbered(7), &config).unwrap();
+        assert_eq!(row_names(&el), ["Row 1", "Row 2", "Row 3"]);
+        assert_eq!(status_text(&el), "Showing 1\u{2013}3 of 7 \u{b7} Page 1 of 3");
+        let buttons = by_class(&el, "chartml-table-pager-button");
+        assert_eq!(buttons.len(), 2);
+        for b in buttons {
+            assert!(attr(b, "disabled").is_some());
+            assert_eq!(attr(b, table_pager::ATTR_TARGET_PAGE), None, "nothing can move it");
+        }
+    }
+
+    #[test]
     fn a_table_of_one_page_has_no_pager_and_is_the_element_it_always_was() {
         // pageSize larger than the row count, equal to it, and a single row.
         for (n, page_size) in [(7, 50), (7, 7), (1, 1)] {
@@ -4054,7 +4072,7 @@ rows:
         let data = DataTable::from_rows(&rows).unwrap();
         let min_of = |page: usize, size: usize| {
             let mut config = cfg(&format!("type: table\ncolumns: name\nstyle:\n  pageSize: {size}\n"));
-            config.table_page = page;
+            config.table_page = Some(page);
             let el = TableRenderer::new().render(&data, &config).unwrap();
             let scroll = by_class(&el, "chartml-table-scroll")[0];
             style_of(scroll).get("--chartml-table-min-1").cloned().unwrap()

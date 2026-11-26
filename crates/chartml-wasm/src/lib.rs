@@ -89,7 +89,7 @@ impl WasmChartML {
     #[wasm_bindgen(js_name = "renderToSvg")]
     pub fn render_to_svg(&self, yaml: &str, options: JsValue) -> Result<String, JsValue> {
         let (width, height) = parse_render_options(&options);
-        let table_page = parse_table_page(&options)?.unwrap_or(0);
+        let table_page = parse_table_page(&options)?;
         with_inner(self, |chartml| {
             let element = chartml
                 .render_from_yaml_with_params_page(yaml, width, height, None, table_page)
@@ -104,7 +104,7 @@ impl WasmChartML {
     #[wasm_bindgen(js_name = "renderToElement")]
     pub fn render_to_element(&self, yaml: &str, options: JsValue) -> Result<JsValue, JsValue> {
         let (width, height) = parse_render_options(&options);
-        let table_page = parse_table_page(&options)?.unwrap_or(0);
+        let table_page = parse_table_page(&options)?;
         with_inner(self, |chartml| {
             let element = chartml
                 .render_from_yaml_with_params_page(yaml, width, height, None, table_page)
@@ -394,7 +394,7 @@ impl WasmChartML {
             render_opts.height = height;
         }
         if let Some(page) = parse_table_page(&opts)? {
-            render_opts.table_page = page;
+            render_opts.table_page = Some(page);
         }
         with_inner(self, |chartml| {
             chartml
@@ -577,7 +577,7 @@ fn parse_full_render_options(options: &JsValue) -> Result<chartml_core::RenderOp
         width,
         height,
         params: None,
-        table_page: parse_table_page(options).map_err(|e| format!("{e:?}"))?.unwrap_or(0),
+        table_page: parse_table_page(options).map_err(|e| format!("{e:?}"))?,
     };
     if !options.is_undefined() && !options.is_null() && options.is_object() {
         let params_js = js_sys::Reflect::get(options, &JsValue::from_str("params"))

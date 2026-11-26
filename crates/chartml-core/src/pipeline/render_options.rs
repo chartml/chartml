@@ -28,11 +28,12 @@ pub struct RenderOptions {
     /// top of `params:` defaults declared in the YAML. `None` skips param
     /// overrides entirely.
     pub params: Option<ParamValues>,
-    /// Which page of a paginated `table` to render, from 0 (the default).
-    /// Only that page's rows are rendered; column widths are still measured
-    /// over every row. A page past the last is an error, not clamped. Other
-    /// chart types ignore it (CHA-30).
-    pub table_page: usize,
+    /// Which page of a paginated `table` to render, from 0, for a host that
+    /// drives the pager. `None` (the default) is a static render: page 0, with
+    /// the pager's buttons disabled. Only that page's rows are rendered; column
+    /// widths are still measured over every row. A page past the last is an
+    /// error, not clamped. Other chart types ignore it (CHA-30).
+    pub table_page: Option<usize>,
 }
 
 impl RenderOptions {
@@ -43,7 +44,7 @@ impl RenderOptions {
             width,
             height,
             params: None,
-            table_page: 0,
+            table_page: None,
         }
     }
 

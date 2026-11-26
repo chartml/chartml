@@ -459,7 +459,7 @@ mod tests {
                 "#4CAF50".to_string(),
             ],
             theme: chartml_core::theme::Theme::default(),
-            table_page: 0,
+            table_page: None,
         }
     }
 
@@ -501,7 +501,7 @@ mod tests {
             height: 400.0,
             colors: vec!["#2E7D9A".to_string()],
             theme: chartml_core::theme::Theme::default(),
-            table_page: 0,
+            table_page: None,
         }
     }
 
@@ -594,7 +594,7 @@ mod tests {
             height: 400.0,
             colors: vec!["#2E7D9A".to_string()],
             theme: chartml_core::theme::Theme::default(),
-            table_page: 0,
+            table_page: None,
         }
     }
 

@@ -1079,7 +1079,7 @@ fn table_chartml(theme: Theme) -> ChartML {
     chartml
 }
 
-fn render_page(spec: &str, theme: Theme, page: usize) -> Result<chartml_core::element::ChartElement, chartml_core::ChartError> {
+fn render_page(spec: &str, theme: Theme, page: Option<usize>) -> Result<chartml_core::element::ChartElement, chartml_core::ChartError> {
     table_chartml(theme).render_from_yaml_with_params_page(spec, None, None, None, page)
 }
 
@@ -1097,7 +1097,7 @@ struct PagedHost {
 }
 
 fn show(path: Path, host: &web_sys::HtmlElement, spec: &str, theme: &Theme, width: u32, page: usize, slot: &Rc<RefCell<Option<Box<dyn Any>>>>) {
-    let element = render_page(spec, theme.clone(), page).expect("page renders");
+    let element = render_page(spec, theme.clone(), Some(page)).expect("page renders");
     // Drop the previous view first: that unmounts it and removes its nodes.
     slot.borrow_mut().take();
     match path {
@@ -1245,12 +1245,17 @@ fn a_static_render_shows_the_first_page_with_disabled_buttons() {
     let s = page_state(&host);
     assert_eq!(s.visible, rows(&["Row 1", "Row 2", "Row 3"]));
     assert!(s.prev_disabled && s.next_disabled);
+    assert_eq!(
+        host.query_selector_all("[data-chartml-target-page]").expect("selector").length(),
+        0,
+        "a static render has no button that could go anywhere"
+    );
 }
 
 #[wasm_bindgen_test]
 fn a_page_past_the_last_is_an_error() {
-    assert!(render_page(&paged_spec(7, 3), Theme::default(), 3).is_err());
-    assert!(render_page(&paged_spec(7, 3), Theme::default(), 2).is_ok());
+    assert!(render_page(&paged_spec(7, 3), Theme::default(), Some(3)).is_err());
+    assert!(render_page(&paged_spec(7, 3), Theme::default(), Some(2)).is_ok());
 }
 
 #[wasm_bindgen_test]
@@ -1364,7 +1369,8 @@ async fn pages_keep_the_layout_svg_narrow() {
 #[wasm_bindgen_test]
 async fn a_dropped_pager_leaves_nothing_behind() {
     let spec = paged_spec(7, 3);
-    let host = mount(Path::Svg, &spec, Theme::default(), 600);
+    let host = host(600);
+    host.set_inner_html(&element_to_svg(&render_page(&spec, Theme::default(), Some(0)).expect("renders"), 600.0, 400.0));
     let reported = Rc::new(RefCell::new(Vec::new()));
     let reported2 = reported.clone();
     let pager = TablePager::attach(&host, move |page| reported2.borrow_mut().push(page)).expect("attach");
@@ -1373,7 +1379,7 @@ async fn a_dropped_pager_leaves_nothing_behind() {
     drop(pager);
     press_forced(&host, "next").await;
     assert!(reported.borrow().is_empty(), "no click listener");
-    host.set_inner_html(&element_to_svg(&render(&spec, Theme::default()), 600.0, 400.0));
+    host.set_inner_html(&element_to_svg(&render_page(&spec, Theme::default(), Some(0)).expect("renders"), 600.0, 400.0));
     settle().await;
     assert!(page_state(&host).next_disabled, "no observer prepares a table mounted after the drop");
 }
@@ -1431,7 +1437,7 @@ async fn chart_component_pages_across_rerenders_and_unmounts_clean() {
     // Unmount: the controller on the container is gone.
     drop(handle);
     settle().await;
-    container.set_inner_html(&element_to_svg(&render(&paged_spec(7, 3), Theme::default()), 600.0, 400.0));
+    container.set_inner_html(&element_to_svg(&render_page(&paged_spec(7, 3), Theme::default(), Some(0)).expect("renders"), 600.0, 400.0));
     settle().await;
     assert!(
         page_state(&container).next_disabled,

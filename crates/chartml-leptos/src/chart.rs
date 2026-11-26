@@ -796,7 +796,8 @@ pub fn ChartMLChart(
                     width: if initial_width > 0.0 { Some(initial_width) } else { None },
                     height: None,
                     params: params_owned,
-                    table_page: 0,
+                    // The pager is driven by this component, from page 0.
+                    table_page: Some(0),
                 };
                 let fetch_result = chartml_async.fetch(&yaml_owned, &opts).await;
                 if gen_ref.get() != my_gen { return; }
@@ -871,7 +872,7 @@ pub fn ChartMLChart(
                 return;
             }
             let opts = RenderOptions {
-                table_page: page,
+                table_page: Some(page),
                 ..RenderOptions::with_size(Some(width), None)
             };
             match chartml.render_prepared_to_svg(&current.prepared, &opts) {

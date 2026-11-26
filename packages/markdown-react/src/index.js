@@ -178,6 +178,14 @@ function DefaultParamsRendererBridge({ parameterDefinitions, scope, value, onCha
  * the resulting SVG string. Subscribes to the parent's params change
  * channel so paramsWrapper updates trigger a re-render with new params.
  */
+// A small id per object, so a key can tell one ChartML instance from another.
+const ids = new WeakMap();
+let nextId = 0;
+function idOf(object) {
+  if (!ids.has(object)) ids.set(object, nextId++);
+  return ids.get(object);
+}
+
 export function ChartMLChart({ yaml: yamlText, chartmlInstance, className = '', getParams, subscribe }) {
   const containerRef = useRef(null);
   const [renderError, setRenderError] = useState(null);
@@ -186,7 +194,7 @@ export function ChartMLChart({ yaml: yamlText, chartmlInstance, className = '', 
   // The page of a paginated table, from 0. It belongs to one spec and one set
   // of params: new ones start at page 0 (they may have fewer pages), and the
   // page chosen for the old ones is dropped.
-  const pageKey = `${paramsVersion}:${yamlText}`;
+  const pageKey = `${paramsVersion}:${idOf(chartmlInstance)}:${yamlText}`;
   const [pageState, setPageState] = useState({ key: pageKey, page: 0 });
   const tablePage = pageState.key === pageKey ? pageState.page : 0;
   useEffect(() => {

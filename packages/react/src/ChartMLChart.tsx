@@ -19,6 +19,14 @@ export interface ChartMLChartProps {
   onError?: (error: Error) => void;
 }
 
+// A small id per object, so a key can tell one ChartML instance from another.
+const ids = new WeakMap<object, number>();
+let nextId = 0;
+function idOf(object: object): number {
+  if (!ids.has(object)) ids.set(object, nextId++);
+  return ids.get(object) as number;
+}
+
 export function ChartMLChart({ spec, chartml, width, height, className, style, onError }: ChartMLChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string>('');
@@ -26,12 +34,13 @@ export function ChartMLChart({ spec, chartml, width, height, className, style, o
   // The page of a paginated table, from 0. It belongs to one spec: a new spec
   // starts at page 0 (it may have fewer pages), without rendering the old page
   // against it first.
-  const [pageState, setPageState] = useState<{ spec: string; page: number }>({ spec, page: 0 });
-  const page = pageState.spec === spec ? pageState.page : 0;
+  const pageKey = `${idOf(chartml)}:${spec}`;
+  const [pageState, setPageState] = useState<{ key: string; page: number }>({ key: pageKey, page: 0 });
+  const page = pageState.key === pageKey ? pageState.page : 0;
   useEffect(() => {
-    // The page chosen for an earlier spec is dropped, so coming back to it starts at page 0.
-    setPageState((s) => (s.spec === spec ? s : { spec, page: 0 }));
-  }, [spec]);
+    // The page chosen for an earlier spec or instance is dropped, so coming back starts at page 0.
+    setPageState((s) => (s.key === pageKey ? s : { key: pageKey, page: 0 }));
+  }, [pageKey]);
 
   // Track container width for responsive sizing
   const [containerWidth, setContainerWidth] = useState<number>(0);
@@ -72,9 +81,9 @@ export function ChartMLChart({ spec, chartml, width, height, className, style, o
   useEffect(() => {
     const container = containerRef.current;
     return container
-      ? attachTablePager(container, (next) => setPageState({ spec, page: next }))
+      ? attachTablePager(container, (next) => setPageState({ key: pageKey, page: next }))
       : undefined;
-  }, [error, spec]);
+  }, [error, pageKey]);
 
   if (error) {
     return (
