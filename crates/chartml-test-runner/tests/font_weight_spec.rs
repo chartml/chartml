@@ -95,7 +95,7 @@ fn string_weights_stay_accepted_unchanged() {
         let Component::Style(style) = single(spec::parse(&style_yaml(raw)).unwrap_or_else(|e| panic!("{raw} must parse: {e}"))) else {
             panic!("expected a style component");
         };
-        let weight = style.fonts.unwrap().title.unwrap().weight;
+        let weight = style.fonts.expect("fonts").title.expect("title").weight;
         let expected = raw.trim_matches('"');
         assert_eq!(weight, Some(FontWeight::Text(expected.to_string())));
     }
