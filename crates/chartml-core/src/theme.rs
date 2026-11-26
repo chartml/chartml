@@ -652,7 +652,7 @@ mod table_cell_padding_tests {
             "8px 12%",
             "2vw 3px",
             "1in 1px",
-            // Malformed shorthands the old unit-only check let through, all of
+            // Malformed shorthands, all of
             // which poison the calc() the renderer builds from them.
             "8",
             ".5",

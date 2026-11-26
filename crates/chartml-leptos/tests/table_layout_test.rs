@@ -773,7 +773,7 @@ fn measure_fixed_tracks(host: &web_sys::HtmlElement, padding: Option<&str>) -> F
     serde_json::from_str(&json).expect("fixed-track state parses")
 }
 
-/// Regression (CHA-22 F1): a host that widens `--chartml-table-cell-padding`
+/// Regression: a host that widens `--chartml-table-cell-padding`
 /// must get wider columns, not squeezed text. Every column's minimum is its
 /// content only and layout adds the padding actually applied, so with a wide
 /// override in a narrow container there are still no cells cut off, no words
@@ -949,7 +949,7 @@ fn zero_cell_padding_keeps_columns_and_text_intact() {
     }
 }
 
-/// Regression (CHA-22 F4): a table that overflows in a narrow container and is
+/// Regression: a table that overflows in a narrow container and is
 /// then resized in place to a width where its columns fit must have no sideways
 /// scroll and no visible fade. This is the resize path a dashboard tile takes
 /// when it grows after first layout, and the case a fade whose visibility came

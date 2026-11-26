@@ -1649,14 +1649,14 @@ fn fade_cell(column: usize) -> ChartElement {
 }
 
 fn header_border(theme: &Theme) -> String {
-    let header_border_colour = if theme.table_header_border.is_empty() {
+    let header_border_color = if theme.table_header_border.is_empty() {
         &theme.table_border
     } else {
         &theme.table_header_border
     };
     format!(
         "1px solid var(--chartml-table-header-border, var(--chartml-table-border, {}))",
-        header_border_colour,
+        header_border_color,
     )
 }
 
@@ -3418,7 +3418,7 @@ style:
             assert!(min.ends_with("+ 12px + 12px)"), "column {i}: {min}");
             // The cell's own minimum is content-only; layout adds the padding
             // actually applied, so a host override still lays text out
-            // correctly (F1) even though the hint's estimate does not see it.
+            // correctly even though the hint's estimate does not see it.
             assert!(!get(cell, "min-width").unwrap().ends_with("+ 12px + 12px)"));
         }
         for row in by_class(&el, "chartml-table-header").into_iter().chain(by_class(&el, "chartml-table-body")) {
@@ -3456,7 +3456,7 @@ style:
 
     #[test]
     fn fade_track_is_zero_when_the_columns_fit_with_room_to_spare() {
-        // Regression for a fade that stuck on after a resize (CHA-22 F4). The
+        // Regression for a fade that stuck on after a resize. The
         // estimate is a pure function of the columns' minimums, so a table
         // whose columns need less than the visible area has a 0px fade track
         // — there is no history, no scroll position and no prior overflow
