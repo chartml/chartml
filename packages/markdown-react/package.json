@@ -20,7 +20,7 @@
     "typescript": "^5.0.0",
     "@types/react": "^18.0.0",
     "@types/markdown-it": "^14.0.0",
-    "@chartml/core": "*",
+    "@chartml/core": "^5.2.1",
     "@chartml/markdown-common": "*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

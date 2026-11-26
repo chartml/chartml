@@ -25,6 +25,8 @@
   },
   "peerDependencies": {},
   "devDependencies": {
+    "d3": "^7.9.0",
+    "d3-array": "^3.2.4",
     "typescript": "^5.0.0"
   },
   "repository": {

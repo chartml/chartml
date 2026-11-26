@@ -7,8 +7,8 @@ Official documentation site for ChartML - a declarative markup language for crea
 ## Local Development
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies (from the repo root: docs is an npm workspace)
+npm ci
 
 # Start dev server
 npm run docs:dev
