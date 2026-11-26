@@ -18,7 +18,7 @@ pub use chart::{
 pub use config::{ConfigSpec, StyleRef};
 pub use params::{ParamDef, ParamsSpec};
 pub use source::{CacheConfig, SourceSpec};
-pub use style::{FontSpec, FontsSpec, GridSpec, LegendSpec, StyleSpec};
+pub use style::{FontSpec, FontWeight, FontsSpec, GridSpec, LegendSpec, StyleSpec};
 pub use transform::{
     AggregateSpec, Dimension, DimensionSpec, FilterGroup, FilterRule, ForecastSpec, Measure,
     SortSpec, SqlSpec, TransformSpec,
@@ -351,6 +351,31 @@ legend:
                 assert_eq!(fonts.title.unwrap().family, Some("Inter".to_string()));
                 let legend = style.legend.unwrap();
                 assert_eq!(legend.position, Some("top".to_string()));
+            }
+            other => panic!("Expected Style, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_style_component_font_weights() {
+        let yaml = r#"
+type: style
+version: 1
+name: weights
+fonts:
+  title:
+    weight: 600
+  axis:
+    weight: bold
+  dataLabel:
+    weight: "500"
+"#;
+        match unwrap_single(parse(yaml).unwrap()) {
+            Component::Style(style) => {
+                let fonts = style.fonts.unwrap();
+                assert_eq!(fonts.title.unwrap().weight, Some(FontWeight::Number(600.0)));
+                assert_eq!(fonts.axis.unwrap().weight, Some(FontWeight::Text("bold".into())));
+                assert_eq!(fonts.data_label.unwrap().weight, Some(FontWeight::Text("500".into())));
             }
             other => panic!("Expected Style, got {:?}", other),
         }
