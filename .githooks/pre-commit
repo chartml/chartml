@@ -290,25 +290,37 @@ snapshot_manifest="$snapshot_tree/Cargo.toml"
 # is already inside the copy, so anything above it is refused. CARGO_HOME is the
 # exception: Cargo reads that for every build the developer runs anyway, and
 # refusing it would block anyone whose TMPDIR sits under their home directory.
-cargo_home=${CARGO_HOME:-$HOME/.cargo}
+cargo_home=${CARGO_HOME:-${HOME:-}/.cargo}
 cargo_home=$(cd -- "$cargo_home" 2>/dev/null && pwd -P) || cargo_home=''
+# The copy's own root is the first directory above the tree, so it is checked
+# too; the walk then continues to the filesystem root.
 ancestor=$(cd -- "$snapshot_root" && pwd -P) || ancestor=''
-while [ -n "$ancestor" ] && [ "$ancestor" != "/" ]; do
-    ancestor=$(dirname -- "$ancestor")
-    for ancestor_config in "$ancestor/.cargo/config.toml" "$ancestor/.cargo/config"; do
-        [ -f "$ancestor_config" ] || continue
-        resolved_config=$(cd -- "$(dirname -- "$ancestor_config")" && pwd -P)/$(basename -- "$ancestor_config") || resolved_config=$ancestor_config
-        case "$resolved_config" in
-            "$cargo_home"/*) continue ;;
+while [ -n "$ancestor" ]; do
+    ancestor_cargo_dir=${ancestor%/}/.cargo
+    for config_name in config.toml config; do
+        [ -f "$ancestor_cargo_dir/$config_name" ] || continue
+        # The CARGO_HOME config is exempt by exact path. An unresolvable
+        # CARGO_HOME exempts nothing.
+        if [ -n "$cargo_home" ] && [ "$ancestor_cargo_dir" = "$cargo_home" ]; then
+            continue
+        fi
+        # The copy is reused through the pointer, so leaving it would keep
+        # refusing after TMPDIR is moved. Drop it and its pointer; the next run
+        # makes a fresh copy under whatever TMPDIR then is.
+        rm -f -- "$pointer"
+        case "$snapshot_root" in
+            */chartml-pre-commit.*) rm -rf -- "$snapshot_root" ;;
         esac
         echo ""
         echo "❌ A Cargo config above the lint copy would decide this commit's verdict:"
-        echo "   $resolved_config"
+        echo "   $ancestor_cargo_dir/$config_name"
         echo "   It is not part of the commit, so the hook cannot lint the commit's own"
         echo "   content reliably. Move TMPDIR somewhere with no .cargo directory above"
         echo "   it, or remove that file, and commit again."
         exit 1
     done
+    [ "$ancestor" = "/" ] && break
+    ancestor=$(dirname -- "$ancestor")
 done
 
 echo "🔍 Running cargo clippy on the committed content..."

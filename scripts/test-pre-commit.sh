@@ -1415,6 +1415,21 @@ elif ! grep -q 'above the lint copy' "$scratch/ancestor-config.log"; then
 else
     pass 'a Cargo config above the lint copy is refused'
 fi
+# Following the advice in the message must work: after TMPDIR moves, the same
+# repository commits again and the refused copy is gone.
+printf 'fn tracked() {}\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+moved_tmp="$scratch/ancestor-config-moved"
+mkdir -p "$moved_tmp"
+if (
+    cd "$repo"
+    TMPDIR="$moved_tmp" bash "$hook" > "$scratch/ancestor-config-moved.log" 2>&1
+) && [ -z "$(find "$outer" -maxdepth 1 -name 'chartml-pre-commit.*' 2>/dev/null)" ]; then
+    pass 'after TMPDIR moves, the refusal clears and the refused copy is removed'
+else
+    fail 'the refusal persisted after TMPDIR moved, or left its copy behind'
+    cat "$scratch/ancestor-config-moved.log" >&2
+fi
 if grep -qF "$outer/.cargo/config.toml" "$scratch/ancestor-config.log"; then
     pass 'the refusal names the config file'
 else
@@ -1439,6 +1454,44 @@ if (
 else
     fail 'the CARGO_HOME config was refused, blocking a normal developer setup'
     cat "$scratch/cargo-home-config.log" >&2
+fi
+
+# An unresolvable CARGO_HOME exempts nothing: the ancestor config is still refused.
+repo="$scratch/ancestor-config-nohome"
+new_repo "$repo"
+printf 'fn tracked() { let CHA27_NOHOME = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    CARGO_HOME="$scratch/does-not-exist" TMPDIR="$outer" HOOK_TEST_WARN_ON_MARKER='CHA27_NOHOME' bash "$hook" > "$scratch/ancestor-config-nohome.log" 2>&1
+); then
+    fail 'an unresolvable CARGO_HOME exempted an ancestor config'
+elif grep -q 'above the lint copy' "$scratch/ancestor-config-nohome.log"; then
+    pass 'an unresolvable CARGO_HOME exempts nothing'
+else
+    fail 'the unresolvable-CARGO_HOME case was refused for the wrong reason'
+    cat "$scratch/ancestor-config-nohome.log" >&2
+fi
+
+# The legacy .cargo/config name is refused too, and so is a config in a
+# directory that is not CARGO_HOME even when CARGO_HOME exists.
+legacy="$scratch/ancestor-config-legacy"
+mkdir -p "$legacy/.cargo"
+printf '[build]\nrustflags = ["-A", "warnings"]\n' > "$legacy/.cargo/config"
+repo="$scratch/ancestor-config-legacy-repo"
+new_repo "$repo"
+printf 'fn tracked() { let CHA27_LEGACY = 1; }\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+if (
+    cd "$repo"
+    CARGO_HOME="$home/.cargo" TMPDIR="$legacy" HOOK_TEST_WARN_ON_MARKER='CHA27_LEGACY' bash "$hook" > "$scratch/ancestor-config-legacy.log" 2>&1
+); then
+    fail 'a legacy .cargo/config above the lint copy changed the verdict'
+elif grep -qF "$legacy/.cargo/config" "$scratch/ancestor-config-legacy.log"; then
+    pass 'a legacy .cargo/config above the lint copy is refused'
+else
+    fail 'the legacy-config case was refused for the wrong reason'
+    cat "$scratch/ancestor-config-legacy.log" >&2
 fi
 
 # A clean TMPDIR lints exactly as before: a committed warning is still caught.
