@@ -295,7 +295,7 @@ transform:                    # Optional - data transformation pipeline
     limit: 100
 
 visualize:                    # Required - chart rendering
-  type: bar | line | area | scatter | pie | doughnut | metric
+  type: bar | line | area | scatter | pie | doughnut | table | metric
   columns: field_name
   rows: field_name
   # ... chart-specific options
@@ -486,7 +486,7 @@ rows: region         # Wrong - region is a category, not a value
 **Basic Structure:**
 ```yaml
 visualize:
-  type: bar | line | area | scatter | pie | doughnut | metric
+  type: bar | line | area | scatter | pie | doughnut | table | metric
   mode: stacked | grouped | normalized  # Optional, for bar/area
   orientation: vertical | horizontal   # Optional, for bar charts
 
@@ -613,7 +613,58 @@ visualize:
   # No format: the card shows 1234567, not 1,234,567
 ```
 
-5. **Dual-Axis Chart**
+5. **Table**
+```yaml
+visualize:
+  type: table
+  columns: region               # First column of the table
+  rows:                         # One more column per field, in order
+    - field: revenue
+      label: "Revenue"          # Optional - header text (default: the field name)
+      format: "$,.0f"           # Optional - number/date format
+      align: right              # Optional - left | center | right
+      width: 120                # Optional - pixels, or auto
+
+  style:
+    pageSize: 25                # Optional - rows per page
+```
+
+**Table Settings:**
+- `columns` / `rows` → Each field becomes one table column: the `columns` field first, then each `rows` field in order. With neither set, every field in the data is shown. A field may be a name or an object with `field`, `label`, `format`, `align` and `width`
+- `align` (optional) → `left`, `center` or `right`. Without it, numbers are right-aligned and everything else is left-aligned. Any other value fails to parse
+- `width` (optional) → A number of pixels greater than 0, or `auto` (the default), which sizes the column from its header label and values. The cell padding is included in the width, and a column is never narrower than its padding. Any other value is rejected: a number of 0 or less with an error when the chart renders, anything else when the spec is parsed
+- `style.pageSize` (optional) → Rows per page, an integer of 1 or more. Defaults to 50
+- `--chartml-table-cell-padding` (CSS variable) → The padding of every cell, default `8px 12px`. It takes one to four lengths in `px`, `em` or `rem` (or unitless `0`). A percentage is not supported, because the renderer measures the padding to size the columns. The Rust renderer rejects an unsupported value in the theme with an error, while a value a host sets in CSS reaches the browser as written and is not checked
+
+```chartml
+type: chart
+version: 1
+title: "Revenue by Region"
+
+data:
+  provider: inline
+  rows:
+    - { region: "US", revenue: 15000, customers: 120 }
+    - { region: "EU", revenue: 12000, customers: 95 }
+    - { region: "APAC", revenue: 9000, customers: 70 }
+    - { region: "LATAM", revenue: 4000, customers: 31 }
+
+visualize:
+  type: table
+  columns: region
+  rows:
+    - field: revenue
+      label: "Revenue"
+      format: "$,.0f"
+      width: 140
+    - field: customers
+      label: "Customers"
+      align: center
+  style:
+    pageSize: 3
+```
+
+6. **Dual-Axis Chart**
 ```yaml
 visualize:
   type: bar
