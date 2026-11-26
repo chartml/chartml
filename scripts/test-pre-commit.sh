@@ -1059,6 +1059,147 @@ else
     pass 'an interrupted run leaves no temporary files in TMPDIR'
 fi
 
+# --- A live holder keeps its lock ----------------------------------------
+repo="$scratch/live-lock-holder"
+new_repo "$repo"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+live_marker="$scratch/live-lock-holder.marker"
+live_release="$scratch/live-lock-holder.release"
+(
+    cd "$repo" || exit 1
+    HOOK_TEST_HANG_MARKER="$live_marker" HOOK_TEST_RELEASE_FILE="$live_release" \
+        bash "$hook" > /dev/null 2>&1 &
+    holder=$!
+    for _ in $(seq 1 100); do
+        [ -e "$live_marker" ] && break
+        sleep 0.1
+    done
+    if [ ! -e "$live_marker" ]; then
+        echo 'ERROR: holder never reached cargo' >&2
+        kill -KILL "$holder" 2>/dev/null || true
+        exit 1
+    fi
+    holder_pid=$(cat "$repo/.git/chartml-pre-commit/lock" 2>/dev/null || true)
+    bash "$hook" > /dev/null 2>&1 &
+    second=$!
+    for _ in $(seq 1 40); do
+        kill -0 "$second" 2>/dev/null || break
+        sleep 0.1
+    done
+    still_owner=$(cat "$repo/.git/chartml-pre-commit/lock" 2>/dev/null || true)
+    printf '%s|%s\n' "$holder_pid" "$still_owner" > "$scratch/live-lock-holder.owners"
+    : > "$live_release"
+    wait "$holder" || echo 'HOLDER_FAILED' > "$scratch/live-lock-holder.result"
+    wait "$second" || echo 'SECOND_FAILED' > "$scratch/live-lock-holder.result2"
+) || true
+if [ -e "$scratch/live-lock-holder.result" ] || [ -e "$scratch/live-lock-holder.result2" ]; then
+    fail 'a second hook broke the live lock holder'
+else
+    pass 'a second hook does not break the live lock holder'
+fi
+if [ -e "$scratch/live-lock-holder.owners" ]; then
+    owners=$(cat "$scratch/live-lock-holder.owners")
+    holder_pid=${owners%%|*}
+    still_owner=${owners#*|}
+    if [ -n "$holder_pid" ] && [ "$holder_pid" = "$still_owner" ]; then
+        pass 'the live holder still owns the lock while the second hook waits'
+    else
+        fail "the lock changed hands while its holder was live ($holder_pid -> $still_owner)"
+    fi
+fi
+
+# --- A guard held by a live reclaimer is respected ----------------------
+# Age cannot distinguish a slow reclaimer from a dead one, so the guard records
+# its owner and is cleared only when that pid is dead.
+repo="$scratch/guard-live"
+new_repo "$repo"
+mkdir -p "$repo/.git/chartml-pre-commit/lock.reclaim"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+sleep 30 &
+slow_pid=$!
+printf '%s\n' "$slow_pid" > "$repo/.git/chartml-pre-commit/lock.reclaim/owner"
+printf '999999\n' > "$repo/.git/chartml-pre-commit/lock"
+(
+    cd "$repo" || exit 1
+    timeout 12 bash "$hook" > "$scratch/guard-live.log" 2>&1
+) || true
+if [ -e "$repo/.git/chartml-pre-commit/lock" ] &&
+    [ "$(cat "$repo/.git/chartml-pre-commit/lock" 2>/dev/null)" = "999999" ]; then
+    pass 'a slow but live reclaimer keeps its guard and the dead lock stays'
+else
+    fail 'a live reclaimer lost its guard and the dead lock was taken'
+    tail -5 "$scratch/guard-live.log" >&2
+fi
+kill "$slow_pid" 2>/dev/null || true
+
+# --- A guard left by a dead run does not disable reclamation ------------
+repo="$scratch/guard-leaked"
+new_repo "$repo"
+mkdir -p "$repo/.git/chartml-pre-commit/lock.reclaim"
+printf '999999\n' > "$repo/.git/chartml-pre-commit/lock.reclaim/owner"
+printf '999999\n' > "$repo/.git/chartml-pre-commit/lock"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+if (cd "$repo" && timeout 40 bash "$hook" > "$scratch/guard-leaked.log" 2>&1); then
+    pass 'a guard left by a dead run does not disable reclamation'
+else
+    fail 'a guard left by a dead run blocked every commit'
+    tail -5 "$scratch/guard-leaked.log" >&2
+fi
+if [ -e "$repo/.git/chartml-pre-commit/lock.reclaim" ]; then
+    fail 'a guard left by a dead run was never removed'
+else
+    pass 'a guard left by a dead run is removed'
+fi
+
+# --- Several hooks racing one dead lock lint one at a time --------------
+repo="$scratch/racing-reclaim"
+new_repo "$repo"
+printf 'fn staged_clean() {}\n' > "$repo/clean.rs"
+git -C "$repo" add clean.rs
+race_failures=0
+overlap_seen=0
+for _ in 1 2 3; do
+    mkdir -p "$repo/.git/chartml-pre-commit"
+    printf '999999\n' > "$repo/.git/chartml-pre-commit/lock"
+    race_dir="$scratch/racing-reclaim.$RANDOM"
+    race_bin="$scratch/racing-bin.$RANDOM"
+    mkdir -p "$race_dir" "$race_bin"
+    cat > "$race_bin/cargo" <<'CARGO'
+#!/usr/bin/env bash
+if mkdir "$HOOK_TEST_RACE_DIR/active" 2>/dev/null; then
+    sleep 0.2
+    rmdir "$HOOK_TEST_RACE_DIR/active"
+else
+    : > "$HOOK_TEST_RACE_DIR/overlap"
+fi
+exit 0
+CARGO
+    chmod +x "$race_bin/cargo"
+    (
+        cd "$repo" || exit 1
+        for _ in 1 2 3 4; do
+            PATH="$race_bin:$PATH" HOOK_TEST_RACE_DIR="$race_dir" bash "$hook" > /dev/null 2>&1 &
+        done
+        status=0
+        for job in $(jobs -p); do
+            wait "$job" || status=1
+        done
+        exit "$status"
+    ) || race_failures=$((race_failures + 1))
+    if [ -e "$race_dir/overlap" ]; then
+        overlap_seen=$((overlap_seen + 1))
+    fi
+    rm -rf "$race_dir" "$race_bin"
+done
+if [ "$race_failures" -eq 0 ] && [ "$overlap_seen" -eq 0 ]; then
+    pass 'hooks racing one dead lock reclaim it without overlapping'
+else
+    fail "racing reclaim overlapped ($overlap_seen rounds) or failed ($race_failures rounds)"
+fi
+
 if [ "$failures" -ne 0 ]; then
     echo "ERROR: $failures pre-commit test(s) failed" >&2
     exit 1

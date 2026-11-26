@@ -55,12 +55,16 @@ lock_owner() {
     cat -- "$lock_dir" 2>/dev/null || true
 }
 
-# A reclaim guard is a directory holding the pid of the hook inside it, so a
-# guard can be cleared only when its owner is dead. Returns success when the
-# guard is absent or was removed.
+# A reclaim guard is a directory holding the pid of the hook inside it. It can
+# be cleared only when its owner is dead. Pass "held" when this hook holds the
+# lint lock: no one else can be reclaiming then, so any guard is dead.
 clear_dead_guard() {
     local guard=$state_dir/lock.reclaim owner
     [ -d "$guard" ] || return 0
+    if [ "${1:-}" = "held" ]; then
+        rm -rf -- "$guard"
+        return 0
+    fi
     owner=$(cat -- "$guard/owner" 2>/dev/null || true)
     case "$owner" in
         ''|*[!0-9]*) owner='' ;;
@@ -96,7 +100,7 @@ cleanup() {
     # The guard is only ours if we hold the lint lock; another hook may be
     # inside its own reclaim, so it is never cleared from here otherwise.
     if [ "$lock_held" -eq 1 ]; then
-        rm -rf -- "$state_dir/lock.reclaim"
+        clear_dead_guard held
     fi
     release_lock
 }
@@ -149,7 +153,7 @@ while :; do
         # A hook killed while it held the reclaim guard leaves it behind, and no
         # hook can reclaim while it exists. Nothing is reclaiming now that we
         # hold the lock.
-        rm -rf -- "$state_dir/lock.reclaim"
+        clear_dead_guard held
         break
     fi
     holder=$(lock_owner)
