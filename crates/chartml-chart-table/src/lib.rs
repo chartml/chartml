@@ -2947,6 +2947,36 @@ style:
     }
 
     #[test]
+    fn a_unitless_zero_padding_still_emits_a_valid_column_minimum() {
+        // Zero padding is documented as supported, so the calc() the estimate
+        // and the cell minimums use must be valid CSS: `calc(0 + 0)` is not,
+        // and the browser silently drops every declaration built from it (no
+        // column minimums, no fade hint, words breaking mid-word). The
+        // renderer normalises the zero to `0px`.
+        for (padding, suffix) in [
+            ("0", "+ 0px + 0px)"),
+            ("0 0", "+ 0px + 0px)"),
+            ("0.0", "+ 0px + 0px)"),
+            ("8px 0", "+ 0px + 0px)"),
+            ("1px 2px 3px 0", "+ 0px + 2px)"),
+        ] {
+            let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+            config.theme.table_cell_padding = padding.into();
+            let el = TableRenderer::new().render(&data(), &config).unwrap();
+            let scroll = by_class(&el, "chartml-table-scroll")[0];
+            // Auto columns carry the padding in their own minimum; the overall
+            // estimate sums those variables.
+            for var in ["--chartml-table-min-1", "--chartml-table-min-2"] {
+                let value = get(scroll, var).unwrap();
+                assert!(
+                    value.ends_with(suffix),
+                    "{padding}: {var} = {value}, expected the padding operands to end {suffix}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn numeric_columns_right_aligned_from_data_type() {
         // Point 3: alignment comes from each column's data type: Float64
         // measures (formatted or not) are right-aligned, header included;
