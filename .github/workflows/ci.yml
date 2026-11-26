@@ -44,8 +44,33 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion -- -D warnings
+      - name: Clippy (host targets, including tests)
+        run: cargo clippy --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion --all-targets -- -D warnings
+      # Browser tests and in-source `#[cfg(all(test, target_arch = "wasm32"))]`
+      # modules only build for wasm32; the host run above never sees them.
+      # chartml-wasm and chartml-wasm-datafusion are excluded from the host run
+      # entirely because they are wasm-only crates, so this is also the only
+      # lane that lints their library code. Lint them here so the same required
+      # Clippy check covers library and test targets on both targets.
+      #
+      # Both steps use `--all-targets` rather than naming test files, so a new
+      # wasm-only test target is linted the day it is added instead of silently
+      # going unlinted until someone remembers to list it. That is why every
+      # integration test in chartml-core carries a target gate: the host-only
+      # ones compile to an empty crate on wasm32 rather than breaking the build.
+      #
+      # The two steps stay separate because `--features` applies per invocation:
+      # only the packages on the same command line receive it, and
+      # `wasm-indexeddb` is a chartml-core feature. A dedicated step guarantees
+      # chartml-core's feature-gated wasm32 code is compiled even if another
+      # crate's defaults change; folding it into the step below would make that
+      # depend on chartml-wasm's `default` feature happening to unify.
+      - name: "Clippy (wasm32 targets: chartml-core)"
+        run: cargo clippy -p chartml-core --all-targets --target wasm32-unknown-unknown --features wasm-indexeddb -- -D warnings
+      - name: "Clippy (wasm32 targets: chartml-leptos, chartml-wasm, chartml-wasm-datafusion)"
+        run: cargo clippy -p chartml-leptos -p chartml-wasm -p chartml-wasm-datafusion --all-targets --target wasm32-unknown-unknown -- -D warnings
 
   test:
     name: Rust Tests

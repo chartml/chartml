@@ -12,7 +12,9 @@
 #![cfg(all(target_arch = "wasm32", feature = "wasm-indexeddb"))]
 
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
+
+use web_time::{SystemTime, UNIX_EPOCH};
 
 use chartml_core::data::{DataTable, Row};
 use chartml_core::resolver::backends::indexeddb::IndexedDbBackend;
@@ -49,7 +51,7 @@ fn make_entry(tag: &str) -> CachedEntry {
     metadata.insert("rows_returned".to_string(), json!(1));
     metadata.insert("source".to_string(), json!("unit-test"));
     CachedEntry {
-        data: DataTable::from_rows(&[row]).unwrap(),
+        data: DataTable::from_rows(&[row]).expect("build the cached-entry data table"),
         fetched_at: browser_now(),
         ttl: Duration::from_secs(300),
         tags: vec![tag.to_string()],
@@ -141,7 +143,10 @@ async fn test_namespace_colon_rejected() {
         err.is_err(),
         "namespace containing ':' must be rejected at construction"
     );
-    let msg = format!("{:?}", err.unwrap_err());
+    let msg = format!(
+        "{:?}",
+        err.expect_err("namespace containing ':' must be rejected at construction")
+    );
     assert!(
         msg.contains(':') && msg.to_lowercase().contains("namespace"),
         "error message must mention the namespace constraint, got {msg:?}"
