@@ -204,6 +204,7 @@ This package includes all ChartML chart plugins by default:
 - `doughnut` - Doughnut charts (from @chartml/chart-pie)
 - `scatter` - Scatter plots and bubble charts (from @chartml/chart-scatter)
 - `metric` - Metric cards for KPIs (from @chartml/chart-metric)
+- `table` - Tables with paging and per-column format, alignment and width
 
 All types work out of the box - no additional imports needed!
 

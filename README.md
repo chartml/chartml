@@ -37,7 +37,7 @@ visualize:
 
 ## Features
 
-- **All Chart Types Built In**: Bar, line, area, pie, doughnut, scatter, bubble, and metric charts — no separate packages needed
+- **All Chart Types Built In**: Bar, line, area, pie, doughnut, scatter, bubble, table, and metric charts — no separate packages needed
 - **Rust/WASM Engine**: Native-speed rendering compiled to WebAssembly (~487 KB gzipped, includes all chart types)
 - **Plugin System**: `registerRenderer()`, `registerDataSource()`, `registerTransform()`, `setDatasourceResolver()`
 - **Framework Support**: React, markdown-it, and Leptos (Rust) integrations

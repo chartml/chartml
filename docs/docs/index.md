@@ -21,7 +21,7 @@ hero:
   <FeatureCard icon="ChartBarIcon" title="Write Dashboards in Markdown" details="Combine charts, text, and parameters in markdown documents. Perfect for documentation and reports." />
   <FeatureCard icon="PaintBrushIcon" title="Style with YAML" details="Clean, readable YAML syntax for data visualization. No JavaScript required." />
   <FeatureCard icon="ArrowPathIcon" title="Interactive Parameters" details="Dynamic filtering and dashboard controls. Parameters update all charts in real-time." />
-  <FeatureCard icon="ChartPieIcon" title="Multiple Chart Types" details="Bar, line, area, scatter, pie, doughnut, and metric cards. Built-in and plugin-based renderers." />
+  <FeatureCard icon="ChartPieIcon" title="Multiple Chart Types" details="Bar, line, area, scatter, pie, doughnut, table, and metric cards. Built-in and plugin-based renderers." />
   <FeatureCard icon="PuzzlePieceIcon" title="Plugin Architecture" details="Extend with custom chart types, data sources, and aggregation middleware." />
   <FeatureCard icon="SparklesIcon" title="Beautiful by Default" details="Professional-looking visualizations with built-in color palettes and responsive design." />
 </div>
@@ -125,6 +125,7 @@ npm install @chartml/core
 - ✅ Bar, line, and area charts (built-in)
 - ✅ Pie and doughnut charts (plugin)
 - ✅ Scatter plots (plugin)
+- ✅ Tables
 - ✅ Metric cards (plugin)
 
 One command gets you everything you need to start building dashboards!

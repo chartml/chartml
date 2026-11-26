@@ -28,6 +28,11 @@ jobs:
           python3 scripts/tests/test_check_md_fences.py
           python3 scripts/check-md-fences.py docs
 
+      - name: Check docs chart-type lists match the schema
+        run: |
+          python3 scripts/tests/test_check_spec_chart_types.py
+          python3 scripts/check-spec-chart-types.py
+
       - name: Reject new lint suppressions
         run: |
           BASE="${{ github.event.pull_request.base.sha }}"
