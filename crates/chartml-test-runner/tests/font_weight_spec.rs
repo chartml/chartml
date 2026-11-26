@@ -6,7 +6,7 @@
 //! example straight from the repository so the three cannot drift apart.
 
 use chartml_chart_cartesian::CartesianRenderer;
-use chartml_core::spec::{self, ChartMLSpec, Component};
+use chartml_core::spec::{self, ChartMLSpec, Component, FontWeight};
 use chartml_core::ChartML;
 use std::fs;
 use std::path::PathBuf;
@@ -76,8 +76,8 @@ fn style_component_accepts_numeric_weight() {
         panic!("expected a style component");
     };
     let fonts = style.fonts.expect("fonts");
-    assert_eq!(fonts.title.expect("title").weight, Some(600.0));
-    assert_eq!(fonts.data_label.expect("dataLabel").weight, Some(500.0));
+    assert_eq!(fonts.title.expect("title").weight, Some(FontWeight::Number(600.0)));
+    assert_eq!(fonts.data_label.expect("dataLabel").weight, Some(FontWeight::Number(500.0)));
 }
 
 #[test]
@@ -87,10 +87,18 @@ fn style_component_registers_with_numeric_weight() {
         .expect("registerComponent accepts a numeric weight");
 }
 
+/// Compatibility: Kyomi stores specs and string weights parsed before CHA-47,
+/// so they stay accepted (undocumented; the schema documents numbers only).
 #[test]
-fn string_weight_is_rejected() {
-    // The schema allows only numbers and no doc mentions string weights.
-    assert!(spec::parse(&style_yaml("\"bold\"")).is_err());
+fn string_weights_stay_accepted_unchanged() {
+    for raw in ["\"bold\"", "\"600\"", "bold"] {
+        let Component::Style(style) = single(spec::parse(&style_yaml(raw)).unwrap_or_else(|e| panic!("{raw} must parse: {e}"))) else {
+            panic!("expected a style component");
+        };
+        let weight = style.fonts.unwrap().title.unwrap().weight;
+        let expected = raw.trim_matches('"');
+        assert_eq!(weight, Some(FontWeight::Text(expected.to_string())));
+    }
 }
 
 #[test]
@@ -101,8 +109,12 @@ fn inline_chart_style_with_numeric_weight_parses_and_renders() {
 }
 
 #[test]
-fn inline_chart_style_with_string_weight_is_rejected() {
-    assert!(chartml().render_from_yaml(&chart_yaml("\"bold\"")).is_err());
+fn inline_chart_style_with_string_weight_still_renders() {
+    for raw in ["\"bold\"", "\"600\""] {
+        chartml()
+            .render_from_yaml(&chart_yaml(raw))
+            .unwrap_or_else(|e| panic!("string weight {raw} must still render: {e}"));
+    }
 }
 
 #[test]
@@ -133,8 +145,9 @@ fn examples_md_style_block_parses() {
     }
 }
 
-/// Every `weight` property in the published schema is a number, and the parser
-/// accepts a number there and rejects the string the schema forbids.
+/// Every `weight` property in the published schema is a number (the documented
+/// form), and the parser accepts a number there. Strings stay accepted for
+/// compatibility but are deliberately not in the schema.
 #[test]
 fn schema_and_parser_agree_on_weight() {
     let schema: serde_json::Value = serde_json::from_str(
@@ -164,5 +177,4 @@ fn schema_and_parser_agree_on_weight() {
     }
 
     assert!(spec::parse(&style_yaml("600")).is_ok());
-    assert!(spec::parse(&style_yaml("\"600\"")).is_err());
 }

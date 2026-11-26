@@ -17,7 +17,7 @@ pub use chart::{
 pub use config::{ConfigSpec, StyleRef};
 pub use params::{ParamDef, ParamsSpec};
 pub use source::{CacheConfig, SourceSpec};
-pub use style::{FontSpec, FontsSpec, GridSpec, LegendSpec, StyleSpec};
+pub use style::{FontSpec, FontWeight, FontsSpec, GridSpec, LegendSpec, StyleSpec};
 pub use transform::{
     AggregateSpec, Dimension, DimensionSpec, FilterGroup, FilterRule, ForecastSpec, Measure,
     SortSpec, SqlSpec, TransformSpec,
@@ -330,10 +330,11 @@ fonts:
   title:
     family: "Inter"
     size: 16
-    weight: 700
+    weight: "bold"
     color: "#333"
   axis:
     size: 12
+    weight: 600
 legend:
   position: top
   orientation: horizontal
@@ -349,7 +350,8 @@ legend:
                 let fonts = style.fonts.unwrap();
                 let title = fonts.title.unwrap();
                 assert_eq!(title.family, Some("Inter".to_string()));
-                assert_eq!(title.weight, Some(700.0));
+                assert_eq!(title.weight, Some(FontWeight::Text("bold".to_string())));
+                assert_eq!(fonts.axis.unwrap().weight, Some(FontWeight::Number(600.0)));
                 let legend = style.legend.unwrap();
                 assert_eq!(legend.position, Some("top".to_string()));
             }
