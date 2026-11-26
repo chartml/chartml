@@ -94,6 +94,13 @@ elif [ -n "${CARGO_BUILD_RUSTFLAGS+set}" ]; then
 elif [ -n "${CARGO_ENCODED_RUSTFLAGS+set}" ]; then
     env_present=1
     env_rustflags=$(printf '%s' "$CARGO_ENCODED_RUSTFLAGS" | tr '\037' ' ')
+else
+    # Cargo also honours CARGO_TARGET_<TRIPLE>_RUSTFLAGS for the target in use.
+    for target_flags in $(env | sed -n 's/^\(CARGO_TARGET_[A-Za-z0-9_]*_RUSTFLAGS\)=.*/\1/p'); do
+        eval "env_rustflags=\${$target_flags}"
+        env_present=1
+        break
+    done
 fi
 if [ "$env_present" -eq 1 ]; then
     case "$env_rustflags" in
@@ -1330,6 +1337,26 @@ if (
 else
     fail 'CARGO_ENCODED_RUSTFLAGS overrode the commit'"'"'s own configuration'
     cat "$scratch/encoded-over-committed.log" >&2
+fi
+
+# Cargo's per-target rustflags spelling is the same rule; the hook clears the
+# whole family rather than a list that would go stale.
+host_triple=$(rustc -vV 2>/dev/null | sed -n 's/host: //p' | tr 'a-z-' 'A-Z_')
+if [ -n "$host_triple" ]; then
+    target_var="CARGO_TARGET_${host_triple}_RUSTFLAGS"
+    repo="$scratch/shell-target-rustflags"
+    new_repo "$repo"
+    printf 'fn tracked() { let CHA27_TARGET_RUSTFLAGS = 1; }\n' > "$repo/tracked.rs"
+    git -C "$repo" add tracked.rs
+    if (
+        cd "$repo"
+        env "$target_var=-A warnings" HOOK_TEST_WARN_ON_MARKER='CHA27_TARGET_RUSTFLAGS' \
+            bash "$hook" > "$scratch/shell-target-rustflags.log" 2>&1
+    ); then
+        fail "$target_var suppressed a committed warning"
+    else
+        pass 'a per-target rustflags variable cannot suppress a committed warning'
+    fi
 fi
 
 repo="$scratch/shell-rustflags-deny"

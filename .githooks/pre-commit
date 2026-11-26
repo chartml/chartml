@@ -379,15 +379,19 @@ fi
 # has one — Cargo resolves exactly the configuration that belongs to the
 # commit, and cannot reach the working tree's.
 #
-# rustflags from the developer's shell are unset, not set to something: a
-# RUSTFLAGS in the environment makes Cargo ignore build.rustflags from every
-# config file, so leaving it in place would let the shell decide the verdict —
-# silencing a committed warning or denying a clean commit. Cargo honours three
-# spellings of it, so all three are unset. Unsetting keeps the commit's own
-# configuration authoritative in both directions. Nothing else about the
-# environment is touched: CARGO_HOME, RUSTC_WRAPPER (sccache) and the toolchain
-# are the developer's, exactly as for a build they run themselves.
+# rustflags from the developer's shell are unset, not set to something: any of
+# them makes Cargo ignore build.rustflags from every config file, so leaving one
+# in place would let the shell decide the verdict — silencing a committed
+# warning or denying a clean commit. Cargo honours three plain spellings plus a
+# per-target family (CARGO_TARGET_<TRIPLE>_RUSTFLAGS), so the whole family is
+# unset rather than a list that would go stale with the next spelling. Unsetting
+# keeps the commit's own configuration authoritative in both directions.
+# Nothing else about the environment is touched: CARGO_HOME, RUSTC_WRAPPER
+# (sccache) and the toolchain are the developer's, as for any build they run.
 unset RUSTFLAGS CARGO_BUILD_RUSTFLAGS CARGO_ENCODED_RUSTFLAGS 2>/dev/null || true
+for rustflags_var in $(env | sed -n 's/^\(CARGO_TARGET_[A-Za-z0-9_]*_RUSTFLAGS\)=.*/\1/p'); do
+    unset "$rustflags_var"
+done
 ( cd -- "$snapshot_tree" && CARGO_TARGET_DIR="$target_dir" cargo clippy --manifest-path "$snapshot_manifest" --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion ) > "$clippy_log" 2>&1 &
 cargo_pid=$!
 clippy_status=0
