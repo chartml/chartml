@@ -75,7 +75,7 @@ class CommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "ok.md").write_text("```\nx\n```\n")
-            for excluded in ("node_modules/pkg", ".vitepress/dist", ".vitepress/cache"):
+            for excluded in ("node_modules/pkg", ".vitepress/dist", ".vitepress/cache", ".git/x"):
                 (root / excluded).mkdir(parents=True)
                 (root / excluded / "bad.md").write_text("```\nx\n")
             self.assertEqual(self.run_checker(root).returncode, 0)
@@ -84,6 +84,29 @@ class CommandTests(unittest.TestCase):
             result = self.run_checker(root)
             self.assertEqual(result.returncode, 1)
             self.assertIn("bad.md,line=1", result.stdout)
+
+    def test_missing_or_empty_root_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self.run_checker(Path(tmp) / "nope").returncode, 1)
+            self.assertEqual(self.run_checker(tmp).returncode, 1)
+            (Path(tmp) / "file.md").write_text("x\n")
+            self.assertEqual(self.run_checker(Path(tmp) / "file.md").returncode, 1)
+
+    def test_unreadable_file_fails_with_annotation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "bin.md").write_bytes(b"\xff\xfe```\n")
+            result = self.run_checker(tmp)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("file=", result.stdout)
+            self.assertNotIn("Traceback", result.stderr)
+
+    def test_only_generated_dirs_are_excluded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ok.md").write_text("x\n")
+            (root / "dist").mkdir()
+            (root / "dist" / "page.md").write_text("```\nx\n")
+            self.assertEqual(self.run_checker(root).returncode, 1)
 
     def test_repository_docs_are_balanced(self):
         docs = SCRIPT.parents[1] / "docs"
