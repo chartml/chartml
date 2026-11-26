@@ -1539,6 +1539,28 @@ else
     cat "$scratch/ancestor-config-legacy.log" >&2
 fi
 
+# The hook deletes only copies it made: a pointer with a ".." component that
+# leads out of a chartml-pre-commit.* directory must never be followed or removed.
+repo="$scratch/pointer-escape"
+new_repo "$repo"
+victim="$scratch/pointer-escape-victim"
+mkdir -p "$victim/tree" "$scratch/pointer-escape-base/chartml-pre-commit.fake"
+printf 'keep\n' > "$victim/tree/keep.txt"
+git_dir=$(git -C "$repo" rev-parse --absolute-git-dir)
+mkdir -p "$git_dir/chartml-pre-commit"
+printf '%s\n' "$scratch/pointer-escape-base/chartml-pre-commit.fake/../../pointer-escape-victim" > "$git_dir/chartml-pre-commit/snapshot-dir"
+printf 'fn tracked() {}\n' > "$repo/tracked.rs"
+git -C "$repo" add tracked.rs
+(
+    cd "$repo"
+    TMPDIR="$outer" bash "$hook" > "$scratch/pointer-escape.log" 2>&1
+) || true
+if [ -f "$victim/tree/keep.txt" ]; then
+    pass 'a pointer that escapes its chartml-pre-commit directory is not followed or deleted'
+else
+    fail 'the hook deleted a directory outside its own lint copies'
+fi
+
 # A clean TMPDIR lints exactly as before: a committed warning is still caught.
 repo="$scratch/clean-tmpdir"
 new_repo "$repo"

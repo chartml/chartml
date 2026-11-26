@@ -246,11 +246,21 @@ usable_outside_repo() {
     [ -n "$1" ] && [ -d "$1" ] && [ -w "$1" ] && ! inside_repo "$1"
 }
 
+# Only a directory this hook made is ever reused or deleted: its name is
+# chartml-pre-commit.XXXXXX, and a ".." component could point elsewhere.
+own_copy() {
+    case "$1" in
+        */..|*/../*) return 1 ;;
+        */chartml-pre-commit.*) return 0 ;;
+    esac
+    return 1
+}
+
 pointer="$state_dir/snapshot-dir"
 snapshot_root=''
 if [ -f "$pointer" ]; then
     candidate=$(cat -- "$pointer" 2>/dev/null || true)
-    if usable_outside_repo "$candidate"; then
+    if own_copy "$candidate" && usable_outside_repo "$candidate"; then
         snapshot_root=$candidate
     fi
 fi
@@ -274,10 +284,8 @@ if [ -z "$snapshot_root" ]; then
     # Replace the previous copy once the new one is usable, so one worktree
     # keeps at most one copy even when TMPDIR changes between runs.
     previous=$(cat -- "$pointer" 2>/dev/null || true)
-    if [ -n "$previous" ] && [ "$previous" != "$snapshot_root" ] && ! inside_repo "$previous"; then
-        case "$previous" in
-            */chartml-pre-commit.*) rm -rf -- "$previous" ;;
-        esac
+    if [ -n "$previous" ] && [ "$previous" != "$snapshot_root" ] && ! inside_repo "$previous" && own_copy "$previous"; then
+        rm -rf -- "$previous"
     fi
     printf '%s\n' "$snapshot_root" > "$pointer"
 fi
@@ -310,9 +318,9 @@ while [ -n "$ancestor" ]; do
         # refusing after TMPDIR is moved. Drop it and its pointer; the next run
         # makes a fresh copy under whatever TMPDIR then is.
         rm -f -- "$pointer" || true
-        case "$snapshot_root" in
-            */chartml-pre-commit.*) rm -rf -- "$snapshot_root" || true ;;
-        esac
+        if own_copy "$snapshot_root"; then
+            rm -rf -- "$snapshot_root" || true
+        fi
         echo ""
         echo "❌ A Cargo config above the lint copy would decide this commit's verdict:"
         echo "   $ancestor_cargo_dir/$config_name"
