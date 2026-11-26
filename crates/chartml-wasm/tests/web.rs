@@ -27,7 +27,7 @@ visualize:
     assert!(result.is_ok(), "render_to_svg failed: {:?}", result.err());
     let svg = result.expect("render_to_svg must return the rendered SVG string");
     assert!(svg.contains("<svg"), "Expected SVG root element");
-    assert!(svg.contains(r#"class="bar-rect-BREAK""#), "Expected bar rect elements");
+    assert!(svg.contains(r#"class="bar bar-rect""#), "Expected bar rect elements");
 }
 
 #[wasm_bindgen_test]
