@@ -257,6 +257,17 @@ pub struct Theme {
     /// CSS font-weight for header cells (e.g. `"600"`, `"500"`).
     pub table_header_font_weight: String,
     /// CSS letter-spacing for header cells (e.g. `"normal"`, `"0.08em"`).
+    ///
+    /// The table renderer turns this into a number to size header columns, so
+    /// only forms it can resolve are supported: `normal`, a unitless `0`, a
+    /// signed `<n>em`, a signed `<n>%` (a percentage of the header's own font
+    /// size, so `10%` is `0.1em`) and a signed `<n>px` (which also needs a `px`
+    /// `table_font_size`). Viewport units, `rem`, `ch`, `calc()` and every other
+    /// unit or keyword are rejected with an error, never measured as zero.
+    /// Unlike `table_cell_padding`, `rem` is not accepted: padding is handed to
+    /// CSS `calc()`, where the browser resolves `rem`, but letter-spacing must
+    /// become a number on the server, and the root font size is not known there.
+    /// See [`Theme::validate_table_header_letter_spacing`].
     pub table_header_letter_spacing: String,
     /// CSS text-transform for header cells (e.g. `"none"`, `"uppercase"`).
     pub table_header_text_transform: String,
@@ -372,6 +383,68 @@ impl Default for Theme {
 }
 
 impl Theme {
+    /// The header letter-spacing as a multiple of the table font size (`em`), for
+    /// measuring header columns. Accepts exactly the forms documented on
+    /// [`Theme::table_header_letter_spacing`] and returns an error naming them
+    /// for anything else, so a value the server cannot resolve is never
+    /// measured as zero.
+    pub fn table_header_letter_spacing_em(&self) -> Result<f64, String> {
+        let value = self.table_header_letter_spacing.trim();
+        let unsupported = || {
+            format!(
+                "table_header_letter_spacing: `{value}` is not a supported letter-spacing; use `normal`, `0`, or a number in em, % or px (px needs a px table_font_size). Viewport units, rem, ch and calc() cannot be measured on the server"
+            )
+        };
+        if value == "normal" {
+            return Ok(0.0);
+        }
+        let (sign, unsigned) = match value.as_bytes().first() {
+            Some(b'-') => (-1.0, &value[1..]),
+            Some(b'+') => (1.0, &value[1..]),
+            _ => (1.0, value),
+        };
+        let (number, unit) = split_length(unsigned);
+        let is_number = number.chars().any(|c| c.is_ascii_digit())
+            && number.chars().filter(|c| *c == '.').count() <= 1
+            && !number.ends_with('.');
+        if !is_number {
+            return Err(unsupported());
+        }
+        let n: f64 = number.parse().map_err(|_| unsupported())?;
+        if unit.is_empty() {
+            // A unitless value is only legal as zero.
+            return if n == 0.0 { Ok(0.0) } else { Err(unsupported()) };
+        }
+        if unit.eq_ignore_ascii_case("em") {
+            Ok(sign * n)
+        } else if unit == "%" {
+            Ok(sign * n / 100.0)
+        } else if unit.eq_ignore_ascii_case("px") {
+            let font_px = self
+                .table_font_size
+                .trim()
+                .strip_suffix("px")
+                .and_then(|f| f.trim().parse::<f64>().ok())
+                .filter(|f| *f > 0.0);
+            match font_px {
+                Some(font) => Ok(sign * n / font),
+                None => Err(format!(
+                    "table_header_letter_spacing: `{value}` is in px but table_font_size `{}` is not a positive px size, so the spacing cannot be converted to em; use em or % instead",
+                    self.table_font_size
+                )),
+            }
+        } else {
+            Err(unsupported())
+        }
+    }
+
+    /// Reject a `table_header_letter_spacing` the table renderer cannot measure.
+    /// Hosts can call this when they set the theme; the renderer fails the
+    /// render with the same message.
+    pub fn validate_table_header_letter_spacing(&self) -> Result<(), String> {
+        self.table_header_letter_spacing_em().map(|_| ())
+    }
+
     /// Reject a `table_cell_padding` the table renderer cannot measure.
     ///
     /// Returns the offending component when any part of the shorthand is a
@@ -678,5 +751,80 @@ mod table_cell_padding_tests {
                 "{padding}: {err}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod table_header_letter_spacing_tests {
+    use super::Theme;
+
+    fn em(spacing: &str, font: &str) -> Result<f64, String> {
+        Theme {
+            table_header_letter_spacing: spacing.into(),
+            table_font_size: font.into(),
+            ..Theme::default()
+        }
+        .table_header_letter_spacing_em()
+    }
+
+    #[test]
+    fn accepts_resolvable_forms() {
+        // (spacing, table font size, expected em). `%` is a percentage of the
+        // header's own font size (measured in headless Chromium: 10% paints
+        // the same width as 0.1em and, at 13px, 1.3px).
+        for (spacing, font, expected) in [
+            ("normal", "13px", 0.0),
+            (" normal ", "13px", 0.0),
+            ("0", "13px", 0.0),
+            ("0.0", "13px", 0.0),
+            ("0.08em", "13px", 0.08),
+            ("0.08EM", "13px", 0.08),
+            ("-0.05em", "13px", -0.05),
+            ("+0.1em", "13px", 0.1),
+            ("10%", "13px", 0.1),
+            ("12.5%", "13px", 0.125),
+            ("-10%", "13px", -0.1),
+            ("0%", "13px", 0.0),
+            ("1.3px", "13px", 0.1),
+            ("-1.3px", "13px", -0.1),
+            ("2px", "20px", 0.1),
+            ("0px", "13px", 0.0),
+            ("0.1em", "0.8rem", 0.1),
+            ("10%", "1rem", 0.1),
+        ] {
+            let got = em(spacing, font).unwrap_or_else(|e| panic!("{spacing}: {e}"));
+            assert!((got - expected).abs() < 1e-12, "{spacing} @ {font}: {got} != {expected}");
+        }
+    }
+
+    #[test]
+    fn rejects_forms_the_server_cannot_resolve() {
+        for spacing in [
+            "0.3vh", "0.3vw", "1vmin", "1vmax", "0.3dvh", "1rem", "2ch", "1ex", "1pt", "1cm",
+            "calc(10% + 1px)", "var(--x)", "inherit", "initial", "bogus", "", "10 %", "em",
+            "%", "px", "1.em", "1.2.3em", "--1em", "1", "0.5", ".", "1e2px", "10em 5px",
+        ] {
+            let err = em(spacing, "13px").expect_err(spacing);
+            assert!(
+                err.contains("table_header_letter_spacing") && err.contains("em, % or px"),
+                "{spacing}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn px_needs_a_px_table_font_size() {
+        for font in ["0.8rem", "1em", "", "0px", "-13px", "big"] {
+            let err = em("1.3px", font).expect_err(font);
+            assert!(err.contains("not a positive px size"), "{font}: {err}");
+        }
+    }
+
+    #[test]
+    fn validate_matches_the_conversion() {
+        let mut theme = Theme::default();
+        assert!(theme.validate_table_header_letter_spacing().is_ok());
+        theme.table_header_letter_spacing = "0.3vh".into();
+        assert!(theme.validate_table_header_letter_spacing().is_err());
     }
 }

@@ -1330,8 +1330,9 @@ fn column_text<'a>(label: &str, header: &HeaderText, values: impl Iterator<Item 
 }
 
 /// How header labels are drawn, for measuring them: the theme's CSS
-/// `text-transform` and `letter-spacing` (`normal`, `<n>em`, or `<n>px`
-/// with a px table font size; any other form adds no spacing) are applied to
+/// `text-transform` and `letter-spacing` (`normal`, `0`, `<n>em`, `<n>%` or `<n>px`
+/// with a px table font size; any other form is rejected by
+/// [`Theme::table_header_letter_spacing_em`], never measured as zero) are applied to
 /// the estimate, and a bold font weight (`600` and up, `bold`, `bolder`)
 /// selects the bold advances in `TABLE_CHAR_MILLI_EM`.
 struct HeaderText {
@@ -1351,28 +1352,18 @@ impl HeaderText {
     }
 }
 
-fn header_text(theme: &Theme) -> HeaderText {
+fn header_text(theme: &Theme) -> Result<HeaderText, String> {
     let transform = match theme.table_header_text_transform.trim() {
         "uppercase" => TextTransform::Uppercase,
         "lowercase" => TextTransform::Lowercase,
         _ => TextTransform::None,
     };
-    let px = |v: &str| v.trim().strip_suffix("px").and_then(|n| n.trim().parse::<f64>().ok());
-    let spacing = theme.table_header_letter_spacing.trim();
-    let letter_spacing_em = if let Some(n) = spacing.strip_suffix("em").and_then(|n| n.trim().parse::<f64>().ok()) {
-        n
-    } else if let Some(n) = spacing.strip_suffix('%').and_then(|n| n.trim().parse::<f64>().ok()) {
-        // A percentage letter-spacing is a percentage of the header's own font
-        // size, so it is `n / 100` em (measured in headless Chromium).
-        n / 100.0
-    } else if let (Some(n), Some(font)) = (px(spacing), px(&theme.table_font_size)) {
-        n / font
-    } else {
-        0.0
-    };
+    // Parsed (and rejected when unresolvable) by the theme, so the forms
+    // accepted here are the ones documented on the field.
+    let letter_spacing_em = theme.table_header_letter_spacing_em()?;
     let weight = theme.table_header_font_weight.trim();
     let bold = matches!(weight, "bold" | "bolder") || weight.parse::<f64>().is_ok_and(|w| w >= 600.0);
-    HeaderText { transform, letter_spacing_em, bold }
+    Ok(HeaderText { transform, letter_spacing_em, bold })
 }
 
 /// Width of `text` in `em` of the table font, margin included, with the header's
@@ -1722,7 +1713,7 @@ impl ChartRenderer for TableRenderer {
             .validate_table_cell_padding()
             .map_err(ChartError::InvalidSpec)?;
         let (pad_left, pad_right) = horizontal_padding(&theme.table_cell_padding);
-        let header = header_text(theme);
+        let header = header_text(theme).map_err(ChartError::InvalidSpec)?;
         let texts: Vec<ColumnText> = columns
             .iter()
             .enumerate()
@@ -2445,25 +2436,25 @@ style:
         // Bold headers (the default theme's weight 600) use the bold
         // advances; weight 500 uses the regular ones.
         let mut theme = Theme::default();
-        let bold = header_text(&theme);
+        let bold = header_text(&theme).unwrap();
         assert!(bold.bold);
         assert!(column_text("NPS", &bold, ["44"].into_iter()).line > nps);
         theme.table_header_font_weight = "500".into();
-        let regular = header_text(&theme);
+        let regular = header_text(&theme).unwrap();
         assert!(!regular.bold);
         theme.table_header_font_weight = "bold".into();
-        assert!(header_text(&theme).bold);
+        assert!(header_text(&theme).unwrap().bold);
         // Uppercase, letter-spaced headers measure wider.
         theme.table_header_font_weight = "500".into();
         theme.table_header_text_transform = "uppercase".into();
         theme.table_header_letter_spacing = "0.08em".into();
-        let kyomi = header_text(&theme);
+        let kyomi = header_text(&theme).unwrap();
         assert!(matches!(kyomi.transform, TextTransform::Uppercase));
         assert!((kyomi.letter_spacing_em - 0.08).abs() < 1e-9);
         assert!(column_text("Customers", &kyomi, [].into_iter()).line > column_text("Customers", &regular, [].into_iter()).line);
         theme.table_header_letter_spacing = "1.3px".into();
         theme.table_font_size = "13px".into();
-        assert!((header_text(&theme).letter_spacing_em - 0.1).abs() < 1e-9);
+        assert!((header_text(&theme).unwrap().letter_spacing_em - 0.1).abs() < 1e-9);
     }
 
     /// CHA-36 line 1: a percentage letter-spacing is a percentage of the
@@ -2476,7 +2467,7 @@ style:
         for (spacing, em) in [("10%", 0.1), ("25%", 0.25), ("50%", 0.5), ("-10%", -0.1), ("0%", 0.0), ("12.5%", 0.125)] {
             let mut theme = Theme::default();
             theme.table_header_letter_spacing = spacing.into();
-            let got = header_text(&theme).letter_spacing_em;
+            let got = header_text(&theme).unwrap().letter_spacing_em;
             assert!((got - em).abs() < 1e-12, "{spacing}: {got} != {em}");
         }
     }
@@ -2584,7 +2575,7 @@ style:
                     theme.table_header_letter_spacing = spacing_css.into();
                     theme.table_header_font_weight =
                         if bold { "600".into() } else { "400".into() };
-                    let header = header_text(&theme);
+                    let header = header_text(&theme).unwrap();
                     let ours = text_em(text, &header);
                     let base = base_text_em(text, upper, spacing, bold);
                     assert!(
@@ -2722,7 +2713,7 @@ style:
                     let mut theme = Theme::default();
                     theme.table_header_font_weight = weight.into();
                     theme.table_header_text_transform = transform.into();
-                    let header = header_text(&theme);
+                    let header = header_text(&theme).unwrap();
                     let ours = text_em(text, &header);
                     // Base's full arithmetic for the same text and theme state,
                     // in base's operation order, including the 1.10 bold scale:
@@ -2823,7 +2814,7 @@ style:
             theme.table_header_font_weight = "600".into();
             theme.table_header_text_transform = "uppercase".into();
             theme.table_header_letter_spacing = spacing_css.into();
-            let header = header_text(&theme);
+            let header = header_text(&theme).unwrap();
             let text = "Umsatz";
             let transformed = transform(text, &header.transform);
             let n = transformed.chars().count() as f64;
@@ -2843,7 +2834,7 @@ style:
         // assertion above cannot pass by comparing two spacing-free numbers.
         let mut spaced = Theme::default();
         spaced.table_header_letter_spacing = "0.2em".into();
-        assert!(header_text(&spaced).letter_spacing_em > 0.19);
+        assert!(header_text(&spaced).unwrap().letter_spacing_em > 0.19);
     }
 
     /// AC 1 and 3: the estimate for every measured Latin code point, regular and
@@ -2909,7 +2900,7 @@ style:
                 *ch as u32
             );
         }
-        let bold_header = header_text(&Theme::default());
+        let bold_header = header_text(&Theme::default()).unwrap();
         let body = HeaderText::body();
         let mut under = Vec::new();
         for (ch, regular_em, bold_em) in &scan {
@@ -3391,7 +3382,7 @@ style:
         // uses the same tracks, in column order, ending with the fade.
         let data = wide_data();
         let el = TableRenderer::new().render(&data, &cfg(WIDE_SPEC)).unwrap();
-        let header = header_text(&Theme::default());
+        let header = header_text(&Theme::default()).unwrap();
         let columns = resolve_columns(&cfg(WIDE_SPEC).visualize, &data);
         let rows = header_and_rows(&el);
         let body_rows = &rows[1..];
@@ -3514,6 +3505,52 @@ style:
         let el = TableRenderer::new().render(&data(), &single).unwrap();
         let scroll = by_class(&el, "chartml-table-scroll")[0];
         assert!(get(scroll, "--chartml-table-min-1").unwrap().ends_with("+ 12px + 12px)"));
+    }
+
+    #[test]
+    fn unresolvable_header_letter_spacing_fails_the_render() {
+        for spacing in ["0.3vh", "0.3vw", "1rem", "2ch", "calc(10% + 1px)", "bogus", "5"] {
+            let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+            config.theme.table_header_letter_spacing = spacing.into();
+            let err = TableRenderer::new()
+                .render(&data(), &config)
+                .expect_err("an unresolvable letter-spacing must not render");
+            assert!(
+                matches!(&err, ChartError::InvalidSpec(msg)
+                    if msg.contains("table_header_letter_spacing") && msg.contains("em, % or px")),
+                "{spacing}: got {err:?}"
+            );
+        }
+        // px with a non-px table font size cannot be converted either.
+        let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+        config.theme.table_header_letter_spacing = "1px".into();
+        config.theme.table_font_size = "1rem".into();
+        assert!(matches!(
+            TableRenderer::new().render(&data(), &config),
+            Err(ChartError::InvalidSpec(_))
+        ));
+        for spacing in ["normal", "0", "0.1em", "10%", "-5%", "1.3px"] {
+            let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+            config.theme.table_header_letter_spacing = spacing.into();
+            assert!(TableRenderer::new().render(&data(), &config).is_ok(), "{spacing}");
+        }
+    }
+
+    /// CHA-36 line 1 end to end: a percentage header gets the same column
+    /// width as the em it equals (browser: `10%` and `0.1em` both paint
+    /// 79.609px at 13px), and is wider than an unspaced header.
+    #[test]
+    fn percentage_header_letter_spacing_sizes_like_the_equivalent_em() {
+        let min = |spacing: &str| {
+            let mut config = cfg("type: table\ncolumns: month\nrows: [revenue]");
+            config.theme.table_header_letter_spacing = spacing.into();
+            let el = TableRenderer::new().render(&data(), &config).unwrap();
+            let scroll = by_class(&el, "chartml-table-scroll")[0];
+            get(scroll, "--chartml-table-min-1").unwrap().to_string()
+        };
+        assert_eq!(min("10%"), min("0.1em"));
+        assert_eq!(min("10%"), min("1.3px"));
+        assert_ne!(min("10%"), min("normal"));
     }
 
     #[test]
@@ -3674,7 +3711,7 @@ rows:
         let scroll = by_class(&el, "chartml-table-scroll")[0];
         assert!(!style_of(scroll).keys().any(|k| k.contains("frozen")), "{:?}", style_of(scroll).keys());
         let rows = header_and_rows(&el);
-        let header = header_text(&Theme::default());
+        let header = header_text(&Theme::default()).unwrap();
         for (i, c) in resolve_columns(&cfg(WIDE_SPEC).visualize, &table).iter().enumerate() {
             let values: Vec<String> = (0..3).map(|r| format_cell(&table, r, c)).collect();
             let t = column_text(&c.label, &header, values.iter().map(String::as_str));
