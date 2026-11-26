@@ -37,7 +37,7 @@ pub struct FontsSpec {
 pub struct FontSpec {
     pub family: Option<String>,
     pub size: Option<f64>,
-    pub weight: Option<String>,
+    pub weight: Option<f64>,
     pub color: Option<String>,
 }
 

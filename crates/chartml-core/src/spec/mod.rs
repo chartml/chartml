@@ -330,7 +330,7 @@ fonts:
   title:
     family: "Inter"
     size: 16
-    weight: "bold"
+    weight: 700
     color: "#333"
   axis:
     size: 12
@@ -347,7 +347,9 @@ legend:
                 assert_eq!(style.show_dots, Some(true));
                 assert_eq!(style.stroke_width, Some(2.0));
                 let fonts = style.fonts.unwrap();
-                assert_eq!(fonts.title.unwrap().family, Some("Inter".to_string()));
+                let title = fonts.title.unwrap();
+                assert_eq!(title.family, Some("Inter".to_string()));
+                assert_eq!(title.weight, Some(700.0));
                 let legend = style.legend.unwrap();
                 assert_eq!(legend.position, Some("top".to_string()));
             }
