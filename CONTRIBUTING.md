@@ -83,6 +83,8 @@ cd docs && npm run docs:dev
 bash scripts/test-pre-commit.sh
 python3 scripts/tests/test_check_md_fences.py
 python3 scripts/check-md-fences.py docs
+python3 scripts/tests/test_check_spec_chart_types.py
+python3 scripts/check-spec-chart-types.py
 ```
 
 The job also rejects any new `#[allow(` in `.rs` files and any new `= "allow"` in `Cargo.toml` files in your diff.

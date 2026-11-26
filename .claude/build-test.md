@@ -16,6 +16,7 @@
   - Clippy lane 3: cargo clippy -p chartml-leptos -p chartml-wasm -p chartml-wasm-datafusion --all-targets --target wasm32-unknown-unknown -- -D warnings
   - Browser tests (headless Chrome): see "Running the browser tests locally" in CONTRIBUTING.md
   - Markdown fences: python3 scripts/tests/test_check_md_fences.py && python3 scripts/check-md-fences.py docs
+  - Docs chart-type lists: python3 scripts/tests/test_check_spec_chart_types.py && python3 scripts/check-spec-chart-types.py
   - Docs charts: npm run docs:build && python3 scripts/tests/test_check_docs_chart_errors.py && python3 scripts/check-docs-chart-errors.py
 - Golden baseline tests: cargo run -p chartml-test-runner
 - npm/WASM tests: npm run test
