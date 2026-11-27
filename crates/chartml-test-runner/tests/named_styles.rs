@@ -768,7 +768,7 @@ fn chart_chosen_colours_are_marked_for_the_browser_stylesheet() {
         let els = tags(&svg, class);
         assert!(!els.is_empty(), "{class}");
         for e in els {
-            assert!(attr(e, "class").unwrap().split_whitespace().any(|c| c == "explicit-paint"), "{class}: {e}");
+            assert!(attr(e, "class").expect("class").split_whitespace().any(|c| c == "explicit-paint"), "{class}: {e}");
         }
     }
 
@@ -782,7 +782,7 @@ fn chart_chosen_colours_are_marked_for_the_browser_stylesheet() {
     let svg = render_ok(&chartml(), &chart("", own));
     for class in ["data-label", "grid-line"] {
         for e in tags(&svg, class) {
-            assert!(attr(e, "class").unwrap().contains("explicit-paint"), "{e}");
+            assert!(attr(e, "class").expect("class").contains("explicit-paint"), "{e}");
         }
     }
     let line = "  type: line\n  columns: month\n  rows:\n    - field: revenue\n      dataLabels:\n        show: true\n";
@@ -790,7 +790,7 @@ fn chart_chosen_colours_are_marked_for_the_browser_stylesheet() {
     let labels = tags(&svg, "data-label");
     assert!(!labels.is_empty());
     for e in labels {
-        assert!(attr(e, "class").unwrap().contains("explicit-paint"), "{e}");
+        assert!(attr(e, "class").expect("class").contains("explicit-paint"), "{e}");
     }
 }
 
@@ -824,8 +824,8 @@ fn horizontal_bars_draw_their_data_labels_past_the_bar_end() {
     let labels = tags(&svg, "data-label");
     assert_eq!(labels.len(), 2, "{svg}");
     for (bar, label) in bars.iter().zip(&labels) {
-        let end: f64 = attr(bar, "width").unwrap().parse().unwrap();
-        let x: f64 = attr(label, "x").unwrap().parse().unwrap();
+        let end: f64 = attr(bar, "width").expect("width").parse().expect("number");
+        let x: f64 = attr(label, "x").expect("x").parse().expect("number");
         assert_eq!(x, end + 5.0, "label just past the bar end: {label}");
         assert_eq!(attr(label, "text-anchor"), Some("start"));
         assert_eq!(attr(label, "dominant-baseline"), Some("middle"));
@@ -838,17 +838,17 @@ fn horizontal_bars_draw_their_data_labels_past_the_bar_end() {
         &format!("type: chart\nversion: 1\ndata:\n{wide}visualize:\n  type: bar\n  orientation: horizontal\n  columns: product\n  rows:\n    field: arr\n    dataLabels:\n      show: true\n"),
     );
     let plot = tags(&wide_svg, "bars").into_iter().find(|t| t.starts_with('g')).expect("bars group");
-    let plot_x: f64 = attr(plot, "transform").unwrap().trim_start_matches("translate(").split(',').next().unwrap().parse().unwrap();
+    let plot_x: f64 = attr(plot, "transform").expect("transform").trim_start_matches("translate(").split(',').next().expect("x").parse().expect("number");
     for (bar, label) in tags(&wide_svg, "bar-rect").iter().zip(tags(&wide_svg, "data-label")) {
-        let end: f64 = attr(bar, "width").unwrap().parse().unwrap();
+        let end: f64 = attr(bar, "width").expect("width").parse().expect("number");
         // "3,100,000" is 9 characters at about 7px each at 12px.
         assert!(plot_x + end + 5.0 + 9.0 * 7.0 <= root_width, "label runs off the chart: {label}");
     }
 
     let centred = render_ok(&chartml(), &yaml("      position: center\n"));
     for (bar, label) in tags(&centred, "bar-rect").iter().zip(tags(&centred, "data-label")) {
-        let end: f64 = attr(bar, "width").unwrap().parse().unwrap();
-        assert_eq!(attr(label, "x").unwrap().parse::<f64>().unwrap(), end / 2.0);
+        let end: f64 = attr(bar, "width").expect("width").parse().expect("number");
+        assert_eq!(attr(label, "x").expect("x").parse::<f64>().expect("number"), end / 2.0);
         assert_eq!(attr(label, "text-anchor"), Some("middle"));
     }
 }
