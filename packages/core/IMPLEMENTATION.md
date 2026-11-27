@@ -138,9 +138,9 @@ data:
 
 ```yaml
 type: style
+version: 1
 name: corporate_theme
 colors: ['#1e40af', '#0891b2', '#059669']
-background: '#f8fafc'
 fonts:
   title:
     family: 'Inter, sans-serif'

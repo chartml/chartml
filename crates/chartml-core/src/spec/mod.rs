@@ -83,13 +83,14 @@ pub fn parse(input: &str) -> Result<ChartMLSpec, ChartError> {
             if trimmed.is_empty() {
                 continue;
             }
-            // Try parsing as a single component first, then as an array of components
-            if let Ok(component) = serde_yaml::from_str::<Component>(trimmed) {
-                components.push(component);
-            } else {
-                // May be an array of components (e.g., multiple charts in one document)
+            // A mapping is one component; a sequence is several (e.g. multiple
+            // charts in one document). Parsing by shape keeps a component's
+            // own error, which names the bad field.
+            if matches!(serde_yaml::from_str::<serde_yaml::Value>(trimmed), Ok(serde_yaml::Value::Sequence(_))) {
                 let array: Vec<Component> = serde_yaml::from_str(trimmed)?;
                 components.extend(array);
+            } else {
+                components.push(serde_yaml::from_str::<Component>(trimmed)?);
             }
         }
         Ok(ChartMLSpec::Array(components))

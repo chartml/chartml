@@ -240,9 +240,6 @@ pub(crate) fn validate_style(path: &str, style: &ChartStyleSpec) -> Result<(), C
 }
 
 fn validate_font(path: &str, font: &FontSpec) -> Result<(), ChartError> {
-    if let Some(family) = &font.family {
-        validate_font_family(&format!("{path}.family"), family)?;
-    }
     if let Some(size) = font.size {
         if !(size.is_finite() && size > 0.0) {
             return Err(ChartError::InvalidSpec(format!(
@@ -254,28 +251,6 @@ fn validate_font(path: &str, font: &FontSpec) -> Result<(), ChartError> {
         // The inherited weight only matters for `bolder` / `lighter`; any
         // valid weight passes here.
         font_weight(weight, 400).map_err(|msg| ChartError::InvalidSpec(format!("{path}.weight {msg}")))?;
-    }
-    Ok(())
-}
-
-/// A font family from a chart spec is copied into SVG `font-family`
-/// attributes and into HTML inline `style` strings (the Leptos title heading,
-/// a metric card's title), so, like a paint, it is checked before use: a font
-/// family list may hold only letters, digits, spaces, commas, hyphens,
-/// underscores, and single or double quotes (in pairs) around a family name.
-/// Anything else (`;`, `{`, `}`, `(`, `)`, `\`, `<`, `>`, `:`, `/`, a line
-/// break) could end the declaration and inject CSS, such as a
-/// `background-image: url(...)` that makes the browser fetch a URL, so it
-/// fails with [`ChartError::InvalidSpec`] naming the field.
-fn validate_font_family(path: &str, family: &str) -> Result<(), ChartError> {
-    let allowed = |c: char| c.is_alphanumeric() || matches!(c, ' ' | ',' | '-' | '_' | '\'' | '"');
-    let balanced =
-        family.matches('\'').count().is_multiple_of(2) && family.matches('"').count().is_multiple_of(2);
-    if family.trim().is_empty() || !family.chars().all(allowed) || !balanced {
-        return Err(ChartError::InvalidSpec(format!(
-            "{path} is not an allowed font family: {family:?} (use family names separated by \
-             commas, with letters, digits, spaces, hyphens, underscores and quotes only)"
-        )));
     }
     Ok(())
 }
@@ -417,36 +392,6 @@ mod tests {
         for n in [0.0, -1.0, 1000.5, 1001.0, 550.5, f64::INFINITY, f64::NAN] {
             let err = font_weight(&FontWeight::Number(n), 400).expect_err("must fail");
             assert!(err.contains("1 to 1000"), "{n}: {err}");
-        }
-    }
-
-    #[test]
-    fn font_families_allow_ordinary_stacks_only() {
-        for ok in [
-            "Inter",
-            "Inter, 'Helvetica Neue', sans-serif",
-            "\"Geist Mono\", monospace",
-            "system-ui, -apple-system, Segoe_UI",
-            "Noto Sans JP",
-            "ヒラギノ角ゴ, sans-serif",
-        ] {
-            assert!(validate_font_family("f", ok).is_ok(), "{ok}");
-        }
-        for bad in [
-            "Inter; background-image: url(https://tracker.example/x)",
-            "Inter}body{color:red",
-            "a(b)",
-            "x\\y",
-            "<script>",
-            "Inter:hover",
-            "url//x",
-            "Inter\ncolor: red",
-            "'Inter",
-            "",
-            "   ",
-        ] {
-            let err = validate_font_family("fonts.title.family", bad).expect_err(bad);
-            assert!(err.to_string().contains("fonts.title.family"), "{err}");
         }
     }
 

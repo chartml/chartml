@@ -1084,3 +1084,29 @@ fn a_named_style_with_an_unknown_field_fails() {
         .register_component("type: config\nversion: 1\nstyle:\n  fillOpacity: 0.3\n")
         .expect("config styles accept inline style fields");
 }
+
+#[test]
+fn a_same_document_style_with_an_unknown_field_names_it() {
+    let doc = format!("type: style\nversion: 1\nname: s\nfillOpacity: 0.3\n---\n{}", chart("style: s", BAR));
+    let err = render(&chartml(), &doc).expect_err("unknown style field");
+    assert!(err.to_string().contains("fillOpacity"), "{err}");
+}
+
+#[test]
+fn the_final_render_stage_checks_font_families_too() {
+    // A host that edits a prepared chart's spec before rendering it still gets
+    // the family check, as it gets the colour check.
+    let c = chartml();
+    let rt = tokio::runtime::Builder::new_current_thread().build().expect("runtime");
+    let opts = RenderOptions::default();
+    let fetched = rt.block_on(c.fetch(&chart("", BAR), &opts)).expect("fetch");
+    let mut prepared = rt.block_on(c.transform(fetched, &opts)).expect("transform");
+    let mut style = prepared.spec.visualize.style.clone().unwrap_or_default();
+    style.fonts = Some(chartml_core::spec::FontsSpec {
+        axis: Some(chartml_core::spec::FontSpec { family: Some(INJECTED.to_string()), ..Default::default() }),
+        ..Default::default()
+    });
+    prepared.spec.visualize.style = Some(style);
+    let err = c.render_prepared_to_svg(&prepared, &opts).expect_err("injected family");
+    assert!(err.to_string().contains("visualize.style.fonts.axis.family"), "{err}");
+}
