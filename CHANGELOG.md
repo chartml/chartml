@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **`chartml-core`**: every colour in a chart spec (`style.colors`, field
+  `color`, `dataLabels.color`, grid, font and annotation colours, and the
+  host's default palette) is checked before rendering, because paint values
+  are copied into SVG `fill` / `stroke`. Allowed: hex, `rgb()`/`rgba()`,
+  `hsl()`/`hsla()`, CSS colour names, and same-document `url(#id)`
+  references. A value outside that (external `url(...)`, `javascript:`,
+  `data:`, `var()`) now fails the render with `ChartError::InvalidSpec`
+  naming the field; it is not replaced by a default colour.
+
 ## [4.1.0] - 2026-04-18
 
 ### Added

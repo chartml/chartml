@@ -12,6 +12,7 @@ pub mod data;
 pub mod transform;
 pub mod params;
 pub mod theme;
+pub mod paint;
 pub mod svg;
 pub mod table_pager;
 pub mod pipeline;
@@ -522,6 +523,9 @@ impl ChartML {
         sources: &HashMap<String, DataTable>,
         table_page: Option<usize>,
     ) -> Result<ChartElement, ChartError> {
+        // Fail before any fetch or transform runs for a spec that can never render.
+        paint::validate_chart_spec(chart_spec)?;
+
         // Resolve every declared source into an ordered map. Inline / Named /
         // single-entry NamedMap collapse to a 1-entry map; multi-entry NamedMap
         // produces one entry per declared source.
@@ -1240,6 +1244,9 @@ impl ChartML {
                 .ok_or_else(|| ChartError::InvalidSpec("No chart component found".into()))?,
         };
 
+        // Fail before any fetch or transform runs for a spec that can never render.
+        paint::validate_chart_spec(&chart_spec)?;
+
         Ok((chart_spec, sources))
     }
 
@@ -1394,6 +1401,8 @@ impl ChartML {
         container_height: Option<f64>,
         table_page: Option<usize>,
     ) -> Result<(ChartElement, f64, f64), ChartError> {
+        paint::validate_chart_spec(chart_spec)?;
+
         let chart_type = &chart_spec.visualize.chart_type;
         let renderer = self.registry.get_renderer(chart_type)
             .ok_or_else(|| ChartError::UnknownChartType(chart_type.clone()))?;
@@ -1416,6 +1425,7 @@ impl ChartML {
             .unwrap_or_else(|| {
                 color::get_chart_colors(12, color::palettes::get_palette("autumn_forest"))
             });
+        paint::validate_palette(&colors)?;
 
         let config = plugin::ChartConfig {
             visualize: chart_spec.visualize.clone(),

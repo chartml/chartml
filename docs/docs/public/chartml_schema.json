@@ -85,7 +85,7 @@
           "items": {
             "type": "string"
           },
-          "description": "Color palette"
+          "description": "Color palette. Each value must be a hex, rgb()/hsl(), CSS colour name or same-document url(#id); anything else fails the render"
         },
         "grid": {
           "type": "object",
