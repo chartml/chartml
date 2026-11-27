@@ -199,3 +199,43 @@ fn rendered_svg_never_contains_an_external_paint_for_valid_specs() {
         assert!(!svg.contains("url(http") && !svg.contains("url(//") && !svg.contains("javascript:"), "{t}");
     }
 }
+
+/// A prepared chart is parsed and fetched once and rendered many times, and
+/// its public `spec` can be changed in between: every render re-checks it.
+#[test]
+fn prepared_chart_with_unsafe_paint_fails_at_render() {
+    use chartml_core::pipeline::RenderOptions;
+
+    let rt = tokio::runtime::Builder::new_current_thread().build().expect("runtime");
+    let c = chartml();
+    let opts = RenderOptions::default();
+    let yaml = chart("bar", "    style:\n      colors: ['#2E7D9A']");
+    let mut prepared = rt.block_on(async {
+        let fetched = c.fetch(&yaml, &opts).await.expect("fetch");
+        c.transform(fetched, &opts).await.expect("transform")
+    });
+    assert!(c.render_prepared_to_svg(&prepared, &opts).is_ok());
+
+    let style = prepared.spec.visualize.style.as_mut().expect("style");
+    style.colors = Some(vec!["url(https://example.com/p.svg#g)".into()]);
+    match c.render_prepared_to_svg(&prepared, &opts) {
+        Err(ChartError::InvalidSpec(msg)) => assert!(msg.contains("visualize.style.colors[0]"), "{msg}"),
+        other => panic!("expected InvalidSpec, got {other:?}"),
+    }
+}
+
+/// The check runs before any data is resolved: a spec that names a missing
+/// data source still reports the paint, not the source.
+#[test]
+fn unsafe_paint_is_reported_before_data_is_resolved() {
+    let yaml = "type: chart\nversion: 1\ndata: no_such_source\nvisualize:\n  type: bar\n  columns: a\n  rows: b\n  \
+                style:\n    colors: ['javascript:alert(1)']\n";
+    let c = chartml();
+    let sync = c.render_from_yaml(yaml).map(|_| ()).expect_err("must fail");
+    assert!(matches!(sync, ChartError::InvalidSpec(_)), "sync: {sync}");
+
+    let rt = tokio::runtime::Builder::new_current_thread().build().expect("runtime");
+    let opts = chartml_core::pipeline::RenderOptions::default();
+    let fetched = rt.block_on(c.fetch(yaml, &opts)).map(|_| ()).expect_err("must fail");
+    assert!(matches!(fetched, ChartError::InvalidSpec(_)), "fetch: {fetched}");
+}

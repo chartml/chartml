@@ -523,6 +523,9 @@ impl ChartML {
         sources: &HashMap<String, DataTable>,
         table_page: Option<usize>,
     ) -> Result<ChartElement, ChartError> {
+        // Fail before any fetch or transform runs for a spec that can never render.
+        paint::validate_chart_spec(chart_spec)?;
+
         // Resolve every declared source into an ordered map. Inline / Named /
         // single-entry NamedMap collapse to a 1-entry map; multi-entry NamedMap
         // produces one entry per declared source.
@@ -1240,6 +1243,9 @@ impl ChartML {
                 })
                 .ok_or_else(|| ChartError::InvalidSpec("No chart component found".into()))?,
         };
+
+        // Fail before any fetch or transform runs for a spec that can never render.
+        paint::validate_chart_spec(&chart_spec)?;
 
         Ok((chart_spec, sources))
     }
