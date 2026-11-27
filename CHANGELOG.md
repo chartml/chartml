@@ -18,6 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `data:`, `var()`) now fails the render with `ChartError::InvalidSpec`
   naming the field; it is not replaced by a default colour.
 
+### Changed
+
+- **`chartml-chart-metric`**: a metric card with a `title` and no `label` shows
+  the title once. Where the host draws the title as a heading above the card
+  (the Leptos component) the card holds no label of its own; where the SVG is
+  shown alone (`renderToSvg`, `render_to_png`) the title is the in-card label.
+  The value field's name is the label only when there is neither a title nor a
+  label.
+- **`chartml-core`**: new public field `title_heading: bool` on `RenderOptions`
+  (still `Default`, `false`) and on `ChartConfig` (`#[serde(default)]`). Set it
+  to `true` when your host draws `title` itself above the rendered SVG. Code
+  that builds `ChartConfig` with a struct literal must add the field.
+
 ## [4.1.0] - 2026-04-18
 
 ### Added
