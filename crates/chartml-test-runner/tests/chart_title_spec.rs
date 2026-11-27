@@ -418,3 +418,18 @@ fn normalized_market_share_legend_entries_do_not_overlap() {
         }
     }
 }
+
+#[test]
+fn a_titled_table_fills_the_box_its_host_gives_it() {
+    // The wasm `renderToSvg` and `render_to_png` put an HTML root in a box
+    // sized by the caller; the table's wrapper must fill that box (as the
+    // untitled table does), not hold a pixel size of its own.
+    let runtime = tokio::runtime::Runtime::new().expect("runtime");
+    let _guard = runtime.enter();
+    let chart = format!("{}  style:\n    height: 200\n", yaml("table", Some(TITLE)));
+    let element = chartml().render_from_yaml(&chart).expect("render");
+    let ChartElement::Div { class, style, .. } = &element else { panic!("a titled table wraps in a Div") };
+    assert_eq!(class, "chart-titled");
+    assert_eq!(style.get("width").map(String::as_str), Some("100%"));
+    assert_eq!(style.get("height").map(String::as_str), Some("100%"));
+}

@@ -1711,3 +1711,20 @@ pub(crate) fn point_data_labels(
         })
         .collect()
 }
+
+#[cfg(test)]
+mod y_tick_target_tests {
+    use super::y_tick_target;
+    use chartml_core::theme::Theme;
+
+    #[test]
+    fn y_tick_target_is_five_until_the_axis_is_too_short_for_the_labels() {
+        let theme = Theme::default();
+        // Two lines of the 12px tick font per tick: 120px holds five.
+        assert_eq!(y_tick_target((330.0, 0.0), &theme), 5);
+        assert_eq!(y_tick_target((120.0, 0.0), &theme), 5);
+        assert_eq!(y_tick_target((119.0, 0.0), &theme), 4);
+        assert_eq!(y_tick_target((60.0, 0.0), &theme), 2);
+        assert_eq!(y_tick_target((10.0, 0.0), &theme), 2);
+    }
+}
