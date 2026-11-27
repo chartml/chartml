@@ -44,6 +44,13 @@ pub trait ChartRenderer: Send + Sync {
     /// Render data with the given config into a ChartElement tree.
     fn render(&self, data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError>;
 
+    /// Whether this renderer draws `config.title` inside its own output (the
+    /// `metric` card does, CHA-49). When `false`, the engine draws the title
+    /// above the chart whenever the host does not (`title_heading` unset).
+    fn draws_own_title(&self) -> bool {
+        false
+    }
+
     /// Optional: provide default dimensions for this chart type.
     fn default_dimensions(&self, _spec: &VisualizeSpec) -> Option<Dimensions> {
         None

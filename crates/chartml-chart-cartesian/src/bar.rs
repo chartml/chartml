@@ -774,6 +774,8 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
             chart_height: Some(inner_height),
             grid: &grid,
             axis_label: bottom_axis_label,
+            margin_left: margins.left,
+            margin_bottom: margins.bottom,
             theme: &config.theme,
         });
         let left_axis_label = config.visualize.axes.as_ref()
@@ -1587,7 +1589,8 @@ fn render_combo(
 
     let mut children = Vec::new();
 
-    // Title is rendered as HTML outside the SVG — not added here.
+    // The title is not drawn here: the host draws it as a heading, or the engine
+    // draws it above this chart (chartml_core::title).
 
     // Axes
     let bottom_axis_label = config.visualize.axes.as_ref()
@@ -1603,6 +1606,8 @@ fn render_combo(
         chart_height: Some(inner_height),
         grid: &grid,
         axis_label: bottom_axis_label,
+        margin_left: margins.left,
+        margin_bottom: margins.bottom,
         theme: &config.theme,
     });
     let left_axis_label = axes_left.and_then(|a| a.label.as_deref());

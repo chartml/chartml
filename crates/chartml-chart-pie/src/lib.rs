@@ -115,7 +115,8 @@ impl ChartRenderer for PieRenderer {
             });
         }
 
-        // Title is rendered as HTML outside the SVG — not added here.
+        // The title is not drawn here: the host draws it as a heading, or the engine
+    // draws it above this chart (chartml_core::title).
         let mut children = Vec::new();
 
         // Pie group (centered)
@@ -227,7 +228,7 @@ mod tests {
 
     #[test]
     fn pie_has_no_title_in_svg() {
-        // Title is rendered as HTML outside the SVG.
+        // The title is not drawn here (see chartml_core::title).
         let renderer = PieRenderer::new();
         let element = renderer.render(&make_pie_data(), &make_pie_config("pie")).unwrap();
         let text_count = count_elements(&element, &|e| matches!(e, ChartElement::Text { class, .. } if class == "chart-title"));

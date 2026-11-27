@@ -292,7 +292,7 @@ mod tests {
 
     #[test]
     fn bar_chart_has_no_title_in_svg() {
-        // Title is rendered as HTML outside the SVG (matching JS chartml).
+        // The title is not drawn by the renderer (see chartml_core::title).
         // The SVG element tree must NOT contain a chart-title text element.
         let renderer = CartesianRenderer::new();
         let data = make_bar_data();
@@ -615,6 +615,7 @@ mod tests {
         use crate::helpers::{generate_x_axis, GridConfig};
         let labels = vec!["A".into(), "B".into(), "C".into()];
         let result = generate_x_axis(&crate::helpers::XAxisParams {
+            margin_left: 70.0, margin_bottom: 60.0,
             labels: &labels, display_label_overrides: None,
             range: (0.0, 800.0), y_position: 350.0, available_width: 800.0,
             x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
@@ -632,6 +633,7 @@ mod tests {
         use crate::helpers::{generate_x_axis, GridConfig};
         let labels: Vec<String> = (0..20).map(|i| format!("Category Number {}", i)).collect();
         let result = generate_x_axis(&crate::helpers::XAxisParams {
+            margin_left: 70.0, margin_bottom: 120.0,
             labels: &labels, display_label_overrides: None,
             range: (0.0, 300.0), y_position: 350.0, available_width: 300.0,
             x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
@@ -645,10 +647,11 @@ mod tests {
     }
 
     #[test]
-    fn x_axis_rotated_labels_preserve_full_text() {
+    fn x_axis_rotated_labels_that_fit_keep_their_full_text() {
         use crate::helpers::{generate_x_axis, GridConfig};
         // Long date-like labels matching the long_temporal_labels test case.
-        // These are 25+ chars and must NOT be truncated when rotated.
+        // These are 25+ chars; with room below the axis for them they are
+        // not truncated when rotated.
         let labels: Vec<String> = vec![
             "Monday, January 6th, 2025".into(),
             "Monday, January 13th, 2025".into(),
@@ -664,6 +667,7 @@ mod tests {
             "Monday, March 24th, 2025".into(),
         ];
         let result = generate_x_axis(&crate::helpers::XAxisParams {
+            margin_left: 200.0, margin_bottom: 150.0,
             labels: &labels, display_label_overrides: None,
             range: (0.0, 600.0), y_position: 350.0, available_width: 600.0,
             x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
@@ -688,6 +692,110 @@ mod tests {
             "Expected full label text in output, got: {:?}", tick_texts);
     }
 
+    /// Every rotated tick label's lowest and leftmost point, in the SVG's
+    /// coordinates (the axis elements sit in a group shifted by `margin_left`).
+    fn rotated_extents(elements: &[ChartElement], margin_left: f64) -> Vec<(String, f64, f64)> {
+        use chartml_core::layout::{measure_text, TextMetrics};
+        let mut out = Vec::new();
+        let mut stack: Vec<&ChartElement> = elements.iter().collect();
+        while let Some(e) = stack.pop() {
+            match e {
+                ChartElement::Group { children, .. } => stack.extend(children.iter()),
+                ChartElement::Text { x, y, content, transform: Some(_), .. } => {
+                    let len = measure_text(content, &TextMetrics::default());
+                    let d = std::f64::consts::FRAC_1_SQRT_2;
+                    // Baseline start of a -45°, end-anchored label, plus its
+                    // ascent (up-left) and descent (down-right).
+                    let left = margin_left + x - (len + 0.8 * 12.0) * d;
+                    let bottom = y + (len + 0.2 * 12.0) * d;
+                    out.push((content.clone(), left, bottom));
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+
+    fn long_labels() -> Vec<String> {
+        (0..6)
+            .map(|i| format!("A deliberately very long category label number {i} that keeps going"))
+            .collect()
+    }
+
+    #[test]
+    fn x_axis_rotated_labels_are_cut_to_the_room_below_the_axis() {
+        use crate::helpers::{generate_x_axis, GridConfig};
+        let labels = long_labels();
+        let (y_position, margin_bottom) = (300.0, 90.0);
+        let result = generate_x_axis(&crate::helpers::XAxisParams {
+            margin_left: 70.0, margin_bottom,
+            labels: &labels, display_label_overrides: None,
+            range: (0.0, 500.0), y_position, available_width: 500.0,
+            x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
+            theme: &chartml_core::theme::Theme::default(),
+        });
+        let extents = rotated_extents(&result.elements, 70.0);
+        assert_eq!(extents.len(), labels.len());
+        for (label, left, bottom) in &extents {
+            assert!(label.ends_with('\u{2026}'), "{label:?} should be cut");
+            assert!(*bottom <= y_position + margin_bottom, "{label:?} bottom {bottom}");
+            assert!(*left >= 0.0, "{label:?} left {left}");
+        }
+        // The full text stays reachable as the SVG <title> of each cut label.
+        for full in &labels {
+            let kept = result.elements.iter().any(|e| matches!(e, ChartElement::Group { children, .. }
+                if children.iter().any(|c| matches!(c, ChartElement::Title { content } if content == full))));
+            assert!(kept, "no <title> holding {full:?}");
+        }
+    }
+
+    #[test]
+    fn x_axis_rotated_labels_are_cut_to_the_room_left_of_the_plot() {
+        use crate::helpers::{generate_x_axis, GridConfig};
+        let labels = long_labels();
+        // Plenty of room below; the first label's anchor is near the SVG's left edge.
+        let result = generate_x_axis(&crate::helpers::XAxisParams {
+            margin_left: 20.0, margin_bottom: 400.0,
+            labels: &labels, display_label_overrides: None,
+            range: (0.0, 500.0), y_position: 100.0, available_width: 500.0,
+            x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
+            theme: &chartml_core::theme::Theme::default(),
+        });
+        let extents = rotated_extents(&result.elements, 20.0);
+        assert!(extents.iter().any(|(l, _, _)| l.ends_with('\u{2026}')), "the first label must be cut");
+        for (label, left, _) in &extents {
+            assert!(*left >= 0.0, "{label:?} left {left}");
+        }
+    }
+
+    #[test]
+    fn x_axis_rotated_labels_are_measured_in_the_resolved_axis_font() {
+        use crate::helpers::{generate_x_axis, GridConfig};
+        use chartml_core::theme::Theme;
+        let labels = long_labels();
+        let params = |theme: &Theme| generate_x_axis(&crate::helpers::XAxisParams {
+            margin_left: 70.0, margin_bottom: 110.0,
+            labels: &labels, display_label_overrides: None,
+            range: (0.0, 500.0), y_position: 300.0, available_width: 500.0,
+            x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
+            theme,
+        });
+        let shown = |theme: &Theme| -> usize {
+            params(theme).elements.iter().flat_map(|e| match e {
+                ChartElement::Group { children, .. } => children.iter().collect::<Vec<_>>(),
+                other => vec![other],
+            }).find_map(|e| match e {
+                ChartElement::Text { content, transform: Some(_), .. } => Some(content.chars().count()),
+                _ => None,
+            }).expect("a rotated label")
+        };
+        let default = shown(&Theme::default());
+        let mut large_theme = Theme::default();
+        large_theme.label_font_size = 18.0;
+        let large = shown(&large_theme);
+        assert!(large < default, "a larger axis font leaves room for fewer characters ({large} vs {default})");
+    }
+
     #[test]
     fn x_axis_title_below_rotated_labels() {
         use crate::helpers::{generate_x_axis, GridConfig};
@@ -701,6 +809,7 @@ mod tests {
         let y_position = 350.0;
         let theme = chartml_core::theme::Theme::default();
         let result = generate_x_axis(&crate::helpers::XAxisParams {
+            margin_left: 70.0, margin_bottom: 60.0,
             labels: &labels, display_label_overrides: None,
             range: (0.0, 300.0), y_position, available_width: 300.0,
             x_format: None, chart_height: None, grid: &GridConfig::default(),
@@ -739,6 +848,7 @@ mod tests {
         use crate::helpers::{generate_x_axis, GridConfig};
         let labels: Vec<String> = (0..100).map(|i| format!("Long Category Name {}", i)).collect();
         let result = generate_x_axis(&crate::helpers::XAxisParams {
+            margin_left: 70.0, margin_bottom: 60.0,
             labels: &labels, display_label_overrides: None,
             range: (0.0, 400.0), y_position: 350.0, available_width: 400.0,
             x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,
@@ -1206,6 +1316,7 @@ style:
             "2024-01-01".into(), "2024-01-02".into(), "2024-01-03".into()
         ];
         let result = generate_x_axis(&crate::helpers::XAxisParams {
+            margin_left: 70.0, margin_bottom: 60.0,
             labels: &labels, display_label_overrides: None,
             range: (0.0, 800.0), y_position: 350.0, available_width: 800.0,
             x_format: None, chart_height: None, grid: &GridConfig::default(), axis_label: None,

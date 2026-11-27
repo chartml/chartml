@@ -136,6 +136,13 @@ pub fn element_to_json(element: &ChartElement) -> Value {
             })
         }
 
+        ChartElement::Title { content } => {
+            json!({
+                "type": "title",
+                "content": content
+            })
+        }
+
         ChartElement::Span { class, style, content } => {
             json!({
                 "type": "span",

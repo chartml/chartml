@@ -306,7 +306,8 @@ impl ChartRenderer for ScatterRenderer {
             children: axis_elements,
         });
 
-        // Title is rendered as HTML outside the SVG — not added here.
+        // The title is not drawn here: the host draws it as a heading, or the engine
+    // draws it above this chart (chartml_core::title).
 
         // Points group
         children.push(ChartElement::Group {

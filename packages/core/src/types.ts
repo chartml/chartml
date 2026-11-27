@@ -228,6 +228,7 @@ export type ChartElement =
   | TextElement
   | DivElement
   | HtmlTagElement
+  | TitleElement
   | SpanElement;
 
 export interface SvgElement {
@@ -326,6 +327,12 @@ export interface HtmlTagElement {
   /** `[name, value]`; an empty value is a boolean attribute. */
   attrs: [string, string][];
   children: ChartElement[];
+}
+
+/** The SVG `<title>` of its parent: the full text behind an ellipsis-shortened label. */
+export interface TitleElement {
+  type: 'title';
+  content: string;
 }
 
 export interface SpanElement {

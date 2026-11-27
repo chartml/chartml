@@ -15,6 +15,7 @@ pub mod theme;
 pub mod paint;
 mod styling;
 pub mod svg;
+pub mod title;
 pub mod table_pager;
 pub mod pipeline;
 pub mod resolver;
@@ -1496,11 +1497,23 @@ impl ChartML {
             &chart_spec.visualize.chart_type,
         )?;
 
+        // Where no host heading shows the title, draw it inside the requested
+        // size: the chart renders into what the title band leaves (CHA-59).
+        let band = if title_heading || renderer.draws_own_title() {
+            None
+        } else {
+            chart_spec
+                .title
+                .as_deref()
+                .and_then(|t| title::TitleBand::new(t, width, &theme))
+                .filter(|b| b.height < height)
+        };
+
         let config = plugin::ChartConfig {
             visualize: chart_spec.visualize.clone(),
             title: chart_spec.title.clone(),
             width,
-            height,
+            height: height - band.as_ref().map_or(0.0, |b| b.height),
             colors,
             theme,
             table_page,
@@ -1508,6 +1521,10 @@ impl ChartML {
         };
 
         let element = renderer.render(data, &config)?;
+        let element = match band {
+            Some(band) => band.wrap(element, width, height),
+            None => element,
+        };
         Ok((element, width, height))
     }
 

@@ -104,7 +104,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
     let mut children = Vec::new();
 
-    // Title is rendered as HTML outside the SVG — not added here.
+    // The title is not drawn here: the host draws it as a heading, or the engine
+    // draws it above this chart (chartml_core::title).
 
     let area_gen = AreaGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
     let mut area_elements = Vec::new();
@@ -249,6 +250,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     chart_height: Some(inner_height),
                     grid: &grid,
                     axis_label: bottom_axis_label,
+                    margin_left: margins.left,
+                    margin_bottom: margins.bottom,
                     theme: &config.theme,
                 });
             let y_axis_elements =
@@ -397,6 +400,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     chart_height: Some(inner_height),
                     grid: &grid,
                     axis_label: bottom_axis_label,
+                    margin_left: margins.left,
+                    margin_bottom: margins.bottom,
                     theme: &config.theme,
                 });
             let y_axis_elements =
@@ -537,6 +542,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     chart_height: Some(inner_height),
                     grid: &grid,
                     axis_label: bottom_axis_label,
+                    margin_left: margins.left,
+                    margin_bottom: margins.bottom,
                     theme: &config.theme,
                 });
         let y_axis_elements =

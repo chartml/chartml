@@ -267,12 +267,20 @@ Referenced as: `$top_n` (no block name prefix)
 
 Complete visualization specification using Data → Transform → Visualize pipeline.
 
+### Title
+
+A chart's `title` is shown exactly once, above the chart, on every output path. Where the host draws the title as a heading above the SVG (the Leptos component, the `@chartml/core` DOM renderer) the SVG holds no title. Where the SVG is shown on its own (`renderToSvg` and `renderToSvgAsync` in `@chartml/core`, the React and markdown components, `render_to_png`) the engine draws the title at the top of the SVG, inside the size that was asked for: the SVG's width and height are the same with and without a title, and the chart takes the space the title leaves. A title too long for the width is cut with an ellipsis and keeps its full text as the SVG `<title>`. A metric card keeps its title inside the card.
+
+### Rotated axis labels
+
+A category label rotated 45 degrees keeps its full text while it fits inside the SVG. A longer one is cut with an ellipsis, measured in the axis font, so no label leaves the SVG; its full text is the label's SVG `<title>`.
+
 ### Structure
 
 ```yaml
 type: chart
 version: 1
-title: "Chart Title"         # Optional
+title: "Chart Title"         # Optional - shown once, above the chart, on every output path
 
 params:                       # Optional - chart-level parameters
   - id: param_id
@@ -988,7 +996,7 @@ A Style component takes only the properties listed under Core Properties and Typ
 Each font takes `family` (a CSS font family list of names separated by commas, using only letters, digits, spaces, hyphens, underscores and quotes around a name, such as `Inter, 'Helvetica Neue', sans-serif`; any other character fails the render), `size` (pixels, greater than 0), `weight` and `color`. `weight` is a whole number from 1 to 1000, or one of the CSS keywords `normal` (400), `bold` (700), `bolder` and `lighter` (relative to the default weight for that text, as in CSS). A number written as a string (`"600"`) is also accepted, for specs stored before numeric weights. Any other weight, or a size of 0 or less, fails the render with an error naming the field.
 
 Where each font applies:
-- `fonts.title` - the chart title wherever it is drawn: the heading a host draws above the chart (the Leptos component; hosts read it from the chart's resolved theme), and the in-card title of a metric card shown without a heading (family, weight and colour; the card sizes its own text to fit).
+- `fonts.title` - the chart title wherever it is drawn: the heading a host draws above the chart (the Leptos component; hosts read it from the chart's resolved theme), the title the engine draws at the top of the SVG where no host heading exists (family, size, weight and colour), and the in-card title of a metric card shown without a heading (family, weight and colour; the card sizes its own text to fit).
 - `fonts.axis` - axis titles and tick labels on bar, line, area, scatter and bubble charts. Table cells are not axis text and keep the table's own typography.
 - `fonts.dataLabel` - values drawn on bars and line points. A field's own `dataLabels.fontSize` and `dataLabels.color` take precedence.
 

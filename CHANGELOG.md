@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`chartml-core`**: a chart's `title` now shows exactly once on every output
+  path (CHA-59). Where no host draws a heading (`renderToSvg` and
+  `renderToSvgAsync` in `@chartml/core`, the React and markdown components,
+  `render_to_png`, `renderToElement`) the engine draws the title at the top of
+  the SVG in the chart's resolved title font, inside the requested size: the
+  SVG's width and height are unchanged and the chart takes the space the title
+  leaves, so every titled chart's SVG has a title band and a plot that is
+  shorter by that band. A title too long for the width is cut with an ellipsis
+  and keeps its full text as the SVG `<title>`. A host that draws its own
+  heading (the Leptos component) passes `title_heading` and gets none from the
+  engine; a metric card keeps its title in the card (CHA-49). New
+  `ChartElement::Title` (type `title`) carries an SVG `<title>`.
+- **`chartml-chart-cartesian`**: a rotated (45 degree) x axis label too long to
+  stay inside the SVG is cut with an ellipsis, measured in the axis font, and
+  keeps its full text as its SVG `<title>`; no rotated label leaves the SVG.
+
 - **`chartml-core`**: named styles and config defaults now apply to charts
   (CHA-48). `register_component` stores a `type: style` component by name and
   each `type: config` as a default; until now both were accepted and

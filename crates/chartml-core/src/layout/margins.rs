@@ -92,7 +92,7 @@ impl Default for MarginConfig {
 /// Calculate chart margins based on configuration.
 ///
 /// Algorithm:
-/// - Top: 20px (title is rendered as HTML outside the SVG)
+/// - Top: 20px (the title takes no margin: the host's heading or the engine's title band sits above the chart)
 /// - Left: max(tick_label_widths) + 15px buffer, or tick_width + 33px when y-axis
 ///   label is present (to fit rotated label + gap), capped at max_left_margin
 /// - Right: 30px base, or max(right_label_widths) + 44px if right axis present,
@@ -102,7 +102,7 @@ impl Default for MarginConfig {
 pub fn calculate_margins(config: &MarginConfig) -> Margins {
     use super::labels::measure_text;
 
-    // Top margin — matches JS d3CartesianChart.js marginTop=20 (title is rendered as HTML outside SVG)
+    // Top margin — matches JS d3CartesianChart.js marginTop=20 (the title takes no margin of its own)
     let top = 20.0 + side_extent(config.legend_top_height, 1.0);
 
     // Left margin: based on Y-axis tick label widths
@@ -228,7 +228,7 @@ mod tests {
             ..Default::default()
         };
         let m = calculate_margins(&config);
-        assert_eq!(m.top, 20.0); // title is rendered as HTML outside SVG — no extra margin needed
+        assert_eq!(m.top, 20.0); // the title takes no margin of its own
     }
 
     #[test]

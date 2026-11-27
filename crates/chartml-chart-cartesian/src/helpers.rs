@@ -108,6 +108,12 @@ pub struct XAxisParams<'a> {
     pub grid: &'a GridConfig,
     pub axis_label: Option<&'a str>,
     pub theme: &'a Theme,
+    /// Space between the SVG's left edge and `range.0`: how far a rotated
+    /// label may reach left of the plot before it leaves the SVG.
+    pub margin_left: f64,
+    /// Space between the x axis line and the SVG's bottom edge: how far
+    /// rotated labels may descend below the axis.
+    pub margin_bottom: f64,
 }
 
 /// Parameters for generating a numeric y-axis.
@@ -351,6 +357,42 @@ pub fn format_display_labels(
     }
 }
 
+/// The longest a `-45°`, end-anchored tick label may be (px of text) and
+/// stay inside the SVG.
+///
+/// The label's baseline starts `ROTATED_LABEL_OFFSET` below the axis line and
+/// runs up and to the right to its anchor, so the text reaches
+/// `(length + ascent)·cos45°` left of the anchor and
+/// `ROTATED_LABEL_OFFSET + (length + descent)·sin45°` below the axis
+/// line. `room_left` is the space from the SVG's left edge to the anchor,
+/// `room_below` the space from the axis line to the SVG's bottom edge; with an
+/// x axis title, its row stays clear of the labels too.
+fn rotated_label_max_length(
+    room_left: f64,
+    room_below: f64,
+    has_axis_title: bool,
+    metrics: &TextMetrics,
+) -> f64 {
+    let font = metrics.font_size_px;
+    // sin 45° = cos 45°.
+    let diag = std::f64::consts::FRAC_1_SQRT_2;
+    let title_row = if has_axis_title { X_AXIS_TITLE_ROW } else { 0.0 };
+    let by_left = (room_left - ROTATED_LABEL_EDGE_PAD - ASCENT_FRACTION * font * diag) / diag;
+    let by_bottom = (room_below - title_row - ROTATED_LABEL_OFFSET - ROTATED_LABEL_EDGE_PAD
+        - (1.0 - ASCENT_FRACTION) * font * diag)
+        / diag;
+    by_left.min(by_bottom).max(0.0)
+}
+
+/// Gap between the x axis line and a rotated label's anchor.
+const ROTATED_LABEL_OFFSET: f64 = 10.0;
+/// Space kept between a rotated label and the SVG's edge.
+const ROTATED_LABEL_EDGE_PAD: f64 = 2.0;
+/// Height of the row an x axis title takes below the tick labels.
+const X_AXIS_TITLE_ROW: f64 = 20.0;
+/// Share of the font size that rises above the baseline.
+const ASCENT_FRACTION: f64 = 0.8;
+
 /// Result of x-axis generation, including the computed label strategy.
 pub struct XAxisResult {
     pub elements: Vec<ChartElement>,
@@ -487,13 +529,21 @@ pub fn generate_x_axis_with_display(
                     None => true,
                 };
                 if should_show {
-                    // Rotated labels preserve full text — the whole point of
-                    // rotation is to fit longer labels. Overflow/clipping is
-                    // handled by the SVG viewport, not by pre-truncation.
+                    // A rotated label runs from its anchor down and to the
+                    // left. It keeps its full text while that fits inside the
+                    // SVG; a longer one is cut with an ellipsis (the full text
+                    // stays as its <title>) so it never leaves the SVG.
                     let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
-                    elements.push(ChartElement::Text {
+                    let max_length = rotated_label_max_length(
+                        x + params.margin_left,
+                        params.margin_bottom,
+                        axis_label.is_some(),
+                        &label_config.text_metrics,
+                    );
+                    let shown = truncate_label_with_metrics(label, max_length, &label_config.text_metrics);
+                    let text = ChartElement::Text {
                         x, y: y_position + 10.0,
-                        content: label.clone(),
+                        content: shown.clone(),
                         anchor: TextAnchor::End,
                         dominant_baseline: None,
                         transform: Some(Transform::Rotate(-45.0, x, y_position + 10.0)),
@@ -505,7 +555,16 @@ pub fn generate_x_axis_with_display(
                         fill: Some(theme.axis_text_color().to_string()),
                         class: paint_class("tick-label axis-label", theme.axis_label_color.is_some()),
                         data: None,
-                    });
+                    };
+                    if shown == *label {
+                        elements.push(text);
+                    } else {
+                        elements.push(ChartElement::Group {
+                            class: "tick-label-shortened".to_string(),
+                            transform: None,
+                            children: vec![text, ChartElement::Title { content: label.clone() }],
+                        });
+                    }
                 }
             }
         }

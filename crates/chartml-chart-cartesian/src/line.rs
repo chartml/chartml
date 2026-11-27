@@ -242,7 +242,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
     let mut children = Vec::new();
 
-    // Title is rendered as HTML outside the SVG — not added here.
+    // The title is not drawn here: the host draws it as a heading, or the engine
+    // draws it above this chart (chartml_core::title).
 
     // Axes — read format string from spec
     let grid = cartesian_grid(config);
@@ -260,6 +261,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         chart_height: Some(inner_height),
         grid: &grid,
         axis_label: bottom_axis_label,
+        margin_left: margins.left,
+        margin_bottom: margins.bottom,
         theme: &config.theme,
     });
     let left_axis_label = config.visualize.axes.as_ref()

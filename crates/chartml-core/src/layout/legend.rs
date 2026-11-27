@@ -954,4 +954,75 @@ mod tests {
         assert_eq!(result.items[1].color, "green");
         assert_eq!(result.items[2].color, "blue");
     }
+
+    /// Each visible item's box: symbol, gap and the label as measured, from
+    /// the item's own `x`. Two items of one row never intersect, and the next
+    /// item's symbol starts at least `item_padding` clear of this label.
+    fn assert_rows_do_not_overlap(result: &LegendLayoutResult, config: &LegendConfig, what: &str) {
+        let visible: Vec<&LegendItem> = result.items.iter().filter(|i| i.visible).collect();
+        for pair in visible.windows(2) {
+            let (a, b) = (pair[0], pair[1]);
+            if a.row != b.row {
+                continue;
+            }
+            let a_end = a.x + config.symbol_size + config.symbol_text_gap
+                + measure_text(&a.label, &config.text_metrics);
+            assert!(
+                b.x >= a_end + config.item_padding - 1e-9,
+                "{what}: {:?} ends at {a_end}, {:?} starts at {}", a.label, b.label, b.x
+            );
+        }
+    }
+
+    #[test]
+    fn legend_items_never_overlap_with_long_series_names() {
+        let names = [
+            "North America",
+            "Europe, Middle East and Africa",
+            "Asia Pacific (excluding Japan and Oceania)",
+            "Latin America and the Caribbean",
+            "Iw",
+            "WWWWWWWWWWWWWWWW",
+            "A very long single series name that no row can hold in full",
+        ];
+        let labels = make_labels(&names);
+        let colors = make_colors(names.len());
+        for alignment in [LegendAlignment::Left, LegendAlignment::Center, LegendAlignment::Right] {
+            for width in [240.0, 420.0, 800.0] {
+                let config = LegendConfig { alignment, ..LegendConfig::default() };
+                let result = calculate_legend_layout(&labels, &colors, width, &config);
+                assert_rows_do_not_overlap(&result, &config, &format!("{alignment:?} at {width}"));
+                for item in result.items.iter().filter(|i| i.visible) {
+                    let end = item.x + config.symbol_size + config.symbol_text_gap
+                        + measure_text(&item.label, &config.text_metrics);
+                    assert!(item.x >= 0.0 && end <= width + 1e-9, "{:?} spans {}..{end} in {width}", item.label, item.x);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn legend_items_never_overlap_in_a_larger_legend_font() {
+        use crate::theme::Theme;
+        let theme = Theme { legend_font_size: 16.0, ..Theme::default() };
+        let config = LegendConfig::for_theme(&theme);
+        let labels = make_labels(&["North America", "Europe", "Asia Pacific", "Latin America"]);
+        let result = calculate_legend_layout(&labels, &make_colors(4), 600.0, &config);
+        assert_rows_do_not_overlap(&result, &config, "16px legend font");
+    }
+
+    #[test]
+    fn vertical_legend_rows_never_overlap() {
+        let labels = make_labels(&["Europe, Middle East and Africa", "North America", "Asia"]);
+        let config = LegendConfig::default();
+        let result = calculate_vertical_legend_layout(&labels, &make_colors(3), 200.0, 3, &config);
+        let rows: Vec<f64> = result.items.iter().map(|i| i.y).collect();
+        for pair in rows.windows(2) {
+            assert!(pair[1] - pair[0] >= config.row_height, "rows {rows:?}");
+        }
+        for item in &result.items {
+            let end = config.symbol_size + config.symbol_text_gap + measure_text(&item.label, &config.text_metrics);
+            assert!(end <= 200.0 + 1e-9, "{:?} spans 0..{end}", item.label);
+        }
+    }
 }
