@@ -549,7 +549,7 @@
         },
         "label": {
           "type": "string",
-          "description": "Label text (for metric charts). Optional: when it is omitted the card uses the chart title as its label, and when there is no title either it uses the name of the value field (e.g. total_revenue)."
+          "description": "Label text (for metric charts). Optional: when it is omitted, a card with a chart title shows that title once (as the heading above the card where the host draws one, otherwise inside the card), and a card with neither a title nor a label uses the name of the value field (e.g. total_revenue)."
         },
         "format": {
           "type": "string",

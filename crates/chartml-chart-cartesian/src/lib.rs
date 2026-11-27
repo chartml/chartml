@@ -76,7 +76,7 @@ mod tests {
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
-                title_heading: false,
+            title_heading: false,
         }
     }
 
@@ -94,7 +94,7 @@ mod tests {
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
-                title_heading: false,
+            title_heading: false,
         }
     }
 
@@ -112,7 +112,7 @@ mod tests {
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
-                title_heading: false,
+            title_heading: false,
         }
     }
 
@@ -1269,7 +1269,7 @@ style:
             colors: vec!["#2E7D9A".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
-                title_heading: false,
+            title_heading: false,
         }
     }
 

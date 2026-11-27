@@ -219,7 +219,7 @@ This metric shows error rate where a decrease is positive (green) and an increas
 **Metric Label Rules:**
 
 Metric cards support two optional label locations:
-- **`chart.title`** → Title shown **above** the card by the Leptos component (like all chart types); not part of the rendered SVG. When `visualize.label` is not set, a title-only card shows the title once, as that heading, with no label inside the card. Where the SVG is shown on its own, with no heading (`renderToSvg`, `render_to_png`), the title is shown inside the card instead, still once
+- **`chart.title`** → Title shown **above** the card by the Leptos component and the `@chartml/core` DOM renderer (like all chart types); not part of the rendered SVG. When `visualize.label` is not set, a title-only card shows the title once, as that heading, with no label inside the card. Where the SVG is shown on its own, with no heading (`renderToSvg`, `render_to_png`), the title is shown inside the card instead, still once
 - **`visualize.label`** → Label shown **inside** the card (metric-specific feature); the title never appears beside it
 - If neither a title nor a label is specified → the in-card label is the name of the `value` field (here `revenue`), so a card always shows a label
 

@@ -306,7 +306,7 @@ mod tests {
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
-                title_heading: false,
+            title_heading: false,
         }
     }
 
