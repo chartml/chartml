@@ -3362,7 +3362,7 @@ visualize:
         assert!(row_properties.contains_key("width"), "rows must document width");
         assert!(row_properties.contains_key("align"), "rows must document align");
 
-        let page_size = &schema["definitions"]["Style"]["properties"]["pageSize"];
+        let page_size = &schema["definitions"]["StyleProperties"]["properties"]["pageSize"];
         assert_eq!(page_size["type"], "integer");
         assert_eq!(page_size["minimum"], 1);
         assert_eq!(
@@ -4084,7 +4084,7 @@ rows:
     #[test]
     fn the_page_size_description_in_the_schema_says_how_pages_are_shown() {
         let schema: serde_json::Value = serde_json::from_str(&schema()).unwrap();
-        let text = schema["definitions"]["Style"]["properties"]["pageSize"]["description"]
+        let text = schema["definitions"]["StyleProperties"]["properties"]["pageSize"]["description"]
             .as_str()
             .unwrap()
             .to_string();
