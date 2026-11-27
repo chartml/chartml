@@ -122,7 +122,7 @@ assertions:
   structure:
     root: svg
     circles: 50
-    title_in_svg: false
+    title_in_svg: true
     legend: false
 
   axes:

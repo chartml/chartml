@@ -140,7 +140,7 @@ assertions:
   structure:
     root: svg
     areas: 3
-    title_in_svg: false
+    title_in_svg: true
     legend: true
     legend_entries: 3
 

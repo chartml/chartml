@@ -43,11 +43,14 @@ describe('chart title (renderToSvg)', () => {
   });
 
   it('keeps the SVG the requested size with and without a title', () => {
-    for (const [width, height] of [[500, 300], [320, 200]]) {
-      const titled = new WasmChartML().renderToSvg(spec('Monthly Sales'), { width, height });
-      const plain = new WasmChartML().renderToSvg(spec(null), { width, height });
-      expect([attr(titled, 'width'), attr(titled, 'height')]).toEqual([width, height]);
-      expect([attr(plain, 'width'), attr(plain, 'height')]).toEqual([width, height]);
+    for (const type of ['bar', 'line', 'area', 'pie']) {
+      const viz = type === 'pie' ? 'type: pie\n  columns: month\n  rows: sales' : `type: ${type}\n  columns: month\n  rows: sales`;
+      for (const [width, height] of [[500, 300], [320, 200]]) {
+        const titled = new WasmChartML().renderToSvg(spec('Monthly Sales', viz), { width, height });
+        const plain = new WasmChartML().renderToSvg(spec(null, viz), { width, height });
+        expect([type, attr(titled, 'width'), attr(titled, 'height')]).toEqual([type, width, height]);
+        expect([type, attr(plain, 'width'), attr(plain, 'height')]).toEqual([type, width, height]);
+      }
     }
   });
 

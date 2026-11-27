@@ -51,7 +51,7 @@ assertions:
   structure:
     root: svg
     bars: 15
-    title_in_svg: false
+    title_in_svg: true
     legend: false
 
   label_rotation:

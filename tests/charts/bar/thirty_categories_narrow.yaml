@@ -87,7 +87,7 @@ assertions:
     svg_width: 500
     svg_height: 300
     bars: 30
-    title_in_svg: false
+    title_in_svg: true
     legend: false
 
   scale:

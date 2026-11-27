@@ -1505,8 +1505,7 @@ impl ChartML {
             chart_spec
                 .title
                 .as_deref()
-                .and_then(|t| title::TitleBand::new(t, width, &theme))
-                .filter(|b| b.height < height)
+                .and_then(|t| title::TitleBand::new(t, width, height / 2.0, &theme))
         };
 
         let config = plugin::ChartConfig {
@@ -1522,7 +1521,7 @@ impl ChartML {
 
         let element = renderer.render(data, &config)?;
         let element = match band {
-            Some(band) => band.wrap(element, width, height),
+            Some(band) => band.wrap(element, height),
             None => element,
         };
         Ok((element, width, height))

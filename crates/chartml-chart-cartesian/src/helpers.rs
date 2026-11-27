@@ -3,7 +3,7 @@ use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
 pub use chartml_core::format::format_value;
 use chartml_core::format::{detect_date_format, reformat_date_label};
-use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics, measure_text, truncate_label_with_metrics};
+use chartml_core::layout::labels::{TEXT_ASCENT_FRACTION, LabelStrategy, LabelStrategyConfig, TextMetrics, measure_text, truncate_label_with_metrics};
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::spec::{AnnotationSpec, FieldRef, FieldRefItem, MarkEncoding};
@@ -377,9 +377,9 @@ fn rotated_label_max_length(
     // sin 45° = cos 45°.
     let diag = std::f64::consts::FRAC_1_SQRT_2;
     let title_row = if has_axis_title { X_AXIS_TITLE_ROW } else { 0.0 };
-    let by_left = (room_left - ROTATED_LABEL_EDGE_PAD - ASCENT_FRACTION * font * diag) / diag;
+    let by_left = (room_left - ROTATED_LABEL_EDGE_PAD - TEXT_ASCENT_FRACTION * font * diag) / diag;
     let by_bottom = (room_below - title_row - ROTATED_LABEL_OFFSET - ROTATED_LABEL_EDGE_PAD
-        - (1.0 - ASCENT_FRACTION) * font * diag)
+        - (1.0 - TEXT_ASCENT_FRACTION) * font * diag)
         / diag;
     by_left.min(by_bottom).max(0.0)
 }
@@ -390,8 +390,6 @@ const ROTATED_LABEL_OFFSET: f64 = 10.0;
 const ROTATED_LABEL_EDGE_PAD: f64 = 2.0;
 /// Height of the row an x axis title takes below the tick labels.
 const X_AXIS_TITLE_ROW: f64 = 20.0;
-/// Share of the font size that rises above the baseline.
-const ASCENT_FRACTION: f64 = 0.8;
 
 /// Result of x-axis generation, including the computed label strategy.
 pub struct XAxisResult {
@@ -765,6 +763,15 @@ pub fn generate_y_axis_with_display(
     elements
 }
 
+/// How many ticks a numeric y axis aims for: 5, or fewer when the axis is too
+/// short to give each label two lines of its font size, so tick labels of a
+/// short plot (a small chart, or one with a title band) never touch.
+fn y_tick_target(range: (f64, f64), theme: &Theme) -> usize {
+    let length = (range.0 - range.1).abs();
+    let per_tick = 2.0 * TextMetrics::from_theme_tick_value(theme).font_size_px;
+    ((length / per_tick).floor() as usize).clamp(2, 5)
+}
+
 /// Generate y-axis elements for numeric data (used by bar, line, and area charts).
 /// Grid lines are controlled by `grid` config and `chart_width`.
 pub fn generate_y_axis_numeric(
@@ -780,10 +787,10 @@ pub fn generate_y_axis_numeric(
     let axis_label = params.axis_label;
     let theme = params.theme;
     let scale = ScaleLinear::new(domain, range);
-    // Match JS: d3.axisLeft(yLeft).ticks(5) — fixed count of 5 regardless of tick_count param.
-    // tick_count is kept for future use / callers that may pass it.
+    // Match JS: d3.axisLeft(yLeft).ticks(5) — a count of 5 regardless of the
+    // tick_count param, fewer only when 5 would not leave the labels room.
     let _ = tick_count;
-    let ticks = d3_ticks(domain.0, domain.1, 5);
+    let ticks = d3_ticks(domain.0, domain.1, y_tick_target(range, theme));
     // Compute the tick step for automatic formatting (D3's tickStep)
     let tick_step = compute_tick_step(&ticks, domain);
     let mut elements = Vec::new();
@@ -905,7 +912,7 @@ pub fn generate_y_axis_numeric_right(
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     let _ = tick_count;
-    let ticks = d3_ticks(domain.0, domain.1, 5);
+    let ticks = d3_ticks(domain.0, domain.1, y_tick_target(range, theme));
     let tick_step = compute_tick_step(&ticks, domain);
     let mut elements = Vec::new();
 

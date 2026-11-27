@@ -48,7 +48,7 @@ assertions:
   structure:
     root: svg
     circles: 6
-    title_in_svg: false
+    title_in_svg: true
     legend: true
     legend_entries: 3
 

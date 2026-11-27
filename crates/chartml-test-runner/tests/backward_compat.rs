@@ -17,7 +17,10 @@
 //! touches differing. Regenerating to get a green run, without that, silently
 //! ratifies whatever the last edit happened to do. (CHA-11 refreshed the eight
 //! metric baselines under exactly that bar: a reviewed metric-card centring fix,
-//! verified in a browser, with no non-metric baseline affected.)
+//! verified in a browser, with no non-metric baseline affected. CHA-59 refreshed
+//! every titled non-metric baseline for the same reason: each chart now draws
+//! its title at the top of the SVG and the plot is shorter by the title band.
+//! Metric baselines are untouched.)
 //!
 //! On mismatch, the actual SVG is written to
 //! `target/backward-compat-diffs/<subdir>/<name>.svg` for inspection.

@@ -19,6 +19,7 @@ use chartml_chart_table::TableRenderer;
 use chartml_datafusion::DataFusionTransform;
 use chartml_core::element::{ChartElement, TextAnchor, Transform};
 use chartml_core::layout::{measure_text, TextMetrics};
+use chartml_core::theme::Theme;
 use chartml_core::{ChartML, RenderOptions};
 use chartml_render::element_to_svg;
 
@@ -277,7 +278,9 @@ fn rotated_label_corners(element: &ChartElement) -> Vec<(String, Vec<(f64, f64)>
                     .as_deref()
                     .and_then(|s| s.trim_end_matches("px").parse().ok())
                     .unwrap_or(12.0);
-                let metrics = TextMetrics { font_size_px: size, ..TextMetrics::default() };
+                // The axis font metrics the production truncation measures with.
+                let metrics = TextMetrics::from_theme_axis_label(&Theme::default());
+                assert_eq!(metrics.font_size_px, size, "the label carries the theme's axis size");
                 let length = measure_text(content, &metrics);
                 if *anchor != TextAnchor::End || *angle != -45.0 {
                     return; // axis titles, not tick labels
@@ -358,5 +361,60 @@ visualize:
         "Another very long category name for the same chart, longer still",
     ] {
         assert!(svg.contains(&format!("<title>{full}</title>")), "full text kept: {svg}");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Legend entries do not overlap in the real output.
+// ---------------------------------------------------------------------------
+
+/// Each legend item's symbol x and label (x, text) in `element`, in drawing order.
+fn legend_items(element: &ChartElement) -> Vec<(f64, f64, String)> {
+    fn find_legend(element: &ChartElement) -> Option<&Vec<ChartElement>> {
+        match element {
+            ChartElement::Group { class, children, .. } if class == "legend" => Some(children),
+            ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                children.iter().find_map(find_legend)
+            }
+            _ => None,
+        }
+    }
+    let Some(children) = find_legend(element) else { return Vec::new() };
+    let mut items = Vec::new();
+    let mut symbol_x = 0.0;
+    for child in children {
+        match child {
+            ChartElement::Rect { x, class, .. } if class.contains("legend-symbol") => symbol_x = *x,
+            ChartElement::Text { x, content, class, .. } if class == "legend-label" => {
+                items.push((symbol_x, *x, content.clone()));
+            }
+            _ => {}
+        }
+    }
+    items
+}
+
+#[test]
+fn normalized_market_share_legend_entries_do_not_overlap() {
+    let runtime = tokio::runtime::Runtime::new().expect("runtime");
+    let _guard = runtime.enter(); // specs() holds sql-transform specs
+    for spec_name in ["bar/normalized_market_share.yaml", "area/normalized_market_share.yaml"] {
+        let (_, spec) = specs()
+            .into_iter()
+            .find(|(name, _)| name == spec_name)
+            .unwrap_or_else(|| panic!("{spec_name} exists"));
+        let element = chartml().render_from_yaml(&chart_yaml(&spec)).expect("render");
+        let items = legend_items(&element);
+        assert!(items.len() >= 3, "{spec_name}: a legend entry per region, got {}", items.len());
+        let metrics = TextMetrics::from_theme_legend(&Theme::default());
+        for pair in items.windows(2) {
+            let (_, label_x, text) = &pair[0];
+            let (next_symbol_x, _, _) = &pair[1];
+            let label_end = label_x + measure_text(text, &metrics);
+            assert!(
+                *next_symbol_x > label_end,
+                "{spec_name}: {text:?} ends at {label_end}, the next symbol starts at {next_symbol_x}"
+            );
+        }
     }
 }

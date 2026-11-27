@@ -53,7 +53,7 @@ assertions:
   structure:
     root: svg
     lines: 1
-    title_in_svg: false
+    title_in_svg: true
     legend: false
     annotation_lines: 1
     annotation_bands: 1

@@ -55,7 +55,7 @@ chart:
 assertions:
   structure:
     root: svg
-    title_in_svg: false
+    title_in_svg: true
     legend: false
     bars: 4
     data_labels: 4

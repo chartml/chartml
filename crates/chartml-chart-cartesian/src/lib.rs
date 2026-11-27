@@ -291,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn bar_chart_has_no_title_in_svg() {
+    fn bar_renderer_draws_no_title() {
         // The title is not drawn by the renderer (see chartml_core::title).
         // The SVG element tree must NOT contain a chart-title text element.
         let renderer = CartesianRenderer::new();

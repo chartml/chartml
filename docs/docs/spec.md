@@ -269,7 +269,7 @@ Complete visualization specification using Data → Transform → Visualize pipe
 
 ### Title
 
-A chart's `title` is shown exactly once, above the chart, on every output path. Where the host draws the title as a heading above the SVG (the Leptos component, the `@chartml/core` DOM renderer) the SVG holds no title. Where the SVG is shown on its own (`renderToSvg` and `renderToSvgAsync` in `@chartml/core`, the React and markdown components, `render_to_png`) the engine draws the title at the top of the SVG, inside the size that was asked for: the SVG's width and height are the same with and without a title, and the chart takes the space the title leaves. A title too long for the width is cut with an ellipsis and keeps its full text as the SVG `<title>`. A metric card keeps its title inside the card.
+A chart's `title` is shown exactly once, above the chart, on every output path. Where the host draws the title as a heading above the SVG (the Leptos component, and the legacy `@chartml/core` DOM renderer) the SVG holds no title. Where the SVG is shown on its own (`renderToSvg` and `renderToSvgAsync` in `@chartml/core`, the React and markdown components, `render_to_png`) the engine draws the title at the top of the SVG, inside the size that was asked for: the SVG's width and height are the same with and without a title, and the chart takes the space the title leaves. A title too long for the width is cut with an ellipsis and keeps its full text as the SVG `<title>`. A metric card keeps its title inside the card.
 
 ### Rotated axis labels
 

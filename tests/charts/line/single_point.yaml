@@ -24,7 +24,7 @@ assertions:
   structure:
     root: svg
     lines: 0
-    title_in_svg: false
+    title_in_svg: true
     legend: false
     dots_min: 1
 

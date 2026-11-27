@@ -55,7 +55,7 @@ assertions:
   structure:
     root: svg
     lines: 2
-    title_in_svg: false
+    title_in_svg: true
     legend: true
     legend_entries: 2
 
