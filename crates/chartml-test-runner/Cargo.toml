@@ -26,3 +26,6 @@ tokio = { version = "1", features = ["rt-multi-thread"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+jsonschema = { version = "0.58", default-features = false }

@@ -10,40 +10,28 @@
   ],
   "definitions": {
     "Source": {
-      "oneOf": [
-        {
-          "type": "object",
-          "description": "Inline data source",
-          "required": ["type", "version", "name", "provider", "rows"],
-          "additionalProperties": false,
-          "properties": {
-            "type": { "const": "source" },
-            "version": { "const": 1 },
-            "name": { "type": "string", "description": "Unique source identifier" },
-            "provider": { "const": "inline" },
-            "rows": { "type": "array", "description": "Inline data rows" }
-          }
-        },
-        {
-          "type": "object",
-          "description": "API source",
-          "required": ["type", "version", "name", "provider", "endpoint"],
-          "additionalProperties": false,
-          "properties": {
-            "type": { "const": "source" },
-            "version": { "const": 1 },
-            "name": { "type": "string", "description": "Unique source identifier" },
-            "provider": { "const": "api" },
-            "endpoint": { "type": "string", "description": "API endpoint URL" },
-            "cache": {
-              "type": "object",
-              "properties": {
-                "ttl": { "type": "string", "description": "Time to live (e.g., '6h', '1d')" }
-              }
-            }
-          }
-        }
-      ]
+      "type": "object",
+      "description": "Reusable data source. The provider is `inline` (with rows), `http` (with url) or a provider the host registers.",
+      "required": ["type", "version", "name", "provider"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "source" },
+        "version": { "const": 1 },
+        "name": { "type": "string", "description": "Unique source identifier" },
+        "provider": { "type": "string", "description": "Data provider: inline, http, or a provider the host registers" },
+        "rows": { "type": "array", "items": { "type": "object" }, "description": "Inline data rows, each an object (provider: inline)" },
+        "url": { "type": "string", "description": "Request URL (provider: http)" },
+        "endpoint": { "type": "string", "description": "API endpoint URL, for a host-registered provider that reads it" },
+        "cache": { "$ref": "#/definitions/Cache" }
+      }
+    },
+    "Cache": {
+      "type": "object",
+      "description": "Cache settings for a data source",
+      "properties": {
+        "ttl": { "type": "string", "description": "Time to live (e.g., '6h', '1d')" },
+        "autoRefresh": { "type": "boolean", "description": "Refresh the data again when the time to live ends" }
+      }
     },
     "Params": {
       "type": "object",
@@ -59,6 +47,10 @@
           "type": "number",
           "const": 1,
           "description": "ChartML version"
+        },
+        "name": {
+          "type": "string",
+          "description": "Unique params identifier, used to reference its parameters as $name.id"
         },
         "params": {
           "type": "array",
@@ -183,7 +175,7 @@
     },
     "Config": {
       "type": "object",
-      "required": ["type", "version"],
+      "required": ["type", "version", "style"],
       "additionalProperties": false,
       "properties": {
         "type": {
@@ -199,78 +191,8 @@
         "style": {
           "description": "Default style for all charts in this scope",
           "oneOf": [
-            {
-              "type": "string",
-              "description": "Reference to a named style"
-            },
-            {
-              "type": "object",
-              "description": "Inline style definition",
-              "properties": {
-                "colors": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "grid": {
-                  "type": "object",
-                  "properties": {
-                    "x": { "type": "boolean" },
-                    "y": { "type": "boolean" },
-                    "color": { "type": "string" },
-                    "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
-                    "dashArray": { "type": "string" }
-                  }
-                },
-                "height": { "type": "number" },
-                "showDots": { "type": "boolean" },
-                "strokeWidth": { "type": "number" },
-                "fonts": {
-                  "type": "object",
-                  "properties": {
-                    "title": {
-                      "type": "object",
-                      "properties": {
-                        "family": { "type": "string" },
-                        "size": { "type": "number" },
-                        "weight": { "type": "number" },
-                        "color": { "type": "string" }
-                      }
-                    },
-                    "axis": {
-                      "type": "object",
-                      "properties": {
-                        "family": { "type": "string" },
-                        "size": { "type": "number" },
-                        "color": { "type": "string" }
-                      }
-                    },
-                    "dataLabel": {
-                      "type": "object",
-                      "properties": {
-                        "family": { "type": "string" },
-                        "size": { "type": "number" },
-                        "weight": { "type": "number" }
-                      }
-                    }
-                  }
-                },
-                "legend": {
-                  "type": "object",
-                  "properties": {
-                    "position": {
-                      "type": "string",
-                      "enum": ["top", "right", "bottom", "left", "none"]
-                    },
-                    "orientation": {
-                      "type": "string",
-                      "enum": ["horizontal", "vertical"]
-                    }
-                  }
-                }
-              }
-            }
+            { "type": "string", "description": "Reference to a named style" },
+            { "$ref": "#/definitions/StyleProperties" }
           ]
         }
       }
@@ -305,8 +227,11 @@
           "$ref": "#/definitions/Layout"
         },
         "style": {
-          "type": "string",
-          "description": "Reference to a named style component"
+          "description": "A named style component, or an inline style",
+          "oneOf": [
+            { "type": "string", "description": "Reference to a named style component" },
+            { "$ref": "#/definitions/Style" }
+          ]
         },
         "data": {
           "$ref": "#/definitions/Data"
@@ -380,39 +305,30 @@
       }
     },
     "Data": {
-      "description": "Data source for the chart - can be a string reference to a named Source or an inline Source definition",
-      "oneOf": [
-        {
-          "type": "string",
-          "description": "Reference to a named Source by name"
-        },
+      "description": "Data for the chart: the name of a registered Source, one data descriptor, or a map of source names to descriptors",
+      "anyOf": [
+        { "type": "string", "description": "Reference to a named Source by name" },
+        { "$ref": "#/definitions/DataDescriptor" },
         {
           "type": "object",
-          "description": "Inline data rows",
-          "required": ["provider", "rows"],
-          "additionalProperties": false,
-          "properties": {
-            "provider": { "const": "inline" },
-            "rows": { "type": "array", "description": "Inline data rows" }
-          }
-        },
-        {
-          "type": "object",
-          "description": "Inline API source",
-          "required": ["provider", "endpoint"],
-          "additionalProperties": false,
-          "properties": {
-            "provider": { "const": "api" },
-            "endpoint": { "type": "string", "description": "API endpoint URL" },
-            "cache": {
-              "type": "object",
-              "properties": {
-                "ttl": { "type": "string", "description": "Time to live (e.g., '6h', '1d')" }
-              }
-            }
-          }
+          "description": "Named sources: a map of names you choose to data descriptors. Sources are joined by a transform.",
+          "additionalProperties": { "$ref": "#/definitions/DataDescriptor" }
         }
       ]
+    },
+    "DataDescriptor": {
+      "type": "object",
+      "description": "Where one source's data comes from: inline rows, a url, an endpoint, or a datasource with a query. Every key is optional and the provider may be omitted, but to load data a descriptor needs `rows`, a `url`, a `datasource`, or a `provider` the host registered.",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string", "description": "Data provider: inline, http, datasource, or a provider the host registers" },
+        "rows": { "type": "array", "items": { "type": "object" }, "description": "Inline data rows, each an object" },
+        "url": { "type": "string", "description": "Request URL (provider: http)" },
+        "endpoint": { "type": "string", "description": "API endpoint URL, for a host-registered provider that reads it" },
+        "datasource": { "type": "string", "description": "Name of a datasource the host resolves" },
+        "query": { "type": "string", "description": "Query to run against the datasource" },
+        "cache": { "$ref": "#/definitions/Cache" }
+      }
     },
     "Transform": {
       "type": "object",
@@ -579,7 +495,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["bar", "line", "area", "pie", "doughnut", "scatter", "table", "metric"],
+          "enum": ["bar", "line", "area", "pie", "doughnut", "scatter", "bubble", "table", "metric"],
           "description": "Chart type"
         },
         "mode": {
@@ -675,8 +591,27 @@
         },
         "mark": {
           "type": "string",
-          "enum": ["bar", "line", "area", "dot"],
-          "description": "Visual mark type override"
+          "enum": ["bar", "line", "area", "dot", "range"],
+          "description": "Visual mark type override. `range` shades the band between the upper and lower fields (for example a forecast confidence band) and takes no field"
+        },
+        "upper": {
+          "type": "string",
+          "description": "Range mark: name of the field holding the upper bound"
+        },
+        "lower": {
+          "type": "string",
+          "description": "Range mark: name of the field holding the lower bound"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Range mark: fill opacity (default 0.15)"
+        },
+        "lineStyle": {
+          "type": "string",
+          "enum": ["solid", "dashed", "dotted"],
+          "description": "Line style (default solid)"
         },
         "color": {
           "type": "string",
@@ -707,7 +642,14 @@
           "description": "Table column text alignment, overriding the type-based default (numbers right, everything else left)"
         }
       },
-      "required": ["field"]
+      "anyOf": [
+        { "required": ["field"] },
+        {
+          "description": "A range mark names no field, only its bounds",
+          "required": ["mark", "upper", "lower"],
+          "properties": { "mark": { "const": "range" } }
+        }
+      ]
     },
     "ColumnsObject": {
       "type": "object",
@@ -846,6 +788,18 @@
         },
         "x": {
           "$ref": "#/definitions/Axis"
+        },
+        "columns": {
+          "$ref": "#/definitions/Axis",
+          "description": "Alias of x: the category axis"
+        },
+        "bottom": {
+          "$ref": "#/definitions/Axis",
+          "description": "Alias of x: the category axis"
+        },
+        "rows": {
+          "$ref": "#/definitions/Axis",
+          "description": "Alias of left: the measure axis"
         }
       }
     },
@@ -867,6 +821,10 @@
         "max": {
           "type": "number",
           "description": "Maximum axis value"
+        },
+        "nice": {
+          "type": "boolean",
+          "description": "Round the axis ends to nice values"
         }
       }
     },
@@ -922,6 +880,11 @@
           "type": "string",
           "description": "Dash pattern (e.g., '5,5')"
         },
+        "style": {
+          "type": "string",
+          "enum": ["solid", "dashed", "dotted"],
+          "description": "Line style shorthand (default solid)"
+        },
         "opacity": {
           "type": "number",
           "minimum": 0,
@@ -930,13 +893,27 @@
         }
       }
     },
-    "Style": {
+    "StyleProperties": {
       "type": "object",
-      "additionalProperties": false,
+      "description": "Inline style properties. The parser ignores keys it does not know, so this definition is open; Style closes it.",
       "properties": {
         "height": {
           "type": "number",
           "description": "Chart height in pixels"
+        },
+        "width": {
+          "type": "number",
+          "description": "Chart width in pixels"
+        },
+        "curveType": {
+          "type": "string",
+          "description": "Line curve: `linear` or `step`; any other value draws the default smooth curve"
+        },
+        "fillOpacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Fill opacity (0-1)"
         },
         "colors": {
           "type": "array",
@@ -1031,6 +1008,24 @@
           "default": 50,
           "description": "Table-only: rows per page (default 50). A table with more rows than this shows one page at a time, with Previous and Next buttons and the current page in the footer; every row is reachable. Where nothing can run (a static SVG, a PNG, markdown output, server-side rendering) the table shows its first page and the buttons are disabled."
         }
+      }
+    },
+    "Style": {
+      "description": "Inline style: a chart's `style` and `visualize.style`. Unknown keys are rejected so typos show up.",
+      "allOf": [{ "$ref": "#/definitions/StyleProperties" }],
+      "additionalProperties": false,
+      "properties": {
+        "height": {},
+        "width": {},
+        "curveType": {},
+        "fillOpacity": {},
+        "colors": {},
+        "grid": {},
+        "showDots": {},
+        "strokeWidth": {},
+        "fonts": {},
+        "legend": {},
+        "pageSize": {}
       }
     }
   }

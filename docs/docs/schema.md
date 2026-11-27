@@ -109,7 +109,7 @@ The schema provides detailed error messages for common mistakes:
 **Invalid chart type:**
 ```
 Error: visualize.type must be one of:
-  bar, line, area, pie, doughnut, table, metric, scatter
+  bar, line, area, pie, doughnut, table, metric, scatter, bubble
 ```
 
 **Missing required field:**
