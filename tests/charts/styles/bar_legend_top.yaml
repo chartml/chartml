@@ -1,0 +1,42 @@
+name: "Named style: horizontal legend at the top"
+tags: [style, named-style, legend, legend-top, bar, stacked]
+description: >
+  A stacked bar chart whose named style puts the legend at the top. The
+  legend is one centred row above the plot, and the plot starts below it
+  with a gap; nothing is reserved at the bottom for a legend.
+
+chart:
+  - type: style
+    version: 1
+    name: top_legend
+    legend:
+      position: top
+  - type: chart
+    version: 1
+    title: "Orders by Status"
+    style: top_legend
+    data:
+      provider: inline
+      rows:
+        - { quarter: "Q1", status: "New", orders: 40 }
+        - { quarter: "Q1", status: "Shipped", orders: 75 }
+        - { quarter: "Q1", status: "Returned", orders: 8 }
+        - { quarter: "Q2", status: "New", orders: 52 }
+        - { quarter: "Q2", status: "Shipped", orders: 81 }
+        - { quarter: "Q2", status: "Returned", orders: 11 }
+    visualize:
+      type: bar
+      mode: stacked
+      columns: quarter
+      rows: orders
+      marks:
+        color: status
+
+assertions:
+  structure:
+    root: svg
+    legend: true
+    legend_entries: 3
+  style:
+    legend_position: top
+    legend_orientation: horizontal

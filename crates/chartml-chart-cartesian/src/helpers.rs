@@ -1,4 +1,4 @@
-use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform};
+use chartml_core::element::{paint_class, ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform};
 use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
 pub use chartml_core::format::format_value;
@@ -68,7 +68,7 @@ pub fn emit_zero_line_if_crosses(
             y2: inner_height,
             stroke: spec.color.clone(),
             stroke_width: Some(spec.width as f64),
-            stroke_dasharray: None,
+            stroke_dasharray: None, opacity: None,
             class: "zero-line".to_string(),
         })
     } else {
@@ -82,55 +82,18 @@ pub fn emit_zero_line_if_crosses(
             y2: y,
             stroke: spec.color.clone(),
             stroke_width: Some(spec.width as f64),
-            stroke_dasharray: None,
+            stroke_dasharray: None, opacity: None,
             class: "zero-line".to_string(),
         })
     }
 }
 
-/// Grid line configuration resolved from the spec.
-#[derive(Debug, Clone)]
-pub struct GridConfig {
-    pub show_x: bool,
-    pub show_y: bool,
-    pub color: String,
-    pub opacity: f64,
-    pub dash_array: Option<String>,
-}
+pub use chartml_core::layout::GridConfig;
 
-impl Default for GridConfig {
-    fn default() -> Self {
-        Self {
-            show_x: false,
-            show_y: true,
-            color: "#e0e0e0".into(),
-            opacity: 0.5,
-            dash_array: None,
-        }
-    }
-}
-
-impl GridConfig {
-    /// Build from chart config, using the theme's grid color as default.
-    pub fn from_config(config: &ChartConfig) -> Self {
-        let mut grid = Self {
-            show_x: false,
-            show_y: true, // JS default: horizontal grid on
-            color: config.theme.grid.clone(),
-            opacity: 0.5,
-            dash_array: None,
-        };
-        if let Some(ref style) = config.visualize.style {
-            if let Some(ref g) = style.grid {
-                if let Some(x) = g.x { grid.show_x = x; }
-                if let Some(y) = g.y { grid.show_y = y; }
-                if let Some(ref c) = g.color { grid.color = c.clone(); }
-                if let Some(o) = g.opacity { grid.opacity = o; }
-                if let Some(ref d) = g.dash_array { grid.dash_array = Some(d.clone()); }
-            }
-        }
-        grid
-    }
+/// Grid settings for a cartesian chart: horizontal grid lines on and
+/// vertical ones off by default (the JS default), then `style.grid`.
+pub fn cartesian_grid(config: &ChartConfig) -> GridConfig {
+    GridConfig::from_config_with_defaults(config, false, true)
 }
 
 /// Parameters for generating an x-axis with band-based labels.
@@ -445,7 +408,7 @@ pub fn generate_x_axis_with_display(
         y2: y_position,
         stroke: theme.axis_line.clone(),
         stroke_width: Some(theme.axis_line_weight as f64),
-        stroke_dasharray: None,
+        stroke_dasharray: None, opacity: None,
         class: "axis-line".to_string(),
     });
 
@@ -460,8 +423,8 @@ pub fn generate_x_axis_with_display(
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position - ch,
                     stroke: grid.color.clone(), stroke_width: Some(theme.grid_line_weight as f64),
-                    stroke_dasharray: grid.dash_array.clone(),
-                    class: "grid-line grid-line-x".to_string(),
+                    stroke_dasharray: grid.dash_array.clone(), opacity: grid.opacity,
+                    class: paint_class("grid-line grid-line-x", grid.explicit_color),
                 });
             }
         }
@@ -481,7 +444,7 @@ pub fn generate_x_axis_with_display(
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
                     stroke: theme.tick.clone(), stroke_width: Some(theme.axis_line_weight as f64),
-                    stroke_dasharray: None, class: "tick".to_string(),
+                    stroke_dasharray: None, opacity: None, class: "tick".to_string(),
                 });
                 // Label
                 let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
@@ -496,8 +459,8 @@ pub fn generate_x_axis_with_display(
                     font_weight: ts.font_weight,
                     letter_spacing: ts.letter_spacing,
                     text_transform: ts.text_transform,
-                    fill: Some(theme.text_secondary.clone()),
-                    class: "tick-label axis-label".to_string(),
+                    fill: Some(theme.axis_text_color().to_string()),
+                    class: paint_class("tick-label axis-label", theme.axis_label_color.is_some()),
                     data: None,
                 });
             }
@@ -516,7 +479,7 @@ pub fn generate_x_axis_with_display(
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
                     stroke: theme.tick.clone(), stroke_width: Some(theme.axis_line_weight as f64),
-                    stroke_dasharray: None, class: "tick".to_string(),
+                    stroke_dasharray: None, opacity: None, class: "tick".to_string(),
                 });
                 // Label -- skip if skip_factor says so
                 let should_show = match skip_factor {
@@ -539,8 +502,8 @@ pub fn generate_x_axis_with_display(
                         font_weight: ts.font_weight,
                         letter_spacing: ts.letter_spacing,
                         text_transform: ts.text_transform,
-                        fill: Some(theme.text_secondary.clone()),
-                        class: "tick-label axis-label".to_string(),
+                        fill: Some(theme.axis_text_color().to_string()),
+                        class: paint_class("tick-label axis-label", theme.axis_label_color.is_some()),
                         data: None,
                     });
                 }
@@ -558,7 +521,7 @@ pub fn generate_x_axis_with_display(
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
                     stroke: theme.tick.clone(), stroke_width: Some(theme.axis_line_weight as f64),
-                    stroke_dasharray: None, class: "tick".to_string(),
+                    stroke_dasharray: None, opacity: None, class: "tick".to_string(),
                 });
                 let truncated = truncate_label_with_metrics(label, *max_width, &TextMetrics::from_theme_axis_label(theme));
                 let is_truncated = truncated != *label;
@@ -574,8 +537,8 @@ pub fn generate_x_axis_with_display(
                     font_weight: ts.font_weight,
                     letter_spacing: ts.letter_spacing,
                     text_transform: ts.text_transform,
-                    fill: Some(theme.text_secondary.clone()),
-                    class: "tick-label axis-label".to_string(),
+                    fill: Some(theme.axis_text_color().to_string()),
+                    class: paint_class("tick-label axis-label", theme.axis_label_color.is_some()),
                     data: if is_truncated {
                         Some(ElementData::new(label.clone(), ""))
                     } else {
@@ -605,7 +568,7 @@ pub fn generate_x_axis_with_display(
                 elements.push(ChartElement::Line {
                     x1: x, y1: y_position, x2: x, y2: y_position + 5.0,
                     stroke: theme.tick.clone(), stroke_width: Some(theme.axis_line_weight as f64),
-                    stroke_dasharray: None, class: "tick".to_string(),
+                    stroke_dasharray: None, opacity: None, class: "tick".to_string(),
                 });
                 // Label only for sampled indices, with truncation if needed
                 if indices.contains(&i) {
@@ -627,8 +590,8 @@ pub fn generate_x_axis_with_display(
                         font_weight: ts.font_weight,
                         letter_spacing: ts.letter_spacing,
                         text_transform: ts.text_transform,
-                        fill: Some(theme.text_secondary.clone()),
-                        class: "tick-label axis-label".to_string(),
+                        fill: Some(theme.axis_text_color().to_string()),
+                        class: paint_class("tick-label axis-label", theme.axis_label_color.is_some()),
                         data: if is_truncated {
                             Some(ElementData::new(label.clone(), ""))
                         } else {
@@ -664,8 +627,8 @@ pub fn generate_x_axis_with_display(
             font_weight: ts.font_weight,
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
-            fill: Some(theme.text_secondary.clone()),
-            class: "axis-label".to_string(),
+            fill: Some(theme.axis_text_color().to_string()),
+            class: paint_class("axis-label", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -698,7 +661,7 @@ pub fn generate_y_axis_with_display(
         y2: range.0.max(range.1),
         stroke: theme.axis_line.clone(),
         stroke_width: Some(theme.axis_line_weight as f64),
-        stroke_dasharray: None,
+        stroke_dasharray: None, opacity: None,
         class: "axis-line".to_string(),
     });
 
@@ -716,7 +679,7 @@ pub fn generate_y_axis_with_display(
             y2: y,
             stroke: theme.tick.clone(),
             stroke_width: Some(theme.axis_line_weight as f64),
-            stroke_dasharray: None,
+            stroke_dasharray: None, opacity: None,
             class: "tick".to_string(),
         });
 
@@ -734,8 +697,8 @@ pub fn generate_y_axis_with_display(
             font_weight: ts.font_weight,
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
-            fill: Some(theme.text_secondary.clone()),
-            class: "tick-label axis-label".to_string(),
+            fill: Some(theme.axis_text_color().to_string()),
+            class: paint_class("tick-label axis-label", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -774,7 +737,7 @@ pub fn generate_y_axis_numeric(
         y2: range.0.max(range.1),
         stroke: theme.axis_line.clone(),
         stroke_width: Some(theme.axis_line_weight as f64),
-        stroke_dasharray: None,
+        stroke_dasharray: None, opacity: None,
         class: "axis-line".to_string(),
     });
 
@@ -798,8 +761,8 @@ pub fn generate_y_axis_numeric(
                     y2: y,
                     stroke: grid.color.clone(),
                     stroke_width: Some(theme.grid_line_weight as f64),
-                    stroke_dasharray: grid.dash_array.clone(),
-                    class: "grid-line grid-line-y".to_string(),
+                    stroke_dasharray: grid.dash_array.clone(), opacity: grid.opacity,
+                    class: paint_class("grid-line grid-line-y", grid.explicit_color),
                 });
             }
         }
@@ -812,7 +775,7 @@ pub fn generate_y_axis_numeric(
             y2: y,
             stroke: theme.tick.clone(),
             stroke_width: Some(theme.axis_line_weight as f64),
-            stroke_dasharray: None,
+            stroke_dasharray: None, opacity: None,
             class: "tick".to_string(),
         });
 
@@ -829,8 +792,8 @@ pub fn generate_y_axis_numeric(
             font_weight: ts.font_weight,
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
-            fill: Some(theme.text_secondary.clone()),
-            class: "tick-label tick-value".to_string(),
+            fill: Some(theme.axis_text_color().to_string()),
+            class: paint_class("tick-label tick-value", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -862,8 +825,8 @@ pub fn generate_y_axis_numeric(
             font_weight: ts.font_weight,
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
-            fill: Some(theme.text_secondary.clone()),
-            class: "axis-label".to_string(),
+            fill: Some(theme.axis_text_color().to_string()),
+            class: paint_class("axis-label", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -892,7 +855,7 @@ pub fn generate_y_axis_numeric_right(
         x1: x_position, y1: range.0.min(range.1),
         x2: x_position, y2: range.0.max(range.1),
         stroke: theme.axis_line.clone(), stroke_width: Some(theme.axis_line_weight as f64),
-        stroke_dasharray: None, class: "axis-line".to_string(),
+        stroke_dasharray: None, opacity: None, class: "axis-line".to_string(),
     });
 
     for val in &ticks {
@@ -907,7 +870,7 @@ pub fn generate_y_axis_numeric_right(
             x1: x_position, y1: y,
             x2: x_position + 5.0, y2: y,
             stroke: theme.tick.clone(), stroke_width: Some(theme.axis_line_weight as f64),
-            stroke_dasharray: None, class: "tick".to_string(),
+            stroke_dasharray: None, opacity: None, class: "tick".to_string(),
         });
 
         // Label (to the right)
@@ -923,8 +886,8 @@ pub fn generate_y_axis_numeric_right(
             font_weight: ts.font_weight,
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
-            fill: Some(theme.text_secondary.clone()),
-            class: "tick-label tick-value".to_string(),
+            fill: Some(theme.axis_text_color().to_string()),
+            class: paint_class("tick-label tick-value", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -946,8 +909,8 @@ pub fn generate_y_axis_numeric_right(
             font_weight: ts.font_weight,
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
-            fill: Some(theme.text_secondary.clone()),
-            class: "axis-label".to_string(),
+            fill: Some(theme.axis_text_color().to_string()),
+            class: paint_class("axis-label", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -991,7 +954,7 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
         y2: y_position,
         stroke: theme.axis_line.clone(),
         stroke_width: Some(theme.axis_line_weight as f64),
-        stroke_dasharray: None,
+        stroke_dasharray: None, opacity: None,
         class: "axis-line".to_string(),
     });
 
@@ -1016,8 +979,8 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
                     y2: y_position - ch,
                     stroke: grid.color.clone(),
                     stroke_width: Some(theme.grid_line_weight as f64),
-                    stroke_dasharray: grid.dash_array.clone(),
-                    class: "grid-line grid-line-x".to_string(),
+                    stroke_dasharray: grid.dash_array.clone(), opacity: grid.opacity,
+                    class: paint_class("grid-line grid-line-x", grid.explicit_color),
                 });
             }
         }
@@ -1029,7 +992,7 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
             y2: y_position + 5.0,
             stroke: theme.tick.clone(),
             stroke_width: Some(theme.axis_line_weight as f64),
-            stroke_dasharray: None,
+            stroke_dasharray: None, opacity: None,
             class: "tick".to_string(),
         });
 
@@ -1046,8 +1009,8 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
             font_weight: ts.font_weight,
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
-            fill: Some(theme.text_secondary.clone()),
-            class: "tick-label tick-value".to_string(),
+            fill: Some(theme.axis_text_color().to_string()),
+            class: paint_class("tick-label tick-value", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -1057,29 +1020,6 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
 
 // Re-export from core for backward compatibility
 pub use chartml_core::layout::legend::LegendMark;
-
-/// Generate legend elements for multi-series charts (default: Rect marks).
-pub fn generate_legend(
-    series_names: &[String],
-    colors: &[String],
-    chart_width: f64,
-    y_position: f64,
-    theme: &Theme,
-) -> Vec<ChartElement> {
-    chartml_core::layout::legend::generate_legend_elements(series_names, colors, chart_width, y_position, LegendMark::Rect, theme)
-}
-
-/// Generate legend with a specific symbol mark type.
-pub fn generate_legend_with_mark(
-    series_names: &[String],
-    colors: &[String],
-    chart_width: f64,
-    y_position: f64,
-    mark: LegendMark,
-    theme: &Theme,
-) -> Vec<ChartElement> {
-    chartml_core::layout::legend::generate_legend_elements(series_names, colors, chart_width, y_position, mark, theme)
-}
 
 /// Generate ticks matching D3's `ticks(start, stop, count)` algorithm exactly.
 ///
@@ -1338,7 +1278,7 @@ mod zero_line_tests {
             .expect("should emit when domain crosses zero");
         match el {
             ChartElement::Line {
-                x1, y1, x2, y2, stroke, stroke_width, stroke_dasharray, class,
+                x1, y1, x2, y2, stroke, stroke_width, stroke_dasharray, class, ..
             } => {
                 // Spans the full plot width
                 assert_eq!(x1, 0.0);
@@ -1484,7 +1424,7 @@ pub fn generate_annotations(
                 x2: x_px, y2: inner_height,
                 stroke: color.clone(),
                 stroke_width,
-                stroke_dasharray: dash_array,
+                stroke_dasharray: dash_array, opacity: None,
                 class: "annotation-line annotation-vertical".to_string(),
             });
 
@@ -1523,7 +1463,7 @@ pub fn generate_annotations(
                 y2: y_px,
                 stroke: color.clone(),
                 stroke_width,
-                stroke_dasharray: dash_array,
+                stroke_dasharray: dash_array, opacity: None,
                 class: "annotation-line".to_string(),
             });
 
@@ -1607,4 +1547,101 @@ pub fn generate_annotations(
     }
 
     elements
+}
+
+/// Gap between a bar or point and its value label, and between a label past
+/// a horizontal bar's end and the chart edge.
+pub(crate) const DATA_LABEL_OFFSET: f64 = 5.0;
+
+/// Where a horizontal bar's value label goes along the bar, for
+/// `dataLabels.position`: past the bar's end by default (`top`, the
+/// counterpart of above a vertical bar), in its middle (`center`), or inside
+/// its start (`bottom`). Returns the label's x, its anchor, and whether it
+/// sits past the bar's end (so the chart keeps room for it on the right).
+pub(crate) fn horizontal_label_position(position: Option<&str>, bar_end: f64) -> (f64, TextAnchor, bool) {
+    match position {
+        Some("center") => (bar_end / 2.0, TextAnchor::Middle, false),
+        Some("bottom") => (DATA_LABEL_OFFSET, TextAnchor::Start, false),
+        _ => (bar_end + DATA_LABEL_OFFSET, TextAnchor::Start, true),
+    }
+}
+
+/// A bar's value label at `(x, y)`: the field's `dataLabels`
+/// format, font size and colour where set, else the chart's data label font
+/// and colour.
+pub(crate) fn bar_data_label(
+    (x, y): (f64, f64),
+    anchor: TextAnchor,
+    dominant_baseline: Option<String>,
+    val: f64,
+    dl: &chartml_core::spec::DataLabelsSpec,
+    fmt: Option<&str>,
+    config: &ChartConfig,
+) -> ChartElement {
+    let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
+    ChartElement::Text {
+        x,
+        y,
+        content: format_value(val, dl.format.as_deref().or(fmt)),
+        anchor,
+        dominant_baseline,
+        transform: None,
+        font_family: dl_ts.font_family,
+        font_size: dl_ts.font_size,
+        font_weight: dl_ts.font_weight,
+        letter_spacing: None,
+        text_transform: None,
+        fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.data_label_text_color().to_string())),
+        class: paint_class("data-label", dl.color.is_some() || config.theme.data_label_color.is_some()),
+        data: None,
+    }
+}
+
+/// Value labels for a line's points when `dl.show` is set: above each point,
+/// or below with `position: bottom`, in the data label font, coloured by the
+/// field's `dataLabels.color`, else the style's data label colour, else the
+/// line's own colour.
+pub(crate) fn point_data_labels(
+    points: &[(f64, f64)],
+    point_data: &[(String, f64)],
+    dl: &chartml_core::spec::DataLabelsSpec,
+    fmt: Option<&str>,
+    color: &str,
+    config: &ChartConfig,
+) -> Vec<ChartElement> {
+    if dl.show != Some(true) {
+        return Vec::new();
+    }
+    let dl_fmt = dl.format.as_deref().or(fmt);
+    points
+        .iter()
+        .zip(point_data)
+        .map(|(&(px, py), (_, val))| {
+            let label_y = match dl.position.as_deref() {
+                Some("bottom") => py + 15.0,
+                _ => py - 10.0,
+            };
+            let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
+            ChartElement::Text {
+                x: px,
+                y: label_y,
+                content: format_value(*val, dl_fmt),
+                anchor: TextAnchor::Middle,
+                dominant_baseline: None,
+                transform: None,
+                font_family: dl_ts.font_family,
+                font_size: dl_ts.font_size,
+                font_weight: dl_ts.font_weight,
+                letter_spacing: None,
+                text_transform: None,
+                fill: Some(dl.color.clone().unwrap_or_else(|| {
+                    config.theme.data_label_color.clone().unwrap_or_else(|| color.to_string())
+                })),
+                // A line's labels default to its own colour, which the page
+                // theme must not replace.
+                class: paint_class("data-label", true),
+                data: None,
+            }
+        })
+        .collect()
 }

@@ -77,8 +77,8 @@ pub fn element_to_json(element: &ChartElement) -> Value {
             })
         }
 
-        ChartElement::Line { x1, y1, x2, y2, stroke, stroke_width, stroke_dasharray, class } => {
-            json!({
+        ChartElement::Line { x1, y1, x2, y2, stroke, stroke_width, stroke_dasharray, opacity, class } => {
+            let mut line = json!({
                 "type": "line",
                 "x1": x1,
                 "y1": y1,
@@ -88,7 +88,11 @@ pub fn element_to_json(element: &ChartElement) -> Value {
                 "strokeWidth": stroke_width,
                 "strokeDasharray": stroke_dasharray,
                 "class": class
-            })
+            });
+            if let Some(op) = opacity {
+                line["opacity"] = json!(op);
+            }
+            line
         }
 
         ChartElement::Text { x, y, content, anchor, dominant_baseline, transform, font_size, font_weight, fill, class, data, .. } => {

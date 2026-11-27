@@ -4,7 +4,9 @@ use chartml_core::element::*;
 use chartml_core::error::ChartError;
 use chartml_core::shapes::{ArcGenerator, PieLayout};
 use chartml_core::spec::{VisualizeSpec, FieldRef};
-use chartml_core::layout::{calculate_legend_layout, LegendConfig, LegendAlignment, TextMetrics};
+use chartml_core::layout::{
+    LegendBlock, LegendConfig, LegendMark, LegendOrientation, LegendPosition, LEGEND_GAP,
+};
 
 #[derive(Default)]
 pub struct PieRenderer;
@@ -39,17 +41,48 @@ impl ChartRenderer for PieRenderer {
         let width = config.width;
         let height = config.height;
 
-        // Reserve space at the bottom for the legend + 5% bottom margin.
-        // The 50px is a conservative upper-bound for single-row legend height
-        // (30px gap + ~20px legend row); multi-row legends are accommodated by
-        // the actual legend_layout.total_height used for positioning below.
-        let bottom_margin = height * 0.05;
-        let legend_reserved = 50.0 + bottom_margin;
-        let radius = (width.min(height - legend_reserved) / 2.0) - 40.0;
+        // Lay out the legend (one entry per slice, in data order, which is
+        // the palette order) first so the pie keeps clear of it.
+        let legend_colors: Vec<String> = (0..labels.len())
+            .map(|i| config.colors.get(i % config.colors.len()).cloned().unwrap_or_else(|| "#999".to_string()))
+            .collect();
+        // A pie keys every slice, even a single one.
+        let legend = LegendBlock::for_chart(config, &labels, &legend_colors, LegendConfig::for_theme(&config.theme))?;
+
+        // The pie fills what the legend leaves, less 40px all round. A legend
+        // below or above keeps a 5% edge margin plus a 30px gap to the pie and
+        // at least the 50px a one-row legend needs; a side legend keeps a gap
+        // either side of it.
+        let edge_margin = height * 0.05;
+        let (area_x, area_y, area_w, area_h) = match &legend {
+            None => (0.0, 0.0, width, height),
+            Some(l) => match l.placement.position {
+                // A horizontal bottom legend keeps the original fixed 50px
+                // reserve (one row); multi-row legends are positioned from
+                // their real height below.
+                LegendPosition::Bottom if l.placement.orientation == LegendOrientation::Horizontal => {
+                    (0.0, 0.0, width, height - (50.0 + edge_margin))
+                }
+                LegendPosition::Bottom => {
+                    (0.0, 0.0, width, height - ((l.height + 30.0).max(50.0) + edge_margin))
+                }
+                LegendPosition::Top => {
+                    let reserved = (l.height + 30.0).max(50.0) + edge_margin;
+                    (0.0, reserved, width, height - reserved)
+                }
+                LegendPosition::Left => {
+                    let reserved = l.reserve().side_inset();
+                    (reserved, 0.0, width - reserved, height)
+                }
+                LegendPosition::Right => (0.0, 0.0, width - l.reserve().side_inset(), height),
+                // `LegendBlock::for_chart` gives no block for `none`.
+                LegendPosition::None => (0.0, 0.0, width, height),
+            },
+        };
+        let radius = (area_w.min(area_h) / 2.0) - 40.0;
         let inner_radius = if is_doughnut { radius * 0.5 } else { 0.0 };
-        let cx = width / 2.0;
-        // Shift pie center up slightly to make room for legend below
-        let cy = (height - legend_reserved) / 2.0;
+        let cx = area_x + area_w / 2.0;
+        let cy = area_y + area_h / 2.0;
 
         // Compute pie layout
         let pie = PieLayout::new();
@@ -92,52 +125,15 @@ impl ChartRenderer for PieRenderer {
             children: slice_elements,
         });
 
-        // Legend — rendered below the pie, horizontally centered
-        let legend_config = LegendConfig {
-            alignment: LegendAlignment::Center,
-            text_metrics: TextMetrics::from_theme_legend(&config.theme),
-            ..LegendConfig::default()
-        };
-        // Build ordered labels and colors (original data order matches color palette order)
-        let legend_colors: Vec<String> = (0..labels.len())
-            .map(|i| config.colors.get(i % config.colors.len()).cloned().unwrap_or_else(|| "#999".to_string()))
-            .collect();
-        let legend_layout = calculate_legend_layout(&labels, &legend_colors, width, &legend_config);
-        // Position legend so the last text baseline sits at least 5% from the bottom edge
-        let legend_y = height - legend_layout.total_height - bottom_margin;
-        for item in legend_layout.items.iter().filter(|i| i.visible) {
-            // Colored swatch rect
-            children.push(ChartElement::Rect {
-                x: item.x,
-                y: legend_y + item.y,
-                width: legend_config.symbol_size,
-                height: legend_config.symbol_size,
-                fill: item.color.clone(),
-                stroke: None,
-                rx: None,
-                ry: None,
-                class: "legend-symbol".to_string(),
-                data: None,
-                animation_origin: None,
-            });
-            // Label text
-            let ts = TextStyle::for_role(&config.theme, TextRole::LegendLabel);
-            children.push(ChartElement::Text {
-                x: item.x + legend_config.symbol_size + legend_config.symbol_text_gap,
-                y: legend_y + item.y + 10.0, // vertical center of 20px row_height
-                content: item.label.clone(),
-                anchor: TextAnchor::Start,
-                dominant_baseline: None,
-                transform: None,
-                font_family: ts.font_family,
-                font_size: ts.font_size,
-                font_weight: ts.font_weight,
-                letter_spacing: ts.letter_spacing,
-                text_transform: ts.text_transform,
-                fill: Some(config.theme.text_secondary.clone()),
-                class: "legend-label".to_string(),
-                data: None,
-            });
+        // Legend — below the pie by default, horizontally centred, its last
+        // row at least 5% from the bottom edge; else at its placement.
+        if let Some(ref legend) = legend {
+            let edge_gap = match legend.placement.position {
+                LegendPosition::Top | LegendPosition::Bottom => edge_margin,
+                _ => LEGEND_GAP,
+            };
+            let origin = legend.origin(width, height, edge_gap);
+            children.extend(legend.elements(origin, |_| LegendMark::Rect, &config.theme));
         }
 
         Ok(ChartElement::Svg {

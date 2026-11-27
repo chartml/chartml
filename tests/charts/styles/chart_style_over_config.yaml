@@ -1,0 +1,58 @@
+name: "Chart style overrides the config default, inline style overrides both"
+tags: [style, config, named-style, precedence, deep-merge, line]
+description: >
+  The config default is the corporate style (blue palette, dashed green
+  grid, 360px). The chart names the dark style (red palette, 280px), and
+  its visualize.style sets only the grid colour to orange. The line is
+  red (from dark), the chart is 280px tall (dark over corporate), and the
+  grid keeps corporate's dash pattern but is orange (inline over both,
+  deep-merged field by field).
+
+chart:
+  - type: style
+    version: 1
+    name: corporate
+    colors: ["#1f5aa6"]
+    grid:
+      y: true
+      color: "#7bc47f"
+      dashArray: "3,3"
+    height: 360
+  - type: style
+    version: 1
+    name: dark
+    colors: ["#d9534f"]
+    height: 280
+  - type: config
+    version: 1
+    style: corporate
+  - type: chart
+    version: 1
+    title: "Signups"
+    style: dark
+    data:
+      provider: inline
+      rows:
+        - { week: "W1", signups: 30 }
+        - { week: "W2", signups: 42 }
+        - { week: "W3", signups: 38 }
+        - { week: "W4", signups: 51 }
+    visualize:
+      type: line
+      columns: week
+      rows: signups
+      style:
+        grid:
+          color: "#f0a030"
+
+assertions:
+  structure:
+    root: svg
+    lines: 1
+    legend: false
+    dots: 4
+  style:
+    height: 280
+    line_color: "#d9534f"
+    grid_color: "#f0a030"
+    grid_dasharray: "3,3"

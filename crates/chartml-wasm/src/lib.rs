@@ -178,6 +178,15 @@ impl WasmChartML {
         })
     }
 
+    /// Remove every registered config (see `ChartML::clear_configs`).
+    #[wasm_bindgen(js_name = "clearConfigs")]
+    pub fn clear_configs(&mut self) -> Result<(), JsValue> {
+        with_inner_mut(self, |chartml| {
+            chartml.clear_configs();
+            Ok(())
+        })
+    }
+
     // ── chartml 5.0 — DataSourceProvider bridge ──────────────────────────
 
     /// Register a `DataSourceProvider` callback under a dispatch key.

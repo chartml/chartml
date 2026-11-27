@@ -1,5 +1,5 @@
 use chartml_core::data::DataTable;
-use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform, ViewBox, emit_dot_halo_if_enabled};
+use chartml_core::element::{paint_class, ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform, ViewBox, emit_dot_halo_if_enabled};
 use chartml_core::error::ChartError;
 use indexmap::IndexMap;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
@@ -10,9 +10,9 @@ use chartml_core::spec::{ChartMode, Orientation};
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics, measure_text};
 
-use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
+use chartml_core::layout::legend::{LegendBlock, LegendConfig, LegendMark};
 
-use crate::helpers::{GridConfig, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
+use crate::helpers::{cartesian_grid, bar_data_label, horizontal_label_position, point_data_labels, DATA_LABEL_OFFSET, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
 
 /// Position of a bar segment within a stacked bar group.
 ///
@@ -598,16 +598,15 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         display.to_vec()
     };
 
-    // Pre-compute legend height so the bottom margin accounts for multi-row legends.
-    let legend_height = if let Some(ref color_f) = color_field {
-        let series_names = data.unique_values(color_f);
-        let legend_config = LegendConfig {
-            text_metrics: TextMetrics::from_theme_legend(&config.theme),
-            ..LegendConfig::default()
-        };
-        calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config).total_height
-    } else {
-        0.0
+    // Lay out the legend first so the margins keep room for it.
+    let legend = match color_field {
+        Some(ref color_f) => LegendBlock::for_series(
+            config,
+            &data.unique_values(color_f),
+            &config.colors,
+            LegendConfig::for_theme(&config.theme),
+        )?,
+        None => None,
     };
 
     // Step 2: Calculate margins including rotation
@@ -619,9 +618,8 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         .and_then(|a| a.left.as_ref())
         .and_then(|a| a.label.as_ref())
         .is_some();
-    let margin_config = MarginConfig {
+    let mut margin_config = MarginConfig {
         has_title: config.title.is_some(),
-        legend_height,
         has_x_axis_label,
         has_y_axis_label,
         x_label_strategy_margin: x_extra_margin,
@@ -636,7 +634,24 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
         ..Default::default()
     };
-    let margins = calculate_margins(&margin_config);
+    if let Some(ref legend) = legend {
+        legend.reserve().apply_to(&mut margin_config);
+    }
+    let mut margins = calculate_margins(&margin_config);
+    // Horizontal single-series value labels sit past the bar end by default;
+    // keep room on the right for the widest one.
+    if is_horizontal && color_field.is_none() {
+        if let Some(dl) = get_data_labels_config(config)
+            .filter(|dl| dl.show == Some(true) && horizontal_label_position(dl.position.as_deref(), 0.0).2)
+        {
+            let metrics = TextMetrics::from_theme_data_label(&config.theme, dl.font_size);
+            let widest = (0..data.num_rows())
+                .filter_map(|i| data.get_f64(i, &value_field))
+                .map(|v| measure_text(&format_value(v, dl.format.as_deref().or(y_fmt_ref)), &metrics))
+                .fold(0.0_f64, f64::max);
+            margins.right = margins.right.max(widest + 2.0 * DATA_LABEL_OFFSET);
+        }
+    }
 
     let inner_width = margins.inner_width(config.width);
     let inner_height = margins.inner_height(config.height);
@@ -646,7 +661,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     // Title is rendered as an HTML div outside the SVG (matches JS chartml behaviour)
     // — do NOT add it here as a SVG text element.
 
-    let grid = GridConfig::from_config(config);
+    let grid = cartesian_grid(config);
 
     let _tick_count = adaptive_tick_count(inner_height);
 
@@ -834,20 +849,8 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     }
 
     // Legend
-    if let Some(ref color_f) = color_field {
-        let series_names = data.unique_values(color_f);
-        let legend_config = LegendConfig {
-            text_metrics: TextMetrics::from_theme_legend(&config.theme),
-            ..LegendConfig::default()
-        };
-        let legend_layout = calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config);
-        let legend_y = config.height - legend_layout.total_height - 8.0;
-        let legend_elements = generate_legend(&series_names, &config.colors, config.width, legend_y, &config.theme);
-        children.push(ChartElement::Group {
-            class: "legend".to_string(),
-            transform: None,
-            children: legend_elements,
-        });
+    if let Some(ref legend) = legend {
+        children.push(legend.group(config, |_| LegendMark::Rect));
     }
 
     let svg_class = if is_horizontal { "chartml-bar chartml-horizontal" } else { "chartml-bar" };
@@ -928,6 +931,22 @@ fn render_single_series_bars(
                 },
                 &config.theme,
             ));
+
+            // Data label along the bar (if configured): past its end by
+            // default, in its middle (`center`) or inside its start (`bottom`),
+            // the horizontal counterparts of the vertical positions.
+            if let Some(dl) = get_data_labels_config(config).filter(|dl| dl.show == Some(true)) {
+                let (label_x, anchor, _) = horizontal_label_position(dl.position.as_deref(), bar_width);
+                elements.push(bar_data_label(
+                    (label_x, y + band.bandwidth() / 2.0),
+                    anchor,
+                    Some("middle".to_string()),
+                    val,
+                    dl,
+                    y_fmt_ref,
+                    config,
+                ));
+            }
         }
     } else {
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
@@ -975,31 +994,21 @@ fn render_single_series_bars(
             ));
 
             // Data label above bar (if configured)
-            if let Some(dl) = get_data_labels_config(config) {
-                if dl.show == Some(true) {
-                    let label_fmt = dl.format.as_deref().or(y_fmt_ref);
-                    let label_y = match dl.position.as_deref() {
-                        Some("center") => rect_y + bar_height / 2.0,
-                        Some("bottom") => rect_y + bar_height - 5.0,
-                        _ => if val >= 0.0 { rect_y - 5.0 } else { rect_y + bar_height + 12.0 }, // "top" or default
-                    };
-                    elements.push(ChartElement::Text {
-                        x: x + band.bandwidth() / 2.0,
-                        y: label_y,
-                        content: format_value(val, label_fmt),
-                        anchor: TextAnchor::Middle,
-                        dominant_baseline: None,
-                        transform: None,
-                        font_family: None,
-                        font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
-                        font_weight: None,
-                        letter_spacing: None,
-                        text_transform: None,
-                        fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.text_secondary.clone())),
-                        class: "data-label".to_string(),
-                        data: None,
-                    });
-                }
+            if let Some(dl) = get_data_labels_config(config).filter(|dl| dl.show == Some(true)) {
+                let label_y = match dl.position.as_deref() {
+                    Some("center") => rect_y + bar_height / 2.0,
+                    Some("bottom") => rect_y + bar_height - DATA_LABEL_OFFSET,
+                    _ => if val >= 0.0 { rect_y - DATA_LABEL_OFFSET } else { rect_y + bar_height + 12.0 }, // "top" or default
+                };
+                elements.push(bar_data_label(
+                    (x + band.bandwidth() / 2.0, label_y),
+                    TextAnchor::Middle,
+                    None,
+                    val,
+                    dl,
+                    y_fmt_ref,
+                    config,
+                ));
             }
         }
     }
@@ -1375,6 +1384,44 @@ fn render_multi_series_bars(
 }
 
 /// Render a combo chart: multiple fields with different marks (bar/line) and optional dual axis.
+/// A combo chart's legend entries `(label, colour, symbol)`, in the order its
+/// marks are drawn. Stacked bars split by a colour field get one entry per
+/// colour series (and the bar fields none of their own); every other field
+/// gets one, a line symbol for a line field and a box otherwise. Range marks
+/// are not drawn on combo charts and get none.
+fn combo_legend_entries(
+    data: &DataTable,
+    config: &ChartConfig,
+    fields: &[chartml_core::spec::FieldSpec],
+    is_stacked: bool,
+    color_field: Option<&str>,
+) -> Vec<(String, String, LegendMark)> {
+    let mut entries = Vec::new();
+    let stacked_by_color = match (is_stacked, color_field) {
+        (true, Some(color_f)) => {
+            for (si, series_name) in data.unique_values(color_f).into_iter().enumerate() {
+                let color = config.colors.get(si).cloned().unwrap_or_else(|| "#2E7D9A".to_string());
+                entries.push((series_name, color, LegendMark::Rect));
+            }
+            true
+        }
+        _ => false,
+    };
+    for (field_idx, field_spec) in fields.iter().enumerate() {
+        let mark = field_spec.mark.as_deref().unwrap_or("bar");
+        if mark == "range" || (stacked_by_color && mark == "bar") {
+            continue;
+        }
+        let color = field_spec.color.clone()
+            .unwrap_or_else(|| config.colors.get(field_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string()));
+        let label = field_spec.label.clone()
+            .unwrap_or_else(|| field_spec.field.as_deref().unwrap_or("").to_string());
+        let symbol = if mark == "line" { LegendMark::Line } else { LegendMark::Rect };
+        entries.push((label, color, symbol));
+    }
+    entries
+}
+
 fn render_combo(
     data: &DataTable,
     config: &ChartConfig,
@@ -1391,7 +1438,7 @@ fn render_combo(
 
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
-    let grid = GridConfig::from_config(config);
+    let grid = cartesian_grid(config);
     let x_format = get_x_format(config);
 
     // Detect stacking mode and color field for bar sub-series
@@ -1426,29 +1473,15 @@ fn render_combo(
         .and_then(|a| a.x.as_ref())
         .and_then(|a| a.label.as_ref())
         .is_some();
-    // Pre-compute combo legend height from field labels. Range marks are
-    // skipped in the render loop and don't get a legend entry, so exclude
-    // them from the legend-height calculation too.
-    let combo_legend_labels: Vec<String> = fields.iter()
-        .filter(|f| f.mark.as_deref() != Some("range"))
-        .map(|f| {
-            f.label
-                .clone()
-                .unwrap_or_else(|| f.field.clone().unwrap_or_default())
-        })
-        .collect();
-    let combo_legend_height = if combo_legend_labels.len() > 1 || color_field.is_some() {
-        let legend_config = LegendConfig {
-            text_metrics: TextMetrics::from_theme_legend(&config.theme),
-            ..LegendConfig::default()
-        };
-        calculate_legend_layout(&combo_legend_labels, &config.colors, config.width, &legend_config).total_height
-    } else {
-        0.0
-    };
-    let margin_config = MarginConfig {
+    // Lay out the legend first so the margins keep room for it.
+    let legend_entries = combo_legend_entries(data, config, fields, is_stacked, color_field.as_deref());
+    let (names, colors): (Vec<String>, Vec<String>) =
+        legend_entries.iter().map(|(n, c, _)| (n.clone(), c.clone())).unzip();
+    // Combo legend items are spaced a little wider than the other charts'.
+    let legend_config = LegendConfig { item_padding: 16.0, ..LegendConfig::for_theme(&config.theme) };
+    let legend = LegendBlock::for_series(config, &names, &colors, legend_config)?;
+    let mut margin_config = MarginConfig {
         has_title: config.title.is_some(),
-        legend_height: combo_legend_height,
         // Left Y-axis label is not rendered for combo charts (see comment below),
         // so do not reserve extra left-margin space for it.
         has_y_axis_label: false,
@@ -1459,6 +1492,8 @@ fn render_combo(
         axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
         ..Default::default()
     };
+    let legend_reserve = legend.as_ref().map(|l| l.reserve()).unwrap_or_default();
+    legend_reserve.apply_to(&mut margin_config);
     let margins = calculate_margins(&margin_config);
     let inner_width = margins.inner_width(config.width);
     let inner_height = margins.inner_height(config.height);
@@ -1618,7 +1653,7 @@ fn render_combo(
     // Right axis title label — rendered manually here with absolute positioning
     // (the left axis label is already handled by generate_y_axis_numeric above).
     if let Some(label) = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()).and_then(|a| a.label.clone()) {
-        let rx = config.width - 12.0;
+        let rx = config.width - 12.0 - legend_reserve.right_inset();
         let ts = TextStyle::for_role(&config.theme, TextRole::AxisLabel);
         axis_elements.push(ChartElement::Text {
             x: rx,
@@ -1632,8 +1667,8 @@ fn render_combo(
             font_weight: ts.font_weight,
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
-            fill: Some(config.theme.text_secondary.clone()),
-            class: "axis-label".to_string(),
+            fill: Some(config.theme.axis_text_color().to_string()),
+            class: paint_class("axis-label", config.theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -1645,6 +1680,8 @@ fn render_combo(
     // Render each field
     let mut mark_elements = Vec::new();
     let line_gen = LineGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
+    // `style.showDots: false` draws no point markers on lines (default: drawn).
+    let show_dots = config.visualize.style.as_ref().and_then(|s| s.show_dots).unwrap_or(true);
 
     // Count bar fields for grouped subdivision
     let num_bar_fields = fields.iter()
@@ -1658,9 +1695,6 @@ fn render_combo(
     let sub_bar_padding = effective_bandwidth * 0.05;
     let sub_bar_width = (effective_bandwidth - sub_bar_padding * (num_bar_fields as f64 - 1.0).max(0.0)) / num_bar_fields as f64;
     let mut bar_field_idx = 0_usize;
-    let mut series_names = Vec::new();
-    let mut series_colors = Vec::new();
-    let mut series_marks = Vec::new();
 
     // Pre-compute stacked bar layout if stacking with color field
     let stacked_bar_rendered = if let (true, Some(color_f)) = (is_stacked, color_field.as_ref()) {
@@ -1741,14 +1775,6 @@ fn render_combo(
             }
         }
 
-        // Add color series to legend tracking
-        for (si, series_name) in color_series.iter().enumerate() {
-            let color = config.colors.get(si).cloned().unwrap_or_else(|| "#2E7D9A".to_string());
-            series_names.push(series_name.clone());
-            series_colors.push(color);
-            series_marks.push("bar".to_string());
-        }
-
         true
     } else {
         false
@@ -1820,24 +1846,16 @@ fn render_combo(
                     ));
 
                     // Data labels
-                    if let Some(ref dl) = field_spec.data_labels {
-                        if dl.show == Some(true) {
-                            let dl_fmt = dl.format.as_deref().or(fmt_ref);
-                            mark_elements.push(ChartElement::Text {
-                                x: bar_x + sub_bar_width / 2.0 + margins.left,
-                                y: rect_y + margins.top - 5.0,
-                                content: format_value(val, dl_fmt),
-                                anchor: TextAnchor::Middle, dominant_baseline: None,
-                                transform: None,
-                                font_family: None,
-                                font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
-                                font_weight: None,
-                                letter_spacing: None,
-                                text_transform: None,
-                                fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.text_secondary.clone())),
-                                class: "data-label".to_string(), data: None,
-                            });
-                        }
+                    if let Some(dl) = field_spec.data_labels.as_ref().filter(|dl| dl.show == Some(true)) {
+                        mark_elements.push(bar_data_label(
+                            (bar_x + sub_bar_width / 2.0 + margins.left, rect_y + margins.top - DATA_LABEL_OFFSET),
+                            TextAnchor::Middle,
+                            None,
+                            val,
+                            dl,
+                            fmt_ref,
+                            config,
+                        ));
                     }
                 }
             }
@@ -1868,52 +1886,28 @@ fn render_combo(
                     });
 
                     // Dots
-                    let dot_r = config.theme.dot_radius as f64;
-                    for (i, &(px, py)) in points.iter().enumerate() {
-                        let (ref cat, val) = point_data[i];
-                        if let Some(halo) = emit_dot_halo_if_enabled(&config.theme, px, py, dot_r) {
-                            mark_elements.push(halo);
+                    if show_dots {
+                        let dot_r = config.theme.dot_radius as f64;
+                        for (i, &(px, py)) in points.iter().enumerate() {
+                            let (ref cat, val) = point_data[i];
+                            if let Some(halo) = emit_dot_halo_if_enabled(&config.theme, px, py, dot_r) {
+                                mark_elements.push(halo);
+                            }
+                            mark_elements.push(ChartElement::Circle {
+                                cx: px, cy: py, r: dot_r,
+                                fill: color.clone(), stroke: Some(config.theme.bg.clone()),
+                                class: "chartml-line-dot dot-marker".to_string(),
+                                data: Some(ElementData::new(cat, format_value(val, fmt_ref)).with_series(&label)),
+                            });
                         }
-                        mark_elements.push(ChartElement::Circle {
-                            cx: px, cy: py, r: dot_r,
-                            fill: color.clone(), stroke: Some(config.theme.bg.clone()),
-                            class: "chartml-line-dot dot-marker".to_string(),
-                            data: Some(ElementData::new(cat, format_value(val, fmt_ref)).with_series(&label)),
-                        });
                     }
 
                     // Data labels
                     if let Some(ref dl) = field_spec.data_labels {
-                        if dl.show == Some(true) {
-                            let dl_fmt = dl.format.as_deref().or(fmt_ref);
-                            for (i, &(px, py)) in points.iter().enumerate() {
-                                let (_, val) = &point_data[i];
-                                mark_elements.push(ChartElement::Text {
-                                    x: px, y: py - 10.0,
-                                    content: format_value(*val, dl_fmt),
-                                    anchor: TextAnchor::Middle, dominant_baseline: None,
-                                    transform: None,
-                                    font_family: None,
-                                    font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
-                                    font_weight: None,
-                                    letter_spacing: None,
-                                    text_transform: None,
-                                    fill: Some(dl.color.clone().unwrap_or_else(|| color.clone())),
-                                    class: "data-label".to_string(), data: None,
-                                });
-                            }
-                        }
+                        mark_elements.extend(point_data_labels(&points, &point_data, dl, fmt_ref, &color, config));
                     }
                 }
             }
-        }
-
-        // When stacked bars were rendered via color field, the color series are already
-        // tracked for legend — skip adding the bar field itself.
-        if !(stacked_bar_rendered && mark == "bar") {
-            series_names.push(label);
-            series_colors.push(color);
-            series_marks.push(mark.to_string());
         }
     }
 
@@ -1943,61 +1937,9 @@ fn render_combo(
         }
     }
 
-    // Legend with mixed marks — anchor using pre-computed legend height
-    if series_names.len() > 1 {
-        let combo_legend_metrics = TextMetrics::from_theme_legend(&config.theme);
-        let mut legend_elements = Vec::new();
-        let total_w: f64 = series_names.iter().map(|name| {
-            let tw = measure_text(name, &combo_legend_metrics);
-            12.0 + 6.0 + tw + 16.0
-        }).sum();
-        let mut x_offset = (config.width - total_w).max(0.0) / 2.0;
-        let legend_y = config.height - combo_legend_height - 8.0;
-
-        for (i, name) in series_names.iter().enumerate() {
-            let color = &series_colors[i];
-            let mark = series_marks[i].as_str();
-            let y = legend_y;
-
-            match mark {
-                "line" => {
-                    legend_elements.push(ChartElement::Line {
-                        x1: x_offset, y1: y + 6.0, x2: x_offset + 12.0, y2: y + 6.0,
-                        stroke: color.clone(), stroke_width: Some(2.5),
-                        stroke_dasharray: None, class: "legend-symbol legend-line".to_string(),
-                    });
-                }
-                _ => {
-                    legend_elements.push(ChartElement::Rect {
-                        x: x_offset, y, width: 12.0, height: 12.0,
-                        fill: color.clone(), stroke: None,
-                        rx: None, ry: None,
-                        class: "legend-symbol".to_string(), data: None,
-                        animation_origin: None,
-                    });
-                }
-            }
-
-            let ts = TextStyle::for_role(&config.theme, TextRole::LegendLabel);
-            legend_elements.push(ChartElement::Text {
-                x: x_offset + 18.0, y: y + 10.0, content: name.clone(),
-                anchor: TextAnchor::Start, dominant_baseline: None,
-                transform: None,
-                font_family: ts.font_family,
-                font_size: ts.font_size,
-                font_weight: ts.font_weight,
-                letter_spacing: ts.letter_spacing,
-                text_transform: ts.text_transform,
-                fill: Some(config.theme.text_secondary.clone()), class: "legend-label".to_string(), data: None,
-            });
-
-            let tw = measure_text(name, &combo_legend_metrics);
-            x_offset += 12.0 + 6.0 + tw + 16.0;
-        }
-
-        children.push(ChartElement::Group {
-            class: "legend".to_string(), transform: None, children: legend_elements,
-        });
+    // Legend with mixed marks: a line symbol for line fields, a box otherwise.
+    if let Some(ref legend) = legend {
+        children.push(legend.group(config, |i| legend_entries[i].2));
     }
 
     Ok(ChartElement::Svg {

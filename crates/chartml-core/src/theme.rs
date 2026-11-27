@@ -191,6 +191,10 @@ pub struct Theme {
     pub title_font_weight: u16,
     /// Font style (`"normal"` / `"italic"`) for chart titles.
     pub title_font_style: String,
+    /// Title text colour set by a chart style (`fonts.title.color`). `None`
+    /// leaves the title colour to the host (`text_strong` / the
+    /// `--chartml-text-strong` CSS property).
+    pub title_color: Option<String>,
 
     // ----- Typography: labels (tick labels, axis labels, data labels) -----
     /// Font family for tick and axis labels.
@@ -203,6 +207,22 @@ pub struct Theme {
     pub label_letter_spacing: f32,
     /// Text transform applied to labels.
     pub label_text_transform: TextTransform,
+    /// Axis and tick label colour set by a chart style (`fonts.axis.color`).
+    /// `None` draws them in `text_secondary`.
+    pub axis_label_color: Option<String>,
+
+    // ----- Typography: data labels -----
+    /// Font family for data labels (values drawn on bars, points and slices).
+    pub data_label_font_family: String,
+    /// Font size (px) for data labels. A field's own `dataLabels.fontSize`
+    /// takes precedence.
+    pub data_label_font_size: f32,
+    /// Font weight for data labels.
+    pub data_label_font_weight: u16,
+    /// Data label colour set by a chart style (`fonts.dataLabel.color`). A
+    /// field's own `dataLabels.color` takes precedence; `None` draws them in
+    /// `text_secondary`.
+    pub data_label_color: Option<String>,
 
     // ----- Typography: numeric tick labels -----
     /// Font family for numeric tick labels (e.g. a tabular/monospaced face).
@@ -332,6 +352,7 @@ impl Default for Theme {
             title_font_size: 14.0,
             title_font_weight: 700,
             title_font_style: "normal".into(),
+            title_color: None,
 
             // Label typography
             label_font_family: "system-ui, sans-serif".into(),
@@ -339,6 +360,13 @@ impl Default for Theme {
             label_font_weight: 400,
             label_letter_spacing: 0.0,
             label_text_transform: TextTransform::None,
+            axis_label_color: None,
+
+            // Data label typography
+            data_label_font_family: "system-ui, sans-serif".into(),
+            data_label_font_size: 12.0,
+            data_label_font_weight: 400,
+            data_label_color: None,
 
             // Numeric typography
             numeric_font_family: "system-ui, sans-serif".into(),
@@ -383,6 +411,19 @@ impl Default for Theme {
 }
 
 impl Theme {
+    /// The colour for axis titles and tick labels: the style's axis font
+    /// colour when one is set, else `text_secondary`.
+    pub fn axis_text_color(&self) -> &str {
+        self.axis_label_color.as_deref().unwrap_or(&self.text_secondary)
+    }
+
+    /// The colour for data labels without a `dataLabels.color` of their own:
+    /// the style's data label font colour when one is set, else
+    /// `text_secondary`.
+    pub fn data_label_text_color(&self) -> &str {
+        self.data_label_color.as_deref().unwrap_or(&self.text_secondary)
+    }
+
     /// The header letter-spacing as a multiple of the table font size (`em`), for
     /// measuring header columns. Accepts exactly the forms documented on
     /// [`Theme::table_header_letter_spacing`] and returns an error naming them

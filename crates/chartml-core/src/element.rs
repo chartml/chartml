@@ -83,6 +83,10 @@ pub enum ChartElement {
         stroke: String,
         stroke_width: Option<f64>,
         stroke_dasharray: Option<String>,
+        /// Line opacity, 0 to 1 (`style.grid.opacity` on grid lines). `None`
+        /// draws the line opaque and emits no attribute.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        opacity: Option<f64>,
         class: String,
     },
     #[serde(rename_all = "camelCase")]
@@ -323,6 +327,23 @@ pub const LEGACY_LEGEND_FONT_SIZE: &str = "11px";
 /// every pre-Phase-4 baseline SVG.
 pub const LEGACY_FONT_WEIGHT: u16 = 400;
 
+/// Class marking an element whose colour the chart chose (a style's axis,
+/// data label or grid colour, a field's `dataLabels.color`, a line's series
+/// colour) rather than the theme. The browser stylesheet's theme colour rules
+/// (`--chartml-text-secondary`, `--chartml-grid`) skip these elements, so the
+/// chart's colour is shown instead of the page theme's.
+pub const EXPLICIT_PAINT_CLASS: &str = "explicit-paint";
+
+/// `class`, plus [`EXPLICIT_PAINT_CLASS`] when the element's colour was
+/// chosen by the chart.
+pub fn paint_class(class: &str, explicit: bool) -> String {
+    if explicit {
+        format!("{class} {EXPLICIT_PAINT_CLASS}")
+    } else {
+        class.to_string()
+    }
+}
+
 /// Role of a text element, used to select the right bundle of typography
 /// fields from the active `Theme`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -334,6 +355,9 @@ pub enum TextRole {
     TickValue,
     /// Legend labels. Reads `legend_*` fields.
     LegendLabel,
+    /// Data labels (values drawn on bars, points and slices). Reads
+    /// `data_label_*` fields.
+    DataLabel,
 }
 
 /// Resolved typography for a single `ChartElement::Text` literal. All fields
@@ -349,6 +373,16 @@ pub struct TextStyle {
 }
 
 impl TextStyle {
+    /// The `TextStyle` for a data label: [`TextRole::DataLabel`], with the
+    /// field's own `dataLabels.fontSize` (px) taking precedence when set.
+    pub fn data_label(theme: &crate::theme::Theme, field_font_size: Option<f64>) -> Self {
+        let mut ts = Self::for_role(theme, TextRole::DataLabel);
+        if let Some(size) = field_font_size {
+            ts.font_size = Some(format!("{}px", size));
+        }
+        ts
+    }
+
     /// Build a `TextStyle` for the given role from a `Theme`.
     ///
     /// Returns `Some(...)` only for attributes whose theme value diverges
@@ -381,17 +415,28 @@ impl TextStyle {
                 default_theme.legend_font_size,
                 LEGACY_LEGEND_FONT_SIZE,
             ),
+            TextRole::DataLabel => (
+                &theme.data_label_font_family,
+                &default_theme.data_label_font_family,
+                theme.data_label_font_size,
+                default_theme.data_label_font_size,
+                LEGACY_LABEL_FONT_SIZE,
+            ),
         };
         let weight = match role {
             TextRole::AxisLabel | TextRole::TickValue => theme.label_font_weight,
             TextRole::LegendLabel => theme.legend_font_weight,
+            TextRole::DataLabel => theme.data_label_font_weight,
         };
 
         // Axis-label, tick-value, and legend-label all inherit
         // `label_letter_spacing` / `label_text_transform` (no legend-specific
-        // overrides per Phase 4 mapping).
-        let letter_spacing = theme.label_letter_spacing;
-        let text_transform = &theme.label_text_transform;
+        // overrides per Phase 4 mapping). Data labels are values, not chrome
+        // labels, and take neither.
+        let (letter_spacing, text_transform) = match role {
+            TextRole::DataLabel => (0.0, &TextTransform::None),
+            _ => (theme.label_letter_spacing, &theme.label_text_transform),
+        };
 
         // Emit `font-family` only when the user has overridden the theme
         // default. When the theme's family equals the default theme's family,
@@ -657,7 +702,7 @@ mod tests {
                     y2: 100.0,
                     stroke: "black".to_string(),
                     stroke_width: Some(1.0),
-                    stroke_dasharray: None,
+                    stroke_dasharray: None, opacity: None,
                     class: "axis".to_string(),
                 },
                 ChartElement::Text {

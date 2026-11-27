@@ -1,7 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+/// A named `type: style` component. Like the schema's closed
+/// `StyleComponent`, it rejects fields it does not know, so a misspelled theme
+/// field fails instead of silently doing nothing. (Inline and Config styles
+/// stay open, as CHA-51 decided.)
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StyleSpec {
     pub version: u32,
     pub name: String,
@@ -14,7 +18,7 @@ pub struct StyleSpec {
     pub legend: Option<LegendSpec>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GridSpec {
     pub x: Option<bool>,
@@ -24,7 +28,7 @@ pub struct GridSpec {
     pub dash_array: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontsSpec {
     pub title: Option<FontSpec>,
@@ -32,7 +36,7 @@ pub struct FontsSpec {
     pub data_label: Option<FontSpec>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontSpec {
     pub family: Option<String>,
@@ -41,10 +45,11 @@ pub struct FontSpec {
     pub color: Option<String>,
 }
 
-/// A font weight. The documented form is a number (`weight: 600`, as in
-/// `chartml_schema.json`). Strings (`weight: bold`) parsed before the number
-/// form was supported and stay accepted unchanged for compatibility with
-/// stored specs; they are not documented.
+/// A font weight: a whole number from 1 to 1000 (`weight: 600`) or a CSS
+/// keyword (`normal`, `bold`, `bolder`, `lighter`), as spec.md "Typography"
+/// and `chartml_schema.json` (`FontWeight`) document. A number written as a
+/// string (`weight: "600"`), which stored specs from before numeric weights
+/// parsed use, stays accepted. Anything else fails the render.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum FontWeight {
@@ -52,7 +57,7 @@ pub enum FontWeight {
     Text(String),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LegendSpec {
     pub position: Option<String>,

@@ -69,25 +69,52 @@ fn inject_chartml_css() {
 const DEFAULT_CHART_HEIGHT: f64 = 400.0;
 const METRIC_CHART_HEIGHT: f64 = 150.0;
 
-/// Resolve the height (px) chartml will render the SVG at, derived
-/// synchronously from the YAML so the loading placeholder reserves the same
-/// in-flow space the SVG will occupy (preventing the loading→rendered layout
-/// shift). Mirrors `ChartML::build_and_render` in chartml-core: an explicit
-/// `visualize.style.height` wins; otherwise the renderer's per-type default
-/// (metric 150, everything else 400) applies. The renderer reads
-/// `visualize.style.height` (NOT the top-level `style:` block), so we do the
-/// same to stay aligned with the rendered SVG height.
-fn resolve_render_height(yaml: &str) -> f64 {
-    let Some(spec) = first_chart_spec(yaml) else {
-        return DEFAULT_CHART_HEIGHT;
+/// What the component lays out around a chart before its data arrives,
+/// derived synchronously from the YAML: the height (px) chartml will render
+/// the SVG at, so the loading placeholder reserves the same in-flow space
+/// (no loading→rendered layout shift), and the inline style of the title
+/// heading.
+///
+/// Both come from the chart's resolved style (`ChartML::resolve_chart_from_yaml`:
+/// a registered or in-document named style and config default, the chart's
+/// own `style:` and `visualize.style`), as the renderer uses it. The height
+/// mirrors `ChartML::build_and_render`: the resolved style's height wins;
+/// otherwise the renderer's per-type default (metric 150, everything else
+/// 400). The heading uses the chart's theme (`ChartML::chart_theme`), so a
+/// style's title font reaches it.
+///
+/// A chart that cannot be resolved (bad YAML, an unregistered style name)
+/// renders its error in place of the chart; its frame is the default height
+/// and the instance theme's title style.
+fn resolve_chart_frame(
+    chartml: &chartml_core::ChartML,
+    yaml: &str,
+    params: Option<&ParamValues>,
+) -> ChartFrame {
+    let resolved = chartml
+        .resolve_chart_from_yaml(yaml, params)
+        .and_then(|spec| chartml.chart_theme(&spec).map(|theme| (spec, theme)));
+    let Ok((spec, theme)) = resolved else {
+        return ChartFrame {
+            height: DEFAULT_CHART_HEIGHT,
+            title_style: build_title_style(chartml.theme()),
+        };
     };
-    if let Some(h) = spec.visualize.style.as_ref().and_then(|s| s.height) {
-        return h;
-    }
-    match spec.visualize.chart_type.as_str() {
-        "metric" => METRIC_CHART_HEIGHT,
-        _ => DEFAULT_CHART_HEIGHT,
-    }
+    let height = match spec.visualize.style.as_ref().and_then(|s| s.height) {
+        Some(h) => h,
+        None => match spec.visualize.chart_type.as_str() {
+            "metric" => METRIC_CHART_HEIGHT,
+            _ => DEFAULT_CHART_HEIGHT,
+        },
+    };
+    ChartFrame { height, title_style: build_title_style(&theme) }
+}
+
+/// See [`resolve_chart_frame`].
+#[derive(Debug, Clone, PartialEq)]
+struct ChartFrame {
+    height: f64,
+    title_style: String,
 }
 
 fn extract_yaml_title(yaml: &str) -> Option<String> {
@@ -114,9 +141,10 @@ fn extract_yaml_title(yaml: &str) -> Option<String> {
 /// must bridge via the sentinel rather than pass the defaults through.
 /// Anything else is emitted verbatim.
 ///
-/// The `color` property is intentionally left as the CSS-var fallback
+/// The `color` property is the CSS-var fallback
 /// `var(--chartml-text-strong, #1f2937)` so browser-side dark mode still
-/// works via CSS custom properties.
+/// works via CSS custom properties, unless the chart's style sets a title
+/// colour (`fonts.title.color`, `Theme::title_color`), which is used as given.
 pub(crate) fn build_title_style(theme: &Theme) -> String {
     let default = Theme::default();
 
@@ -138,9 +166,13 @@ pub(crate) fn build_title_style(theme: &Theme) -> String {
         theme.title_font_weight.to_string()
     };
 
+    let color = theme
+        .title_color
+        .clone()
+        .unwrap_or_else(|| "var(--chartml-text-strong, #1f2937)".to_string());
     let mut style = format!(
-        "font-size: {}; font-weight: {}; color: var(--chartml-text-strong, #1f2937); margin-bottom: 8px;",
-        font_size, font_weight
+        "font-size: {}; font-weight: {}; color: {}; margin-bottom: 8px;",
+        font_size, font_weight, color
     );
 
     // Legacy HTML had no `font-family` — only emit when the theme overrides it.
@@ -743,10 +775,23 @@ pub fn ChartMLChart(
     // the title can render before the async pipeline completes.
     let title_signal = Memo::new(move |_| extract_yaml_title(&spec.try_get().unwrap_or_default()));
 
-    // Height the SVG will render at, resolved synchronously so the loading
-    // placeholder can reserve matching in-flow space (no layout shift).
-    let reserved_height_signal =
-        Memo::new(move |_| resolve_render_height(&spec.try_get().unwrap_or_default()));
+    // Height the SVG will render at and the title heading's style, resolved
+    // synchronously from the chart's style so the loading placeholder can
+    // reserve matching in-flow space (no layout shift) and the heading shows
+    // the style's title font from the start.
+    let chart_frame = {
+        // `ChartMLRef` is an `Rc` on WASM (single-threaded), which a `Memo`
+        // closure can only hold wrapped.
+        #[cfg(target_arch = "wasm32")]
+        let chartml = SendWrapper::new(chartml.clone());
+        #[cfg(not(target_arch = "wasm32"))]
+        let chartml = chartml.clone();
+        Memo::new(move |_| {
+            let params = param_values.and_then(|pv| pv.try_get());
+            resolve_chart_frame(&chartml, &spec.try_get().unwrap_or_default(), params.as_ref())
+        })
+    };
+    let reserved_height_signal = Memo::new(move |_| chart_frame.get().height);
 
     // Main fetch + transform effect. Reactive on `(spec, params, refresh_count)`.
     // Runs the new chartml-5 pipeline (`fetch` → `transform` →
@@ -986,10 +1031,6 @@ pub fn ChartMLChart(
         });
     }
 
-    // Build the title style string once from the theme. The theme is set on
-    // the ChartML instance before it's handed to this component and does not
-    // change reactively, so a one-shot computation is correct here.
-    let title_style = build_title_style(chartml.theme());
 
     view! {
         <div
@@ -1004,9 +1045,8 @@ pub fn ChartMLChart(
             // Chart title (extracted synchronously from the YAML so it
             // shows immediately, even before the async pipeline finishes).
             {
-                let title_style = title_style.clone();
                 move || {
-                    let title_style = title_style.clone();
+                    let title_style = chart_frame.try_get().map(|f| f.title_style).unwrap_or_default();
                     title_signal.try_get().flatten().map(|t| view! {
                         <div class="chart-title" style=title_style>
                             {t}
@@ -1422,6 +1462,10 @@ visualize:
 mod resolve_height_tests {
     use super::*;
 
+    fn frame_height(yaml: &str) -> f64 {
+        resolve_chart_frame(&chartml_core::ChartML::new(), yaml, None).height
+    }
+
     #[test]
     fn explicit_visualize_style_height_wins() {
         // An explicit `visualize.style.height` overrides the per-type default.
@@ -1437,7 +1481,7 @@ visualize:
   style:
     height: 300
 ";
-        assert_eq!(resolve_render_height(yaml), 300.0);
+        assert_eq!(frame_height(yaml), 300.0);
     }
 
     #[test]
@@ -1453,7 +1497,7 @@ visualize:
   type: line
   columns: day
 ";
-        assert_eq!(resolve_render_height(yaml), 400.0);
+        assert_eq!(frame_height(yaml), 400.0);
     }
 
     #[test]
@@ -1469,19 +1513,67 @@ visualize:
   type: metric
   value: total
 ";
-        assert_eq!(resolve_render_height(yaml), 150.0);
+        assert_eq!(frame_height(yaml), 150.0);
     }
 
     #[test]
     fn invalid_yaml_falls_back_to_default() {
         // Unparseable YAML can't yield a spec — fall back to the safe default
         // rather than panicking.
-        assert_eq!(resolve_render_height("not: [valid"), 400.0);
+        assert_eq!(frame_height("not: [valid"), 400.0);
     }
 
     #[test]
     fn empty_yaml_falls_back_to_default() {
-        assert_eq!(resolve_render_height(""), 400.0);
+        assert_eq!(frame_height(""), 400.0);
+    }
+
+    const CHART: &str = "\
+type: chart
+version: 1
+title: Revenue
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+visualize:
+  type: line
+  columns: day
+";
+
+    fn themed() -> chartml_core::ChartML {
+        let mut c = chartml_core::ChartML::new();
+        c.register_component(
+            "type: style\nversion: 1\nname: brand\nheight: 275\nfonts:\n  title:\n    family: \"Georgia, serif\"\n    size: 22\n    weight: 800\n    color: \"#112233\"\n",
+        )
+        .expect("style registers");
+        c.register_component("type: config\nversion: 1\nstyle: brand\n").expect("config registers");
+        c
+    }
+
+    #[test]
+    fn a_config_style_height_reserves_the_placeholder() {
+        assert_eq!(resolve_chart_frame(&themed(), CHART, None).height, 275.0);
+    }
+
+    #[test]
+    fn the_heading_uses_the_resolved_title_font_and_colour() {
+        let style = resolve_chart_frame(&themed(), CHART, None).title_style;
+        assert!(style.contains("font-family: Georgia, serif;"), "{style}");
+        assert!(style.contains("font-size: 22px;"), "{style}");
+        assert!(style.contains("font-weight: 800;"), "{style}");
+        assert!(style.contains("color: #112233;"), "{style}");
+
+        // Without the style, the instance theme's (legacy) heading style.
+        let plain = resolve_chart_frame(&chartml_core::ChartML::new(), CHART, None).title_style;
+        assert_eq!(plain, build_title_style(&Theme::default()));
+    }
+
+    #[test]
+    fn a_chart_naming_an_unregistered_style_gets_the_default_frame() {
+        let yaml = CHART.replace("title: Revenue\n", "title: Revenue\nstyle: missing\n");
+        let frame = resolve_chart_frame(&chartml_core::ChartML::new(), &yaml, None);
+        assert_eq!(frame.height, 400.0);
+        assert_eq!(frame.title_style, build_title_style(&Theme::default()));
     }
 }
 

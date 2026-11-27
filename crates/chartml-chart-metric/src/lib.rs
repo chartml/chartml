@@ -134,11 +134,11 @@ impl ChartRenderer for MetricRenderer {
         // its label row, empty, so that its value lines up with the value of
         // a labelled card beside it (CHA-11).
         let title = config.title.as_deref().map(str::trim).filter(|t| !t.is_empty());
-        let label = match (&viz.label, title) {
-            (Some(label), _) => label.clone(),
-            (None, Some(_)) if config.title_heading => String::new(),
-            (None, Some(title)) => title.to_string(),
-            (None, None) => value_field.clone(),
+        let (label, label_is_title) = match (&viz.label, title) {
+            (Some(label), _) => (label.clone(), false),
+            (None, Some(_)) if config.title_heading => (String::new(), false),
+            (None, Some(title)) => (title.to_string(), true),
+            (None, None) => (value_field.clone(), false),
         };
 
         // Build the metric card using Div/Span elements
@@ -165,6 +165,21 @@ impl ChartRenderer for MetricRenderer {
             ]);
         if let Some(line_px) = layout.label_line_px {
             label_style.insert("line-height".to_string(), format!("{line_px}px"));
+        }
+        // A label that shows the title takes the title font's family, weight
+        // and colour where the theme or the chart's style sets them. Its size
+        // stays the card's own, which is fitted to the card.
+        if label_is_title {
+            let default_theme = chartml_core::theme::Theme::default();
+            if config.theme.title_font_family != default_theme.title_font_family {
+                label_style.insert("font-family".to_string(), config.theme.title_font_family.clone());
+            }
+            if config.theme.title_font_weight != default_theme.title_font_weight {
+                label_style.insert("font-weight".to_string(), config.theme.title_font_weight.to_string());
+            }
+            if let Some(color) = &config.theme.title_color {
+                label_style.insert("color".to_string(), color.clone());
+            }
         }
         card_children.push(ChartElement::Span {
             class: "chartml-metric-label".to_string(),

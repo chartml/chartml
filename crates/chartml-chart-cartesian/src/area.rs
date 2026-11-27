@@ -2,6 +2,7 @@ use chartml_core::data::DataTable;
 use chartml_core::element::{ChartElement, ElementData, Transform, ViewBox};
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
+use chartml_core::layout::legend::{LegendBlock, LegendConfig};
 use chartml_core::layout::stack::{StackLayout, StackOffset};
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
@@ -9,11 +10,12 @@ use chartml_core::shapes::AreaGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics};
 
-use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
 
-use crate::helpers::{GridConfig, emit_zero_line_if_crosses, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_legend, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{cartesian_grid, emit_zero_line_if_crosses, generate_annotations, generate_x_axis, generate_y_axis_numeric, get_color_field, LegendMark, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
+    // `style.fillOpacity` (0 to 1); area fills are 60% opaque by default.
+    let fill_opacity = config.visualize.style.as_ref().and_then(|s| s.fill_opacity).unwrap_or(0.6);
     let category_field = get_field_name(&config.visualize.columns)?;
     let value_field = get_field_name(&config.visualize.rows)?;
 
@@ -27,7 +29,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     let is_normalized = matches!(config.visualize.mode, Some(chartml_core::spec::ChartMode::Normalized));
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
-    let grid = GridConfig::from_config(config);
+    let grid = cartesian_grid(config);
     let left_axis_label = config.visualize.axes.as_ref()
         .and_then(|a| a.left.as_ref())
         .and_then(|a| a.label.as_deref());
@@ -59,16 +61,15 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         crate::helpers::format_value(prelim_nice_max, area_prelim_fmt),
     ];
 
-    // Pre-compute legend height so the bottom margin accounts for multi-row legends.
-    let legend_height = if let Some(ref color_f) = color_field {
-        let series_names = data.unique_values(color_f);
-        let legend_config = LegendConfig {
-            text_metrics: TextMetrics::from_theme_legend(&config.theme),
-            ..LegendConfig::default()
-        };
-        calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config).total_height
-    } else {
-        0.0
+    // Lay out the legend first so the margins keep room for it.
+    let legend = match color_field {
+        Some(ref color_f) => LegendBlock::for_series(
+            config,
+            &data.unique_values(color_f),
+            &config.colors,
+            LegendConfig::for_theme(&config.theme),
+        )?,
+        None => None,
     };
 
     // Step 2: Calculate margins including rotation
@@ -80,9 +81,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         .and_then(|a| a.left.as_ref())
         .and_then(|a| a.label.as_ref())
         .is_some();
-    let margin_config = MarginConfig {
+    let mut margin_config = MarginConfig {
         has_title: config.title.is_some(),
-        legend_height,
         has_x_axis_label,
         has_y_axis_label,
         x_label_strategy_margin: x_extra_margin,
@@ -91,6 +91,9 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
         ..Default::default()
     };
+    if let Some(ref legend) = legend {
+        legend.reserve().apply_to(&mut margin_config);
+    }
     let margins = calculate_margins(&margin_config);
 
     let inner_width = margins.inner_width(config.width);
@@ -207,7 +210,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     stroke_width: None,
                     stroke_dasharray: None,
                     stroke_dashoffset: None,
-                    opacity: Some(0.6),
+                    opacity: Some(fill_opacity),
                     class: "chartml-area-path".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                     animation_origin: None,
@@ -356,7 +359,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     stroke_width: None,
                     stroke_dasharray: None,
                     stroke_dashoffset: None,
-                    opacity: Some(0.6),
+                    opacity: Some(fill_opacity),
                     class: "chartml-area-path".to_string(),
                     data: Some(ElementData::new(series_name, "").with_series(series_name)),
                     animation_origin: None,
@@ -440,25 +443,9 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         }
 
         // Legend
-        let series_names_for_legend = data.unique_values(color_f);
-        let legend_config = LegendConfig {
-            text_metrics: TextMetrics::from_theme_legend(&config.theme),
-            ..LegendConfig::default()
-        };
-        let legend_layout = calculate_legend_layout(&series_names_for_legend, &config.colors, config.width, &legend_config);
-        let legend_y = config.height - legend_layout.total_height - 8.0;
-        let legend_elements = generate_legend(
-            &series_names_for_legend,
-            &config.colors,
-            config.width,
-            legend_y,
-            &config.theme,
-        );
-        children.push(ChartElement::Group {
-            class: "legend".to_string(),
-            transform: None,
-            children: legend_elements,
-        });
+        if let Some(ref legend) = legend {
+            children.push(legend.group(config, |_| LegendMark::Rect));
+        }
     } else {
         // Single series area
         let values: Vec<f64> = (0..data.num_rows())
@@ -511,7 +498,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 stroke_width: None,
                 stroke_dasharray: None,
                 stroke_dashoffset: None,
-                opacity: Some(0.6),
+                opacity: Some(fill_opacity),
                 class: "chartml-area-path".to_string(),
                 data: None,
                 animation_origin: None,

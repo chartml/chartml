@@ -1,0 +1,50 @@
+name: "Named style: legend on the right, no dots, thick lines"
+tags: [style, named-style, legend, legend-right, line, multi-series, show-dots, stroke-width]
+description: >
+  A named style puts the legend at the right (vertical by default there),
+  turns line dots off and sets a 4px line width. Three series lines with
+  no dot markers; the legend is a single column at the right edge,
+  vertically centred, and the plot ends left of it with a gap.
+
+chart:
+  - type: style
+    version: 1
+    name: lines
+    showDots: false
+    strokeWidth: 4
+    legend:
+      position: right
+  - type: chart
+    version: 1
+    title: "Traffic by Channel"
+    style: lines
+    data:
+      provider: inline
+      rows:
+        - { day: "Mon", channel: "Search", visits: 320 }
+        - { day: "Mon", channel: "Social", visits: 210 }
+        - { day: "Mon", channel: "Email", visits: 120 }
+        - { day: "Tue", channel: "Search", visits: 340 }
+        - { day: "Tue", channel: "Social", visits: 190 }
+        - { day: "Tue", channel: "Email", visits: 150 }
+        - { day: "Wed", channel: "Search", visits: 360 }
+        - { day: "Wed", channel: "Social", visits: 230 }
+        - { day: "Wed", channel: "Email", visits: 140 }
+    visualize:
+      type: line
+      columns: day
+      rows: visits
+      marks:
+        color: channel
+
+assertions:
+  structure:
+    root: svg
+    lines: 3
+    dots: 0
+    legend: true
+    legend_entries: 3
+  style:
+    line_stroke_width: 4
+    legend_position: right
+    legend_orientation: vertical

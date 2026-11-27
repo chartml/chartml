@@ -62,8 +62,19 @@ pub fn parse(input: &str) -> Result<ChartMLSpec, ChartError> {
         // Single document: try to parse as a single component first,
         // then fall back to an array of components.
         let yaml_str = documents.first().copied().unwrap_or(input);
-        let spec: ChartMLSpec = serde_yaml::from_str(yaml_str)?;
-        Ok(spec)
+        match serde_yaml::from_str::<ChartMLSpec>(yaml_str) {
+            Ok(spec) => Ok(spec),
+            // A single component that fails: report the component's own error
+            // (which names the bad field) rather than the untagged enum's
+            // "did not match any variant".
+            Err(untagged) => match serde_yaml::from_str::<serde_yaml::Value>(yaml_str) {
+                Ok(serde_yaml::Value::Mapping(_)) => match serde_yaml::from_str::<Component>(yaml_str) {
+                    Err(component) => Err(component.into()),
+                    Ok(_) => Err(untagged.into()),
+                },
+                _ => Err(untagged.into()),
+            },
+        }
     } else {
         // Multiple documents: parse each as a Component or array of Components.
         let mut components = Vec::with_capacity(documents.len());
@@ -72,13 +83,17 @@ pub fn parse(input: &str) -> Result<ChartMLSpec, ChartError> {
             if trimmed.is_empty() {
                 continue;
             }
-            // Try parsing as a single component first, then as an array of components
-            if let Ok(component) = serde_yaml::from_str::<Component>(trimmed) {
-                components.push(component);
-            } else {
-                // May be an array of components (e.g., multiple charts in one document)
-                let array: Vec<Component> = serde_yaml::from_str(trimmed)?;
-                components.extend(array);
+            // A sequence is several components (e.g. multiple charts in one
+            // document), a document with no content (only comments) none, and
+            // anything else one component. Parsing by shape keeps a
+            // component's own error, which names the bad field.
+            match serde_yaml::from_str::<serde_yaml::Value>(trimmed) {
+                Ok(serde_yaml::Value::Null) => {}
+                Ok(serde_yaml::Value::Sequence(_)) => {
+                    let array: Vec<Component> = serde_yaml::from_str(trimmed)?;
+                    components.extend(array);
+                }
+                _ => components.push(serde_yaml::from_str::<Component>(trimmed)?),
             }
         }
         Ok(ChartMLSpec::Array(components))
@@ -399,6 +414,16 @@ style: custom_theme
             }
             other => panic!("Expected Config, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn a_comment_only_document_before_a_separator_adds_nothing() {
+        let yaml = "# Revenue dashboard\n---\ntype: chart\nversion: 1\ndata: sales\nvisualize:\n  type: bar\n  columns: month\n  rows: revenue\n";
+        let ChartMLSpec::Array(components) = parse(yaml).expect("parses") else {
+            panic!("multi-document input parses as an array");
+        };
+        assert_eq!(components.len(), 1);
+        assert!(matches!(components[0], Component::Chart(_)));
     }
 
     #[test]

@@ -290,6 +290,8 @@ export interface LineElement {
   stroke: string;
   strokeWidth?: number;
   strokeDasharray?: string;
+  /** Line opacity, 0 to 1 (set on grid lines by `style.grid.opacity`). */
+  opacity?: number;
   class: string;
 }
 

@@ -7,133 +7,6 @@ Comprehensive examples demonstrating all ChartML v1.0 features including reusabl
 
 ---
 
-## Reusable Styles and Configuration
-
-This section demonstrates how to define reusable themes and apply them across multiple charts.
-
-### Define a Reusable Style
-
-```yaml
-type: style
-version: 1
-name: corporate_theme
-colors: ["#4285f4", "#ea4335", "#fbbc04", "#34a853"]
-grid:
-  y: true
-  color: "#e0e0e0"
-  opacity: 0.5
-height: 400
-fonts:
-  title:
-    family: "Inter, sans-serif"
-    size: 18
-    weight: 600
-```
-
-### Set Dashboard-Level Default Style
-
-All charts below will inherit `corporate_theme` automatically:
-
-```yaml
-type: config
-version: 1
-style: corporate_theme
-```
-
-### Charts Automatically Inherit the Theme
-
-**Chart 1: Revenue Trend** - Uses all defaults from corporate_theme
-
-```chartml
-type: chart
-version: 1
-title: "Monthly Revenue"
-
-data:
-  provider: inline
-  rows:
-    - month: "Jan"
-      revenue: 125000
-    - month: "Feb"
-      revenue: 138000
-    - month: "Mar"
-      revenue: 152000
-
-visualize:
-  type: bar
-  columns: month
-  rows: revenue
-```
-
-**Chart 2: Customer Growth** - Also inherits theme, demonstrates multiple charts sharing style
-
-```chartml
-type: chart
-version: 1
-title: "New Customers"
-
-data:
-  provider: inline
-  rows:
-    - month: "Jan"
-      customers: 450
-    - month: "Feb"
-      customers: 485
-    - month: "Mar"
-      customers: 520
-
-visualize:
-  type: line
-  columns: month
-  rows: customers
-```
-
-### Chart with Selective Overrides (Deep Merge)
-
-This chart overrides just height and grid color while keeping corporate_theme's fonts and base colors:
-
-```chartml
-type: chart
-version: 1
-title: "Regional Breakdown"
-
-data:
-  provider: inline
-  rows:
-    - region: "US"
-      revenue: 85000
-    - region: "EU"
-      revenue: 67000
-
-visualize:
-  type: pie
-  columns: region
-  rows: revenue
-  style:
-    height: 300
-    grid:
-      color: "#ff0000"
-```
-
-### Config with Inline Style
-
-For one-off dashboard themes without creating a named style, you can define inline styles:
-
-```yaml
-type: config
-version: 1
-style:
-  colors: ["#1a237e", "#3949ab", "#5e92f3"]
-  height: 500
-  grid:
-    y: true
-    color: "#f0f0f0"
-```
-
-*(Note: Example shown as YAML instead of chartml to avoid multiple configs in this file)*
-
----
-
 ## KPI Overview: Executive Metrics Dashboard
 
 This dashboard demonstrates metric cards (KPI cards) that display key performance indicators with trend comparisons.
@@ -2396,6 +2269,139 @@ visualize:
 - Variable resolution is simple string replacement
 - URL updates enable shareable filtered views
 - Each chart independently chooses which parameters apply
+
+---
+
+## Reusable Styles and Configuration
+
+This section demonstrates how to define a reusable theme once and apply it across charts. It sits at the end of this page because a Config sets the default for every chart after it in the page, as it would for a dashboard.
+
+### Define a Reusable Style
+
+```chartml
+type: style
+version: 1
+name: corporate_theme
+colors: ["#4285f4", "#ea4335", "#fbbc04", "#34a853"]
+grid:
+  y: true
+  color: "#e0e0e0"
+  opacity: 0.5
+height: 400
+fonts:
+  title:
+    family: "Inter, sans-serif"
+    size: 18
+    weight: 600
+  axis:
+    family: "Georgia, serif"
+    size: 13
+    color: "#5f6368"
+```
+
+### Set Dashboard-Level Default Style
+
+All charts below inherit `corporate_theme` automatically:
+
+```chartml
+type: config
+version: 1
+style: corporate_theme
+```
+
+### Charts Automatically Inherit the Theme
+
+**Chart 1: Revenue Trend** - Uses all defaults from corporate_theme: its blue bars, its grid and its serif axis labels
+
+```chartml
+type: chart
+version: 1
+title: "Monthly Revenue"
+
+data:
+  provider: inline
+  rows:
+    - month: "Jan"
+      revenue: 125000
+    - month: "Feb"
+      revenue: 138000
+    - month: "Mar"
+      revenue: 152000
+
+visualize:
+  type: bar
+  columns: month
+  rows: revenue
+```
+
+**Chart 2: Customer Growth** - Also inherits the theme, so the two charts share one look
+
+```chartml
+type: chart
+version: 1
+title: "New Customers"
+
+data:
+  provider: inline
+  rows:
+    - month: "Jan"
+      customers: 450
+    - month: "Feb"
+      customers: 485
+    - month: "Mar"
+      customers: 520
+
+visualize:
+  type: line
+  columns: month
+  rows: customers
+```
+
+### Chart with Selective Overrides (Deep Merge)
+
+This chart overrides just its height and grid colour while keeping corporate_theme's colours, fonts and the rest of its grid:
+
+```chartml
+type: chart
+version: 1
+title: "Regional Breakdown"
+
+data:
+  provider: inline
+  rows:
+    - region: "US"
+      revenue: 85000
+    - region: "EU"
+      revenue: 67000
+    - region: "APAC"
+      revenue: 52000
+
+visualize:
+  type: bar
+  columns: region
+  rows: revenue
+  style:
+    height: 300
+    grid:
+      color: "#ff0000"
+```
+
+### Config with Inline Style
+
+For one-off dashboard themes without creating a named style, you can define inline styles:
+
+```yaml
+type: config
+version: 1
+style:
+  colors: ["#1a237e", "#3949ab", "#5e92f3"]
+  height: 500
+  grid:
+    y: true
+    color: "#f0f0f0"
+```
+
+*(Note: Example shown as YAML instead of chartml because a second config would merge over the one above for the rest of the page)*
 
 ---
 

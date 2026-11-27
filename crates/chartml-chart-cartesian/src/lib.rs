@@ -788,7 +788,7 @@ style:
         };
 
         // Verify GridConfig resolves correctly
-        let grid_config = crate::helpers::GridConfig::from_config(&config);
+        let grid_config = crate::helpers::cartesian_grid(&config);
         assert_eq!(grid_config.dash_array, Some("4,4".to_string()), "GridConfig.dash_array should be set");
         assert!(grid_config.show_x, "grid.show_x should be true");
         assert!(grid_config.show_y, "grid.show_y should be true");

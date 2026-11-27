@@ -191,7 +191,7 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             buf.push_str("/>");
         }
 
-        ChartElement::Line { x1, y1, x2, y2, stroke, stroke_width, stroke_dasharray, class } => {
+        ChartElement::Line { x1, y1, x2, y2, stroke, stroke_width, stroke_dasharray, opacity, class } => {
             write!(
                 buf,
                 r#"<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}""#,
@@ -202,6 +202,9 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             }
             if let Some(sda) = stroke_dasharray {
                 write!(buf, r#" stroke-dasharray="{}""#, xml_escape(sda)).expect("writing to String is infallible");
+            }
+            if let Some(op) = opacity {
+                write!(buf, r#" opacity="{}""#, op).expect("writing to String is infallible");
             }
             if !class.is_empty() {
                 write!(buf, r#" class="{}""#, xml_escape(class)).expect("writing to String is infallible");
@@ -514,7 +517,7 @@ mod tests {
                     x1: 0.0, y1: 0.0, x2: 100.0, y2: 100.0,
                     stroke: "red".to_string(),
                     stroke_width: Some(1.0),
-                    stroke_dasharray: None,
+                    stroke_dasharray: None, opacity: None,
                     class: "grid".to_string(),
                 },
             ],

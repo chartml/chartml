@@ -1,0 +1,52 @@
+name: "Named style: scatter grid and a vertical legend at the bottom"
+tags: [style, named-style, legend, legend-vertical, scatter, grid]
+description: >
+  A scatter plot whose named style draws only horizontal grid lines, in
+  dashed light blue, and puts the legend at the bottom as a single
+  centred column. No vertical grid lines; two legend entries one above
+  the other below the plot.
+
+chart:
+  - type: style
+    version: 1
+    name: scatter_theme
+    grid:
+      x: false
+      y: true
+      color: "#9ecae1"
+      dashArray: "4,2"
+    legend:
+      position: bottom
+      orientation: vertical
+  - type: chart
+    version: 1
+    title: "Budget vs Sales"
+    style: scatter_theme
+    data:
+      provider: inline
+      rows:
+        - { budget: 10, sales: 25, segment: "Retail" }
+        - { budget: 20, sales: 38, segment: "Retail" }
+        - { budget: 30, sales: 41, segment: "Retail" }
+        - { budget: 15, sales: 18, segment: "Wholesale" }
+        - { budget: 25, sales: 30, segment: "Wholesale" }
+        - { budget: 35, sales: 52, segment: "Wholesale" }
+    visualize:
+      type: scatter
+      columns: budget
+      rows: sales
+      marks:
+        color: segment
+
+assertions:
+  structure:
+    root: svg
+    points: 6
+    legend: true
+    legend_entries: 2
+  style:
+    grid_color: "#9ecae1"
+    grid_dasharray: "4,2"
+    vertical_grid: false
+    legend_position: bottom
+    legend_orientation: vertical

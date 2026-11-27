@@ -39,6 +39,16 @@ pub struct MarginConfig {
     /// This should be pre-computed via `calculate_legend_layout().total_height`
     /// so that multi-row legends get proper bottom margin space.
     pub legend_height: f64,
+    /// Height of a legend at the top (0.0 when none). The plot starts below
+    /// it and a [`LEGEND_GAP`](super::legend::LEGEND_GAP).
+    pub legend_top_height: f64,
+    /// Width of a legend at the left (0.0 when none). The y axis starts to
+    /// its right, with a [`LEGEND_GAP`](super::legend::LEGEND_GAP) either side.
+    pub legend_left_width: f64,
+    /// Width of a legend at the right (0.0 when none), kept clear of the plot
+    /// and any right axis with a [`LEGEND_GAP`](super::legend::LEGEND_GAP)
+    /// either side.
+    pub legend_right_width: f64,
     pub y_tick_labels: Vec<String>,
     pub right_tick_labels: Vec<String>,
     pub x_label_strategy_margin: f64,
@@ -64,6 +74,9 @@ impl Default for MarginConfig {
             has_y_axis_label: false,
             has_right_axis: false,
             legend_height: 0.0,
+            legend_top_height: 0.0,
+            legend_left_width: 0.0,
+            legend_right_width: 0.0,
             y_tick_labels: Vec::new(),
             right_tick_labels: Vec::new(),
             x_label_strategy_margin: 0.0,
@@ -90,7 +103,7 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
     use super::labels::measure_text;
 
     // Top margin — matches JS d3CartesianChart.js marginTop=20 (title is rendered as HTML outside SVG)
-    let top = 20.0;
+    let top = 20.0 + side_extent(config.legend_top_height, 1.0);
 
     // Left margin: based on Y-axis tick label widths
     let max_y_label_width = config.y_tick_labels.iter()
@@ -120,7 +133,7 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
         left_base.max(min_with_label)
     } else {
         left_base
-    }.min(config.max_left_margin);
+    }.min(config.max_left_margin) + side_extent(config.legend_left_width, 2.0);
 
     // Right margin
     let right = if config.has_right_axis {
@@ -132,7 +145,7 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
             .min(config.max_right_margin)
     } else {
         30.0 // matches JS d3CartesianChart.js default marginRight
-    };
+    } + side_extent(config.legend_right_width, 2.0);
 
     // Bottom margin: 40px base covers tick marks (+5px) and horizontal label text (+18px)
     // with some padding.  For small charts (< 300px tall), scale proportionally to
@@ -152,6 +165,16 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
         + if config.legend_height > 0.0 { config.legend_height + 8.0 } else { 0.0 };
 
     Margins { top, right, bottom, left }
+}
+
+/// Room a top or side legend of `size` takes, with `gaps` legend gaps
+/// around it; nothing when there is no legend.
+fn side_extent(size: f64, gaps: f64) -> f64 {
+    if size > 0.0 {
+        size + gaps * super::legend::LEGEND_GAP
+    } else {
+        0.0
+    }
 }
 
 #[cfg(test)]
@@ -180,6 +203,22 @@ mod tests {
         let m = Margins::new(300.0, 300.0, 300.0, 300.0);
         assert_eq!(m.inner_width(100.0), 0.0);
         assert_eq!(m.inner_height(100.0), 0.0);
+    }
+
+    #[test]
+    fn top_and_side_legends_widen_their_margins_with_gaps() {
+        use crate::layout::legend::LEGEND_GAP;
+        let base = calculate_margins(&MarginConfig::default());
+        let m = calculate_margins(&MarginConfig {
+            legend_top_height: 20.0,
+            legend_left_width: 90.0,
+            legend_right_width: 70.0,
+            ..Default::default()
+        });
+        assert_eq!(m.top, base.top + 20.0 + LEGEND_GAP);
+        assert_eq!(m.left, base.left + 90.0 + 2.0 * LEGEND_GAP);
+        assert_eq!(m.right, base.right + 70.0 + 2.0 * LEGEND_GAP);
+        assert_eq!(m.bottom, base.bottom);
     }
 
     #[test]

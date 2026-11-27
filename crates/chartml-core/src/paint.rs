@@ -138,12 +138,49 @@ fn check_field_ref(path: &str, r: &Option<FieldRef>) -> Result<(), ChartError> {
 
 fn check_font(path: &str, f: &Option<FontSpec>) -> Result<(), ChartError> {
     match f {
-        Some(f) => check_opt(&format!("{path}.color"), &f.color),
+        Some(f) => {
+            if let Some(family) = &f.family {
+                check_font_family(&format!("{path}.family"), family)?;
+            }
+            check_opt(&format!("{path}.color"), &f.color)
+        }
         None => Ok(()),
     }
 }
 
-fn check_style(path: &str, s: &ChartStyleSpec) -> Result<(), ChartError> {
+/// A font family from a chart spec is copied into SVG `font-family`
+/// attributes and into HTML inline `style` strings (the Leptos title heading,
+/// a metric card's title), so, like a paint, it is checked before use. A font
+/// family list is family names separated by commas; each name is either
+/// unquoted (letters, digits, spaces, hyphens, underscores) or wrapped in one
+/// pair of matching single or double quotes with no quote inside. Anything
+/// else (`;`, `{`, `}`, `(`, `)`, `\`, `<`, `>`, `:`, `/`, a line break, or a
+/// stray quote that would leave a CSS string open) could end the declaration
+/// or swallow the rest of a style, for example injecting a
+/// `background-image: url(...)` that makes the browser fetch a URL, so it
+/// fails with [`ChartError::InvalidSpec`] naming the field.
+fn check_font_family(path: &str, family: &str) -> Result<(), ChartError> {
+    let name_char = |c: char| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_');
+    let valid_name = |name: &str| {
+        let name = name.trim();
+        let unquoted = match (name.chars().next(), name.chars().last()) {
+            (Some(q @ ('\'' | '"')), Some(end)) if name.len() >= 2 && end == q => &name[1..name.len() - 1],
+            _ => name,
+        };
+        !unquoted.trim().is_empty() && unquoted.chars().all(name_char)
+    };
+    if family.split(',').all(valid_name) {
+        Ok(())
+    } else {
+        Err(ChartError::InvalidSpec(format!(
+            "{path} is not an allowed font family: {family:?} (use family names separated by \
+             commas, with letters, digits, spaces, hyphens and underscores, each optionally \
+             in one pair of quotes)"
+        )))
+    }
+}
+
+pub(crate) fn validate_style(path: &str, s: &ChartStyleSpec) -> Result<(), ChartError> {
     for (i, c) in s.colors.iter().flatten().enumerate() {
         check(&format!("{path}.colors[{i}]"), c)?;
     }
@@ -171,7 +208,7 @@ fn check_visualize(v: &VisualizeSpec) -> Result<(), ChartError> {
         check_annotation(&format!("visualize.annotations[{i}]"), a)?;
     }
     if let Some(style) = &v.style {
-        check_style("visualize.style", style)?;
+        validate_style("visualize.style", style)?;
     }
     Ok(())
 }
@@ -181,7 +218,7 @@ fn check_visualize(v: &VisualizeSpec) -> Result<(), ChartError> {
 pub fn validate_chart_spec(spec: &ChartSpec) -> Result<(), ChartError> {
     check_visualize(&spec.visualize)?;
     if let Some(StyleRefOrInline::Inline(style)) = &spec.style {
-        check_style("style", style)?;
+        validate_style("style", style)?;
     }
     Ok(())
 }
@@ -222,6 +259,41 @@ mod tests {
             "calc(1)", "expression(1)",
         ] {
             assert!(!is_safe_paint(v), "{v:?} should be rejected");
+        }
+    }
+
+    #[test]
+    fn font_families_allow_ordinary_stacks_only() {
+        for ok in [
+            "Inter",
+            "Inter, 'Helvetica Neue', sans-serif",
+            "\"Geist Mono\", monospace",
+            "system-ui, -apple-system, Segoe_UI",
+            "Noto Sans JP",
+            "ヒラギノ角ゴ, sans-serif",
+        ] {
+            assert!(check_font_family("f", ok).is_ok(), "{ok}");
+        }
+        for bad in [
+            "Inter; background-image: url(https://tracker.example/x)",
+            "Inter}body{color:red",
+            "a(b)",
+            "x\\y",
+            "<script>",
+            "Inter:hover",
+            "url//x",
+            "Inter\ncolor: red",
+            "'Inter",
+            "\"'\"'",
+            "'a\"b'\"",
+            "'Inter\"",
+            "Inter,,serif",
+            "''",
+            "",
+            "   ",
+        ] {
+            let err = check_font_family("fonts.title.family", bad).expect_err(bad);
+            assert!(err.to_string().contains("fonts.title.family"), "{err}");
         }
     }
 
