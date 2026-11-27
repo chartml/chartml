@@ -2401,7 +2401,7 @@ style:
     color: "#f0f0f0"
 ```
 
-*(Note: Example shown as YAML instead of chartml because a second config would replace the one above for the rest of the page)*
+*(Note: Example shown as YAML instead of chartml because a second config would merge over the one above for the rest of the page)*
 
 ---
 

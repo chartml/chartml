@@ -10,9 +10,9 @@ use chartml_core::spec::{ChartMode, Orientation};
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics, measure_text};
 
-use chartml_core::layout::legend::{LegendBlock, LegendConfig, LegendMark, LEGEND_GAP};
+use chartml_core::layout::legend::{LegendBlock, LegendConfig, LegendMark};
 
-use crate::helpers::{cartesian_grid, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
+use crate::helpers::{cartesian_grid, bar_data_label, horizontal_label_position, point_data_labels, DATA_LABEL_OFFSET, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
 
 /// Position of a bar segment within a stacked bar group.
 ///
@@ -642,17 +642,14 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     // keep room on the right for the widest one.
     if is_horizontal && color_field.is_none() {
         if let Some(dl) = get_data_labels_config(config)
-            .filter(|dl| dl.show == Some(true) && matches!(dl.position.as_deref(), None | Some("top")))
+            .filter(|dl| dl.show == Some(true) && horizontal_label_position(dl.position.as_deref(), 0.0).2)
         {
-            let metrics = TextMetrics {
-                font_size_px: dl.font_size.unwrap_or(config.theme.data_label_font_size as f64),
-                ..TextMetrics::default()
-            };
+            let metrics = TextMetrics::from_theme_data_label(&config.theme, dl.font_size);
             let widest = (0..data.num_rows())
                 .filter_map(|i| data.get_f64(i, &value_field))
                 .map(|v| measure_text(&format_value(v, dl.format.as_deref().or(y_fmt_ref)), &metrics))
                 .fold(0.0_f64, f64::max);
-            margins.right = margins.right.max(widest + 5.0 + LEGEND_GAP);
+            margins.right = margins.right.max(widest + 2.0 * DATA_LABEL_OFFSET);
         }
     }
 
@@ -939,11 +936,7 @@ fn render_single_series_bars(
             // default, in its middle (`center`) or inside its start (`bottom`),
             // the horizontal counterparts of the vertical positions.
             if let Some(dl) = get_data_labels_config(config).filter(|dl| dl.show == Some(true)) {
-                let (label_x, anchor) = match dl.position.as_deref() {
-                    Some("center") => (bar_width / 2.0, TextAnchor::Middle),
-                    Some("bottom") => (5.0, TextAnchor::Start),
-                    _ => (bar_width + 5.0, TextAnchor::Start),
-                };
+                let (label_x, anchor, _) = horizontal_label_position(dl.position.as_deref(), bar_width);
                 elements.push(bar_data_label(
                     (label_x, y + band.bandwidth() / 2.0),
                     anchor,
@@ -1021,37 +1014,6 @@ fn render_single_series_bars(
     }
 
     Ok((value_max, elements))
-}
-
-/// A single-series bar's value label at `(x, y)`: the field's `dataLabels`
-/// format, font size and colour where set, else the chart's data label font
-/// and colour.
-fn bar_data_label(
-    (x, y): (f64, f64),
-    anchor: TextAnchor,
-    dominant_baseline: Option<String>,
-    val: f64,
-    dl: &chartml_core::spec::DataLabelsSpec,
-    fmt: Option<&str>,
-    config: &ChartConfig,
-) -> ChartElement {
-    let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
-    ChartElement::Text {
-        x,
-        y,
-        content: format_value(val, dl.format.as_deref().or(fmt)),
-        anchor,
-        dominant_baseline,
-        transform: None,
-        font_family: dl_ts.font_family,
-        font_size: dl_ts.font_size,
-        font_weight: dl_ts.font_weight,
-        letter_spacing: None,
-        text_transform: None,
-        fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.data_label_text_color().to_string())),
-        class: paint_class("data-label", dl.color.is_some() || config.theme.data_label_color.is_some()),
-        data: None,
-    }
 }
 
 fn render_multi_series_bars(
@@ -1884,25 +1846,16 @@ fn render_combo(
                     ));
 
                     // Data labels
-                    if let Some(ref dl) = field_spec.data_labels {
-                        if dl.show == Some(true) {
-                            let dl_fmt = dl.format.as_deref().or(fmt_ref);
-                            let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
-                            mark_elements.push(ChartElement::Text {
-                                x: bar_x + sub_bar_width / 2.0 + margins.left,
-                                y: rect_y + margins.top - 5.0,
-                                content: format_value(val, dl_fmt),
-                                anchor: TextAnchor::Middle, dominant_baseline: None,
-                                transform: None,
-                                font_family: dl_ts.font_family,
-                                font_size: dl_ts.font_size,
-                                font_weight: dl_ts.font_weight,
-                                letter_spacing: None,
-                                text_transform: None,
-                                fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.data_label_text_color().to_string())),
-                                class: paint_class("data-label", dl.color.is_some() || config.theme.data_label_color.is_some()), data: None,
-                            });
-                        }
+                    if let Some(dl) = field_spec.data_labels.as_ref().filter(|dl| dl.show == Some(true)) {
+                        mark_elements.push(bar_data_label(
+                            (bar_x + sub_bar_width / 2.0 + margins.left, rect_y + margins.top - DATA_LABEL_OFFSET),
+                            TextAnchor::Middle,
+                            None,
+                            val,
+                            dl,
+                            fmt_ref,
+                            config,
+                        ));
                     }
                 }
             }
@@ -1951,26 +1904,7 @@ fn render_combo(
 
                     // Data labels
                     if let Some(ref dl) = field_spec.data_labels {
-                        if dl.show == Some(true) {
-                            let dl_fmt = dl.format.as_deref().or(fmt_ref);
-                            for (i, &(px, py)) in points.iter().enumerate() {
-                                let (_, val) = &point_data[i];
-                                let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
-                                mark_elements.push(ChartElement::Text {
-                                    x: px, y: py - 10.0,
-                                    content: format_value(*val, dl_fmt),
-                                    anchor: TextAnchor::Middle, dominant_baseline: None,
-                                    transform: None,
-                                    font_family: dl_ts.font_family,
-                                    font_size: dl_ts.font_size,
-                                    font_weight: dl_ts.font_weight,
-                                    letter_spacing: None,
-                                    text_transform: None,
-                                    fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.data_label_color.clone().unwrap_or_else(|| color.clone()))),
-                                    class: paint_class("data-label", true), data: None,
-                                });
-                            }
-                        }
+                        mark_elements.extend(point_data_labels(&points, &point_data, dl, fmt_ref, &color, config));
                     }
                 }
             }

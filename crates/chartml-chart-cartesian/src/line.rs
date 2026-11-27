@@ -11,7 +11,7 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetri
 use chartml_core::layout::legend::{LegendBlock, LegendConfig};
 
 
-use crate::helpers::{cartesian_grid, LegendMark, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_field_name, get_x_format, get_y_format, nice_domain, offset_element};
+use crate::helpers::{cartesian_grid, point_data_labels, LegendMark, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_field_name, get_x_format, get_y_format, nice_domain, offset_element};
 
 pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
@@ -132,17 +132,11 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             .filter(|(_, f)| f.mark.as_deref() != Some("range"))
             .filter(|(_, f)| {
                 let field = f.field.as_deref().unwrap_or("");
-                categories.iter().any(|cat| {
-                    (0..data.num_rows())
-                        .find(|&i| data.get_string(i, &category_field).as_deref() == Some(cat.as_str()))
-                        .is_some_and(|i| data.get_f64(i, field).is_some())
-                })
+                categories.iter().any(|cat| category_value(data, &category_field, cat, field).is_some())
             })
             .map(|(field_idx, f)| {
                 let label = f.label.clone().unwrap_or_else(|| f.field.clone().unwrap_or_default());
-                let color = f.color.clone()
-                    .unwrap_or_else(|| config.colors.get(field_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string()));
-                (label, color)
+                (label, field_color(f, field_idx, config))
             })
             .unzip()
     } else if let Some(ref color_f) = color_field {
@@ -386,8 +380,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         // Multi-field rows: each field spec is a separate line series
 
         for (field_idx, field_spec) in multi_fields.iter().enumerate() {
-            let color = field_spec.color.clone()
-                .unwrap_or_else(|| config.colors.get(field_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string()));
+            let color = field_color(field_spec, field_idx, config);
 
             // Range mark — render shaded area between upper and lower bounds
             if field_spec.mark.as_deref() == Some("range") {
@@ -470,11 +463,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
             for cat in &categories {
                 // Find the row for this category
-                let row_i = match (0..data.num_rows()).find(|&i| data.get_string(i, &category_field).as_deref() == Some(cat.as_str())) {
-                    Some(i) => i,
-                    None => continue,
-                };
-                let val = match data.get_f64(row_i, field_name) {
+                // The value the legend counted this field's entry by.
+                let val = match category_value(data, &category_field, cat, field_name) {
                     Some(v) => v,
                     None => continue,
                 };
@@ -724,51 +714,18 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     })
 }
 
-/// Value labels for a line's points when `dl.show` is set: above each point,
-/// or below with `position: bottom`, in the data label font, coloured by the
-/// field's `dataLabels.color`, else the style's data label colour, else the
-/// line's own colour.
-fn point_data_labels(
-    points: &[(f64, f64)],
-    point_data: &[(String, f64)],
-    dl: &chartml_core::spec::DataLabelsSpec,
-    fmt: Option<&str>,
-    color: &str,
-    config: &ChartConfig,
-) -> Vec<ChartElement> {
-    if dl.show != Some(true) {
-        return Vec::new();
-    }
-    let dl_fmt = dl.format.as_deref().or(fmt);
-    points
-        .iter()
-        .zip(point_data)
-        .map(|(&(px, py), (_, val))| {
-            let label_y = match dl.position.as_deref() {
-                Some("bottom") => py + 15.0,
-                _ => py - 10.0,
-            };
-            let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
-            ChartElement::Text {
-                x: px,
-                y: label_y,
-                content: format_value(*val, dl_fmt),
-                anchor: TextAnchor::Middle,
-                dominant_baseline: None,
-                transform: None,
-                font_family: dl_ts.font_family,
-                font_size: dl_ts.font_size,
-                font_weight: dl_ts.font_weight,
-                letter_spacing: None,
-                text_transform: None,
-                fill: Some(dl.color.clone().unwrap_or_else(|| {
-                    config.theme.data_label_color.clone().unwrap_or_else(|| color.to_string())
-                })),
-                // A line's labels default to its own colour, which the page
-                // theme must not replace.
-                class: paint_class("data-label", true),
-                data: None,
-            }
-        })
-        .collect()
+/// A field's value for `cat`: from the first row of that category, as a
+/// multi-field line plots it. `None` when the category has no row or the
+/// value is missing.
+fn category_value(data: &DataTable, category_field: &str, cat: &str, field: &str) -> Option<f64> {
+    (0..data.num_rows())
+        .find(|&i| data.get_string(i, category_field).as_deref() == Some(cat))
+        .and_then(|i| data.get_f64(i, field))
+}
+
+/// A multi-field line's colour: its own `color`, else the palette colour at
+/// its position.
+fn field_color(field: &chartml_core::spec::FieldSpec, field_idx: usize, config: &ChartConfig) -> String {
+    field.color.clone()
+        .unwrap_or_else(|| config.colors.get(field_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string()))
 }

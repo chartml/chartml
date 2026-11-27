@@ -521,7 +521,8 @@ impl ChartML {
     }
 
     /// The registered styles, extended by the style and config components
-    /// in `parsed` (a later one replacing an earlier one of the same name).
+    /// in `parsed`: a style replaces a registered one of the same name, and a
+    /// config merges over the registered configs.
     fn document_styles(
         &self,
         parsed: &ChartMLSpec,
@@ -1319,7 +1320,7 @@ impl ChartML {
         data: DataTable,
     ) -> Result<ChartElement, ChartError> {
         // Register data as "source", then delegate to full async render
-        let parsed = spec::parse(yaml)?;
+        let parsed = self.parse_with_params(yaml, None)?;
         let resolved = self.document_styles(&parsed)?.resolve(first_chart(&parsed)?)?;
         let chart_spec = &resolved;
 

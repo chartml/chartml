@@ -128,6 +128,20 @@ impl TextMetrics {
         }
     }
 
+    /// Build `TextMetrics` for data labels from a theme. `font_size_px`
+    /// overrides the theme's data label size (a field's own
+    /// `dataLabels.fontSize`).
+    pub fn from_theme_data_label(theme: &Theme, font_size_px: Option<f64>) -> Self {
+        let default = Theme::default();
+        let family_changed = theme.data_label_font_family != default.data_label_font_family;
+        Self {
+            font_size_px: font_size_px.unwrap_or(theme.data_label_font_size as f64),
+            letter_spacing_px: 0.0,
+            text_transform: TextTransform::None,
+            monospace: family_changed && family_is_monospace(&theme.data_label_font_family),
+        }
+    }
+
     /// Build `TextMetrics` for the chart title from a theme.
     pub fn from_theme_title(theme: &Theme) -> Self {
         let default = Theme::default();

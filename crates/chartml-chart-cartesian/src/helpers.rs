@@ -1548,3 +1548,100 @@ pub fn generate_annotations(
 
     elements
 }
+
+/// Gap between a bar or point and its value label, and between a label past
+/// a horizontal bar's end and the chart edge.
+pub(crate) const DATA_LABEL_OFFSET: f64 = 5.0;
+
+/// Where a horizontal bar's value label goes along the bar, for
+/// `dataLabels.position`: past the bar's end by default (`top`, the
+/// counterpart of above a vertical bar), in its middle (`center`), or inside
+/// its start (`bottom`). Returns the label's x, its anchor, and whether it
+/// sits past the bar's end (so the chart keeps room for it on the right).
+pub(crate) fn horizontal_label_position(position: Option<&str>, bar_end: f64) -> (f64, TextAnchor, bool) {
+    match position {
+        Some("center") => (bar_end / 2.0, TextAnchor::Middle, false),
+        Some("bottom") => (DATA_LABEL_OFFSET, TextAnchor::Start, false),
+        _ => (bar_end + DATA_LABEL_OFFSET, TextAnchor::Start, true),
+    }
+}
+
+/// A bar's value label at `(x, y)`: the field's `dataLabels`
+/// format, font size and colour where set, else the chart's data label font
+/// and colour.
+pub(crate) fn bar_data_label(
+    (x, y): (f64, f64),
+    anchor: TextAnchor,
+    dominant_baseline: Option<String>,
+    val: f64,
+    dl: &chartml_core::spec::DataLabelsSpec,
+    fmt: Option<&str>,
+    config: &ChartConfig,
+) -> ChartElement {
+    let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
+    ChartElement::Text {
+        x,
+        y,
+        content: format_value(val, dl.format.as_deref().or(fmt)),
+        anchor,
+        dominant_baseline,
+        transform: None,
+        font_family: dl_ts.font_family,
+        font_size: dl_ts.font_size,
+        font_weight: dl_ts.font_weight,
+        letter_spacing: None,
+        text_transform: None,
+        fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.data_label_text_color().to_string())),
+        class: paint_class("data-label", dl.color.is_some() || config.theme.data_label_color.is_some()),
+        data: None,
+    }
+}
+
+/// Value labels for a line's points when `dl.show` is set: above each point,
+/// or below with `position: bottom`, in the data label font, coloured by the
+/// field's `dataLabels.color`, else the style's data label colour, else the
+/// line's own colour.
+pub(crate) fn point_data_labels(
+    points: &[(f64, f64)],
+    point_data: &[(String, f64)],
+    dl: &chartml_core::spec::DataLabelsSpec,
+    fmt: Option<&str>,
+    color: &str,
+    config: &ChartConfig,
+) -> Vec<ChartElement> {
+    if dl.show != Some(true) {
+        return Vec::new();
+    }
+    let dl_fmt = dl.format.as_deref().or(fmt);
+    points
+        .iter()
+        .zip(point_data)
+        .map(|(&(px, py), (_, val))| {
+            let label_y = match dl.position.as_deref() {
+                Some("bottom") => py + 15.0,
+                _ => py - 10.0,
+            };
+            let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
+            ChartElement::Text {
+                x: px,
+                y: label_y,
+                content: format_value(*val, dl_fmt),
+                anchor: TextAnchor::Middle,
+                dominant_baseline: None,
+                transform: None,
+                font_family: dl_ts.font_family,
+                font_size: dl_ts.font_size,
+                font_weight: dl_ts.font_weight,
+                letter_spacing: None,
+                text_transform: None,
+                fill: Some(dl.color.clone().unwrap_or_else(|| {
+                    config.theme.data_label_color.clone().unwrap_or_else(|| color.to_string())
+                })),
+                // A line's labels default to its own colour, which the page
+                // theme must not replace.
+                class: paint_class("data-label", true),
+                data: None,
+            }
+        })
+        .collect()
+}

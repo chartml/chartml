@@ -66,8 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`chartml-chart-cartesian`**: single-field line charts
   (`rows: { field, dataLabels: { show: true } }`) and horizontal bar charts
   draw their data labels; both drew none. Horizontal labels sit just past the
-  bar end (`top`, the default, with room kept on the right), in its middle
-  (`center`) or inside its start (`bottom`).
+  bar end (`top`, the default, with room kept on the right for the widest
+  label in the data label font), in its middle (`center`) or inside its start
+  (`bottom`). Combo charts draw their line fields' labels with the same
+  helper as line charts, so `position: bottom` now puts them below the point.
 - **`chartml-chart-scatter`**: scatter and bubble charts read `style.grid`
   (visibility, colour, opacity, dash pattern), which they ignored.
 - **`chartml-leptos`**: the title heading uses the chart's resolved title
@@ -88,11 +90,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   legend room only when they draw a legend (two or more entries), sized from
   the entries they draw. A chart with a single colour series (or a
   single-field `rows` array) no longer keeps an empty band for it.
-- **`chartml-core`**: `fetch` (and so the async render paths and the Leptos
-  component) resolves `type: params` defaults from the chart's own document,
+- **`chartml-core`**: `fetch` (and so the async render paths, including
+  `render_from_yaml_with_data_async`, and the Leptos component) resolves
+  `type: params` defaults from the chart's own document,
   as the sync path did, through one shared step. Interactive param overrides
   now win over those document defaults on every path; the sync path dropped
-  them when the document declared its own params.
+  them when the document declared its own params. Document defaults now
+  always win over registered defaults for the same key; the sync path applied
+  them only when the document also declared a key that was not registered.
 - **`chartml-render`**: `render_to_png` and `render_to_png_async` size the
   PNG canvas from the rendered chart (a style's height beats the requested
   height), so the image is no longer cropped or padded with blank space.

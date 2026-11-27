@@ -918,3 +918,93 @@ fn png_canvas_uses_the_style_height_not_the_requested_height() {
     let png = chartml_render::render_to_png(&chartml(), &chart("", BAR), 640, 480, 72).expect("png");
     assert_eq!(png_size(&png), (640 + pad, 480 + pad));
 }
+
+// --- Round 2: legend room, label room, every async path ---------------------
+
+/// The plot's bottom edge: the y where the x axis line sits.
+fn x_axis_y(svg: &str) -> f64 {
+    let line = tags(svg, "axis-line")
+        .into_iter()
+        .find(|t| attr(t, "y1") == attr(t, "y2"))
+        .expect("horizontal axis line");
+    attr(line, "y1").expect("y1").parse().expect("number")
+}
+
+#[test]
+fn multi_field_line_keys_only_the_fields_it_draws() {
+    let rows = "  provider: inline\n  rows:\n    - { month: Jan, a: 1, b: 2, empty: null }\n    - { month: Feb, a: 3, b: 4, empty: null }\n";
+    let line = |fields: &str| {
+        format!("type: chart\nversion: 1\ndata:\n{rows}visualize:\n  type: line\n  columns: month\n  rows:\n{fields}")
+    };
+    // A plain single-field line: no legend, no room kept for one.
+    let plain = format!("type: chart\nversion: 1\ndata:\n{rows}visualize:\n  type: line\n  columns: month\n  rows: a\n");
+    let one_plus_empty = "    - field: a\n    - field: empty\n";
+    let two_plus_empty = "    - field: a\n    - field: b\n    - field: empty\n";
+    let two = "    - field: a\n    - field: b\n";
+
+    // One drawn line and one empty field: no legend and no room kept for one.
+    let svg = render_ok(&chartml(), &line(one_plus_empty));
+    assert!(legend_labels(&svg).is_empty(), "{svg}");
+    assert_eq!(x_axis_y(&svg), x_axis_y(&render_ok(&chartml(), &plain)), "no empty legend band");
+
+    // Two drawn lines and one empty field: the legend keys the two, and keeps
+    // exactly the room a two-field legend keeps.
+    let svg = render_ok(&chartml(), &line(two_plus_empty));
+    assert_eq!(legend_labels(&svg).len(), 2);
+    assert_eq!(x_axis_y(&svg), x_axis_y(&render_ok(&chartml(), &line(two))));
+}
+
+#[test]
+fn horizontal_label_room_uses_the_data_label_font() {
+    let style = "type: style\nversion: 1\nname: mono\nfonts:\n  dataLabel:\n    family: \"Courier New, monospace\"\n    size: 16\n";
+    // 3,000,000 is a nice axis maximum, so the longest bar reaches the plot's
+    // right edge and its label needs the full reserved room.
+    let rows = "  provider: inline\n  rows:\n    - { product: A, arr: 1000000 }\n    - { product: B, arr: 3000000 }\n";
+    let yaml = format!(
+        "type: chart\nversion: 1\nstyle: mono\ndata:\n{rows}visualize:\n  type: bar\n  orientation: horizontal\n  columns: product\n  rows:\n    field: arr\n    dataLabels:\n      show: true\n"
+    );
+    let svg = render_ok(&with(&[style]), &yaml);
+    let plot = tags(&svg, "bars").into_iter().find(|t| t.starts_with('g')).expect("bars group");
+    let plot_x: f64 = attr(plot, "transform")
+        .expect("transform")
+        .trim_start_matches("translate(")
+        .split(',')
+        .next()
+        .expect("x")
+        .parse()
+        .expect("number");
+    for (bar, label) in tags(&svg, "bar-rect").iter().zip(tags(&svg, "data-label")) {
+        let end: f64 = attr(bar, "width").expect("width").parse().expect("number");
+        // "3,000,000": 9 monospace characters at 16px, ~0.64em each.
+        let label_width = 9.0 * 7.7 * 16.0 / 12.0;
+        assert!(plot_x + end + 5.0 + label_width <= 800.0, "label runs off the chart: {label}");
+    }
+}
+
+#[test]
+fn render_with_data_async_resolves_document_params() {
+    let rt = tokio::runtime::Builder::new_current_thread().build().expect("runtime");
+    let element = rt
+        .block_on(chartml().render_from_yaml_with_data_async(&params_doc(), chartml_core::data::DataTable::from_rows(&[]).expect("empty")))
+        .expect("renders with document params");
+    let svg = element_to_svg(&element, 800.0, 400.0);
+    assert!(bar_fills(&svg).iter().all(|f| f == "#abcdef"), "{:?}", bar_fills(&svg));
+}
+
+#[test]
+fn combo_line_labels_follow_their_position() {
+    let combo = "  type: bar\n  columns: month\n  rows:\n    - field: revenue\n    - field: budget\n      mark: line\n      dataLabels:\n        show: true\n        position: bottom\n";
+    let svg = render_ok(&chartml(), &chart("", combo));
+    let dots: Vec<f64> = tags(&svg, "dot-marker")
+        .iter()
+        .map(|d| attr(d, "cy").expect("cy").parse().expect("number"))
+        .collect();
+    let labels: Vec<f64> = tags(&svg, "data-label")
+        .iter()
+        .map(|l| attr(l, "y").expect("y").parse().expect("number"))
+        .collect();
+    assert!(!labels.is_empty());
+    for (dot, label) in dots.iter().zip(&labels) {
+        assert_eq!(*label, dot + 15.0, "a bottom label sits below its point");
+    }
+}
