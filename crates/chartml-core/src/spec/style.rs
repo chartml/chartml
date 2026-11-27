@@ -1,7 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+/// A named `type: style` component. Like the schema's closed
+/// `StyleComponent`, it rejects fields it does not know, so a misspelled theme
+/// field fails instead of silently doing nothing. (Inline and Config styles
+/// stay open, as CHA-51 decided.)
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StyleSpec {
     pub version: u32,
     pub name: String,

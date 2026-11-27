@@ -978,12 +978,14 @@ fonts:
 
 A chart's `style` is the name of a Style component or an inline object with these properties. A Config's `style` takes the same two forms. The engine applies both as described in [Resolution Order](#resolution-order).
 
+A Style component takes only the properties listed under Core Properties and Typography; any other key (for example `fillOpacity`, which belongs in an inline style) fails with an error naming it.
+
 **Typography (Optional):**
 - `fonts.title` - Title font configuration (family, size, weight, color)
 - `fonts.axis` - Axis label font configuration
 - `fonts.dataLabel` - Data label font configuration (family, size, weight, color)
 
-Each font takes `family` (a CSS font family list), `size` (pixels, greater than 0), `weight` and `color`. `weight` is a whole number from 1 to 1000, or one of the CSS keywords `normal` (400), `bold` (700), `bolder` and `lighter` (relative to the default weight for that text, as in CSS). A number written as a string (`"600"`) is also accepted, for specs stored before numeric weights. Any other weight, or a size of 0 or less, fails the render with an error naming the field.
+Each font takes `family` (a CSS font family list of names separated by commas, using only letters, digits, spaces, hyphens, underscores and quotes around a name, such as `Inter, 'Helvetica Neue', sans-serif`; any other character fails the render), `size` (pixels, greater than 0), `weight` and `color`. `weight` is a whole number from 1 to 1000, or one of the CSS keywords `normal` (400), `bold` (700), `bolder` and `lighter` (relative to the default weight for that text, as in CSS). A number written as a string (`"600"`) is also accepted, for specs stored before numeric weights. Any other weight, or a size of 0 or less, fails the render with an error naming the field.
 
 Where each font applies:
 - `fonts.title` - the chart title wherever it is drawn: the heading a host draws above the chart (the Leptos component; hosts read it from the chart's resolved theme), and the in-card title of a metric card shown without a heading (family, weight and colour; the card sizes its own text to fit).

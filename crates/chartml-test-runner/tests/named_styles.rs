@@ -1037,3 +1037,50 @@ fn a_host_clears_and_re_registers_configs_after_a_settings_change() {
     // Named styles stay registered.
     assert_eq!(svg_height(&render_ok(&c, &chart("style: corporate", BAR))), 333.0);
 }
+
+// --- Font families cannot inject CSS ------------------------------------------
+
+const INJECTED: &str = "Inter; background-image: url(https://tracker.example/x)";
+
+#[test]
+fn an_injected_font_family_fails_at_every_style_level() {
+    let named = format!("type: style\nversion: 1\nname: x\nfonts:\n  title:\n    family: \"{INJECTED}\"\n");
+    let err = chartml().register_component(&named).expect_err("named style");
+    assert!(err.to_string().contains("style 'x'.fonts.title.family is not an allowed font family"), "{err}");
+
+    let config = format!("type: config\nversion: 1\nstyle:\n  fonts:\n    axis:\n      family: \"{INJECTED}\"\n");
+    let err = chartml().register_component(&config).expect_err("config style");
+    assert!(err.to_string().contains("config.style.fonts.axis.family"), "{err}");
+
+    let inline = format!("{BAR}  style:\n    fonts:\n      dataLabel:\n        family: \"{INJECTED}\"\n");
+    assert_invalid(render(&chartml(), &chart("", &inline)), &["visualize.style.fonts.dataLabel.family"]);
+
+    let top = format!("style:\n  fonts:\n    title:\n      family: \"{INJECTED}\"");
+    assert_invalid(render(&chartml(), &chart(&top, BAR)), &["style.fonts.title.family"]);
+}
+
+#[test]
+fn an_ordinary_font_stack_passes_and_reaches_the_chart() {
+    let stack = "Inter, 'Helvetica Neue', sans-serif";
+    let style = format!("type: style\nversion: 1\nname: s\nfonts:\n  axis:\n    family: \"{stack}\"\n");
+    let svg = render_ok(&with(&[&style]), &chart("style: s", BAR));
+    let labels = tags(&svg, "tick-label");
+    assert!(!labels.is_empty());
+    for l in labels {
+        let family = attr(l, "font-family").expect("family");
+        assert!(family.starts_with("Inter, ") && family.contains("Helvetica Neue") && family.ends_with(", sans-serif"), "{l}");
+    }
+}
+
+// --- A named style rejects fields it does not know ---------------------------
+
+#[test]
+fn a_named_style_with_an_unknown_field_fails() {
+    let style = "type: style\nversion: 1\nname: s\nfillOpacity: 0.3\n";
+    let err = chartml().register_component(style).expect_err("fillOpacity is not a Style component field");
+    assert!(err.to_string().contains("fillOpacity"), "{err}");
+    // Inline and config styles stay open (CHA-51).
+    chartml()
+        .register_component("type: config\nversion: 1\nstyle:\n  fillOpacity: 0.3\n")
+        .expect("config styles accept inline style fields");
+}

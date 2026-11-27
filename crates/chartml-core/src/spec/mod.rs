@@ -62,8 +62,19 @@ pub fn parse(input: &str) -> Result<ChartMLSpec, ChartError> {
         // Single document: try to parse as a single component first,
         // then fall back to an array of components.
         let yaml_str = documents.first().copied().unwrap_or(input);
-        let spec: ChartMLSpec = serde_yaml::from_str(yaml_str)?;
-        Ok(spec)
+        match serde_yaml::from_str::<ChartMLSpec>(yaml_str) {
+            Ok(spec) => Ok(spec),
+            // A single component that fails: report the component's own error
+            // (which names the bad field) rather than the untagged enum's
+            // "did not match any variant".
+            Err(untagged) => match serde_yaml::from_str::<serde_yaml::Value>(yaml_str) {
+                Ok(serde_yaml::Value::Mapping(_)) => match serde_yaml::from_str::<Component>(yaml_str) {
+                    Err(component) => Err(component.into()),
+                    Ok(_) => Err(untagged.into()),
+                },
+                _ => Err(untagged.into()),
+            },
+        }
     } else {
         // Multiple documents: parse each as a Component or array of Components.
         let mut components = Vec::with_capacity(documents.len());

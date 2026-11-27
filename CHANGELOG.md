@@ -95,7 +95,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`chartml-chart-cartesian`**: bar, line, area and combo charts reserve
   legend room only when they draw a legend (two or more entries), sized from
   the entries they draw. A chart with a single colour series (or a
-  single-field `rows` array) no longer keeps an empty band for it.
+  single-field `rows` array) drew no legend entries before and still draws
+  none; it no longer keeps an empty legend group and an empty band below the
+  plot for them.
+- **`chartml-core`**: a named `type: style` component rejects fields it does
+  not know (the schema's `StyleComponent` was already closed), so a misspelled
+  theme field fails instead of silently doing nothing. Inline and config
+  styles stay open. A single component that fails to parse now reports its
+  own error (naming the field) instead of "did not match any variant of
+  untagged enum".
 - **`chartml-core`**: `fetch` (and so the async render paths, including
   `render_from_yaml_with_data_async`, and the Leptos component) resolves
   `type: params` defaults from the chart's own document,
@@ -110,6 +118,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **`chartml-core`**: a font family in a chart spec (`fonts.title`,
+  `fonts.axis`, `fonts.dataLabel`, at any style level) may hold only letters,
+  digits, spaces, commas, hyphens, underscores and paired quotes. Families
+  reach SVG attributes and HTML inline `style` strings (the Leptos title
+  heading, a metric card's title), so anything else, which could inject CSS
+  such as a `background-image: url(...)` that makes the browser fetch a URL,
+  fails with `ChartError::InvalidSpec` naming the field.
 - **`chartml-core`**: every colour in a chart spec (`style.colors`, field
   `color`, `dataLabels.color`, grid, font and annotation colours, and the
   host's default palette) is checked before rendering, because paint values
