@@ -1531,7 +1531,6 @@ fn render_combo(
         .padding(crate::helpers::adaptive_bar_padding(categories.len()));
     let bandwidth = band.bandwidth();
 
-
     let left_scale = ScaleLinear::new((left_domain_min, left_domain_max), (inner_height, 0.0));
     let right_scale = right_domain.map(|(min, max)| ScaleLinear::new((min, max), (inner_height, 0.0)));
 
