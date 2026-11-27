@@ -324,6 +324,13 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             if field_spec.mark.as_deref() == Some("range") {
                 if let (Some(ref upper_field), Some(ref lower_field)) = (&field_spec.upper, &field_spec.lower) {
                     let fill_opacity = field_spec.opacity.unwrap_or(0.15);
+                    // The band is drawn on the axis its mark names, as its
+                    // upper and lower values are part of that axis's domain.
+                    let band_scale = if field_spec.axis.as_deref() == Some("right") {
+                        right_scale.as_ref().unwrap_or(&linear)
+                    } else {
+                        &linear
+                    };
                     let mut area_points: Vec<(f64, f64, f64)> = Vec::new(); // (x, y_upper, y_lower)
 
                     for cat in &categories {
@@ -344,7 +351,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                             Some(x) => x + bandwidth / 2.0,
                             None => continue,
                         };
-                        area_points.push((x, linear.map(upper_val), linear.map(lower_val)));
+                        area_points.push((x, band_scale.map(upper_val), band_scale.map(lower_val)));
                     }
 
                     if !area_points.is_empty() {

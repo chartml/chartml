@@ -828,3 +828,87 @@ fn a_non_stacked_area_applies_the_left_axis_format() {
         assert!(!labels.is_empty() && labels.iter().all(|l| l.starts_with('$')), "{viz}: {labels:?}");
     }
 }
+
+fn range_area_ys(chart: &str) -> Vec<f64> {
+    fn walk(element: &ChartElement, out: &mut Vec<f64>) {
+        match element {
+            ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                children.iter().for_each(|c| walk(c, out))
+            }
+            ChartElement::Path { d, class, .. } if class == "range-area" => {
+                // Path data is `M x,y L x,y ... Z`: take each point's y.
+                out.extend(d.split(|c: char| c.is_ascii_alphabetic()).filter_map(|pt| {
+                    pt.split(',').nth(1).and_then(|y| y.trim().parse::<f64>().ok())
+                }));
+            }
+            _ => {}
+        }
+    }
+    let element = chartml().render_from_yaml(chart).expect("render");
+    let mut out = Vec::new();
+    walk(&element, &mut out);
+    out
+}
+
+#[test]
+fn a_range_band_on_the_right_axis_is_drawn_on_the_right_scale() {
+    // The band reaches 1,000 on a right axis whose lines reach 3, while the
+    // left axis reaches 40: the right domain stretches to hold the band and
+    // the band is drawn on that scale, so it stays inside the plot.
+    let rows = "    - { month: Jan, v: 10, w: 1, lo: 0, hi: 1000 }\n    - { month: Feb, v: 20, w: 2, lo: 0, hi: 900 }\n    - { month: Mar, v: 40, w: 3, lo: 0, hi: 800 }\n";
+    let chart = format!(
+        "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n{rows}visualize:\n  type: line\n  columns: month\n  rows:\n    - field: v\n    - field: w\n      axis: right\n    - mark: range\n      axis: right\n      upper: hi\n      lower: lo\n"
+    );
+    let right = right_tick_label_texts(&chart);
+    assert_eq!(right.last().map(String::as_str), Some("1,000"), "{right:?}");
+    let ys = range_area_ys(&chart);
+    assert!(!ys.is_empty(), "the band is drawn");
+    assert!(ys.iter().all(|y| *y >= -1e-6), "the band reaches above the plot: {ys:?}");
+}
+
+#[test]
+fn a_range_only_line_chart_draws_its_band_inside_the_plot() {
+    let rows = "    - { month: Jan, lo: 5, hi: 1000 }\n    - { month: Feb, lo: 8, hi: 900 }\n    - { month: Mar, lo: 20, hi: 800 }\n";
+    let chart = format!(
+        "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n{rows}visualize:\n  type: line\n  columns: month\n  rows:\n    - mark: range\n      upper: hi\n      lower: lo\n"
+    );
+    let labels = y_tick_label_texts(&chart);
+    assert_eq!(labels.last().map(String::as_str), Some("1,000"), "{labels:?}");
+    let ys = range_area_ys(&chart);
+    assert!(!ys.is_empty() && ys.iter().all(|y| *y >= -1e-6), "{ys:?}");
+}
+
+#[test]
+fn a_combo_right_axis_leaves_room_for_the_labels_it_draws() {
+    // The right data reaches 900,000 but the axis is bounded at -100,000,000,000:
+    // a far wider label than the data's, which the right margin must hold.
+    let chart = "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n    - { month: Jan, v: 10, w: 100000 }\n    - { month: Feb, v: 20, w: 500000 }\n    - { month: Mar, v: 40, w: 900000 }\nvisualize:\n  type: bar\n  columns: month\n  rows:\n    - field: v\n    - field: w\n      mark: line\n      axis: right\n  axes:\n    right:\n      min: -100000000000\n";
+    let right = right_tick_label_texts(chart);
+    assert_eq!(right.first().map(String::as_str), Some("-100,000,000,000"), "{right:?}");
+    // The widest right label ends inside the SVG.
+    let element = chartml().render_from_yaml(chart).expect("render");
+    let ChartElement::Svg { viewbox, width, .. } = &element else { panic!("svg root") };
+    let canvas = width.unwrap_or(viewbox.width);
+    fn rightmost(element: &ChartElement, dx: f64, out: &mut f64) {
+        match element {
+            ChartElement::Svg { children, .. } => children.iter().for_each(|c| rightmost(c, dx, out)),
+            ChartElement::Group { transform, children, .. } => {
+                let tx = match transform {
+                    Some(Transform::Translate(x, _)) => *x,
+                    _ => 0.0,
+                };
+                children.iter().for_each(|c| rightmost(c, dx + tx, out));
+            }
+            ChartElement::Text { x, content, anchor: TextAnchor::Start, class, .. }
+                if class.split_whitespace().any(|c| c == "tick-value") =>
+            {
+                let metrics = TextMetrics::from_theme_tick_value(&Theme::default());
+                *out = out.max(dx + x + measure_text(content, &metrics));
+            }
+            _ => {}
+        }
+    }
+    let mut end = 0.0;
+    rightmost(&element, 0.0, &mut end);
+    assert!(end > 0.0 && end <= canvas, "right labels end at {end}, canvas {canvas}");
+}

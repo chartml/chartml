@@ -1433,57 +1433,6 @@ fn render_combo(
         .and_then(|a| a.right.as_ref())
         .and_then(|a| a.format.as_deref());
 
-    // Pre-compute right tick labels to measure their width
-    let right_tick_labels: Vec<String> = if has_right {
-        // Estimate right-axis values for label width measurement
-        let right_max = fields.iter()
-            .filter(|f| f.axis.as_deref() == Some("right"))
-            .filter_map(|f| f.field.as_deref())
-            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
-            .fold(0.0_f64, f64::max);
-        let right_domain_max = config.visualize.axes.as_ref()
-            .and_then(|a| a.right.as_ref())
-            .and_then(|a| a.max)
-            .unwrap_or(if right_max <= 0.0 { 1.0 } else { right_max });
-        let tmp_scale = ScaleLinear::new((0.0, right_domain_max), (0.0, 100.0));
-        tmp_scale.ticks(5).iter().map(|v| format_value(*v, right_fmt)).collect()
-    } else {
-        vec![]
-    };
-
-    let has_x_axis_label = config.visualize.axes.as_ref()
-        .and_then(|a| a.x.as_ref())
-        .and_then(|a| a.label.as_ref())
-        .is_some();
-    // Lay out the legend first so the margins keep room for it.
-    let legend_entries = combo_legend_entries(data, config, fields, is_stacked, color_field.as_deref());
-    let (names, colors): (Vec<String>, Vec<String>) =
-        legend_entries.iter().map(|(n, c, _)| (n.clone(), c.clone())).unzip();
-    // Combo legend items are spaced a little wider than the other charts'.
-    let legend_config = LegendConfig { item_padding: 16.0, ..LegendConfig::for_theme(&config.theme) };
-    let legend = LegendBlock::for_series(config, &names, &colors, legend_config)?;
-    let mut margin_config = MarginConfig {
-        has_title: config.title.is_some(),
-        // Left Y-axis label is not rendered for combo charts (see comment below),
-        // so do not reserve extra left-margin space for it.
-        has_y_axis_label: false,
-        has_x_axis_label,
-        has_right_axis: has_right,
-        right_tick_labels,
-        tick_value_metrics: TextMetrics::from_theme_tick_value(&config.theme),
-        axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
-        ..Default::default()
-    };
-    let legend_reserve = legend.as_ref().map(|l| l.reserve()).unwrap_or_default();
-    legend_reserve.apply_to(&mut margin_config);
-    let margins = calculate_margins(&margin_config);
-    let inner_width = margins.inner_width(config.width);
-    let inner_height = margins.inner_height(config.height);
-
-    let band = ScaleBand::new(categories.clone(), (0.0, inner_width))
-        .padding(crate::helpers::adaptive_bar_padding(categories.len()));
-    let bandwidth = band.bandwidth();
-
     // Separate fields by axis
     let left_fields: Vec<&chartml_core::spec::FieldSpec> = fields.iter()
         .filter(|f| f.axis.as_deref() != Some("right"))
@@ -1531,24 +1480,60 @@ fn render_combo(
     let axes_left = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref());
     let (left_domain_min, left_domain_max) =
         crate::helpers::y_axis_domain(left_data_min, left_max, get_y_axis_bounds(config));
-    let left_scale = ScaleLinear::new((left_domain_min, left_domain_max), (inner_height, 0.0));
-
-    // Compute right-axis domain with D3-style nice rounding (Regressions 2 & 3).
-    let right_scale = if !right_fields.is_empty() {
-        let right_max = right_fields.iter()
-            .filter_map(|f| f.field.as_deref())
-            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
-            .fold(0.0_f64, f64::max);
-        let right_data_min = right_fields.iter()
-            .filter_map(|f| f.field.as_deref())
-            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
-            .fold(0.0_f64, f64::min);
-        let (right_domain_min, right_domain_max) =
-            crate::helpers::y_axis_domain(right_data_min, right_max, crate::helpers::get_right_axis_bounds(config));
-        Some(ScaleLinear::new((right_domain_min, right_domain_max), (inner_height, 0.0)))
-    } else {
+    // The right axis's domain, derived with the left's (and measured for the
+    // margin below): its fields' extent and `axes.right.min/max/nice`.
+    let right_domain: Option<(f64, f64)> = if right_fields.is_empty() {
         None
+    } else {
+        let right_values: Vec<f64> = right_fields.iter()
+            .filter_map(|f| f.field.as_deref())
+            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
+            .collect();
+        let right_max = right_values.iter().cloned().fold(0.0_f64, f64::max);
+        let right_data_min = right_values.iter().cloned().fold(0.0_f64, f64::min);
+        Some(crate::helpers::y_axis_domain(right_data_min, right_max, crate::helpers::get_right_axis_bounds(config)))
     };
+    let right_tick_labels: Vec<String> = match right_domain {
+        Some(domain) => crate::helpers::y_axis_tick_labels(domain, right_fmt),
+        None => vec![],
+    };
+
+    let has_x_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.x.as_ref())
+        .and_then(|a| a.label.as_ref())
+        .is_some();
+    // Lay out the legend first so the margins keep room for it.
+    let legend_entries = combo_legend_entries(data, config, fields, is_stacked, color_field.as_deref());
+    let (names, colors): (Vec<String>, Vec<String>) =
+        legend_entries.iter().map(|(n, c, _)| (n.clone(), c.clone())).unzip();
+    // Combo legend items are spaced a little wider than the other charts'.
+    let legend_config = LegendConfig { item_padding: 16.0, ..LegendConfig::for_theme(&config.theme) };
+    let legend = LegendBlock::for_series(config, &names, &colors, legend_config)?;
+    let mut margin_config = MarginConfig {
+        has_title: config.title.is_some(),
+        // Left Y-axis label is not rendered for combo charts (see comment below),
+        // so do not reserve extra left-margin space for it.
+        has_y_axis_label: false,
+        has_x_axis_label,
+        has_right_axis: has_right,
+        right_tick_labels,
+        tick_value_metrics: TextMetrics::from_theme_tick_value(&config.theme),
+        axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
+        ..Default::default()
+    };
+    let legend_reserve = legend.as_ref().map(|l| l.reserve()).unwrap_or_default();
+    legend_reserve.apply_to(&mut margin_config);
+    let margins = calculate_margins(&margin_config);
+    let inner_width = margins.inner_width(config.width);
+    let inner_height = margins.inner_height(config.height);
+
+    let band = ScaleBand::new(categories.clone(), (0.0, inner_width))
+        .padding(crate::helpers::adaptive_bar_padding(categories.len()));
+    let bandwidth = band.bandwidth();
+
+
+    let left_scale = ScaleLinear::new((left_domain_min, left_domain_max), (inner_height, 0.0));
+    let right_scale = right_domain.map(|(min, max)| ScaleLinear::new((min, max), (inner_height, 0.0)));
 
     let mut children = Vec::new();
 
