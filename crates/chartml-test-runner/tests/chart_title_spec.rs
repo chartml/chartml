@@ -912,3 +912,16 @@ fn a_combo_right_axis_leaves_room_for_the_labels_it_draws() {
     rightmost(&element, 0.0, &mut end);
     assert!(end > 0.0 && end <= canvas, "right labels end at {end}, canvas {canvas}");
 }
+
+#[test]
+fn a_combo_left_axis_leaves_room_for_its_widest_label() {
+    // Left values reach 1,000,000,000: the combo's left margin must hold the
+    // labels the axis draws, not a fixed default.
+    let chart = "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n    - { month: Jan, v: 100000000, w: 1 }\n    - { month: Feb, v: 500000000, w: 2 }\n    - { month: Mar, v: 1000000000, w: 3 }\nvisualize:\n  type: bar\n  columns: month\n  rows:\n    - field: v\n    - field: w\n      mark: line\n      axis: right\n";
+    let labels = y_tick_label_texts(chart);
+    assert_eq!(labels.last().map(String::as_str), Some("1,000,000,000"), "{labels:?}");
+    assert!(
+        leftmost_y_label_edge(chart) >= Y_LABEL_CLEARANCE,
+        "the widest left label is clear of the SVG's edge by the margin's padding"
+    );
+}

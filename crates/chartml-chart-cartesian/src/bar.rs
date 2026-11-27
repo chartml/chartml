@@ -1517,6 +1517,8 @@ fn render_combo(
         has_x_axis_label,
         has_right_axis: has_right,
         right_tick_labels,
+        // The labels the left axis draws, so the left margin holds the widest.
+        y_tick_labels: crate::helpers::y_axis_tick_labels((left_domain_min, left_domain_max), y_fmt_ref),
         tick_value_metrics: TextMetrics::from_theme_tick_value(&config.theme),
         axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
         ..Default::default()
