@@ -589,10 +589,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     // For horizontal charts the y-axis shows categories, so use those for left margin.
     let y_tick_labels_for_margin: Vec<String> = if !is_horizontal {
         let prelim_fmt = if is_normalized { Some(".0%") } else { y_fmt_ref };
-        vec![
-            format_value(prelim_domain_max, prelim_fmt),
-            format_value(prelim_domain_min, prelim_fmt),
-        ]
+        crate::helpers::y_axis_tick_labels((prelim_domain_min, prelim_domain_max), prelim_fmt)
     } else {
         let display = display_labels.as_deref().unwrap_or(&categories);
         display.to_vec()
@@ -775,7 +772,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
             grid: &grid,
             axis_label: bottom_axis_label,
             margin_left: margins.left,
-            margin_bottom: margins.bottom,
+            margin_bottom: margins.bottom - margin_config.bottom_legend_extent(),
             theme: &config.theme,
         });
         let left_axis_label = config.visualize.axes.as_ref()
@@ -1607,7 +1604,7 @@ fn render_combo(
         grid: &grid,
         axis_label: bottom_axis_label,
         margin_left: margins.left,
-        margin_bottom: margins.bottom,
+        margin_bottom: margins.bottom - margin_config.bottom_legend_extent(),
         theme: &config.theme,
     });
     let left_axis_label = axes_left.and_then(|a| a.label.as_deref());

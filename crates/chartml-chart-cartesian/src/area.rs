@@ -56,10 +56,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     let prelim_domain_min = if prelim_min < 0.0 { prelim_min } else { 0.0 };
     let (prelim_nice_min, prelim_nice_max) = crate::helpers::nice_domain(prelim_domain_min, prelim_max, 5);
     let area_prelim_fmt = if is_normalized { Some(".0%") } else { y_fmt_ref };
-    let area_prelim_labels = vec![
-        crate::helpers::format_value(prelim_nice_min, area_prelim_fmt),
-        crate::helpers::format_value(prelim_nice_max, area_prelim_fmt),
-    ];
+    let area_prelim_labels = crate::helpers::y_axis_tick_labels((prelim_nice_min, prelim_nice_max), area_prelim_fmt);
 
     // Lay out the legend first so the margins keep room for it.
     let legend = match color_field {
@@ -251,7 +248,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     grid: &grid,
                     axis_label: bottom_axis_label,
                     margin_left: margins.left,
-                    margin_bottom: margins.bottom,
+                    margin_bottom: margins.bottom - margin_config.bottom_legend_extent(),
                     theme: &config.theme,
                 });
             let y_axis_elements =
@@ -401,7 +398,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     grid: &grid,
                     axis_label: bottom_axis_label,
                     margin_left: margins.left,
-                    margin_bottom: margins.bottom,
+                    margin_bottom: margins.bottom - margin_config.bottom_legend_extent(),
                     theme: &config.theme,
                 });
             let y_axis_elements =
@@ -543,7 +540,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     grid: &grid,
                     axis_label: bottom_axis_label,
                     margin_left: margins.left,
-                    margin_bottom: margins.bottom,
+                    margin_bottom: margins.bottom - margin_config.bottom_legend_extent(),
                     theme: &config.theme,
                 });
         let y_axis_elements =

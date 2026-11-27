@@ -763,6 +763,25 @@ pub fn generate_y_axis_with_display(
     elements
 }
 
+/// A numeric y axis tick's label: an explicit format with SI abbreviation for
+/// large values, else D3-style auto-formatting at the axis's tick step.
+fn y_tick_label(value: f64, fmt: Option<&str>, tick_step: f64) -> String {
+    match fmt {
+        Some(f) => format_tick_value_si(value, tick_step, f),
+        None => format_tick_value(value, tick_step),
+    }
+}
+
+/// The labels a numeric y axis over `domain` draws at its target of five
+/// ticks. Callers measure these to give the left margin room for the widest
+/// label actually drawn (an axis shows `0.5` and `1.0` where the domain's
+/// ends alone would be `0` and `3`).
+pub fn y_axis_tick_labels(domain: (f64, f64), fmt: Option<&str>) -> Vec<String> {
+    let ticks = d3_ticks(domain.0, domain.1, 5);
+    let tick_step = compute_tick_step(&ticks, domain);
+    ticks.iter().map(|v| y_tick_label(*v, fmt, tick_step)).collect()
+}
+
 /// How many ticks a numeric y axis aims for: 5, or fewer when the axis is too
 /// short to give each label two lines of its font size, so tick labels of a
 /// short plot (a small chart, or one with a title band) never touch.
@@ -812,10 +831,7 @@ pub fn generate_y_axis_numeric(
         // When an explicit format string is provided (e.g. ".0%" for normalized
         // stacked charts), use it with SI abbreviation for large values.
         // Otherwise fall back to D3-style auto-formatting.
-        let label = match fmt {
-            Some(f) => format_tick_value_si(*val, tick_step, f),
-            None => format_tick_value(*val, tick_step),
-        };
+        let label = y_tick_label(*val, fmt, tick_step);
 
         // Horizontal grid line
         if grid.show_y && should_draw_horizontal_grid(&theme.grid_style) {
@@ -926,10 +942,7 @@ pub fn generate_y_axis_numeric_right(
 
     for val in &ticks {
         let y = scale.map(*val);
-        let label = match fmt {
-            Some(f) => format_tick_value_si(*val, tick_step, f),
-            None => format_tick_value(*val, tick_step),
-        };
+        let label = y_tick_label(*val, fmt, tick_step);
 
         // Tick mark (to the right)
         elements.push(ChartElement::Line {

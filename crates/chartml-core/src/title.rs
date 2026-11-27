@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use crate::element::{ChartElement, TextAnchor, Transform, ViewBox};
+use crate::element::{ChartElement, HtmlTag, TextAnchor, Transform, ViewBox};
 use crate::layout::labels::{truncate_label_with_metrics, TextMetrics, TEXT_ASCENT_FRACTION};
 use crate::theme::Theme;
 
@@ -111,9 +111,13 @@ impl TitleBand {
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect();
-        ChartElement::Div {
+        ChartElement::Html {
+            tag: HtmlTag::Div,
             class: TITLE_CLASS.to_string(),
             style,
+            // The heading is cut with a CSS ellipsis; the hover text is the
+            // whole title, as the SVG title's `<title>` is.
+            attrs: vec![("title".to_string(), self.full_text.clone())],
             children: vec![ChartElement::Span {
                 class: String::new(),
                 style: HashMap::new(),

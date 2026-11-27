@@ -66,6 +66,14 @@ pub struct MarginConfig {
     pub axis_label_metrics: super::labels::TextMetrics,
 }
 
+impl MarginConfig {
+    /// Room a bottom legend takes below the axis: its height and a gap, or
+    /// nothing when there is none.
+    pub fn bottom_legend_extent(&self) -> f64 {
+        if self.legend_height > 0.0 { self.legend_height + 8.0 } else { 0.0 }
+    }
+}
+
 impl Default for MarginConfig {
     fn default() -> Self {
         Self {
@@ -162,7 +170,7 @@ pub fn calculate_margins(config: &MarginConfig) -> Margins {
     let bottom = base_bottom
         + config.x_label_strategy_margin
         + if config.has_x_axis_label { 20.0 } else { 0.0 }
-        + if config.legend_height > 0.0 { config.legend_height + 8.0 } else { 0.0 };
+        + config.bottom_legend_extent();
 
     Margins { top, right, bottom, left }
 }

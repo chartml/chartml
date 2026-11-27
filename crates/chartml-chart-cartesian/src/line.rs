@@ -99,10 +99,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     let (prelim_domain_min, prelim_domain_max) = nice_domain(prelim_domain_min, prelim_domain_max, 5);
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
-    let prelim_labels = vec![
-        format_value(prelim_domain_max, y_fmt_ref),
-        format_value(prelim_domain_min, y_fmt_ref),
-    ];
+    let prelim_labels = crate::helpers::y_axis_tick_labels((prelim_domain_min, prelim_domain_max), y_fmt_ref);
 
     // Pre-compute right tick labels for margin estimation (mirrors bar.rs render_combo)
     let right_fmt = config.visualize.axes.as_ref()
@@ -262,7 +259,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         grid: &grid,
         axis_label: bottom_axis_label,
         margin_left: margins.left,
-        margin_bottom: margins.bottom,
+        margin_bottom: margins.bottom - margin_config.bottom_legend_extent(),
         theme: &config.theme,
     });
     let left_axis_label = config.visualize.axes.as_ref()

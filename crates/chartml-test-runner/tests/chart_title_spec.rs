@@ -89,6 +89,15 @@ fn titles(svg: &str) -> usize {
     svg.matches(r#"class="chart-title""#).count()
 }
 
+/// The visible text of the chart's title element: the SVG `<text>` or the
+/// table's HTML heading (its text sits in a `<span>`).
+fn title_text(svg: &str) -> String {
+    let at = svg.find(r#"class="chart-title""#).expect("a chart-title element");
+    let after_tag = &svg[at + svg[at..].find('>').expect("tag end") + 1..];
+    let after_tag = after_tag.strip_prefix("<span>").unwrap_or(after_tag);
+    after_tag[..after_tag.find('<').expect("text end")].to_string()
+}
+
 fn root_attr(svg: &str, attr: &str) -> f64 {
     let root = &svg[..svg.find('>').expect("root tag")];
     let needle = format!(" {attr}=\"");
@@ -102,7 +111,7 @@ async fn every_chart_type_shows_its_title_once_where_no_heading_is_drawn() {
     for chart_type in TYPES {
         let svg = svg_of(&yaml(chart_type, Some(TITLE)), 640.0, 360.0, false).await;
         assert_eq!(titles(&svg), 1, "{chart_type}: {svg}");
-        assert_eq!(svg.matches(TITLE).count(), 1, "{chart_type}: the title text once: {svg}");
+        assert_eq!(svg.matches(&format!(">{TITLE}<")).count(), 1, "{chart_type}: the title text once: {svg}");
     }
 }
 
@@ -166,7 +175,7 @@ async fn a_long_title_is_cut_with_an_ellipsis_and_keeps_its_full_text_as_the_svg
     let long = "Quarterly signups by acquisition channel across every region and plan tier";
     let svg = svg_of(&yaml("bar", Some(long)), 300.0, 300.0, false).await;
     assert_eq!(titles(&svg), 1, "{svg}");
-    assert!(svg.contains('\u{2026}'), "ellipsis: {svg}");
+    assert!(title_text(&svg).ends_with('\u{2026}'), "the title element is cut: {svg}");
     assert!(svg.contains(&format!("<title>{long}</title>")), "full text as <title>: {svg}");
 
     let short = svg_of(&yaml("bar", Some(TITLE)), 640.0, 360.0, false).await;
@@ -232,8 +241,11 @@ fn every_titled_spec_in_the_suite_shows_its_title_once() {
         let svg = element_to_svg(&element, 800.0, 400.0);
         assert_eq!(titles(&svg), 1, "{name}");
         assert!(svg.contains("chart-title"), "{name}");
-        let shown = svg.contains(&format!(">{}<", xml_escape(title.trim()))) || svg.contains('\u{2026}');
-        assert!(shown, "{name}: title text missing");
+        let shown = title_text(&svg);
+        let full = xml_escape(title.trim());
+        let ok = shown == full
+            || (shown.ends_with('\u{2026}') && full.starts_with(shown.trim_end_matches('\u{2026}')));
+        assert!(ok, "{name}: the title element shows {shown:?}, not {full:?}");
         checked += 1;
     }
     assert!(checked > 100, "checked only {checked} specs");
@@ -277,7 +289,7 @@ fn rotated_label_corners(element: &ChartElement) -> Vec<(String, Vec<(f64, f64)>
                 let size: f64 = font_size
                     .as_deref()
                     .and_then(|s| s.trim_end_matches("px").parse().ok())
-                    .unwrap_or(12.0);
+                    .expect("a rotated label carries its font size");
                 // The axis font metrics the production truncation measures with.
                 let metrics = TextMetrics::from_theme_axis_label(&Theme::default());
                 assert_eq!(metrics.font_size_px, size, "the label carries the theme's axis size");
@@ -432,4 +444,141 @@ fn a_titled_table_fills_the_box_its_host_gives_it() {
     assert_eq!(class, "chart-titled");
     assert_eq!(style.get("width").map(String::as_str), Some("100%"));
     assert_eq!(style.get("height").map(String::as_str), Some("100%"));
+}
+
+#[tokio::test]
+async fn a_table_heading_keeps_the_full_title_as_its_hover_text() {
+    let long = "Quarterly signups by acquisition channel across every region and plan tier";
+    let svg = svg_of(&yaml("table", Some(long)), 300.0, 300.0, false).await;
+    assert_eq!(titles(&svg), 1, "{svg}");
+    assert!(svg.contains(&format!(r#"title="{long}""#)), "{svg}");
+}
+
+// ---------------------------------------------------------------------------
+// Left-axis tick labels stay inside the SVG.
+// ---------------------------------------------------------------------------
+
+/// Every numeric y tick label's left edge in SVG coordinates.
+fn y_tick_label_left_edges(element: &ChartElement) -> Vec<(String, f64)> {
+    fn walk(element: &ChartElement, dx: f64, out: &mut Vec<(String, f64)>) {
+        match element {
+            ChartElement::Svg { children, .. } => children.iter().for_each(|c| walk(c, dx, out)),
+            ChartElement::Group { transform, children, .. } => {
+                let tx = match transform {
+                    Some(Transform::Translate(x, _)) => *x,
+                    _ => 0.0,
+                };
+                children.iter().for_each(|c| walk(c, dx + tx, out));
+            }
+            ChartElement::Text { x, content, anchor: TextAnchor::End, transform: None, class, .. }
+                if class.split_whitespace().any(|c| c == "tick-value") =>
+            {
+                let metrics = TextMetrics::from_theme_tick_value(&Theme::default());
+                out.push((content.clone(), dx + x - measure_text(content, &metrics)));
+            }
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(element, 0.0, &mut out);
+    out
+}
+
+#[test]
+fn no_y_tick_label_in_the_suite_leaves_the_svg() {
+    let runtime = tokio::runtime::Runtime::new().expect("runtime");
+    let _guard = runtime.enter();
+    let mut seen = 0;
+    for (name, spec) in specs() {
+        let element = chartml().render_from_yaml(&chart_yaml(&spec)).expect(&name);
+        for (label, left) in y_tick_label_left_edges(&element) {
+            seen += 1;
+            assert!(left >= 0.0, "{name}: y tick label {label:?} starts at x={left:.1}, left of the SVG");
+        }
+    }
+    assert!(seen > 500, "only {seen} y tick labels seen");
+}
+
+// ---------------------------------------------------------------------------
+// Rotated labels keep clear of a bottom legend.
+// ---------------------------------------------------------------------------
+
+/// The bounding box (x0, y0, x1, y1) of the legend group's symbols and labels
+/// in SVG coordinates.
+fn legend_box(element: &ChartElement) -> Option<(f64, f64, f64, f64)> {
+    fn bounds(element: &ChartElement, (dx, dy): (f64, f64), b: &mut Option<(f64, f64, f64, f64)>) {
+        let mut add = |x0: f64, y0: f64, x1: f64, y1: f64| {
+            let (x0, y0, x1, y1) = (x0 + dx, y0 + dy, x1 + dx, y1 + dy);
+            *b = Some(match *b {
+                None => (x0, y0, x1, y1),
+                Some((a, c, d, e)) => (a.min(x0), c.min(y0), d.max(x1), e.max(y1)),
+            });
+        };
+        match element {
+            ChartElement::Group { children, .. } => children.iter().for_each(|c| bounds(c, (dx, dy), b)),
+            ChartElement::Rect { x, y, width, height, .. } => add(*x, *y, x + width, y + height),
+            ChartElement::Text { x, y, content, .. } => {
+                let w = measure_text(content, &TextMetrics::from_theme_legend(&Theme::default()));
+                add(*x, y - 9.0, x + w, y + 2.0);
+            }
+            _ => {}
+        }
+    }
+    fn find(element: &ChartElement, offset: (f64, f64)) -> Option<(f64, f64, f64, f64)> {
+        match element {
+            ChartElement::Svg { children, .. } => children.iter().find_map(|c| find(c, offset)),
+            ChartElement::Group { class, transform, children } => {
+                let offset = match transform {
+                    Some(Transform::Translate(x, y)) => (offset.0 + x, offset.1 + y),
+                    _ => offset,
+                };
+                if class == "legend" {
+                    let mut b = None;
+                    children.iter().for_each(|c| bounds(c, offset, &mut b));
+                    return b;
+                }
+                children.iter().find_map(|c| find(c, offset))
+            }
+            _ => None,
+        }
+    }
+    find(element, (0.0, 0.0))
+}
+
+#[test]
+fn cut_rotated_labels_stay_clear_of_a_bottom_legend() {
+    let rows: String = (0..6)
+        .flat_map(|i| {
+            ["North America", "Europe"].into_iter().enumerate().map(move |(j, region)| {
+                format!(
+                    "    - {{ name: \"A deliberately very long category label number {i} that keeps going\", region: \"{region}\", v: {} }}\n",
+                    i + j + 1
+                )
+            })
+        })
+        .collect();
+    let chart = format!(
+        "type: chart\nversion: 1\ntitle: Sales\ndata:\n  provider: inline\n  rows:\n{rows}visualize:\n  type: bar\n  mode: grouped\n  columns: name\n  rows: v\n  marks:\n    color: region\n"
+    );
+    let element = chartml().render_from_yaml_with_size(&chart, Some(500.0), Some(300.0)).expect("render");
+    let (lx0, ly0, lx1, ly1) = legend_box(&element).expect("a bottom legend");
+    let labels = rotated_label_corners(&element);
+    assert_eq!(labels.len(), 6, "six rotated labels");
+    assert!(labels.iter().any(|(l, _)| l.ends_with('\u{2026}')), "the labels are long enough to be cut");
+    for (label, corners) in labels {
+        // The label is the parallelogram corners[0..4] (start-top, end-top,
+        // end-bottom, start-bottom); walk its whole area, not just its corners.
+        let lerp = |a: (f64, f64), b: (f64, f64), t: f64| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+        for i in 0..=60 {
+            let along = i as f64 / 60.0;
+            for j in 0..=4 {
+                let across = j as f64 / 4.0;
+                let top = lerp(corners[0], corners[1], along);
+                let bottom = lerp(corners[3], corners[2], along);
+                let (px, py) = lerp(top, bottom, across);
+                let inside = px >= lx0 && px <= lx1 && py >= ly0 && py <= ly1;
+                assert!(!inside, "{label:?} at ({px:.1}, {py:.1}) is inside the legend ({lx0:.1}, {ly0:.1})-({lx1:.1}, {ly1:.1})");
+            }
+        }
+    }
 }
