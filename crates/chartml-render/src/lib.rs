@@ -144,9 +144,8 @@ pub fn render_to_png_with_background(
         Some(height as f64),
     )?;
 
-    let svg_str = element_to_svg(&element, width as f64, height as f64);
-    let svg_str = strip_dashoffset_for_static(&svg_str);
-    svg_to_png(&svg_str, width, height, density, DEFAULT_PADDING, background)
+    let (width, height) = rendered_size(&element, width, height);
+    element_to_png_with_background(&element, width, height, density, background)
 }
 
 /// Render a ChartML YAML spec to PNG bytes (async).
@@ -200,9 +199,23 @@ pub async fn render_to_png_with_background_async(
         None,
     ).await?;
 
-    let svg_str = element_to_svg(&element, width as f64, height as f64);
-    let svg_str = strip_dashoffset_for_static(&svg_str);
-    svg_to_png(&svg_str, width, height, density, DEFAULT_PADDING, background)
+    let (width, height) = rendered_size(&element, width, height);
+    element_to_png_with_background(&element, width, height, density, background)
+}
+
+/// The size a rendered chart came out at, for its PNG canvas: an SVG root's
+/// own width and height (a chart's resolved style height beats the requested
+/// container height), else the requested size (an HTML-drawn chart fills
+/// its container).
+#[cfg(feature = "rasterize")]
+fn rendered_size(element: &chartml_core::ChartElement, width: u32, height: u32) -> (u32, u32) {
+    match element {
+        chartml_core::ChartElement::Svg { width: w, height: h, .. } => (
+            w.map_or(width, |w| w.round() as u32),
+            h.map_or(height, |h| h.round() as u32),
+        ),
+        _ => (width, height),
+    }
 }
 
 /// Render a pre-built ChartElement tree to PNG bytes.

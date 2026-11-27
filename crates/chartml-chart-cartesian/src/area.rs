@@ -2,6 +2,7 @@ use chartml_core::data::DataTable;
 use chartml_core::element::{ChartElement, ElementData, Transform, ViewBox};
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
+use chartml_core::layout::legend::{LegendBlock, LegendConfig};
 use chartml_core::layout::stack::{StackLayout, StackOffset};
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
@@ -10,7 +11,7 @@ use chartml_core::shapes::AreaGenerator;
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics};
 
 
-use crate::helpers::{cartesian_grid, emit_zero_line_if_crosses, generate_annotations, generate_x_axis, generate_y_axis_numeric, get_color_field, legend_group, plan_legend, theme_legend_config, LegendMark, get_field_name, get_x_format, get_y_format, offset_element};
+use crate::helpers::{cartesian_grid, emit_zero_line_if_crosses, generate_annotations, generate_x_axis, generate_y_axis_numeric, get_color_field, LegendMark, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     // `style.fillOpacity` (0 to 1); area fills are 60% opaque by default.
@@ -62,11 +63,11 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
     // Lay out the legend first so the margins keep room for it.
     let legend = match color_field {
-        Some(ref color_f) => plan_legend(
+        Some(ref color_f) => LegendBlock::for_series(
             config,
             &data.unique_values(color_f),
             &config.colors,
-            theme_legend_config(&config.theme),
+            LegendConfig::for_theme(&config.theme),
         )?,
         None => None,
     };
@@ -443,7 +444,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
         // Legend
         if let Some(ref legend) = legend {
-            children.push(legend_group(legend, config, LegendMark::Rect));
+            children.push(legend.group(config, |_| LegendMark::Rect));
         }
     } else {
         // Single series area

@@ -41,10 +41,12 @@ pub struct FontSpec {
     pub color: Option<String>,
 }
 
-/// A font weight. The documented form is a number (`weight: 600`, as in
-/// `chartml_schema.json`). Strings (`weight: bold`) parsed before the number
-/// form was supported and stay accepted unchanged for compatibility with
-/// stored specs; they are not documented.
+/// A font weight. The schema's form is a number (`weight: 600`, as in
+/// `chartml_schema.json`). Strings (`weight: bold`, `weight: "600"`) parsed
+/// before the number form was supported and stay accepted for stored specs.
+/// Rendering accepts a whole number from 1 to 1000, a numeric string, or the
+/// CSS keywords `normal`, `bold`, `bolder` and `lighter` (spec.md
+/// "Typography"); anything else fails the render.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum FontWeight {

@@ -1,5 +1,5 @@
 use chartml_core::data::DataTable;
-use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform, ViewBox, emit_dot_halo_if_enabled};
+use chartml_core::element::{paint_class, ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform, ViewBox, emit_dot_halo_if_enabled};
 use chartml_core::error::ChartError;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
 use chartml_core::plugin::ChartConfig;
@@ -8,9 +8,10 @@ use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::shapes::LineGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics};
+use chartml_core::layout::legend::{LegendBlock, LegendConfig};
 
 
-use crate::helpers::{cartesian_grid, LegendMark, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, legend_group, plan_legend, theme_legend_config, get_field_name, get_x_format, get_y_format, nice_domain, offset_element};
+use crate::helpers::{cartesian_grid, LegendMark, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_field_name, get_x_format, get_y_format, nice_domain, offset_element};
 
 pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
@@ -47,7 +48,6 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     };
 
     let color_field = get_color_field(config);
-    let has_series = color_field.is_some() || is_multi_field;
 
     // Step 1: Compute label strategy for margin estimation
     let estimated_width = config.width - 80.0;
@@ -123,24 +123,34 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         vec![]
     };
 
-    // Lay out the legend first so the margins keep room for it.
-    let legend = if has_series {
-        let legend_series_names: Vec<String> = if is_multi_field {
-            multi_fields.iter()
-                // Range marks render as shaded bands, not a legend entry; skip them.
-                .filter(|f| f.mark.as_deref() != Some("range"))
-                .map(|f| {
-                    f.label.clone().unwrap_or_else(|| f.field.clone().unwrap_or_default())
-                }).collect()
-        } else if let Some(ref color_f) = color_field {
-            data.unique_values(color_f)
-        } else {
-            vec![]
-        };
-        plan_legend(config, &legend_series_names, &config.colors, theme_legend_config(&config.theme))?
+    // Lay out the legend first so the margins keep room for it, from the
+    // same entries it draws: one per field that draws a line (range marks
+    // render as shaded bands and fields without a value draw nothing), in
+    // the field's colour; or one per colour series.
+    let (legend_names, legend_colors): (Vec<String>, Vec<String>) = if is_multi_field {
+        multi_fields.iter().enumerate()
+            .filter(|(_, f)| f.mark.as_deref() != Some("range"))
+            .filter(|(_, f)| {
+                let field = f.field.as_deref().unwrap_or("");
+                categories.iter().any(|cat| {
+                    (0..data.num_rows())
+                        .find(|&i| data.get_string(i, &category_field).as_deref() == Some(cat.as_str()))
+                        .is_some_and(|i| data.get_f64(i, field).is_some())
+                })
+            })
+            .map(|(field_idx, f)| {
+                let label = f.label.clone().unwrap_or_else(|| f.field.clone().unwrap_or_default());
+                let color = f.color.clone()
+                    .unwrap_or_else(|| config.colors.get(field_idx).cloned().unwrap_or_else(|| "#2E7D9A".to_string()));
+                (label, color)
+            })
+            .unzip()
+    } else if let Some(ref color_f) = color_field {
+        (data.unique_values(color_f), config.colors.clone())
     } else {
-        None
+        (vec![], vec![])
     };
+    let legend = LegendBlock::for_series(config, &legend_names, &legend_colors, LegendConfig::for_theme(&config.theme))?;
     let legend_reserve = legend.as_ref().map(|l| l.reserve()).unwrap_or_default();
 
     let has_y_axis_label = config.visualize.axes.as_ref()
@@ -325,7 +335,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 letter_spacing: ts.letter_spacing,
                 text_transform: ts.text_transform,
                 fill: Some(config.theme.axis_text_color().to_string()),
-                class: "axis-label".to_string(),
+                class: paint_class("axis-label", config.theme.axis_label_color.is_some()),
                 data: None,
             });
         }
@@ -374,8 +384,6 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
     if is_multi_field {
         // Multi-field rows: each field spec is a separate line series
-        let mut series_names = Vec::new();
-        let mut series_colors = Vec::new();
 
         for (field_idx, field_spec) in multi_fields.iter().enumerate() {
             let color = field_spec.color.clone()
@@ -532,41 +540,13 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
             // Data labels (if configured on this field spec)
             if let Some(ref dl) = field_spec.data_labels {
-                if dl.show == Some(true) {
-                    let dl_fmt = dl.format.as_deref().or(y_fmt_ref);
-                    for (i, &(px, py)) in points.iter().enumerate() {
-                        let (_, val) = &point_data[i];
-                        let label_y = match dl.position.as_deref() {
-                            Some("bottom") => py + 15.0,
-                            _ => py - 10.0,
-                        };
-                        let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
-                        line_elements.push(ChartElement::Text {
-                            x: px, y: label_y,
-                            content: format_value(*val, dl_fmt),
-                            anchor: TextAnchor::Middle,
-                            dominant_baseline: None,
-                            transform: None,
-                            font_family: dl_ts.font_family,
-                            font_size: dl_ts.font_size,
-                            font_weight: dl_ts.font_weight,
-                            letter_spacing: None,
-                            text_transform: None,
-                            fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.data_label_color.clone().unwrap_or_else(|| color.clone()))),
-                            class: "data-label".to_string(),
-                            data: None,
-                        });
-                    }
-                }
+                line_elements.extend(point_data_labels(&points, &point_data, dl, y_fmt_ref, &color, config));
             }
-
-            series_names.push(label);
-            series_colors.push(color);
         }
 
         // Legend, in each field's own colour
-        if let Some(legend) = plan_legend(config, &series_names, &series_colors, theme_legend_config(&config.theme))? {
-            children.push(legend_group(&legend, config, LegendMark::Line));
+        if let Some(ref legend) = legend {
+            children.push(legend.group(config, |_| LegendMark::Line));
         }
     } else if let Some(ref color_f) = color_field {
         let series_names = data.unique_values(color_f);
@@ -651,7 +631,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
         // Legend
         if let Some(ref legend) = legend {
-            children.push(legend_group(legend, config, LegendMark::Line));
+            children.push(legend.group(config, |_| LegendMark::Line));
         }
     } else {
         // Single series
@@ -721,6 +701,11 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     });
                 }
             }
+
+            // Data labels (`rows: { field, dataLabels }`)
+            if let Some(dl) = crate::helpers::get_data_labels_config(config) {
+                line_elements.extend(point_data_labels(&points, &point_data, dl, y_fmt_ref, &color, config));
+            }
         }
     }
 
@@ -739,3 +724,51 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     })
 }
 
+/// Value labels for a line's points when `dl.show` is set: above each point,
+/// or below with `position: bottom`, in the data label font, coloured by the
+/// field's `dataLabels.color`, else the style's data label colour, else the
+/// line's own colour.
+fn point_data_labels(
+    points: &[(f64, f64)],
+    point_data: &[(String, f64)],
+    dl: &chartml_core::spec::DataLabelsSpec,
+    fmt: Option<&str>,
+    color: &str,
+    config: &ChartConfig,
+) -> Vec<ChartElement> {
+    if dl.show != Some(true) {
+        return Vec::new();
+    }
+    let dl_fmt = dl.format.as_deref().or(fmt);
+    points
+        .iter()
+        .zip(point_data)
+        .map(|(&(px, py), (_, val))| {
+            let label_y = match dl.position.as_deref() {
+                Some("bottom") => py + 15.0,
+                _ => py - 10.0,
+            };
+            let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
+            ChartElement::Text {
+                x: px,
+                y: label_y,
+                content: format_value(*val, dl_fmt),
+                anchor: TextAnchor::Middle,
+                dominant_baseline: None,
+                transform: None,
+                font_family: dl_ts.font_family,
+                font_size: dl_ts.font_size,
+                font_weight: dl_ts.font_weight,
+                letter_spacing: None,
+                text_transform: None,
+                fill: Some(dl.color.clone().unwrap_or_else(|| {
+                    config.theme.data_label_color.clone().unwrap_or_else(|| color.to_string())
+                })),
+                // A line's labels default to its own colour, which the page
+                // theme must not replace.
+                class: paint_class("data-label", true),
+                data: None,
+            }
+        })
+        .collect()
+}

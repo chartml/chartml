@@ -5,8 +5,7 @@ use chartml_core::error::ChartError;
 use chartml_core::shapes::{ArcGenerator, PieLayout};
 use chartml_core::spec::{VisualizeSpec, FieldRef};
 use chartml_core::layout::{
-    LegendAlignment, LegendBlock, LegendConfig, LegendMark, LegendOrientation, LegendPlacement,
-    LegendPosition, TextMetrics, LEGEND_GAP,
+    LegendBlock, LegendConfig, LegendMark, LegendOrientation, LegendPosition, LEGEND_GAP,
 };
 
 #[derive(Default)]
@@ -47,13 +46,8 @@ impl ChartRenderer for PieRenderer {
         let legend_colors: Vec<String> = (0..labels.len())
             .map(|i| config.colors.get(i % config.colors.len()).cloned().unwrap_or_else(|| "#999".to_string()))
             .collect();
-        let placement = LegendPlacement::from_style(config.visualize.style.as_ref())?;
-        let legend_config = LegendConfig {
-            alignment: LegendAlignment::Center,
-            text_metrics: TextMetrics::from_theme_legend(&config.theme),
-            ..LegendConfig::default()
-        };
-        let legend = LegendBlock::new(&labels, &legend_colors, placement, width, height, legend_config);
+        // A pie keys every slice, even a single one.
+        let legend = LegendBlock::for_chart(config, &labels, &legend_colors, LegendConfig::for_theme(&config.theme))?;
 
         // The pie fills what the legend leaves, less 40px all round. A legend
         // below or above keeps a 5% edge margin plus a 30px gap to the pie and
@@ -69,7 +63,7 @@ impl ChartRenderer for PieRenderer {
                 LegendPosition::Bottom if l.placement.orientation == LegendOrientation::Horizontal => {
                     (0.0, 0.0, width, height - (50.0 + edge_margin))
                 }
-                LegendPosition::Bottom | LegendPosition::None => {
+                LegendPosition::Bottom => {
                     (0.0, 0.0, width, height - ((l.height + 30.0).max(50.0) + edge_margin))
                 }
                 LegendPosition::Top => {
@@ -77,10 +71,12 @@ impl ChartRenderer for PieRenderer {
                     (0.0, reserved, width, height - reserved)
                 }
                 LegendPosition::Left => {
-                    let reserved = l.width + 2.0 * LEGEND_GAP;
+                    let reserved = l.reserve().side_inset();
                     (reserved, 0.0, width - reserved, height)
                 }
-                LegendPosition::Right => (0.0, 0.0, width - (l.width + 2.0 * LEGEND_GAP), height),
+                LegendPosition::Right => (0.0, 0.0, width - l.reserve().side_inset(), height),
+                // `LegendBlock::for_chart` gives no block for `none`.
+                LegendPosition::None => (0.0, 0.0, width, height),
             },
         };
         let radius = (area_w.min(area_h) / 2.0) - 40.0;

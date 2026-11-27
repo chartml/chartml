@@ -151,42 +151,44 @@ impl ChartML {
     /// Register a non-chart component (source, style, config, params) from a YAML string.
     /// Sources are stored in the instance and available to all subsequent render calls.
     /// This matches the JS `chartml.registerComponent(spec)` API.
+    ///
+    /// A document of several components registers all of them or, when any
+    /// one fails, none: the instance is left exactly as it was.
     pub fn register_component(&mut self, yaml: &str) -> Result<(), ChartError> {
-        let parsed = spec::parse(yaml)?;
-        match parsed {
-            ChartMLSpec::Single(component) => self.register_single_component(*component),
-            ChartMLSpec::Array(components) => {
-                for component in components {
-                    self.register_single_component(component)?;
-                }
-                Ok(())
-            }
-        }
-    }
+        let components = match spec::parse(yaml)? {
+            ChartMLSpec::Single(component) => vec![*component],
+            ChartMLSpec::Array(components) => components,
+        };
 
-    fn register_single_component(&mut self, component: spec::Component) -> Result<(), ChartError> {
-        match component {
-            spec::Component::Source(source_spec) => {
-                if let Some(ref rows) = source_spec.rows {
-                    let json_rows = self.convert_json_rows(rows)?;
-                    let data = DataTable::from_rows(&json_rows)?;
-                    self.sources.insert(source_spec.name.clone(), data);
+        // Stage every component first; commit only when all succeeded.
+        let mut sources: Vec<(String, DataTable)> = Vec::new();
+        let mut param_defaults = params::ParamValues::new();
+        let mut styles = self.styles.clone();
+        for component in components {
+            match component {
+                spec::Component::Source(source_spec) => {
+                    if let Some(ref rows) = source_spec.rows {
+                        let json_rows = self.convert_json_rows(rows)?;
+                        sources.push((source_spec.name.clone(), DataTable::from_rows(&json_rows)?));
+                    }
                 }
-                Ok(())
-            }
-            spec::Component::Params(params_spec) => {
-                let defaults = params::collect_param_defaults(&[&params_spec]);
-                self.param_values.extend(defaults);
-                Ok(())
-            }
-            spec::Component::Style(style_spec) => self.styles.register_style(*style_spec),
-            spec::Component::Config(config_spec) => self.styles.register_config(config_spec),
-            spec::Component::Chart(..) => {
-                Err(ChartError::InvalidSpec(
-                    "Cannot register chart components. Use render_from_yaml() instead.".into()
-                ))
+                spec::Component::Params(params_spec) => {
+                    param_defaults.extend(params::collect_param_defaults(&[&params_spec]));
+                }
+                spec::Component::Style(style_spec) => styles.register_style(*style_spec)?,
+                spec::Component::Config(config_spec) => styles.register_config(config_spec)?,
+                spec::Component::Chart(..) => {
+                    return Err(ChartError::InvalidSpec(
+                        "Cannot register chart components. Use render_from_yaml() instead.".into(),
+                    ));
+                }
             }
         }
+
+        self.sources.extend(sources);
+        self.param_values.extend(param_defaults);
+        self.styles = styles;
+        Ok(())
     }
 
     /// Register a named source directly from a DataTable.
@@ -358,48 +360,9 @@ impl ChartML {
         param_overrides: Option<&params::ParamValues>,
         table_page: Option<usize>,
     ) -> Result<ChartElement, ChartError> {
-        // Step 1: Collect ALL param values — defaults + overrides.
-        // Priority: overrides > persistent defaults > inline defaults
-        let mut all_params = self.param_values.clone();
-
-        // Extract inline (chart-level) param defaults from the raw YAML
-        let inline_defaults = params::extract_inline_param_defaults(yaml);
-        all_params.extend(inline_defaults);
-
-        // Apply overrides (interactive values from UI controls)
-        if let Some(overrides) = param_overrides {
-            all_params.extend(overrides.iter().map(|(k, v)| (k.clone(), v.clone())));
-        }
-
-        // Resolve parameter references in the YAML string
-        let resolved_yaml = if !all_params.is_empty() {
-            params::resolve_param_references(yaml, &all_params)
-        } else {
-            yaml.to_string()
-        };
-
-        let parsed = spec::parse(&resolved_yaml)?;
-
-        // Step 2: Collect document-local params and re-resolve if needed.
-        let mut local_params = self.param_values.clone();
-        let mut has_local_params = false;
-        if let ChartMLSpec::Array(ref components) = parsed {
-            for component in components {
-                if let Component::Params(params_spec) = component {
-                    let defaults = params::collect_param_defaults(&[params_spec]);
-                    local_params.extend(defaults);
-                    has_local_params = true;
-                }
-            }
-        }
-
-        // If we found local params, re-resolve and re-parse
-        let parsed = if has_local_params && local_params.len() > self.param_values.len() {
-            let re_resolved = params::resolve_param_references(yaml, &local_params);
-            spec::parse(&re_resolved)?
-        } else {
-            parsed
-        };
+        // Steps 1-2: resolve params (registered, document, inline and
+        // overrides) and parse.
+        let parsed = self.parse_with_params(yaml, param_overrides)?;
 
         // Step 3: Collect sources (persistent + document-local).
         let mut sources: HashMap<String, DataTable> = self.sources.clone();
@@ -554,7 +517,7 @@ impl ChartML {
     /// `style:` must be resolved first. Fails with
     /// [`ChartError::InvalidSpec`] for an invalid font weight.
     pub fn chart_theme(&self, chart: &ChartSpec) -> Result<theme::Theme, ChartError> {
-        styling::chart_theme(&self.theme, chart.visualize.style.as_ref())
+        styling::chart_theme(&self.theme, chart.visualize.style.as_ref(), &chart.visualize.chart_type)
     }
 
     /// The registered styles, extended by the style and config components
@@ -1266,25 +1229,48 @@ impl ChartML {
         Ok(element)
     }
 
-    /// Resolve params in `yaml` (defaults < inline defaults < overrides,
-    /// as the sync path does) and parse it.
+    /// Resolve the param references in `yaml` and parse it: the one param
+    /// step every render path shares (sync, `fetch`, and hosts resolving a
+    /// chart from YAML). Priority, highest first: `param_overrides`
+    /// (interactive values), chart-level inline defaults, the defaults of
+    /// `type: params` components in the same document, then registered
+    /// defaults. Document defaults are known only after a first parse, so a
+    /// document with params components is resolved and parsed twice.
     fn parse_with_params(
         &self,
         yaml: &str,
         param_overrides: Option<&params::ParamValues>,
     ) -> Result<ChartMLSpec, ChartError> {
-        let mut all_params = self.param_values.clone();
         let inline_defaults = params::extract_inline_param_defaults(yaml);
-        all_params.extend(inline_defaults);
-        if let Some(overrides) = param_overrides {
-            all_params.extend(overrides.iter().map(|(k, v)| (k.clone(), v.clone())));
-        }
-        let resolved_yaml = if !all_params.is_empty() {
-            params::resolve_param_references(yaml, &all_params)
-        } else {
-            yaml.to_string()
+        let resolve = |document_defaults: &params::ParamValues| {
+            let mut all_params = self.param_values.clone();
+            all_params.extend(document_defaults.iter().map(|(k, v)| (k.clone(), v.clone())));
+            all_params.extend(inline_defaults.iter().map(|(k, v)| (k.clone(), v.clone())));
+            if let Some(overrides) = param_overrides {
+                all_params.extend(overrides.iter().map(|(k, v)| (k.clone(), v.clone())));
+            }
+            if all_params.is_empty() {
+                yaml.to_string()
+            } else {
+                params::resolve_param_references(yaml, &all_params)
+            }
         };
-        spec::parse(&resolved_yaml)
+
+        let parsed = spec::parse(&resolve(&params::ParamValues::new()))?;
+        let ChartMLSpec::Array(ref components) = parsed else {
+            return Ok(parsed);
+        };
+        let document_params: Vec<&spec::ParamsSpec> = components
+            .iter()
+            .filter_map(|c| match c {
+                Component::Params(p) => Some(p),
+                _ => None,
+            })
+            .collect();
+        if document_params.is_empty() {
+            return Ok(parsed);
+        }
+        spec::parse(&resolve(&params::collect_param_defaults(&document_params)))
     }
 
     /// Shared step 1+2 for `fetch` and the legacy async path: resolve params
@@ -1494,7 +1480,11 @@ impl ChartML {
             });
         paint::validate_palette(&colors)?;
 
-        let theme = styling::chart_theme(&self.theme, chart_spec.visualize.style.as_ref())?;
+        let theme = styling::chart_theme(
+            &self.theme,
+            chart_spec.visualize.style.as_ref(),
+            &chart_spec.visualize.chart_type,
+        )?;
 
         let config = plugin::ChartConfig {
             visualize: chart_spec.visualize.clone(),

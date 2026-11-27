@@ -11,6 +11,9 @@ pub struct GridConfig {
     pub show_y: bool,
     /// Grid line colour (`grid.color`, else `theme.grid`).
     pub color: String,
+    /// The colour came from the chart's `grid.color`, not the theme
+    /// (see [`EXPLICIT_PAINT_CLASS`](crate::element::EXPLICIT_PAINT_CLASS)).
+    pub explicit_color: bool,
     /// Grid line opacity (`grid.opacity`). `None` draws them opaque.
     pub opacity: Option<f64>,
     /// Grid line dash pattern (`grid.dashArray`).
@@ -23,6 +26,7 @@ impl Default for GridConfig {
             show_x: false,
             show_y: true,
             color: "#e0e0e0".into(),
+            explicit_color: false,
             opacity: None,
             dash_array: None,
         }
@@ -38,13 +42,17 @@ impl GridConfig {
             show_x,
             show_y,
             color: config.theme.grid.clone(),
+            explicit_color: false,
             opacity: None,
             dash_array: None,
         };
         if let Some(g) = config.visualize.style.as_ref().and_then(|s| s.grid.as_ref()) {
             if let Some(x) = g.x { grid.show_x = x; }
             if let Some(y) = g.y { grid.show_y = y; }
-            if let Some(ref c) = g.color { grid.color = c.clone(); }
+            if let Some(ref c) = g.color {
+                grid.color = c.clone();
+                grid.explicit_color = true;
+            }
             if let Some(o) = g.opacity { grid.opacity = Some(o); }
             if let Some(ref d) = g.dash_array { grid.dash_array = Some(d.clone()); }
         }

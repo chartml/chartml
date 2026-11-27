@@ -10,6 +10,7 @@ use chartml_chart_cartesian::CartesianRenderer;
 use chartml_chart_metric::MetricRenderer;
 use chartml_chart_pie::PieRenderer;
 use chartml_chart_scatter::ScatterRenderer;
+use chartml_chart_table::TableRenderer;
 use chartml_core::{ChartError, ChartML, RenderOptions};
 use chartml_render::element_to_svg;
 
@@ -25,6 +26,7 @@ fn chartml() -> ChartML {
         c.register_renderer(t, ScatterRenderer::new());
     }
     c.register_renderer("metric", MetricRenderer::new());
+    c.register_renderer("table", TableRenderer::new());
     c
 }
 
@@ -290,20 +292,43 @@ fn config_with_inline_style() {
 }
 
 #[test]
-fn a_later_style_or_config_replaces_the_earlier_one() {
+fn a_later_style_replaces_the_earlier_one_of_that_name() {
     let replaced = "type: style\nversion: 1\nname: corporate\nheight: 250\n";
     let c = with(&[CORPORATE, replaced]);
     let svg = render_ok(&c, &chart("style: corporate", BAR));
     assert_eq!(svg_height(&svg), 250.0);
     assert!(!svg.contains("#123456"), "the replaced style's colours are gone");
 
+}
+
+#[test]
+fn configs_cascade_in_registration_order_and_the_document_config_merges_last() {
+    // spec.md Resolution Order: workspace (2) -> user (3) -> dashboard (4)
+    // configs deep-merge, each overriding only what it sets.
     let c = with(&[
         CORPORATE,
         DARK,
         "type: config\nversion: 1\nstyle: corporate\n",
         "type: config\nversion: 1\nstyle: dark\n",
     ]);
-    assert_eq!(svg_height(&render_ok(&c, &chart("", BAR))), 222.0);
+    let svg = render_ok(&c, &chart("", BAR));
+    assert_eq!(svg_height(&svg), 222.0, "the later config's height");
+    assert!(bar_fills(&svg).iter().all(|f| f == "#ff0000"), "the later config's colours");
+    assert!(
+        tags(&svg, "grid-line").iter().all(|g| attr(g, "stroke") == Some("#00ff00")),
+        "fields the later config does not set stay from the earlier one"
+    );
+
+    // A dashboard document's config that sets only height keeps the
+    // registered palette and fonts.
+    let c = with(&[CORPORATE, "type: config\nversion: 1\nstyle: corporate\n"]);
+    let doc = format!("type: config\nversion: 1\nstyle:\n  height: 250\n---\n{}", chart("", BAR));
+    let svg = render_ok(&c, &doc);
+    assert_eq!(svg_height(&svg), 250.0);
+    assert!(bar_fills(&svg).iter().all(|f| f == "#123456"), "registered palette kept");
+    for l in tags(&svg, "tick-label") {
+        assert_eq!(attr(l, "font-family"), Some("Courier New, monospace"), "registered fonts kept: {l}");
+    }
 }
 
 // --- Acceptance 3: precedence and unknown names -----------------------------
@@ -383,7 +408,7 @@ fn unknown_style_name_in_the_config_fails_naming_it() {
     let c = with(&["type: config\nversion: 1\nstyle: missing_theme\n"]);
     assert_invalid(
         render(&c, &chart("", BAR)),
-        &["style 'missing_theme' is not registered", "the registered config"],
+        &["style 'missing_theme' is not registered", "a registered config"],
     );
 }
 
@@ -690,4 +715,206 @@ fn area_fill_opacity_comes_from_the_style() {
 
     let vis = format!("{area}  style:\n    fillOpacity: 1.5\n");
     assert_invalid(render(&chartml(), &chart("", &vis)), &["visualize.style.fillOpacity"]);
+}
+
+// --- Registration is all-or-nothing -------------------------------------------
+
+#[test]
+fn a_failing_component_leaves_the_registration_unchanged() {
+    let mut c = with(&[CORPORATE, "type: config\nversion: 1\nstyle: corporate\n"]);
+    // A config naming `brand`, then an invalid `brand` style: neither applies.
+    let bad = "type: config\nversion: 1\nstyle: brand\n---\ntype: style\nversion: 1\nname: brand\ncolors: [\"javascript:alert(1)\"]\n";
+    let err = c.register_component(bad).expect_err("the invalid style fails the registration");
+    assert!(err.to_string().contains("style 'brand'.colors[0]"), "{err}");
+    let svg = render_ok(&c, &chart("", BAR));
+    assert_eq!(svg_height(&svg), 333.0, "the earlier config still applies alone");
+    assert!(bar_fills(&svg).iter().all(|f| f == "#123456"));
+
+    // A replacing style before a failing component does not replace.
+    let replacing = "type: style\nversion: 1\nname: corporate\nheight: 100\n---\ntype: style\nversion: 1\nname: x\nfonts:\n  axis:\n    weight: 0\n";
+    c.register_component(replacing).expect_err("bad weight fails");
+    assert_eq!(svg_height(&render_ok(&c, &chart("style: corporate", BAR))), 333.0);
+}
+
+// --- Tables keep their own typography ---------------------------------------
+
+#[test]
+fn axis_fonts_do_not_reach_tables() {
+    let table = "  type: table\n  rows: [month, revenue]\n";
+    let plain = serde_json::to_value(chartml().render_from_yaml(&chart("", table)).expect("table")).expect("json");
+    let styled = serde_json::to_value(with(&[CORPORATE]).render_from_yaml(&chart("style: corporate", table)).expect("table"))
+        .expect("json");
+    assert!(!styled.to_string().contains("Courier New"), "fonts.axis must not reach table cells");
+    assert_eq!(plain, styled, "a table renders the same with or without an axis-font style");
+}
+
+#[test]
+fn grid_opacity_outside_0_to_1_fails() {
+    for bad in ["5", "-0.1", ".nan"] {
+        let style = format!("type: style\nversion: 1\nname: g\ngrid:\n  opacity: {bad}\n");
+        let err = chartml().register_component(&style).expect_err("bad grid opacity");
+        assert!(err.to_string().contains("style 'g'.grid.opacity must be a number from 0 to 1"), "{err}");
+    }
+}
+
+// --- Colours the chart chose survive the browser stylesheet ------------------
+
+#[test]
+fn chart_chosen_colours_are_marked_for_the_browser_stylesheet() {
+    let style = "type: style\nversion: 1\nname: paint\ngrid:\n  color: \"#00ff00\"\nfonts:\n  axis:\n    color: \"#445566\"\n  dataLabel:\n    color: \"#0000ff\"\n";
+    let c = with(&[style]);
+    let svg = render_ok(&c, &chart("style: paint", BAR_WITH_LABELS));
+    for class in ["tick-label", "grid-line", "data-label"] {
+        let els = tags(&svg, class);
+        assert!(!els.is_empty(), "{class}");
+        for e in els {
+            assert!(attr(e, "class").unwrap().split_whitespace().any(|c| c == "explicit-paint"), "{class}: {e}");
+        }
+    }
+
+    // Theme colours stay unmarked, so the page theme still styles them.
+    let plain = render_ok(&chartml(), &chart("", BAR_WITH_LABELS));
+    assert!(!plain.contains("explicit-paint"), "{plain}");
+
+    // A field's own dataLabels.color, inline grid.color, and a line's
+    // series-coloured data labels are the chart's choice too.
+    let own = "  type: bar\n  columns: month\n  rows:\n    field: revenue\n    dataLabels:\n      show: true\n      color: \"#999999\"\n  style:\n    grid:\n      color: \"#ff0000\"\n";
+    let svg = render_ok(&chartml(), &chart("", own));
+    for class in ["data-label", "grid-line"] {
+        for e in tags(&svg, class) {
+            assert!(attr(e, "class").unwrap().contains("explicit-paint"), "{e}");
+        }
+    }
+    let line = "  type: line\n  columns: month\n  rows:\n    - field: revenue\n      dataLabels:\n        show: true\n";
+    let svg = render_ok(&chartml(), &chart("", line));
+    let labels = tags(&svg, "data-label");
+    assert!(!labels.is_empty());
+    for e in labels {
+        assert!(attr(e, "class").unwrap().contains("explicit-paint"), "{e}");
+    }
+}
+
+// --- Also fixed: data labels on single-field lines and horizontal bars -------
+
+#[test]
+fn single_field_line_draws_its_data_labels() {
+    let line = "  type: line\n  columns: month\n  rows:\n    field: revenue\n    dataLabels:\n      show: true\n";
+    let c = with(&[CORPORATE]);
+    let svg = render_ok(&c, &chart("style: corporate", line));
+    let labels = tags(&svg, "data-label");
+    // One label per category (Jan, Feb) at each point, in the data label font.
+    assert_eq!(labels.len(), 2, "{svg}");
+    for l in labels {
+        assert_eq!(attr(l, "font-family"), Some("Verdana, sans-serif"), "{l}");
+        assert_eq!(attr(l, "font-size"), Some("15px"), "{l}");
+        assert_eq!(attr(l, "fill"), Some("#123456"), "defaults to the line's colour: {l}");
+    }
+}
+
+#[test]
+fn horizontal_bars_draw_their_data_labels_past_the_bar_end() {
+    let rows = "  provider: inline\n  rows:\n    - { product: A, arr: 10 }\n    - { product: B, arr: 30 }\n";
+    let yaml = |position: &str| {
+        format!(
+            "type: chart\nversion: 1\ndata:\n{rows}visualize:\n  type: bar\n  orientation: horizontal\n  columns: product\n  rows:\n    field: arr\n    dataLabels:\n      show: true\n{position}"
+        )
+    };
+    let svg = render_ok(&chartml(), &yaml(""));
+    let bars = tags(&svg, "bar-rect");
+    let labels = tags(&svg, "data-label");
+    assert_eq!(labels.len(), 2, "{svg}");
+    for (bar, label) in bars.iter().zip(&labels) {
+        let end: f64 = attr(bar, "width").unwrap().parse().unwrap();
+        let x: f64 = attr(label, "x").unwrap().parse().unwrap();
+        assert_eq!(x, end + 5.0, "label just past the bar end: {label}");
+        assert_eq!(attr(label, "text-anchor"), Some("start"));
+        assert_eq!(attr(label, "dominant-baseline"), Some("middle"));
+    }
+    // The widest label stays inside the chart.
+    let root_width = 800.0;
+    let wide = "  provider: inline\n  rows:\n    - { product: A, arr: 1000000 }\n    - { product: B, arr: 3100000 }\n";
+    let wide_svg = render_ok(
+        &chartml(),
+        &format!("type: chart\nversion: 1\ndata:\n{wide}visualize:\n  type: bar\n  orientation: horizontal\n  columns: product\n  rows:\n    field: arr\n    dataLabels:\n      show: true\n"),
+    );
+    let plot = tags(&wide_svg, "bars").into_iter().find(|t| t.starts_with('g')).expect("bars group");
+    let plot_x: f64 = attr(plot, "transform").unwrap().trim_start_matches("translate(").split(',').next().unwrap().parse().unwrap();
+    for (bar, label) in tags(&wide_svg, "bar-rect").iter().zip(tags(&wide_svg, "data-label")) {
+        let end: f64 = attr(bar, "width").unwrap().parse().unwrap();
+        // "3,100,000" is 9 characters at about 7px each at 12px.
+        assert!(plot_x + end + 5.0 + 9.0 * 7.0 <= root_width, "label runs off the chart: {label}");
+    }
+
+    let centred = render_ok(&chartml(), &yaml("      position: center\n"));
+    for (bar, label) in tags(&centred, "bar-rect").iter().zip(tags(&centred, "data-label")) {
+        let end: f64 = attr(bar, "width").unwrap().parse().unwrap();
+        assert_eq!(attr(label, "x").unwrap().parse::<f64>().unwrap(), end / 2.0);
+        assert_eq!(attr(label, "text-anchor"), Some("middle"));
+    }
+}
+
+// --- Also fixed: every path resolves document `type: params` the same way ---
+
+fn params_doc() -> String {
+    format!(
+        "type: params\nversion: 1\nname: f\nparams:\n  - id: brand\n    type: text\n    label: Brand\n    default: \"#abcdef\"\n---\n{}",
+        chart("", "  type: bar\n  columns: month\n  rows: revenue\n  style:\n    colors: [\"$f.brand\"]\n")
+    )
+}
+
+#[test]
+fn document_params_resolve_on_the_async_path_as_on_the_sync_path() {
+    let c = chartml();
+    let sync = render_ok(&c, &params_doc());
+    assert!(bar_fills(&sync).iter().all(|f| f == "#abcdef"), "sync: {:?}", bar_fills(&sync));
+
+    let rt = tokio::runtime::Builder::new_current_thread().build().expect("runtime");
+    let svg = rt
+        .block_on(c.render_to_svg_async(&params_doc(), &RenderOptions::default()))
+        .expect("async render resolves document params");
+    assert!(bar_fills(&svg).iter().all(|f| f == "#abcdef"), "async: {:?}", bar_fills(&svg));
+}
+
+#[test]
+fn param_overrides_beat_document_param_defaults() {
+    let mut overrides = chartml_core::params::ParamValues::new();
+    overrides.insert("f.brand".to_string(), serde_json::json!("#111111"));
+    let c = chartml();
+    let element = c
+        .render_from_yaml_with_params(&params_doc(), None, None, Some(&overrides))
+        .expect("renders");
+    let svg = element_to_svg(&element, 800.0, 400.0);
+    assert!(bar_fills(&svg).iter().all(|f| f == "#111111"), "{:?}", bar_fills(&svg));
+
+    let opts = RenderOptions { params: Some(overrides), ..RenderOptions::default() };
+    let rt = tokio::runtime::Builder::new_current_thread().build().expect("runtime");
+    let svg = rt.block_on(c.render_to_svg_async(&params_doc(), &opts)).expect("async");
+    assert!(bar_fills(&svg).iter().all(|f| f == "#111111"), "{:?}", bar_fills(&svg));
+}
+
+// --- Also fixed: the PNG canvas is the size the chart rendered at ------------
+
+/// Width and height from a PNG's IHDR chunk.
+fn png_size(png: &[u8]) -> (u32, u32) {
+    let be = |b: &[u8]| u32::from_be_bytes([b[0], b[1], b[2], b[3]]);
+    (be(&png[16..20]), be(&png[20..24]))
+}
+
+#[test]
+fn png_canvas_uses_the_style_height_not_the_requested_height() {
+    let c = with(&[CORPORATE, "type: config\nversion: 1\nstyle: corporate\n"]);
+    let png = chartml_render::render_to_png(&c, &chart("", BAR), 640, 480, 72).expect("png");
+    // chartml-render pads the canvas by 16px on each side at 72 dpi.
+    let pad = 2 * 16;
+    assert_eq!(png_size(&png), (640 + pad, 333 + pad), "canvas height is the style's 333px chart");
+
+    let rt = tokio::runtime::Builder::new_current_thread().build().expect("runtime");
+    let png = rt
+        .block_on(chartml_render::render_to_png_async(&c, &chart("", BAR), 640, 480, 72))
+        .expect("png");
+    assert_eq!(png_size(&png), (640 + pad, 333 + pad));
+
+    // Without a style the requested size is used.
+    let png = chartml_render::render_to_png(&chartml(), &chart("", BAR), 640, 480, 72).expect("png");
+    assert_eq!(png_size(&png), (640 + pad, 480 + pad));
 }

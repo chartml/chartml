@@ -44,6 +44,13 @@ pub enum LegendAlignment {
     Right,
 }
 
+impl LegendConfig {
+    /// The default item metrics with the theme's legend font.
+    pub fn for_theme(theme: &crate::theme::Theme) -> Self {
+        Self { text_metrics: TextMetrics::from_theme_legend(theme), ..Self::default() }
+    }
+}
+
 impl Default for LegendConfig {
     fn default() -> Self {
         Self {
@@ -111,24 +118,7 @@ pub fn calculate_legend_layout(
         let non_text_width = config.symbol_size + config.symbol_text_gap + config.item_padding;
         let max_text_width = remaining_width - non_text_width;
 
-        let display_label = if full_text_width > max_text_width {
-            // Progressively truncate until it fits
-            let char_count = label.chars().count();
-            let mut truncated_count = char_count.min(config.max_label_chars);
-            loop {
-                if truncated_count == 0 {
-                    break "\u{2026}".to_string();
-                }
-                let candidate: String = label.chars().take(truncated_count).collect();
-                let candidate_with_ellipsis = format!("{}\u{2026}", candidate);
-                if measure(&candidate_with_ellipsis) <= max_text_width {
-                    break candidate_with_ellipsis;
-                }
-                truncated_count -= 1;
-            }
-        } else {
-            label.clone()
-        };
+        let display_label = truncate_to_width(label, max_text_width, config.max_label_chars, metrics);
 
         let text_width = measure(&display_label);
         let item_width = config.symbol_size + config.symbol_text_gap + text_width + config.item_padding;
@@ -419,6 +409,13 @@ impl LegendReserve {
         if self.right > 0.0 { self.right + 2.0 * LEGEND_GAP } else { 0.0 }
     }
 
+    /// The room a left or right legend takes from the chart width: its width
+    /// plus a gap either side.
+    pub fn side_inset(&self) -> f64 {
+        let width = self.left.max(self.right);
+        if width > 0.0 { width + 2.0 * LEGEND_GAP } else { 0.0 }
+    }
+
     /// Set the legend fields of `margins` (`legend_height`,
     /// `legend_top_height`, `legend_left_width`, `legend_right_width`) from
     /// this reserve.
@@ -431,6 +428,50 @@ impl LegendReserve {
 }
 
 impl LegendBlock {
+    /// The legend a chart draws for `labels`, laid out for the chart's
+    /// resolved `style.legend` placement. `None` when the placement is
+    /// `none`.
+    pub fn for_chart(
+        config: &crate::plugin::ChartConfig,
+        labels: &[String],
+        colors: &[String],
+        legend_config: LegendConfig,
+    ) -> Result<Option<Self>, crate::error::ChartError> {
+        let placement = LegendPlacement::from_style(config.visualize.style.as_ref())?;
+        Ok(Self::new(labels, colors, placement, config.width, config.height, legend_config))
+    }
+
+    /// The legend a series chart (bar, line, area, scatter) draws: as
+    /// [`LegendBlock::for_chart`], and also `None` for fewer than two
+    /// series, which need no key. A chart keeps room only for a legend it
+    /// draws.
+    pub fn for_series(
+        config: &crate::plugin::ChartConfig,
+        labels: &[String],
+        colors: &[String],
+        legend_config: LegendConfig,
+    ) -> Result<Option<Self>, crate::error::ChartError> {
+        if labels.len() < 2 {
+            return Ok(None);
+        }
+        Self::for_chart(config, labels, colors, legend_config)
+    }
+
+    /// The `legend` group: the legend drawn at its placement, `mark_for`
+    /// giving each item's symbol by item index.
+    pub fn group(
+        &self,
+        config: &crate::plugin::ChartConfig,
+        mark_for: impl Fn(usize) -> LegendMark,
+    ) -> ChartElement {
+        let origin = self.origin(config.width, config.height, LEGEND_GAP);
+        ChartElement::Group {
+            class: "legend".to_string(),
+            transform: None,
+            children: self.elements(origin, mark_for, &config.theme),
+        }
+    }
+
     /// Lay out `labels` for `placement` on a `chart_width` x `chart_height`
     /// chart. `None` when the placement is [`LegendPosition::None`].
     ///

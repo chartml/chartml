@@ -6,7 +6,10 @@
 //!
 //! 1. the host's base: [`Theme`](crate::theme::Theme), the default palette and
 //!    the renderer defaults;
-//! 2. the registered `type: config` style (a named style or an inline object);
+//! 2. every `type: config` style (a named style or an inline object), in the
+//!    order the configs were registered (a host registers its system,
+//!    workspace and user defaults in that order), then a config in the
+//!    chart's own document (the dashboard's);
 //! 3. the chart's top-level `style:` (a named style or an inline object);
 //! 4. the chart's `visualize.style`.
 //!
@@ -29,11 +32,12 @@ use crate::spec::{
 };
 use crate::theme::Theme;
 
-/// The registered named styles and the registered config default.
+/// The registered named styles and config defaults.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct StyleScope {
     styles: HashMap<String, StyleSpec>,
-    config: Option<ConfigSpec>,
+    /// In registration order; each merges over the ones before it.
+    configs: Vec<ConfigSpec>,
 }
 
 impl StyleScope {
@@ -49,12 +53,14 @@ impl StyleScope {
         Ok(())
     }
 
-    /// Register the config default. A later config replaces the earlier one.
+    /// Register a config default. Configs cascade: each one's style
+    /// deep-merges over the styles of the configs registered before it, so
+    /// a later config overrides only the fields it sets.
     pub(crate) fn register_config(&mut self, config: ConfigSpec) -> Result<(), ChartError> {
         if let StyleRef::Inline(style) = &config.style {
             validate_style("config.style", style)?;
         }
-        self.config = Some(config);
+        self.configs.push(config);
         Ok(())
     }
 
@@ -68,13 +74,12 @@ impl StyleScope {
     pub(crate) fn resolve(&self, chart: &ChartSpec) -> Result<ChartSpec, ChartError> {
         let mut merged: Option<ChartStyleSpec> = None;
 
-        if let Some(config) = &self.config {
+        // Registered styles and config styles were validated when they were
+        // registered; the chart's own levels are validated here.
+        for config in &self.configs {
             let layer = match &config.style {
-                StyleRef::Named(name) => self.named(name, "the registered config")?,
-                StyleRef::Inline(style) => {
-                    validate_style("config.style", style)?;
-                    style.as_ref().clone()
-                }
+                StyleRef::Named(name) => self.named(name, "a registered config")?,
+                StyleRef::Inline(style) => style.as_ref().clone(),
             };
             merged = Some(merge(merged, &layer));
         }
@@ -102,7 +107,8 @@ impl StyleScope {
         Ok(resolved)
     }
 
-    /// Look up a registered style by name and validate it, as a style layer.
+    /// Look up a registered (already validated) style by name, as a style
+    /// layer.
     fn named(&self, name: &str, referenced_by: &str) -> Result<ChartStyleSpec, ChartError> {
         let style = self.styles.get(name).ok_or_else(|| {
             ChartError::InvalidSpec(format!(
@@ -110,9 +116,7 @@ impl StyleScope {
                  register a `type: style` component named '{name}' first"
             ))
         })?;
-        let layer = from_named(style);
-        validate_style(&format!("style '{name}'"), &layer)?;
-        Ok(layer)
+        Ok(from_named(style))
     }
 }
 
@@ -213,11 +217,16 @@ pub(crate) fn validate_style(path: &str, style: &ChartStyleSpec) -> Result<(), C
             )));
         }
     }
-    if let Some(opacity) = style.fill_opacity {
-        if !(0.0..=1.0).contains(&opacity) {
-            return Err(ChartError::InvalidSpec(format!(
-                "{path}.fillOpacity must be a number from 0 to 1, got {opacity}"
-            )));
+    for (field, opacity) in [
+        ("fillOpacity", style.fill_opacity),
+        ("grid.opacity", style.grid.as_ref().and_then(|g| g.opacity)),
+    ] {
+        if let Some(opacity) = opacity {
+            if !(0.0..=1.0).contains(&opacity) {
+                return Err(ChartError::InvalidSpec(format!(
+                    "{path}.{field} must be a number from 0 to 1, got {opacity}"
+                )));
+            }
         }
     }
     LegendPlacement::from_spec(style.legend.as_ref())
@@ -290,11 +299,17 @@ fn font_weight(weight: &FontWeight, inherited: u16) -> Result<u16, String> {
 ///
 /// - `fonts.title` sets the title typography (`title_font_*`, `title_color`);
 /// - `fonts.axis` sets axis and tick label typography (`label_font_*`,
-///   `numeric_font_family` / `numeric_font_size`, `axis_label_color`);
+///   `numeric_font_family` / `numeric_font_size`, `axis_label_color`),
+///   except on a `table`, which has no axes and keeps its own typography
+///   (it draws its cells in the label font);
 /// - `fonts.dataLabel` sets data label typography (`data_label_font_*`,
 ///   `data_label_color`);
 /// - `strokeWidth` sets `series_line_weight`.
-pub(crate) fn chart_theme(base: &Theme, style: Option<&ChartStyleSpec>) -> Result<Theme, ChartError> {
+pub(crate) fn chart_theme(
+    base: &Theme,
+    style: Option<&ChartStyleSpec>,
+    chart_type: &str,
+) -> Result<Theme, ChartError> {
     let mut theme = base.clone();
     let Some(style) = style else {
         return Ok(theme);
@@ -322,7 +337,7 @@ pub(crate) fn chart_theme(base: &Theme, style: Option<&ChartStyleSpec>) -> Resul
             theme.title_color = Some(color.clone());
         }
     }
-    if let Some(f) = &fonts.axis {
+    if let Some(f) = fonts.axis.as_ref().filter(|_| chart_type != "table") {
         if let Some(family) = &f.family {
             theme.label_font_family = family.clone();
             theme.numeric_font_family = family.clone();

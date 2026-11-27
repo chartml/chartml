@@ -11,14 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`chartml-core`**: named styles and config defaults now apply to charts
   (CHA-48). `register_component` stores a `type: style` component by name and
-  a `type: config` as the default; until now both were accepted and
-  discarded. Each chart renders with its config's style, then its own
-  `style:` (a name or an inline object), then `visualize.style`, deep-merged
-  field by field (spec.md "Resolution Order"). Style and config components in
-  the same document as a chart apply to it too. A chart or config naming a
-  style that is not registered fails with `ChartError::InvalidSpec` naming the
-  style; it never falls back to the defaults. A re-registered style or config
-  replaces the earlier one.
+  each `type: config` as a default; until now both were accepted and
+  discarded. Each chart renders with the registered configs' styles in
+  registration order, then a config in its own document, then its own
+  `style:` (a name or an inline object), then `visualize.style`, each
+  deep-merged field by field over the last (spec.md "Resolution Order").
+  Style and config components in the same document as a chart apply to it
+  too. A chart or config naming a style that is not registered fails with
+  `ChartError::InvalidSpec` naming the style; it never falls back to the
+  defaults. A re-registered style replaces the earlier one of that name.
+  `register_component` with several components registers all of them or,
+  when one fails, none.
 - **`chartml-core`**: style fields that were parsed but never drawn now take
   effect, inline or from a named style: `fonts.title` / `fonts.axis` /
   `fonts.dataLabel` (family, size, weight, colour), `showDots: false`,
@@ -28,7 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   charts. Font weights must be a whole number from 1 to 1000 or `normal`,
   `bold`, `bolder` or `lighter` (a number written as a string, such as
   `"600"`, stays accepted); any other weight, a font size of 0 or less, a
-  negative `strokeWidth` or an unknown legend value fails with
+  negative `strokeWidth`, a `grid.opacity` or `fillOpacity` outside 0 to 1,
+  or an unknown legend value fails with
   `ChartError::InvalidSpec` naming the field. Named and config styles pass the
   same colour check as inline styles.
 - **`chartml-core`**: `ChartML::resolve_chart_style`,
@@ -43,13 +47,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`chartml-core`**: legend placement in `layout::legend`
   (`LegendPlacement`, `LegendPosition`, `LegendOrientation`, `LegendBlock`,
   `LegendReserve`, `LEGEND_GAP`, `SIDE_LEGEND_MAX_WIDTH_FRACTION`,
-  `calculate_vertical_legend_layout`, `legend_item_elements`) and
-  `layout::GridConfig`, shared by the chart crates. `ChartStyleSpec`,
+  `calculate_vertical_legend_layout`, `legend_item_elements`,
+  `LegendConfig::for_theme`, `LegendBlock::for_chart` / `for_series` /
+  `group`) and `layout::GridConfig`, shared by the chart crates. `ChartStyleSpec`,
   `GridSpec`, `FontsSpec`, `FontSpec` and `LegendSpec` implement `Default`;
   `LegendConfig` implements `Debug` and `Clone`.
+- **`chartml-core`**: `element::EXPLICIT_PAINT_CLASS` (`explicit-paint`)
+  and `element::paint_class`. Axis labels, data labels and grid lines whose
+  colour the chart chose (a style's axis, data label or grid colour, a
+  field's `dataLabels.color`, a line's series-coloured labels) carry the
+  class, and the stylesheet `chartml-leptos` injects no longer replaces their
+  colour with the page theme's (`--chartml-text-secondary`,
+  `--chartml-grid`), nor a style's `grid.opacity` with its default 0.5. Charts
+  coloured by the theme render unchanged.
 - **`chartml-chart-cartesian`**: area charts read `style.fillOpacity` (0 to
   1, default 0.6), as spec.md documented; they always drew 0.6. A value
   outside 0 to 1 fails with `ChartError::InvalidSpec`.
+- **`chartml-chart-cartesian`**: single-field line charts
+  (`rows: { field, dataLabels: { show: true } }`) and horizontal bar charts
+  draw their data labels; both drew none. Horizontal labels sit just past the
+  bar end (`top`, the default, with room kept on the right), in its middle
+  (`center`) or inside its start (`bottom`).
 - **`chartml-chart-scatter`**: scatter and bubble charts read `style.grid`
   (visibility, colour, opacity, dash pattern), which they ignored.
 - **`chartml-leptos`**: the title heading uses the chart's resolved title
@@ -66,9 +84,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   new `DataLabel` variant, and `MarginConfig` has new `legend_top_height`,
   `legend_left_width` and `legend_right_width` fields (`Default` still
   available).
-- **`chartml-chart-cartesian`**: a combo chart reserves legend room only when
-  it draws a legend (two or more entries), computed from the same entries it
-  draws.
+- **`chartml-chart-cartesian`**: bar, line, area and combo charts reserve
+  legend room only when they draw a legend (two or more entries), sized from
+  the entries they draw. A chart with a single colour series (or a
+  single-field `rows` array) no longer keeps an empty band for it.
+- **`chartml-core`**: `fetch` (and so the async render paths and the Leptos
+  component) resolves `type: params` defaults from the chart's own document,
+  as the sync path did, through one shared step. Interactive param overrides
+  now win over those document defaults on every path; the sync path dropped
+  them when the document declared its own params.
+- **`chartml-render`**: `render_to_png` and `render_to_png_async` size the
+  PNG canvas from the rendered chart (a style's height beats the requested
+  height), so the image is no longer cropped or padded with blank space.
 
 ### Security
 

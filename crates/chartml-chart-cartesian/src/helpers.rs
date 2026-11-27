@@ -1,10 +1,9 @@
-use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform};
+use chartml_core::element::{paint_class, ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform};
 use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
 pub use chartml_core::format::format_value;
 use chartml_core::format::{detect_date_format, reformat_date_label};
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics, measure_text, truncate_label_with_metrics};
-use chartml_core::layout::legend::{LegendBlock, LegendConfig, LegendPlacement, LEGEND_GAP};
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::spec::{AnnotationSpec, FieldRef, FieldRefItem, MarkEncoding};
@@ -425,7 +424,7 @@ pub fn generate_x_axis_with_display(
                     x1: x, y1: y_position, x2: x, y2: y_position - ch,
                     stroke: grid.color.clone(), stroke_width: Some(theme.grid_line_weight as f64),
                     stroke_dasharray: grid.dash_array.clone(), opacity: grid.opacity,
-                    class: "grid-line grid-line-x".to_string(),
+                    class: paint_class("grid-line grid-line-x", grid.explicit_color),
                 });
             }
         }
@@ -461,7 +460,7 @@ pub fn generate_x_axis_with_display(
                     letter_spacing: ts.letter_spacing,
                     text_transform: ts.text_transform,
                     fill: Some(theme.axis_text_color().to_string()),
-                    class: "tick-label axis-label".to_string(),
+                    class: paint_class("tick-label axis-label", theme.axis_label_color.is_some()),
                     data: None,
                 });
             }
@@ -504,7 +503,7 @@ pub fn generate_x_axis_with_display(
                         letter_spacing: ts.letter_spacing,
                         text_transform: ts.text_transform,
                         fill: Some(theme.axis_text_color().to_string()),
-                        class: "tick-label axis-label".to_string(),
+                        class: paint_class("tick-label axis-label", theme.axis_label_color.is_some()),
                         data: None,
                     });
                 }
@@ -539,7 +538,7 @@ pub fn generate_x_axis_with_display(
                     letter_spacing: ts.letter_spacing,
                     text_transform: ts.text_transform,
                     fill: Some(theme.axis_text_color().to_string()),
-                    class: "tick-label axis-label".to_string(),
+                    class: paint_class("tick-label axis-label", theme.axis_label_color.is_some()),
                     data: if is_truncated {
                         Some(ElementData::new(label.clone(), ""))
                     } else {
@@ -592,7 +591,7 @@ pub fn generate_x_axis_with_display(
                         letter_spacing: ts.letter_spacing,
                         text_transform: ts.text_transform,
                         fill: Some(theme.axis_text_color().to_string()),
-                        class: "tick-label axis-label".to_string(),
+                        class: paint_class("tick-label axis-label", theme.axis_label_color.is_some()),
                         data: if is_truncated {
                             Some(ElementData::new(label.clone(), ""))
                         } else {
@@ -629,7 +628,7 @@ pub fn generate_x_axis_with_display(
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
             fill: Some(theme.axis_text_color().to_string()),
-            class: "axis-label".to_string(),
+            class: paint_class("axis-label", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -699,7 +698,7 @@ pub fn generate_y_axis_with_display(
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
             fill: Some(theme.axis_text_color().to_string()),
-            class: "tick-label axis-label".to_string(),
+            class: paint_class("tick-label axis-label", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -763,7 +762,7 @@ pub fn generate_y_axis_numeric(
                     stroke: grid.color.clone(),
                     stroke_width: Some(theme.grid_line_weight as f64),
                     stroke_dasharray: grid.dash_array.clone(), opacity: grid.opacity,
-                    class: "grid-line grid-line-y".to_string(),
+                    class: paint_class("grid-line grid-line-y", grid.explicit_color),
                 });
             }
         }
@@ -794,7 +793,7 @@ pub fn generate_y_axis_numeric(
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
             fill: Some(theme.axis_text_color().to_string()),
-            class: "tick-label tick-value".to_string(),
+            class: paint_class("tick-label tick-value", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -827,7 +826,7 @@ pub fn generate_y_axis_numeric(
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
             fill: Some(theme.axis_text_color().to_string()),
-            class: "axis-label".to_string(),
+            class: paint_class("axis-label", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -888,7 +887,7 @@ pub fn generate_y_axis_numeric_right(
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
             fill: Some(theme.axis_text_color().to_string()),
-            class: "tick-label tick-value".to_string(),
+            class: paint_class("tick-label tick-value", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -911,7 +910,7 @@ pub fn generate_y_axis_numeric_right(
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
             fill: Some(theme.axis_text_color().to_string()),
-            class: "axis-label".to_string(),
+            class: paint_class("axis-label", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -981,7 +980,7 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
                     stroke: grid.color.clone(),
                     stroke_width: Some(theme.grid_line_weight as f64),
                     stroke_dasharray: grid.dash_array.clone(), opacity: grid.opacity,
-                    class: "grid-line grid-line-x".to_string(),
+                    class: paint_class("grid-line grid-line-x", grid.explicit_color),
                 });
             }
         }
@@ -1011,7 +1010,7 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
             fill: Some(theme.axis_text_color().to_string()),
-            class: "tick-label tick-value".to_string(),
+            class: paint_class("tick-label tick-value", theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -1021,39 +1020,6 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
 
 // Re-export from core for backward compatibility
 pub use chartml_core::layout::legend::LegendMark;
-
-/// The chart's legend for `series_names`, laid out for its resolved
-/// `style.legend` placement, with the theme's legend font. `None` when the
-/// placement is `none`.
-pub fn plan_legend(
-    config: &ChartConfig,
-    series_names: &[String],
-    colors: &[String],
-    legend_config: LegendConfig,
-) -> Result<Option<LegendBlock>, ChartError> {
-    let placement = LegendPlacement::from_style(config.visualize.style.as_ref())?;
-    Ok(LegendBlock::new(series_names, colors, placement, config.width, config.height, legend_config))
-}
-
-/// The default legend item metrics with the theme's legend font.
-pub fn theme_legend_config(theme: &Theme) -> LegendConfig {
-    LegendConfig {
-        text_metrics: TextMetrics::from_theme_legend(theme),
-        ..LegendConfig::default()
-    }
-}
-
-/// The `legend` group for `legend`, drawn at its placement with `mark` symbols.
-/// A legend of one series or none draws no items.
-pub fn legend_group(legend: &LegendBlock, config: &ChartConfig, mark: LegendMark) -> ChartElement {
-    let children = if legend.layout.items.len() <= 1 {
-        Vec::new()
-    } else {
-        let origin = legend.origin(config.width, config.height, LEGEND_GAP);
-        legend.elements(origin, |_| mark, &config.theme)
-    };
-    ChartElement::Group { class: "legend".to_string(), transform: None, children }
-}
 
 /// Generate ticks matching D3's `ticks(start, stop, count)` algorithm exactly.
 ///

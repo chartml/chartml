@@ -327,6 +327,23 @@ pub const LEGACY_LEGEND_FONT_SIZE: &str = "11px";
 /// every pre-Phase-4 baseline SVG.
 pub const LEGACY_FONT_WEIGHT: u16 = 400;
 
+/// Class marking an element whose colour the chart chose (a style's axis,
+/// data label or grid colour, a field's `dataLabels.color`, a line's series
+/// colour) rather than the theme. The browser stylesheet's theme colour rules
+/// (`--chartml-text-secondary`, `--chartml-grid`) skip these elements, so the
+/// chart's colour is shown instead of the page theme's.
+pub const EXPLICIT_PAINT_CLASS: &str = "explicit-paint";
+
+/// `class`, plus [`EXPLICIT_PAINT_CLASS`] when the element's colour was
+/// chosen by the chart.
+pub fn paint_class(class: &str, explicit: bool) -> String {
+    if explicit {
+        format!("{class} {EXPLICIT_PAINT_CLASS}")
+    } else {
+        class.to_string()
+    }
+}
+
 /// Role of a text element, used to select the right bundle of typography
 /// fields from the active `Theme`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,5 +1,5 @@
 use chartml_core::data::DataTable;
-use chartml_core::element::{ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform, ViewBox, emit_dot_halo_if_enabled};
+use chartml_core::element::{paint_class, ChartElement, ElementData, TextAnchor, TextRole, TextStyle, Transform, ViewBox, emit_dot_halo_if_enabled};
 use chartml_core::error::ChartError;
 use indexmap::IndexMap;
 use chartml_core::layout::margins::{calculate_margins, MarginConfig};
@@ -8,11 +8,11 @@ use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::layout::adaptive_tick_count;
 use chartml_core::spec::{ChartMode, Orientation};
 
-use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics};
+use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics, measure_text};
 
-use chartml_core::layout::legend::{LegendConfig, LegendMark, LEGEND_GAP};
+use chartml_core::layout::legend::{LegendBlock, LegendConfig, LegendMark, LEGEND_GAP};
 
-use crate::helpers::{cartesian_grid, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, legend_group, plan_legend, theme_legend_config, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
+use crate::helpers::{cartesian_grid, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
 
 /// Position of a bar segment within a stacked bar group.
 ///
@@ -600,11 +600,11 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
 
     // Lay out the legend first so the margins keep room for it.
     let legend = match color_field {
-        Some(ref color_f) => plan_legend(
+        Some(ref color_f) => LegendBlock::for_series(
             config,
             &data.unique_values(color_f),
             &config.colors,
-            theme_legend_config(&config.theme),
+            LegendConfig::for_theme(&config.theme),
         )?,
         None => None,
     };
@@ -637,7 +637,24 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     if let Some(ref legend) = legend {
         legend.reserve().apply_to(&mut margin_config);
     }
-    let margins = calculate_margins(&margin_config);
+    let mut margins = calculate_margins(&margin_config);
+    // Horizontal single-series value labels sit past the bar end by default;
+    // keep room on the right for the widest one.
+    if is_horizontal && color_field.is_none() {
+        if let Some(dl) = get_data_labels_config(config)
+            .filter(|dl| dl.show == Some(true) && matches!(dl.position.as_deref(), None | Some("top")))
+        {
+            let metrics = TextMetrics {
+                font_size_px: dl.font_size.unwrap_or(config.theme.data_label_font_size as f64),
+                ..TextMetrics::default()
+            };
+            let widest = (0..data.num_rows())
+                .filter_map(|i| data.get_f64(i, &value_field))
+                .map(|v| measure_text(&format_value(v, dl.format.as_deref().or(y_fmt_ref)), &metrics))
+                .fold(0.0_f64, f64::max);
+            margins.right = margins.right.max(widest + 5.0 + LEGEND_GAP);
+        }
+    }
 
     let inner_width = margins.inner_width(config.width);
     let inner_height = margins.inner_height(config.height);
@@ -836,7 +853,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
 
     // Legend
     if let Some(ref legend) = legend {
-        children.push(legend_group(legend, config, LegendMark::Rect));
+        children.push(legend.group(config, |_| LegendMark::Rect));
     }
 
     let svg_class = if is_horizontal { "chartml-bar chartml-horizontal" } else { "chartml-bar" };
@@ -917,6 +934,26 @@ fn render_single_series_bars(
                 },
                 &config.theme,
             ));
+
+            // Data label along the bar (if configured): past its end by
+            // default, in its middle (`center`) or inside its start (`bottom`),
+            // the horizontal counterparts of the vertical positions.
+            if let Some(dl) = get_data_labels_config(config).filter(|dl| dl.show == Some(true)) {
+                let (label_x, anchor) = match dl.position.as_deref() {
+                    Some("center") => (bar_width / 2.0, TextAnchor::Middle),
+                    Some("bottom") => (5.0, TextAnchor::Start),
+                    _ => (bar_width + 5.0, TextAnchor::Start),
+                };
+                elements.push(bar_data_label(
+                    (label_x, y + band.bandwidth() / 2.0),
+                    anchor,
+                    Some("middle".to_string()),
+                    val,
+                    dl,
+                    y_fmt_ref,
+                    config,
+                ));
+            }
         }
     } else {
         let band = ScaleBand::new(categories.to_vec(), (0.0, inner_width))
@@ -964,37 +1001,57 @@ fn render_single_series_bars(
             ));
 
             // Data label above bar (if configured)
-            if let Some(dl) = get_data_labels_config(config) {
-                if dl.show == Some(true) {
-                    let label_fmt = dl.format.as_deref().or(y_fmt_ref);
-                    let label_y = match dl.position.as_deref() {
-                        Some("center") => rect_y + bar_height / 2.0,
-                        Some("bottom") => rect_y + bar_height - 5.0,
-                        _ => if val >= 0.0 { rect_y - 5.0 } else { rect_y + bar_height + 12.0 }, // "top" or default
-                    };
-                    let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
-                    elements.push(ChartElement::Text {
-                        x: x + band.bandwidth() / 2.0,
-                        y: label_y,
-                        content: format_value(val, label_fmt),
-                        anchor: TextAnchor::Middle,
-                        dominant_baseline: None,
-                        transform: None,
-                        font_family: dl_ts.font_family,
-                        font_size: dl_ts.font_size,
-                        font_weight: dl_ts.font_weight,
-                        letter_spacing: None,
-                        text_transform: None,
-                        fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.data_label_text_color().to_string())),
-                        class: "data-label".to_string(),
-                        data: None,
-                    });
-                }
+            if let Some(dl) = get_data_labels_config(config).filter(|dl| dl.show == Some(true)) {
+                let label_y = match dl.position.as_deref() {
+                    Some("center") => rect_y + bar_height / 2.0,
+                    Some("bottom") => rect_y + bar_height - 5.0,
+                    _ => if val >= 0.0 { rect_y - 5.0 } else { rect_y + bar_height + 12.0 }, // "top" or default
+                };
+                elements.push(bar_data_label(
+                    (x + band.bandwidth() / 2.0, label_y),
+                    TextAnchor::Middle,
+                    None,
+                    val,
+                    dl,
+                    y_fmt_ref,
+                    config,
+                ));
             }
         }
     }
 
     Ok((value_max, elements))
+}
+
+/// A single-series bar's value label at `(x, y)`: the field's `dataLabels`
+/// format, font size and colour where set, else the chart's data label font
+/// and colour.
+fn bar_data_label(
+    (x, y): (f64, f64),
+    anchor: TextAnchor,
+    dominant_baseline: Option<String>,
+    val: f64,
+    dl: &chartml_core::spec::DataLabelsSpec,
+    fmt: Option<&str>,
+    config: &ChartConfig,
+) -> ChartElement {
+    let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
+    ChartElement::Text {
+        x,
+        y,
+        content: format_value(val, dl.format.as_deref().or(fmt)),
+        anchor,
+        dominant_baseline,
+        transform: None,
+        font_family: dl_ts.font_family,
+        font_size: dl_ts.font_size,
+        font_weight: dl_ts.font_weight,
+        letter_spacing: None,
+        text_transform: None,
+        fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.data_label_text_color().to_string())),
+        class: paint_class("data-label", dl.color.is_some() || config.theme.data_label_color.is_some()),
+        data: None,
+    }
 }
 
 fn render_multi_series_bars(
@@ -1456,15 +1513,11 @@ fn render_combo(
         .is_some();
     // Lay out the legend first so the margins keep room for it.
     let legend_entries = combo_legend_entries(data, config, fields, is_stacked, color_field.as_deref());
-    let legend = if legend_entries.len() > 1 {
-        let (names, colors): (Vec<String>, Vec<String>) =
-            legend_entries.iter().map(|(n, c, _)| (n.clone(), c.clone())).unzip();
-        // Combo legend items are spaced a little wider than the other charts'.
-        let legend_config = LegendConfig { item_padding: 16.0, ..theme_legend_config(&config.theme) };
-        plan_legend(config, &names, &colors, legend_config)?
-    } else {
-        None
-    };
+    let (names, colors): (Vec<String>, Vec<String>) =
+        legend_entries.iter().map(|(n, c, _)| (n.clone(), c.clone())).unzip();
+    // Combo legend items are spaced a little wider than the other charts'.
+    let legend_config = LegendConfig { item_padding: 16.0, ..LegendConfig::for_theme(&config.theme) };
+    let legend = LegendBlock::for_series(config, &names, &colors, legend_config)?;
     let mut margin_config = MarginConfig {
         has_title: config.title.is_some(),
         // Left Y-axis label is not rendered for combo charts (see comment below),
@@ -1653,7 +1706,7 @@ fn render_combo(
             letter_spacing: ts.letter_spacing,
             text_transform: ts.text_transform,
             fill: Some(config.theme.axis_text_color().to_string()),
-            class: "axis-label".to_string(),
+            class: paint_class("axis-label", config.theme.axis_label_color.is_some()),
             data: None,
         });
     }
@@ -1847,7 +1900,7 @@ fn render_combo(
                                 letter_spacing: None,
                                 text_transform: None,
                                 fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.data_label_text_color().to_string())),
-                                class: "data-label".to_string(), data: None,
+                                class: paint_class("data-label", dl.color.is_some() || config.theme.data_label_color.is_some()), data: None,
                             });
                         }
                     }
@@ -1914,7 +1967,7 @@ fn render_combo(
                                     letter_spacing: None,
                                     text_transform: None,
                                     fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.data_label_color.clone().unwrap_or_else(|| color.clone()))),
-                                    class: "data-label".to_string(), data: None,
+                                    class: paint_class("data-label", true), data: None,
                                 });
                             }
                         }
@@ -1952,11 +2005,7 @@ fn render_combo(
 
     // Legend with mixed marks: a line symbol for line fields, a box otherwise.
     if let Some(ref legend) = legend {
-        let origin = legend.origin(config.width, config.height, LEGEND_GAP);
-        let legend_elements = legend.elements(origin, |i| legend_entries[i].2, &config.theme);
-        children.push(ChartElement::Group {
-            class: "legend".to_string(), transform: None, children: legend_elements,
-        });
+        children.push(legend.group(config, |i| legend_entries[i].2));
     }
 
     Ok(ChartElement::Svg {

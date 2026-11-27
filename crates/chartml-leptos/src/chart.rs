@@ -1527,6 +1527,54 @@ visualize:
     fn empty_yaml_falls_back_to_default() {
         assert_eq!(frame_height(""), 400.0);
     }
+
+    const CHART: &str = "\
+type: chart
+version: 1
+title: Revenue
+data:
+  datasource: ds
+  query: \"SELECT 1\"
+visualize:
+  type: line
+  columns: day
+";
+
+    fn themed() -> chartml_core::ChartML {
+        let mut c = chartml_core::ChartML::new();
+        c.register_component(
+            "type: style\nversion: 1\nname: brand\nheight: 275\nfonts:\n  title:\n    family: \"Georgia, serif\"\n    size: 22\n    weight: 800\n    color: \"#112233\"\n",
+        )
+        .expect("style registers");
+        c.register_component("type: config\nversion: 1\nstyle: brand\n").expect("config registers");
+        c
+    }
+
+    #[test]
+    fn a_config_style_height_reserves_the_placeholder() {
+        assert_eq!(resolve_chart_frame(&themed(), CHART, None).height, 275.0);
+    }
+
+    #[test]
+    fn the_heading_uses_the_resolved_title_font_and_colour() {
+        let style = resolve_chart_frame(&themed(), CHART, None).title_style;
+        assert!(style.contains("font-family: Georgia, serif;"), "{style}");
+        assert!(style.contains("font-size: 22px;"), "{style}");
+        assert!(style.contains("font-weight: 800;"), "{style}");
+        assert!(style.contains("color: #112233;"), "{style}");
+
+        // Without the style, the instance theme's (legacy) heading style.
+        let plain = resolve_chart_frame(&chartml_core::ChartML::new(), CHART, None).title_style;
+        assert_eq!(plain, build_title_style(&Theme::default()));
+    }
+
+    #[test]
+    fn a_chart_naming_an_unregistered_style_gets_the_default_frame() {
+        let yaml = CHART.replace("title: Revenue\n", "title: Revenue\nstyle: missing\n");
+        let frame = resolve_chart_frame(&chartml_core::ChartML::new(), &yaml, None);
+        assert_eq!(frame.height, 400.0);
+        assert_eq!(frame.title_style, build_title_style(&Theme::default()));
+    }
 }
 
 #[cfg(all(test, target_arch = "wasm32"))]

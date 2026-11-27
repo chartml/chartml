@@ -363,7 +363,9 @@ body {
 
 /* Grid lines — opacity is now set per-spec via the grid config.
    Default fallback if no inline style is set. */
-.grid-line {
+/* A grid line whose chart style sets `grid.opacity` carries an `opacity`
+ * attribute; keep it rather than this default. */
+.grid-line:not([opacity]) {
     opacity: 0.5;
 }
 
