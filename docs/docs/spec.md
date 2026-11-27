@@ -960,6 +960,7 @@ fonts:
 
 **Core Properties:**
 - `colors` - Array of color values for multi-series charts (12-color system with automatic fallback)
+- Colour values (in `colors` and every other `color` field) must be a hex colour, `rgb()`/`rgba()`, `hsl()`/`hsla()`, a CSS colour name, or a same-document reference such as `url(#my-gradient)`. External `url(...)`, `javascript:` and `data:` values fail the render with an error naming the field; they are never replaced by a default.
 - `grid` - Grid line configuration (x/y visibility, color, opacity, dashArray)
 - `height` - Default chart height in pixels
 - `showDots` - Show dots on line charts (boolean)
