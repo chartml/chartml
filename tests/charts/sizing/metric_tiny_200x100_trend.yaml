@@ -1,0 +1,45 @@
+name: "Tiny metric card with a trend — compact KPI at 200x100"
+tags: [metric, sizing, tiny, 200x100, trend, comparison]
+description: >
+  Metric card with compareWith in a short 200x100 dashboard tile (CHA-14).
+  Cards under 150px tall use the compact layout, so the label, value and trend
+  indicator all sit inside the card instead of the trend hanging off the
+  bottom edge. Rendered at 200x100 so the snapshot is the size of the tile.
+
+viewport:
+  width: 200
+  height: 100
+
+chart:
+  type: chart
+  version: 1
+  title: "Monthly Revenue"
+  data:
+    provider: inline
+    rows:
+      - revenue: 247500
+        previous: 225000
+  visualize:
+    type: metric
+    value: revenue
+    label: "Monthly Revenue"
+    format: "$,.0f"
+    compareWith: previous
+    style:
+      width: 200
+      height: 100
+
+assertions:
+  structure:
+    root: div
+    is_metric_card: true
+
+  value:
+    raw: 247500
+    formatted: "$247,500"
+
+  trend:
+    direction: up
+    arrow: true
+    positive: true
+    compare_value: 225000

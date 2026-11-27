@@ -3,7 +3,14 @@ tags: [metric, sizing, tiny, 200x100]
 description: >
   Metric card rendered at compact KPI size (200x100). Tests that the
   value and label render in a very tight space typical of dashboard
-  KPI strips. Labels may be cramped or truncated at this size.
+  KPI strips. Cards under 150px tall use the compact layout (CHA-14);
+  the label is clamped to one line. Rendered at 200x100 so the snapshot
+  is the size of the tile. See metric_tiny_200x100_trend for the same card
+  with a comparison.
+
+viewport:
+  width: 200
+  height: 100
 
 chart:
   type: chart

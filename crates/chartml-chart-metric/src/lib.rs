@@ -6,18 +6,86 @@ use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
 use chartml_core::spec::VisualizeSpec;
 
-/// Height in px reserved for the trend row, and the trend span's line box.
+/// Cards shorter than this render the compact layout (CHA-14).
 ///
-/// The two must be the same number: the row is reserved on every card whether
-/// or not a trend is rendered, so if the rendered trend were taller the row
-/// would grow only on the cards that have one and the value band would drift
-/// out of alignment across a dashboard row.
+/// The standard layout needs about 142px (20px padding top and bottom, a 2.5em
+/// label row, the 36px value's line box and the 20px trend row), so a card of
+/// the renderer's own default height (150px) still uses it. Anything shorter
+/// would push the trend row out of the bottom of the card, where it is clipped
+/// or invisible.
 ///
-/// 20px is the label's line box at its 14px font size, so the trend reads as a
-/// matching band at the foot of the card. It is deliberately a fixed px value
-/// and not an `em`: an `em` on the card resolves against the card's font size,
-/// not the trend's smaller one.
-const TREND_ROW_HEIGHT_PX: u32 = 20;
+/// The choice depends on the card height alone, never on whether a trend is
+/// rendered: cards with and without a comparison, side by side, must pick the
+/// same layout or their value bands would no longer line up (CHA-11).
+const COMPACT_BELOW_HEIGHT_PX: f64 = 150.0;
+
+/// The measurements one card layout is built from.
+///
+/// Every card of a given height uses the same `Layout`, whether or not it has a
+/// trend. `trend_row_px` is both the height reserved for the trend row and the
+/// trend span's line box. The two must be the same number: the row is reserved
+/// on every card, so if the rendered trend were taller the row would grow only
+/// on the cards that have one and the value band would drift out of alignment
+/// across a dashboard row. It is a fixed px value and not an `em`: an `em` on
+/// the card resolves against the card's font size, not the trend's.
+struct Layout {
+    padding_px: u32,
+    label_font_px: u32,
+    /// `None`: the label's line box follows its font (the standard layout).
+    label_line_px: Option<u32>,
+    label_clamp_lines: u32,
+    /// Floor of the label row, as a CSS length.
+    label_row_floor: &'static str,
+    value_font_px: u32,
+    /// `None`: the value's line box follows its font (the standard layout).
+    value_line_px: Option<u32>,
+    trend_font_px: u32,
+    trend_row_px: u32,
+}
+
+impl Layout {
+    /// The layout of cards at least `COMPACT_BELOW_HEIGHT_PX` tall.
+    ///
+    /// 20px is the label's line box at its 14px font size, so the trend reads
+    /// as a matching band at the foot of the card.
+    const STANDARD: Layout = Layout {
+        padding_px: 20,
+        label_font_px: 14,
+        label_line_px: None,
+        label_clamp_lines: 2,
+        label_row_floor: "2.5em",
+        value_font_px: 36,
+        value_line_px: None,
+        trend_font_px: 14,
+        trend_row_px: 20,
+    };
+
+    /// The layout of short cards: smaller padding and type, fixed px line boxes
+    /// and a one-line label, sized so that padding, label, value and trend
+    /// (8 + 8 + 16 + 32 + 16 = 80px) fit in a card 80px tall or more.
+    const COMPACT: Layout = Layout {
+        padding_px: 8,
+        label_font_px: 12,
+        label_line_px: Some(16),
+        label_clamp_lines: 1,
+        label_row_floor: "16px",
+        value_font_px: 28,
+        value_line_px: Some(32),
+        trend_font_px: 12,
+        trend_row_px: 16,
+    };
+
+    fn for_height(height: f64) -> &'static Layout {
+        if height < COMPACT_BELOW_HEIGHT_PX { &Self::COMPACT } else { &Self::STANDARD }
+    }
+
+    fn row_template(&self) -> String {
+        format!(
+            "[label] minmax({}, max-content) [value] 1fr [trend] minmax({}px, max-content)",
+            self.label_row_floor, self.trend_row_px
+        )
+    }
+}
 
 #[derive(Default)]
 pub struct MetricRenderer;
@@ -29,6 +97,7 @@ impl MetricRenderer {
 impl ChartRenderer for MetricRenderer {
     fn render(&self, data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
         let viz = &config.visualize;
+        let layout = Layout::for_height(config.height);
 
         // Get the value field name
         let value_field = viz.value.as_ref()
@@ -65,10 +134,8 @@ impl ChartRenderer for MetricRenderer {
         let mut card_children: Vec<ChartElement> = Vec::new();
 
         // Label
-        card_children.push(ChartElement::Span {
-            class: "chartml-metric-label".to_string(),
-            style: HashMap::from([
-                ("font-size".to_string(), "14px".to_string()),
+        let mut label_style = HashMap::from([
+                ("font-size".to_string(), format!("{}px", layout.label_font_px)),
                 ("color".to_string(), format!("var(--chartml-text-secondary, {})", config.theme.text_secondary)),
                 ("grid-row".to_string(), "label".to_string()),
                 ("grid-column".to_string(), "1".to_string()),
@@ -81,18 +148,22 @@ impl ChartRenderer for MetricRenderer {
                 ("max-width".to_string(), "100%".to_string()),
                 ("display".to_string(), "-webkit-box".to_string()),
                 ("-webkit-box-orient".to_string(), "vertical".to_string()),
-                ("-webkit-line-clamp".to_string(), "2".to_string()),
+                ("-webkit-line-clamp".to_string(), layout.label_clamp_lines.to_string()),
                 ("overflow".to_string(), "hidden".to_string()),
                 ("text-align".to_string(), "center".to_string()),
-            ]),
+            ]);
+        if let Some(line_px) = layout.label_line_px {
+            label_style.insert("line-height".to_string(), format!("{line_px}px"));
+        }
+        card_children.push(ChartElement::Span {
+            class: "chartml-metric-label".to_string(),
+            style: label_style,
             content: label,
         });
 
         // Value
-        card_children.push(ChartElement::Span {
-            class: "chartml-metric-value".to_string(),
-            style: HashMap::from([
-                ("font-size".to_string(), "36px".to_string()),
+        let mut value_style = HashMap::from([
+                ("font-size".to_string(), format!("{}px", layout.value_font_px)),
                 ("font-weight".to_string(), "bold".to_string()),
                 ("color".to_string(), format!("var(--chartml-text, {})", config.theme.text)),
                 ("grid-row".to_string(), "value".to_string()),
@@ -102,7 +173,13 @@ impl ChartRenderer for MetricRenderer {
                 ("max-width".to_string(), "100%".to_string()),
                 ("align-self".to_string(), "center".to_string()),
                 ("text-align".to_string(), "center".to_string()),
-            ]),
+            ]);
+        if let Some(line_px) = layout.value_line_px {
+            value_style.insert("line-height".to_string(), format!("{line_px}px"));
+        }
+        card_children.push(ChartElement::Span {
+            class: "chartml-metric-value".to_string(),
+            style: value_style,
             content: formatted_value,
         });
 
@@ -133,17 +210,17 @@ impl ChartRenderer for MetricRenderer {
                 card_children.push(ChartElement::Span {
                     class: "chartml-metric-trend".to_string(),
                     style: HashMap::from([
-                        ("font-size".to_string(), "14px".to_string()),
+                        ("font-size".to_string(), format!("{}px", layout.trend_font_px)),
                         ("color".to_string(), trend_color),
                         ("grid-row".to_string(), "trend".to_string()),
                         ("grid-column".to_string(), "1".to_string()),
                         ("max-width".to_string(), "100%".to_string()),
                         // Pin the line box to a fixed px height so the trend row
-                        // reserved on the card (`TREND_ROW_HEIGHT_PX` below) is
+                        // reserved on the card (`Layout::trend_row_px`) is
                         // exactly the height this span occupies. Without it the
                         // line box is font-dependent and the reservation would
                         // only approximately match the rendered trend.
-                        ("line-height".to_string(), format!("{TREND_ROW_HEIGHT_PX}px")),
+                        ("line-height".to_string(), format!("{}px", layout.trend_row_px)),
                         ("align-self".to_string(), "end".to_string()),
                         ("text-align".to_string(), "center".to_string()),
                     ]),
@@ -160,7 +237,7 @@ impl ChartRenderer for MetricRenderer {
         //
         // The trend gets its own row rather than sharing the value cell, so the
         // two can never vertically overlap on a short card. That row is
-        // *reserved* — `minmax(TREND_ROW_HEIGHT_PX, max-content)`, mirroring the
+        // *reserved* — `minmax(trend_row_px, max-content)`, mirroring the
         // label row's `minmax(2.5em, max-content)` idiom — rather than `auto`.
         // An `auto` row collapses to zero when no trend is rendered, and the
         // `1fr` value track absorbs the difference, which would move the big
@@ -171,10 +248,10 @@ impl ChartRenderer for MetricRenderer {
             class: "chartml-metric-card".to_string(),
             style: HashMap::from([
                 ("display".to_string(), "grid".to_string()),
-                ("grid-template-rows".to_string(), format!("[label] minmax(2.5em, max-content) [value] 1fr [trend] minmax({TREND_ROW_HEIGHT_PX}px, max-content)")),
+                ("grid-template-rows".to_string(), layout.row_template()),
                 ("grid-template-columns".to_string(), "minmax(0, 1fr)".to_string()),
                 ("justify-items".to_string(), "center".to_string()),
-                ("padding".to_string(), "20px".to_string()),
+                ("padding".to_string(), format!("{}px", layout.padding_px)),
                 ("height".to_string(), "100%".to_string()),
                 ("box-sizing".to_string(), "border-box".to_string()),
             ]),
@@ -778,10 +855,11 @@ mod tests {
         // exactly why the regression shipped: styles that are identical across
         // cards and byte-stable across runs can still be uniformly wrong.
         //
-        // Both card sizes are exercised: 300x150 is the renderer's own default
-        // and the size at which layout defects show most clearly, 800x400 the
-        // size the snapshot fixtures render at.
-        for (width, height) in [(300.0, 150.0), (800.0, 400.0)] {
+        // 300x150 is the renderer's own default and the size at which layout
+        // defects show most clearly, 800x400 the size the snapshot fixtures
+        // render at; 240x120 and 200x100 are short dashboard tiles, which use
+        // the compact layout (CHA-14).
+        for (width, height) in [(300.0, 150.0), (800.0, 400.0), (240.0, 120.0), (200.0, 100.0)] {
             for compare in [true, false] {
                 let case = format!("{width}x{height} compare={compare}");
                 let (card_style, children) =
@@ -917,5 +995,98 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn px(style: &HashMap<String, String>, prop: &str) -> f64 {
+        let raw = style.get(prop).unwrap_or_else(|| panic!("missing {prop}"));
+        raw.strip_suffix("px")
+            .unwrap_or_else(|| panic!("{prop} {raw:?} is not a px length"))
+            .parse()
+            .unwrap_or_else(|_| panic!("{prop} {raw:?} is not a number"))
+    }
+
+    fn span_style(children: &[ChartElement], class: &str) -> HashMap<String, String> {
+        children
+            .iter()
+            .find_map(|c| match c {
+                ChartElement::Span { class: k, style, .. } if k == class => Some(style.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("no {class} span"))
+    }
+
+    #[test]
+    fn short_card_with_a_trend_fits_label_value_and_trend_inside_the_card() {
+        // CHA-14: at 200x100 the trend row used to start at y=102, outside the
+        // card. Every stacked row's reserved height (padding, label, value
+        // line box, trend row) must sum to no more than the card's height, so
+        // the trend sits inside it. Row heights are all fixed px in the compact
+        // layout, so the sum is exact.
+        for (width, height) in [(200.0, 100.0), (240.0, 120.0), (300.0, 149.0), (200.0, 80.0)] {
+            let case = format!("{width}x{height}");
+            let (card, children) = render_metric_card("Monthly Revenue", true, width, height);
+            assert_eq!(children.len(), 3, "{case}: label, value and trend expected");
+
+            let rows = card.get("grid-template-rows").unwrap();
+            let label_row = reserved_floor_px(&track_after_line_name(rows, "label").unwrap())
+                .unwrap_or_else(|| panic!("{case}: label row {rows:?} has no fixed px floor"));
+            let trend_row = reserved_floor_px(&track_after_line_name(rows, "trend").unwrap()).unwrap();
+            let value = px(&span_style(&children, "chartml-metric-value"), "line-height");
+            let padding = px(&card, "padding");
+
+            let stacked = 2.0 * padding + label_row + value + trend_row;
+            assert!(
+                stacked <= height,
+                "{case}: padding {padding}x2 + label {label_row} + value {value} + trend {trend_row} \
+                 = {stacked}px does not fit in {height}px",
+            );
+
+            // The label's line box must be what its row reserves, or the row
+            // grows past the floor and pushes the trend down.
+            let label = span_style(&children, "chartml-metric-label");
+            assert_eq!(px(&label, "line-height"), label_row, "{case}: label line box != label row");
+            assert_eq!(label.get("-webkit-line-clamp").map(String::as_str), Some("1"), "{case}");
+            // The value's line box must hold its glyphs.
+            let value_font = px(&span_style(&children, "chartml-metric-value"), "font-size");
+            assert!(value >= value_font, "{case}: value line box {value} < font {value_font}");
+        }
+    }
+
+    #[test]
+    fn layout_depends_on_height_alone_so_cards_with_and_without_a_trend_stay_aligned() {
+        // CHA-11 / KYO-131: the value band lines up across side-by-side cards
+        // only if cards with and without a comparison emit the same card-level
+        // layout, whichever layout the height selects.
+        for (width, height) in [(200.0, 100.0), (240.0, 120.0), (300.0, 149.0), (300.0, 150.0), (800.0, 400.0)] {
+            let (with, with_children) = render_metric_card("Revenue", true, width, height);
+            let (without, without_children) = render_metric_card("Revenue", false, width, height);
+            assert_eq!(with, without, "{width}x{height}: card style depends on the trend");
+            for class in ["chartml-metric-label", "chartml-metric-value"] {
+                assert_eq!(
+                    span_style(&with_children, class),
+                    span_style(&without_children, class),
+                    "{width}x{height}: {class} style depends on the trend",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cards_at_the_default_height_and_taller_keep_the_standard_layout() {
+        // The standard layout is unchanged by CHA-14: only cards shorter than
+        // the renderer's own default height switch to the compact one.
+        let (tall, _) = render_metric_card("Revenue", true, 300.0, 150.0);
+        assert_eq!(
+            tall.get("grid-template-rows").map(String::as_str),
+            Some("[label] minmax(2.5em, max-content) [value] 1fr [trend] minmax(20px, max-content)"),
+        );
+        assert_eq!(tall.get("padding").map(String::as_str), Some("20px"));
+
+        let (short, _) = render_metric_card("Revenue", true, 300.0, 149.0);
+        assert_eq!(
+            short.get("grid-template-rows").map(String::as_str),
+            Some("[label] minmax(16px, max-content) [value] 1fr [trend] minmax(16px, max-content)"),
+        );
+        assert_eq!(short.get("padding").map(String::as_str), Some("8px"));
     }
 }
