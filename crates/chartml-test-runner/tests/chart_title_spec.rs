@@ -767,3 +767,64 @@ fn a_single_series_normalized_area_leaves_room_for_its_raw_labels() {
     );
     assert!(leftmost_y_label_edge(&chart) >= Y_LABEL_CLEARANCE, "the widest raw label is inside the SVG");
 }
+
+// ---------------------------------------------------------------------------
+// `axes.left.nice` / `axes.right.nice`, range marks in the domain, y format.
+// ---------------------------------------------------------------------------
+
+/// Three months of `v` reaching 43 (and `w` reaching 43 for a right axis).
+fn nice_chart(visualize: &str, axes: &str) -> String {
+    format!(
+        "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n    - {{ month: Jan, series: a, v: 10, w: 1 }}\n    - {{ month: Feb, series: a, v: 20, w: 2 }}\n    - {{ month: Mar, series: a, v: 43, w: 43 }}\nvisualize:\n{visualize}  axes:\n{axes}"
+    )
+}
+
+#[test]
+fn axes_nice_decides_whether_the_domain_is_rounded_for_bar_line_and_area() {
+    for ty in ["bar", "line", "area"] {
+        let viz = format!("  type: {ty}\n  columns: month\n  rows: v\n");
+        // Default: no bounds, so rounded: 43 reaches 50.
+        let default = y_tick_label_texts(&nice_chart(&viz, "    left:\n      label: Sales\n"));
+        assert_eq!(default.last().map(String::as_str), Some("50"), "{ty} default: {default:?}");
+        // nice: false keeps the data's own extent: the axis stops at 40.
+        let raw = y_tick_label_texts(&nice_chart(&viz, "    left:\n      nice: false\n"));
+        assert_eq!(raw.last().map(String::as_str), Some("40"), "{ty} nice: false: {raw:?}");
+        // A bound alone is not rounded; nice: true rounds it.
+        let bound = y_tick_label_texts(&nice_chart(&viz, "    left:\n      max: 43\n"));
+        assert_eq!(bound.last().map(String::as_str), Some("40"), "{ty} max 43: {bound:?}");
+        let rounded = y_tick_label_texts(&nice_chart(&viz, "    left:\n      max: 43\n      nice: true\n"));
+        assert_eq!(rounded.last().map(String::as_str), Some("50"), "{ty} max 43, nice: {rounded:?}");
+    }
+}
+
+#[test]
+fn axes_right_nice_decides_whether_a_dual_axis_right_domain_is_rounded() {
+    let viz = "  type: line\n  columns: month\n  rows:\n    - field: v\n    - field: w\n      axis: right\n";
+    let raw = right_tick_label_texts(&nice_chart(viz, "    right:\n      nice: false\n"));
+    assert_eq!(raw.last().map(String::as_str), Some("40"), "right nice: false: {raw:?}");
+    let default = right_tick_label_texts(&nice_chart(viz, "    right:\n      label: Other\n"));
+    assert_eq!(default.last().map(String::as_str), Some("50"), "right default: {default:?}");
+}
+
+#[test]
+fn range_marks_extend_the_y_domain_and_the_margin() {
+    // A forecast band reaching 1,000,000 over data of 40: the axis must reach
+    // it (the band is not clipped) and the margin must hold its labels.
+    let rows = "    - { month: Jan, v: 10, lo: 5, hi: 1000000 }\n    - { month: Feb, v: 20, lo: 8, hi: 900000 }\n    - { month: Mar, v: 40, lo: 20, hi: 800000 }\n";
+    let chart = format!(
+        "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n{rows}visualize:\n  type: line\n  columns: month\n  rows:\n    - field: v\n    - mark: range\n      upper: hi\n      lower: lo\n"
+    );
+    let labels = y_tick_label_texts(&chart);
+    assert_eq!(labels.last().map(String::as_str), Some("1,000,000"), "{labels:?}");
+    assert!(leftmost_y_label_edge(&chart) >= Y_LABEL_CLEARANCE, "the widest label is inside the SVG");
+}
+
+#[test]
+fn a_non_stacked_area_applies_the_left_axis_format() {
+    let single = "  type: area\n  columns: month\n  rows: v\n";
+    let multi = "  type: area\n  columns: month\n  rows: v\n  marks:\n    color: series\n";
+    for viz in [single, multi] {
+        let labels = y_tick_label_texts(&nice_chart(viz, "    left:\n      format: \"$,.0f\"\n"));
+        assert!(!labels.is_empty() && labels.iter().all(|l| l.starts_with('$')), "{viz}: {labels:?}");
+    }
+}

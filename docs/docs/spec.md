@@ -549,11 +549,11 @@ visualize:
       format: "$,.0f"
       min: 0
       max: 100
-      nice: true        # Round the ends to nice values
+      nice: true        # Round the ends to nice values (the default when neither min nor max is set; false draws the data's own extent)
     right:              # Secondary measure axis (dual-axis charts)
       label: "Label"
       format: ",.0f"
-      min: 0            # Optional - as for the left axis
+      min: 0            # Optional - as for the left axis (min, max, nice)
       max: 100
 
   annotations:        # Optional - reference lines, bands, markers

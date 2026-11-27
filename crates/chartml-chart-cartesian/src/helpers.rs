@@ -144,37 +144,39 @@ pub fn adaptive_bar_padding(num_categories: usize) -> f64 {
     }
 }
 
-pub fn get_y_axis_bounds(config: &ChartConfig) -> (Option<f64>, Option<f64>) {
-    let axes = match &config.visualize.axes {
-        Some(a) => a,
-        None => return (None, None),
-    };
-    let axis = match &axes.left {
-        Some(a) => a,
-        None => return (None, None),
-    };
-    (axis.min, axis.max)
+/// A y axis's `min`, `max` and `nice` settings (`axes.left` / `axes.right`).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct YAxisBounds {
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub nice: Option<bool>,
 }
 
-/// The right axis's `min` / `max` (`axes.right`).
-pub fn get_right_axis_bounds(config: &ChartConfig) -> (Option<f64>, Option<f64>) {
-    config
-        .visualize
-        .axes
-        .as_ref()
-        .and_then(|a| a.right.as_ref())
-        .map_or((None, None), |axis| (axis.min, axis.max))
+fn axis_bounds(axis: Option<&chartml_core::spec::AxisSpec>) -> YAxisBounds {
+    axis.map_or_else(YAxisBounds::default, |a| YAxisBounds { min: a.min, max: a.max, nice: a.nice })
 }
 
-/// The domain of a numeric y axis for data spanning `data_min..=data_max`,
-/// honouring the axis's `min` / `max` (`bounds`): the data's extent anchored
-/// at zero (an all-non-positive maximum falls back to 1), each bound replaced
-/// by the user's when set, and rounded to nice values only when the user set
-/// neither bound.
-pub fn y_axis_domain(data_min: f64, data_max: f64, bounds: (Option<f64>, Option<f64>)) -> (f64, f64) {
-    let min = bounds.0.unwrap_or(if data_min < 0.0 { data_min } else { 0.0 });
-    let max = bounds.1.unwrap_or(if data_max <= 0.0 { 1.0 } else { data_max });
-    if bounds.0.is_none() && bounds.1.is_none() {
+/// The left axis's settings (`axes.left`, also written `axes.rows`).
+pub fn get_y_axis_bounds(config: &ChartConfig) -> YAxisBounds {
+    axis_bounds(config.visualize.axes.as_ref().and_then(|a| a.left.as_ref()))
+}
+
+/// The right axis's settings (`axes.right`).
+pub fn get_right_axis_bounds(config: &ChartConfig) -> YAxisBounds {
+    axis_bounds(config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()))
+}
+
+/// The domain of a numeric y axis for data spanning `data_min..=data_max`:
+/// the data's extent anchored at zero (an all-non-positive maximum falls
+/// back to 1), each bound replaced by the user's when set, then rounded to
+/// nice values when `nice` says so. `nice` defaults to true only when the
+/// user set neither bound, so a bound the user chose is drawn as given
+/// unless they also ask for `nice: true`. The one derivation bar, line and
+/// area charts share, for the margin estimate and the drawn axis alike.
+pub fn y_axis_domain(data_min: f64, data_max: f64, bounds: YAxisBounds) -> (f64, f64) {
+    let min = bounds.min.unwrap_or(if data_min < 0.0 { data_min } else { 0.0 });
+    let max = bounds.max.unwrap_or(if data_max <= 0.0 { 1.0 } else { data_max });
+    if bounds.nice.unwrap_or(bounds.min.is_none() && bounds.max.is_none()) {
         nice_domain(min, max, 5)
     } else {
         (min, max)

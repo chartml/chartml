@@ -12,7 +12,7 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetri
 
 use chartml_core::layout::legend::{LegendBlock, LegendConfig, LegendMark};
 
-use crate::helpers::{cartesian_grid, bar_data_label, horizontal_label_position, point_data_labels, DATA_LABEL_OFFSET, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
+use crate::helpers::{cartesian_grid, bar_data_label, horizontal_label_position, point_data_labels, DATA_LABEL_OFFSET, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, offset_element};
 
 /// Position of a bar segment within a stacked bar group.
 ///
@@ -518,7 +518,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     let x_format = get_x_format(config);
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
-    let (axis_min, axis_max) = get_y_axis_bounds(config);
+    let y_bounds = get_y_axis_bounds(config);
 
     // Format labels the same way generate_x_axis will — margin estimation must
     // use the actual display strings, not raw data values.
@@ -577,19 +577,11 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     // Keep data_min at 0 when all values are non-negative (standard bar chart behavior)
     let prelim_data_min = if prelim_data_min >= 0.0 { 0.0 } else { prelim_data_min };
 
-    let prelim_domain_max = if is_normalized {
-        1.0
+    // The margin is estimated over the domain the axis will draw.
+    let (prelim_domain_min, prelim_domain_max) = if is_normalized {
+        (0.0, 1.0)
     } else {
-        let raw_max = axis_max.unwrap_or(prelim_data_max);
-        if axis_max.is_none() { nice_domain(axis_min.unwrap_or(prelim_data_min), raw_max, 5).1 } else { raw_max }
-    };
-    // The drawn domain rounds its minimum down (nice) when no axis bound is set.
-    let prelim_domain_min = if is_normalized {
-        0.0
-    } else if axis_min.is_none() && axis_max.is_none() {
-        nice_domain(prelim_data_min, prelim_data_max, 5).0
-    } else {
-        axis_min.unwrap_or(prelim_data_min)
+        crate::helpers::y_axis_domain(prelim_data_min, prelim_data_max, y_bounds)
     };
 
     // Generate representative tick label (domain max is typically widest label).
@@ -669,24 +661,8 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
 
     let _tick_count = adaptive_tick_count(inner_height);
 
-    // Compute final domain (same as prelim for vertical bars).
-    let raw_data_max = prelim_data_max;
-
-    // For normalized mode, domain is always 0-1 (the NumberFormatter handles % display).
-    let (domain_min, domain_max) = if is_normalized {
-        (0.0, 1.0)
-    } else {
-        let raw_domain_min = axis_min.unwrap_or(prelim_data_min);
-        let raw_domain_max = axis_max.unwrap_or(raw_data_max);
-        // Apply nice rounding to domain so ticks are round numbers with headroom (Regressions 2 & 3).
-        // Only apply when no explicit axis bounds are set by the user.
-        if axis_min.is_none() && axis_max.is_none() {
-            // Match JS: yLeft.nice() uses default count=10 for domain rounding.
-            nice_domain(raw_domain_min, raw_domain_max, 5)
-        } else {
-            (raw_domain_min, raw_domain_max)
-        }
-    };
+    // The final domain is the one the margin was estimated over.
+    let (domain_min, domain_max) = (prelim_domain_min, prelim_domain_max);
     // For normalized mode, override Y-axis format to show percentages.
     // Otherwise, use the format from config (axes.left.format).
     let effective_y_fmt: Option<String> = if is_normalized {
@@ -1553,16 +1529,8 @@ fn render_combo(
     // Keep data_min at 0 when all values are non-negative (standard bar chart behavior)
     let left_data_min = if left_data_min >= 0.0 { 0.0 } else { left_data_min };
     let axes_left = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref());
-    let left_explicit_min = axes_left.and_then(|a| a.min);
-    let left_explicit_max = axes_left.and_then(|a| a.max);
-    let raw_left_domain_min = left_explicit_min.unwrap_or(left_data_min);
-    let raw_left_domain_max = left_explicit_max.unwrap_or(if left_max <= 0.0 { 1.0 } else { left_max });
-    let (left_domain_min, left_domain_max) = if left_explicit_min.is_none() && left_explicit_max.is_none() {
-        // Use count=5 to align with generate_y_axis_numeric's hardcoded tick count of 5.
-        nice_domain(raw_left_domain_min, raw_left_domain_max, 5)
-    } else {
-        (raw_left_domain_min, raw_left_domain_max)
-    };
+    let (left_domain_min, left_domain_max) =
+        crate::helpers::y_axis_domain(left_data_min, left_max, get_y_axis_bounds(config));
     let left_scale = ScaleLinear::new((left_domain_min, left_domain_max), (inner_height, 0.0));
 
     // Compute right-axis domain with D3-style nice rounding (Regressions 2 & 3).
@@ -1575,17 +1543,8 @@ fn render_combo(
             .filter_map(|f| f.field.as_deref())
             .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
             .fold(0.0_f64, f64::min);
-        let axes_right = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref());
-        let right_explicit_min = axes_right.and_then(|a| a.min);
-        let right_explicit_max = axes_right.and_then(|a| a.max);
-        let raw_right_domain_min = right_explicit_min.unwrap_or(if right_data_min < 0.0 { right_data_min } else { 0.0 });
-        let raw_right_domain_max = right_explicit_max.unwrap_or(if right_max <= 0.0 { 1.0 } else { right_max });
-        let (right_domain_min, right_domain_max) = if right_explicit_min.is_none() && right_explicit_max.is_none() {
-            // Use count=5 to align with generate_y_axis_numeric's hardcoded tick count of 5.
-            nice_domain(raw_right_domain_min, raw_right_domain_max, 5)
-        } else {
-            (raw_right_domain_min, raw_right_domain_max)
-        };
+        let (right_domain_min, right_domain_max) =
+            crate::helpers::y_axis_domain(right_data_min, right_max, crate::helpers::get_right_axis_bounds(config));
         Some(ScaleLinear::new((right_domain_min, right_domain_max), (inner_height, 0.0)))
     } else {
         None
