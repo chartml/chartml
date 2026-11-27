@@ -925,3 +925,37 @@ fn a_combo_left_axis_leaves_room_for_its_widest_label() {
         "the widest left label is clear of the SVG's edge by the margin's padding"
     );
 }
+
+/// The x of the left axis title (the rotated -90° `axis-label`), in SVG coordinates.
+fn left_axis_title_x(element: &ChartElement) -> Option<f64> {
+    fn walk(element: &ChartElement, dx: f64) -> Option<f64> {
+        match element {
+            ChartElement::Svg { children, .. } => children.iter().find_map(|c| walk(c, dx)),
+            ChartElement::Group { transform, children, .. } => {
+                let tx = match transform {
+                    Some(Transform::Translate(x, _)) => *x,
+                    _ => 0.0,
+                };
+                children.iter().find_map(|c| walk(c, dx + tx))
+            }
+            ChartElement::Text { x, class, transform: Some(Transform::Rotate(angle, ..)), .. }
+                if *angle == -90.0 && class.split_whitespace().all(|c| c != "tick-label") =>
+            {
+                Some(dx + x)
+            }
+            _ => None,
+        }
+    }
+    walk(element, 0.0)
+}
+
+#[test]
+fn a_combo_left_axis_title_stays_clear_of_the_left_tick_labels() {
+    let chart = "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n    - { month: Jan, v: 1000, w: 1 }\n    - { month: Feb, v: 2000, w: 2 }\n    - { month: Mar, v: 4000, w: 3 }\nvisualize:\n  type: bar\n  columns: month\n  rows:\n    - field: v\n    - field: w\n      mark: line\n      axis: right\n  axes:\n    left:\n      label: Sales\n";
+    let element = chartml().render_from_yaml(chart).expect("render");
+    let title_x = left_axis_title_x(&element).expect("the left axis title is drawn");
+    let labels_left = leftmost_y_label_edge(chart);
+    // The title is rotated text about 12px tall, centred on its x.
+    assert!(title_x - 6.0 >= 0.0, "title at x={title_x} leaves the SVG");
+    assert!(title_x + 6.0 <= labels_left, "title at x={title_x} overlaps the tick labels starting at x={labels_left}");
+}

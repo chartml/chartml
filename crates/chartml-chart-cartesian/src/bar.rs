@@ -1511,9 +1511,8 @@ fn render_combo(
     let legend = LegendBlock::for_series(config, &names, &colors, legend_config)?;
     let mut margin_config = MarginConfig {
         has_title: config.title.is_some(),
-        // Left Y-axis label is not rendered for combo charts (see comment below),
-        // so do not reserve extra left-margin space for it.
-        has_y_axis_label: false,
+        // The left axis title is drawn left of the tick labels: reserve its room.
+        has_y_axis_label: axes_left.and_then(|a| a.label.as_ref()).is_some(),
         has_x_axis_label,
         has_right_axis: has_right,
         right_tick_labels,
