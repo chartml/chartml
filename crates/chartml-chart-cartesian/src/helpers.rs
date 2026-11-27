@@ -156,6 +156,31 @@ pub fn get_y_axis_bounds(config: &ChartConfig) -> (Option<f64>, Option<f64>) {
     (axis.min, axis.max)
 }
 
+/// The right axis's `min` / `max` (`axes.right`).
+pub fn get_right_axis_bounds(config: &ChartConfig) -> (Option<f64>, Option<f64>) {
+    config
+        .visualize
+        .axes
+        .as_ref()
+        .and_then(|a| a.right.as_ref())
+        .map_or((None, None), |axis| (axis.min, axis.max))
+}
+
+/// The domain of a numeric y axis for data spanning `data_min..=data_max`,
+/// honouring the axis's `min` / `max` (`bounds`): the data's extent anchored
+/// at zero (an all-non-positive maximum falls back to 1), each bound replaced
+/// by the user's when set, and rounded to nice values only when the user set
+/// neither bound.
+pub fn y_axis_domain(data_min: f64, data_max: f64, bounds: (Option<f64>, Option<f64>)) -> (f64, f64) {
+    let min = bounds.0.unwrap_or(if data_min < 0.0 { data_min } else { 0.0 });
+    let max = bounds.1.unwrap_or(if data_max <= 0.0 { 1.0 } else { data_max });
+    if bounds.0.is_none() && bounds.1.is_none() {
+        nice_domain(min, max, 5)
+    } else {
+        (min, max)
+    }
+}
+
 /// Get dataLabels config from the rows field spec.
 pub fn get_data_labels_config(config: &ChartConfig) -> Option<&chartml_core::spec::DataLabelsSpec> {
     match &config.visualize.rows {

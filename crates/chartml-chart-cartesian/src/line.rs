@@ -11,7 +11,7 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetri
 use chartml_core::layout::legend::{LegendBlock, LegendConfig};
 
 
-use crate::helpers::{cartesian_grid, point_data_labels, LegendMark, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_field_name, get_x_format, get_y_format, nice_domain, offset_element};
+use crate::helpers::{cartesian_grid, point_data_labels, LegendMark, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
@@ -94,9 +94,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     }
     let prelim_value_max = all_values_prelim.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let prelim_value_min = all_values_prelim.iter().cloned().fold(f64::INFINITY, f64::min);
-    let prelim_domain_min = if prelim_value_min >= 0.0 { 0.0 } else { prelim_value_min };
-    let prelim_domain_max = if prelim_value_max <= 0.0 { 1.0 } else { prelim_value_max };
-    let (prelim_domain_min, prelim_domain_max) = nice_domain(prelim_domain_min, prelim_domain_max, 5);
+    let (prelim_domain_min, prelim_domain_max) =
+        crate::helpers::y_axis_domain(prelim_value_min, prelim_value_max, crate::helpers::get_y_axis_bounds(config));
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
     let prelim_labels = crate::helpers::y_axis_tick_labels((prelim_domain_min, prelim_domain_max), y_fmt_ref);
@@ -186,9 +185,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         }
         let left_min = left_vals.iter().cloned().fold(f64::INFINITY, f64::min);
         let left_max = left_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let left_domain_min = if left_min >= 0.0 { 0.0 } else { left_min };
-        let left_domain_max = if left_max <= 0.0 { 1.0 } else { left_max };
-        let (left_domain_min, left_domain_max) = nice_domain(left_domain_min, left_domain_max, 5);
+        let (left_domain_min, left_domain_max) =
+            crate::helpers::y_axis_domain(left_min, left_max, crate::helpers::get_y_axis_bounds(config));
 
         // Right-axis fields only
         let right_fields: Vec<&str> = multi_fields.iter()
@@ -203,9 +201,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         }
         let right_min = right_vals.iter().cloned().fold(f64::INFINITY, f64::min);
         let right_max = right_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let right_domain_min = if right_min >= 0.0 { 0.0 } else { right_min };
-        let right_domain_max = if right_max <= 0.0 { 1.0 } else { right_max };
-        let (right_domain_min, right_domain_max) = nice_domain(right_domain_min, right_domain_max, 5);
+        let (right_domain_min, right_domain_max) =
+            crate::helpers::y_axis_domain(right_min, right_max, crate::helpers::get_right_axis_bounds(config));
 
         (left_domain_min, left_domain_max, Some((right_domain_min, right_domain_max)))
     } else {
@@ -227,9 +224,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         }
         let value_min = all_values.iter().cloned().fold(f64::INFINITY, f64::min);
         let value_max = all_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let dm = if value_min >= 0.0 { 0.0 } else { value_min };
-        let dx = if value_max <= 0.0 { 1.0 } else { value_max };
-        let (dm, dx) = nice_domain(dm, dx, 5);
+        let (dm, dx) = crate::helpers::y_axis_domain(value_min, value_max, crate::helpers::get_y_axis_bounds(config));
         (dm, dx, None)
     };
 

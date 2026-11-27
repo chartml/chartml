@@ -632,3 +632,78 @@ fn a_normalized_area_leaves_room_for_the_hundred_percent_label() {
     );
     assert!(leftmost_y_label_edge(&chart) >= Y_LABEL_CLEARANCE, "the widest label is clear of the SVG's edge by the margin's padding");
 }
+
+// ---------------------------------------------------------------------------
+// `axes.left.min` / `axes.left.max` and `axes.right.min` / `axes.right.max`
+// set the y domain of line and area charts, as they do for bar charts.
+// ---------------------------------------------------------------------------
+
+fn y_tick_label_texts(chart: &str) -> Vec<String> {
+    let element = chartml().render_from_yaml(chart).expect("render");
+    y_tick_label_left_edges(&element).into_iter().map(|(label, _)| label).collect()
+}
+
+fn bounded_chart(visualize: &str, axes: &str) -> String {
+    format!(
+        "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n    - {{ month: Jan, series: a, v: 10, w: 1 }}\n    - {{ month: Feb, series: a, v: 20, w: 2 }}\n    - {{ month: Mar, series: a, v: 40, w: 3 }}\nvisualize:\n{visualize}  axes:\n{axes}"
+    )
+}
+
+fn assert_domain(labels: &[String], first: &str, last: &str, what: &str) {
+    assert_eq!(labels.first().map(String::as_str), Some(first), "{what}: {labels:?}");
+    assert_eq!(labels.last().map(String::as_str), Some(last), "{what}: {labels:?}");
+}
+
+#[test]
+fn line_charts_honour_the_left_axis_min_and_max() {
+    let viz = "  type: line\n  columns: month\n  rows: v\n";
+    let unset = y_tick_label_texts(&bounded_chart(viz, "    left:\n      label: Sales\n"));
+    assert_domain(&unset, "0", "40", "no bounds: the data's own nice domain");
+    let set = y_tick_label_texts(&bounded_chart(viz, "    left:\n      min: -100\n      max: 100\n"));
+    assert_domain(&set, "-100", "100", "min -100, max 100");
+}
+
+#[test]
+fn area_charts_honour_the_left_axis_min_and_max() {
+    let viz = "  type: area\n  columns: month\n  rows: v\n";
+    let unset = y_tick_label_texts(&bounded_chart(viz, "    left:\n      label: Sales\n"));
+    assert_domain(&unset, "0", "40", "no bounds");
+    let set = y_tick_label_texts(&bounded_chart(viz, "    left:\n      min: -100\n      max: 100\n"));
+    assert_domain(&set, "-100", "100", "min -100, max 100");
+}
+
+#[test]
+fn stacked_area_charts_honour_the_left_axis_max() {
+    let viz = "  type: area\n  mode: stacked\n  columns: month\n  rows: v\n  marks:\n    color: series\n";
+    let set = y_tick_label_texts(&bounded_chart(viz, "    left:\n      max: 100\n"));
+    assert_domain(&set, "0", "100", "max 100");
+}
+
+fn right_tick_label_texts(chart: &str) -> Vec<String> {
+    fn walk(element: &ChartElement, out: &mut Vec<String>) {
+        match element {
+            ChartElement::Svg { children, .. } | ChartElement::Group { children, .. } => {
+                children.iter().for_each(|c| walk(c, out))
+            }
+            ChartElement::Text { content, anchor: TextAnchor::Start, class, .. }
+                if class.split_whitespace().any(|c| c == "tick-value") =>
+            {
+                out.push(content.clone())
+            }
+            _ => {}
+        }
+    }
+    let element = chartml().render_from_yaml(chart).expect("render");
+    let mut out = Vec::new();
+    walk(&element, &mut out);
+    out
+}
+
+#[test]
+fn a_dual_axis_line_chart_honours_both_axes_bounds() {
+    let viz = "  type: line\n  columns: month\n  rows:\n    - field: v\n    - field: w\n      axis: right\n";
+    let axes = "    left:\n      min: -100\n      max: 100\n    right:\n      min: -10\n      max: 10\n";
+    let chart = bounded_chart(viz, axes);
+    assert_domain(&y_tick_label_texts(&chart), "-100", "100", "left bounds");
+    assert_domain(&right_tick_label_texts(&chart), "-10", "10", "right bounds");
+}

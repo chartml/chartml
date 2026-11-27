@@ -64,10 +64,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     } else {
         single_max
     };
-    let prelim_max = if prelim_max <= 0.0 { 1.0 } else { prelim_max };
-    // When data has negative values, use the actual minimum; otherwise anchor at 0
-    let prelim_domain_min = if prelim_min < 0.0 { prelim_min } else { 0.0 };
-    let (prelim_nice_min, prelim_nice_max) = crate::helpers::nice_domain(prelim_domain_min, prelim_max, 5);
+    let (prelim_nice_min, prelim_nice_max) =
+        crate::helpers::y_axis_domain(prelim_min, prelim_max, crate::helpers::get_y_axis_bounds(config));
     let area_prelim_fmt = if is_normalized { Some(".0%") } else { y_fmt_ref };
     // A normalized area's axis is always 0 to 100%, whatever the data's shares.
     let area_prelim_domain = if is_normalized { (0.0, 1.0) } else { (prelim_nice_min, prelim_nice_max) };
@@ -172,10 +170,10 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     .iter()
                     .map(|p| p.y1)
                     .fold(0.0_f64, f64::max);
-                let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
                 // Match JS: yLeft.nice() uses default count=10 for domain rounding.
-                let (_, nice_max) = crate::helpers::nice_domain(0.0, raw_value_max, 5);
-                (0.0, nice_max, y_fmt_ref)
+                let (domain_min, domain_max) =
+                    crate::helpers::y_axis_domain(0.0, raw_value_max, crate::helpers::get_y_axis_bounds(config));
+                (domain_min, domain_max, y_fmt_ref)
             };
             let linear = ScaleLinear::new((value_min, value_max), (inner_height, 0.0));
             y_domain_min = value_min;
@@ -318,10 +316,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 .collect();
             let raw_value_min = values.iter().cloned().fold(f64::INFINITY, f64::min);
             let raw_value_max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-            let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
-            // When data has negative values, use the actual minimum; otherwise anchor at 0
-            let domain_min = if raw_value_min < 0.0 { raw_value_min } else { 0.0 };
-            let (value_min, value_max) = crate::helpers::nice_domain(domain_min, raw_value_max, 5);
+            let (value_min, value_max) =
+                crate::helpers::y_axis_domain(raw_value_min, raw_value_max, crate::helpers::get_y_axis_bounds(config));
             let linear = ScaleLinear::new((value_min, value_max), (inner_height, 0.0));
             y_domain_min = value_min;
             y_domain_max = value_max;
@@ -470,10 +466,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             .collect();
         let raw_value_min = values.iter().cloned().fold(f64::INFINITY, f64::min);
         let raw_value_max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
-        // When data has negative values, use the actual minimum; otherwise anchor at 0
-        let domain_min = if raw_value_min < 0.0 { raw_value_min } else { 0.0 };
-        let (value_min, value_max) = crate::helpers::nice_domain(domain_min, raw_value_max, 5);
+        let (value_min, value_max) =
+            crate::helpers::y_axis_domain(raw_value_min, raw_value_max, crate::helpers::get_y_axis_bounds(config));
         let linear = ScaleLinear::new((value_min, value_max), (inner_height, 0.0));
         y_domain_min = value_min;
         y_domain_max = value_max;
