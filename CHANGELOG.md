@@ -124,6 +124,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `TITLE_CLASS`) that draws the SVG title (CHA-59). New `Theme` methods
   `table_header_letter_spacing_em`, `validate_table_header_letter_spacing`
   and `validate_table_cell_padding`.
+- **`chartml-core`**: `ChartRenderer::draws_own_title` (a default method, `false`;
+  a renderer that draws the title itself, such as the metric card, returns
+  `true` so the engine adds none), `svg::is_attr_name`, `HtmlTag::name`,
+  `layout::labels::TEXT_ASCENT_FRACTION`, `TextMetrics::from_theme_data_label`,
+  `GridConfig::from_config_with_defaults` and `from_theme_data_label`,
+  `MarginConfig::bottom_legend_extent`; and `ColumnAlign`, `ColumnWidth` and
+  `AutoWidth` in `spec`.
 - **`chartml-chart-metric`** (CHA-14): a metric card shorter than 150px uses a
   compact layout (smaller padding and type) and keeps its trend inside the
   card; cards with and without a trend keep the same value band. Taller cards
@@ -191,16 +198,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`chartml-render`**: `render_to_png` and `render_to_png_async` size the
   PNG canvas from the rendered chart (a style's height beats the requested
   height), so the image is no longer cropped or padded with blank space.
-
 - **`chartml-chart-metric`**: a metric card with a `title` and no `label` shows
   the title once. Where the host draws the title as a heading above the card
   (the Leptos component) the card holds no label of its own; where the SVG is
   shown alone (`renderToSvg`, `render_to_png`) the title is the in-card label.
   The value field's name is the label only when there is neither a title nor a
   label.
-- **`chartml-core`**: set `title_heading` (a field on `RenderOptions` and
-  `ChartConfig`, listed above) to `true` when your host draws `title` itself
-  above the rendered SVG; the Leptos component does.
 
 ### Security
 
