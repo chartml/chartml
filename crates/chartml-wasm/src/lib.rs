@@ -579,6 +579,8 @@ fn parse_full_render_options(options: &JsValue) -> Result<chartml_core::RenderOp
         height,
         params: None,
         table_page: parse_table_page(options).map_err(|e| format!("{e:?}"))?,
+        // The npm components return the SVG alone; the host draws no heading.
+        title_heading: false,
     };
     if !options.is_undefined() && !options.is_null() && options.is_object() {
         let params_js = js_sys::Reflect::get(options, &JsValue::from_str("params"))

@@ -34,6 +34,11 @@ pub struct RenderOptions {
     /// widths are still measured over every row. A page past the last is an
     /// error, not clamped. Other chart types ignore it (CHA-30).
     pub table_page: Option<usize>,
+    /// The host draws the chart's `title` itself, as a heading above the
+    /// rendered SVG (the Leptos component does). `false` (the default) means
+    /// the SVG is shown alone, so a chart that can only show its title inside
+    /// itself must do so. Only the `metric` renderer reads it (CHA-49).
+    pub title_heading: bool,
 }
 
 impl RenderOptions {
@@ -45,6 +50,7 @@ impl RenderOptions {
             height,
             params: None,
             table_page: None,
+            title_heading: false,
         }
     }
 

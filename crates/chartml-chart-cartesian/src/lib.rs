@@ -76,6 +76,7 @@ mod tests {
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         }
     }
 
@@ -93,6 +94,7 @@ mod tests {
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         }
     }
 
@@ -110,6 +112,7 @@ mod tests {
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         }
     }
 
@@ -452,6 +455,7 @@ mod tests {
             colors: vec!["#2E7D9A".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         };
         let renderer = CartesianRenderer::new();
         let element = renderer.render(&data, &config).unwrap();
@@ -518,6 +522,7 @@ mod tests {
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         };
         let renderer = CartesianRenderer::new();
         let result = renderer.render(&data, &config);
@@ -552,6 +557,7 @@ mod tests {
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         };
         let renderer = CartesianRenderer::new();
         let result = renderer.render(&data, &config);
@@ -585,6 +591,7 @@ mod tests {
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         };
         let renderer = CartesianRenderer::new();
         let result = renderer.render(&data, &config);
@@ -777,6 +784,7 @@ style:
             colors: vec!["#2E7D9A".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         };
 
         // Verify GridConfig resolves correctly
@@ -1261,6 +1269,7 @@ style:
             colors: vec!["#2E7D9A".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         }
     }
 
@@ -1414,6 +1423,7 @@ style:
             colors: vec!["#2E7D9A".to_string()],
             theme,
             table_page: None,
+            title_heading: false,
         };
 
         let element = renderer.render(&data, &config).unwrap();
@@ -1846,6 +1856,7 @@ style:
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string()],
             theme,
             table_page: None,
+            title_heading: false,
         };
         let renderer = CartesianRenderer::new();
         let element = renderer.render(&data, &config).unwrap();
@@ -1919,6 +1930,7 @@ style:
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string(), "#4A7C59".to_string()],
             theme,
             table_page: None,
+            title_heading: false,
         };
         let renderer = CartesianRenderer::new();
         let element = renderer.render(&data, &config).unwrap();
@@ -1982,6 +1994,7 @@ style:
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string()],
             theme,
             table_page: None,
+            title_heading: false,
         };
         let renderer = CartesianRenderer::new();
         let element = renderer.render(&data, &config).unwrap();
@@ -2048,6 +2061,7 @@ style:
             colors: vec!["#2E7D9A".to_string(), "#D4A445".to_string()],
             theme,
             table_page: None,
+            title_heading: false,
         };
         let renderer = CartesianRenderer::new();
         let element = renderer.render(&data, &config).unwrap();
@@ -2108,6 +2122,7 @@ style:
             colors: vec!["#2E7D9A".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         };
 
         let renderer = CartesianRenderer::new();

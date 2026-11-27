@@ -242,9 +242,9 @@ This metric shows error rate where a decrease is positive (green) and an increas
 **Metric Label Rules:**
 
 Metric cards support two optional label locations:
-- **`chart.title`** → Title shown **above** the card by the browser components (like all chart types); not part of the rendered SVG. When `visualize.label` is not set, the title is also used as the in-card label
-- **`visualize.label`** → Label shown **inside** the card (metric-specific feature); takes precedence over the title for the in-card label
-- If neither specified → The in-card label is the name of the `value` field (here `revenue`), so a card always shows a label
+- **`chart.title`** → Title shown **above** the card by the Leptos component and the `@chartml/core` DOM renderer (like all chart types); not part of the rendered SVG. When `visualize.label` is not set, a title-only card shows the title once, as that heading, with no label inside the card. Where the SVG is shown on its own, with no heading (`renderToSvg`, `render_to_png`), the title is shown inside the card instead, still once
+- **`visualize.label`** → Label shown **inside** the card (metric-specific feature); the title never appears beside it
+- If neither a title nor a label is specified → the in-card label is the name of the `value` field (here `revenue`), so a card always shows a label
 
 **Examples:**
 
@@ -252,6 +252,21 @@ Metric cards support two optional label locations:
 # No title or label: the card shows the field name "revenue" as its label
 type: chart
 version: 1
+data:
+  provider: inline
+  rows:
+    - revenue: 45000
+visualize:
+  type: metric
+  value: revenue
+  format: "$,.0f"
+```
+
+```chartml
+# Title only: the title shows once, as the heading above; no label inside the card
+type: chart
+version: 1
+title: "Total Revenue"     # Shows above card
 data:
   provider: inline
   rows:

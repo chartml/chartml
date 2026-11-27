@@ -460,6 +460,7 @@ mod tests {
             ],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         }
     }
 
@@ -502,6 +503,7 @@ mod tests {
             colors: vec!["#2E7D9A".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         }
     }
 
@@ -595,6 +597,7 @@ mod tests {
             colors: vec!["#2E7D9A".to_string()],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         }
     }
 

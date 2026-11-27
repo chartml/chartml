@@ -46,6 +46,8 @@ wasm-bindgen-test = "0.3"
 # not force it on consumers (they pick `csr` or `hydrate` themselves).
 leptos = { version = "0.8", features = ["csr"] }
 chartml-chart-cartesian = { path = "../chartml-chart-cartesian" }
+# `chart_provider_test.rs` mounts a title-only metric card (CHA-49).
+chartml-chart-metric = { path = "../chartml-chart-metric" }
 # `table_layout_test.rs` renders tables with the real renderer and reads the
 # page's layout measurements back as JSON.
 chartml-chart-table = { path = "../chartml-chart-table" }
