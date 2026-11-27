@@ -8,7 +8,7 @@ Part of [ChartML](https://chartml.org) — declarative chart markup powered by R
 
 ```toml
 [dependencies]
-chartml-leptos = "4.0.2"
+chartml-leptos = "6"
 ```
 
 Provides:

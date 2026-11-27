@@ -11,14 +11,14 @@ name = "chartml-test"
 path = "src/main.rs"
 
 [dependencies]
-chartml-core = { path = "../chartml-core", version = "5" }
-chartml-chart-cartesian = { path = "../chartml-chart-cartesian", version = "5" }
-chartml-chart-pie = { path = "../chartml-chart-pie", version = "5" }
-chartml-chart-scatter = { path = "../chartml-chart-scatter", version = "5" }
-chartml-chart-metric = { path = "../chartml-chart-metric", version = "5" }
-chartml-chart-table = { path = "../chartml-chart-table", version = "5" }
-chartml-render = { path = "../chartml-render", version = "5" }
-chartml-datafusion = { path = "../chartml-datafusion", version = "5" }
+chartml-core = { path = "../chartml-core", version = "6" }
+chartml-chart-cartesian = { path = "../chartml-chart-cartesian", version = "6" }
+chartml-chart-pie = { path = "../chartml-chart-pie", version = "6" }
+chartml-chart-scatter = { path = "../chartml-chart-scatter", version = "6" }
+chartml-chart-metric = { path = "../chartml-chart-metric", version = "6" }
+chartml-chart-table = { path = "../chartml-chart-table", version = "6" }
+chartml-render = { path = "../chartml-render", version = "6" }
+chartml-datafusion = { path = "../chartml-datafusion", version = "6" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"

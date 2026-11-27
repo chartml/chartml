@@ -8,7 +8,7 @@ Part of [ChartML](https://chartml.org) — declarative chart markup powered by R
 
 ```toml
 [dependencies]
-chartml-chart-cartesian = "4.0.0"
+chartml-chart-cartesian = "6"
 ```
 
 See [chartml.org](https://chartml.org) for documentation.
