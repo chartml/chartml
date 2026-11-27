@@ -29,3 +29,4 @@ workspace = true
 
 [dev-dependencies]
 jsonschema = { version = "0.58", default-features = false }
+tempfile = "3"

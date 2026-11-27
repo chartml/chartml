@@ -328,23 +328,34 @@ fn run_single(spec_path: &Path, output_dir: &Path) {
     }
 }
 
-fn run_batch(specs_dir: &Path, output_dir: &Path) {
+/// Outcome of rendering every spec under a directory.
+struct BatchOutcome {
+    total: usize,
+    passed: usize,
+    /// `(spec name, error)` for each spec that failed to render.
+    failures: Vec<(String, String)>,
+}
+
+/// Render every spec under `specs_dir` into `output_dir`, printing one line per spec
+/// when `verbose` is set.
+fn render_all(specs_dir: &Path, output_dir: &Path, verbose: bool) -> BatchOutcome {
     let mut specs: Vec<PathBuf> = Vec::new();
     collect_specs(specs_dir, &mut specs);
     specs.sort();
 
     let total = specs.len();
     let mut passed = 0;
-    let mut failed = 0;
     let mut failures: Vec<(String, String)> = Vec::new();
 
     for spec_path in &specs {
         match render_spec(spec_path, output_dir, Some(specs_dir)) {
             Ok(result) => {
-                if let Some(ref err) = result.expected_error {
-                    println!("OK   {} (expected error: {})", result.spec_name, err);
-                } else {
-                    println!("OK   {}", result.spec_name);
+                if verbose {
+                    if let Some(ref err) = result.expected_error {
+                        println!("OK   {} (expected error: {})", result.spec_name, err);
+                    } else {
+                        println!("OK   {}", result.spec_name);
+                    }
                 }
                 passed += 1;
             }
@@ -352,12 +363,19 @@ fn run_batch(specs_dir: &Path, output_dir: &Path) {
                 let name = spec_path.file_stem()
                     .expect("spec path must have a file stem")
                     .to_string_lossy().to_string();
-                eprintln!("FAIL {}: {}", name, e);
+                if verbose {
+                    eprintln!("FAIL {}: {}", name, e);
+                }
                 failures.push((name, e));
-                failed += 1;
             }
         }
     }
+    BatchOutcome { total, passed, failures }
+}
+
+fn run_batch(specs_dir: &Path, output_dir: &Path) {
+    let BatchOutcome { total, passed, failures } = render_all(specs_dir, output_dir, true);
+    let failed = failures.len();
 
     // Write batch summary manifest
     let manifest = serde_json::json!({
@@ -396,8 +414,43 @@ fn collect_specs(dir: &Path, specs: &mut Vec<PathBuf>) {
 
 #[cfg(test)]
 mod tests {
-    use super::viewport;
+    use super::{diff, render_all, viewport};
     use std::path::Path;
+
+    /// The golden SVGs in `test-output/golden/` are what chartml draws today. This renders
+    /// every spec in `tests/charts/` exactly as `chartml-test --batch` does and fails,
+    /// naming each chart that differs, if any SVG is not byte-identical to its golden.
+    ///
+    /// A failure is a finding to investigate. When the change is intended, inspect the
+    /// new drawing, then refresh the goldens:
+    ///
+    /// ```text
+    /// cargo run -p chartml-test-runner -- --batch tests/charts --output-dir test-output/all
+    /// cargo run -p chartml-test-runner -- --diff      # review what changed
+    /// cargo run -p chartml-test-runner -- --accept
+    /// ```
+    #[test]
+    fn rendered_output_matches_goldens() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let out = tempfile::tempdir().expect("create a temp output dir");
+        // DataFusion's spawned work needs a Tokio reactor, as in `main`.
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to build Tokio runtime");
+        let _guard = runtime.enter();
+
+        let outcome = render_all(&root.join("tests/charts"), out.path(), false);
+        assert!(outcome.total > 0, "no chart specs found under tests/charts");
+        assert!(outcome.failures.is_empty(), "specs failed to render: {:?}", outcome.failures);
+
+        let comparison = diff::compare(out.path(), &root.join("test-output/golden"));
+        assert!(
+            comparison.total_changes() == 0,
+            "rendered output differs from test-output/golden:\n{}",
+            comparison.report()
+        );
+    }
 
     fn spec(yaml: &str) -> serde_yaml::Value {
         serde_yaml::from_str(yaml).expect("test YAML parses")

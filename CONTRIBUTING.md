@@ -103,6 +103,14 @@ cargo clippy -p chartml-leptos -p chartml-wasm -p chartml-wasm-datafusion --all-
 cargo test --workspace --exclude chartml-wasm --exclude chartml-wasm-datafusion
 ```
 
+This includes `rendered_output_matches_goldens` (in `chartml-test-runner`), which renders every spec in `tests/charts/` and fails, naming each chart that differs, if an SVG is not byte-identical to its golden in `test-output/golden/`. If you changed how charts draw on purpose, look at the new drawings, then refresh the goldens and commit them with the change:
+
+```bash
+cargo run -p chartml-test-runner -- --batch tests/charts --output-dir test-output/all
+cargo run -p chartml-test-runner -- --diff     # review each changed chart
+cargo run -p chartml-test-runner -- --accept
+```
+
 The same job then runs four browser (`wasm-bindgen-test`) suites in headless Chrome; see [Running the browser tests locally](#running-the-browser-tests-locally).
 
 **WASM Build**
