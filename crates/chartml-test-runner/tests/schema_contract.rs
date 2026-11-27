@@ -237,6 +237,29 @@ fn config_style_accepts_a_name_or_the_same_inline_style() {
 }
 
 #[test]
+fn config_inline_style_ignores_unknown_keys_like_the_parser() {
+    // The parser skips keys it does not know, so a Config style with one is a
+    // valid existing shape and the schema must not reject it.
+    assert_valid(
+        "config style with an unknown key",
+        "type: config\nversion: 1\nstyle:\n  height: 300\n  accent: teal\n",
+    );
+}
+
+#[test]
+fn chart_inline_styles_reject_unknown_keys_in_the_schema_so_typos_show() {
+    // New for CHA-51 (Chart.style) or closed before it (visualize.style): the
+    // schema flags a misspelt key. The parser skips it, so this is schema-only.
+    for yaml in [
+        chart(&format!("style:\n  heigth: 300\ndata: d\n{BAR}")),
+        chart("data: d\nvisualize:\n  type: bar\n  style:\n    heigth: 300\n"),
+    ] {
+        assert!(!schema_errors(&validator(), &yaml).is_empty());
+        assert!(spec::parse(&yaml).is_ok());
+    }
+}
+
+#[test]
 fn config_without_a_style_is_rejected() {
     assert_rejected("config without style", "type: config\nversion: 1\n");
 }

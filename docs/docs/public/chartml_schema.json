@@ -192,7 +192,7 @@
           "description": "Default style for all charts in this scope",
           "oneOf": [
             { "type": "string", "description": "Reference to a named style" },
-            { "$ref": "#/definitions/Style" }
+            { "$ref": "#/definitions/StyleProperties" }
           ]
         }
       }
@@ -893,9 +893,9 @@
         }
       }
     },
-    "Style": {
+    "StyleProperties": {
       "type": "object",
-      "additionalProperties": false,
+      "description": "Inline style properties. The parser ignores keys it does not know, so this definition is open; Style closes it.",
       "properties": {
         "height": {
           "type": "number",
@@ -1008,6 +1008,24 @@
           "default": 50,
           "description": "Table-only: rows per page (default 50). A table with more rows than this shows one page at a time, with Previous and Next buttons and the current page in the footer; every row is reachable. Where nothing can run (a static SVG, a PNG, markdown output, server-side rendering) the table shows its first page and the buttons are disabled."
         }
+      }
+    },
+    "Style": {
+      "description": "Inline style: a chart's `style` and `visualize.style`. Unknown keys are rejected so typos show up.",
+      "allOf": [{ "$ref": "#/definitions/StyleProperties" }],
+      "additionalProperties": false,
+      "properties": {
+        "height": {},
+        "width": {},
+        "curveType": {},
+        "fillOpacity": {},
+        "colors": {},
+        "grid": {},
+        "showDots": {},
+        "strokeWidth": {},
+        "fonts": {},
+        "legend": {},
+        "pageSize": {}
       }
     }
   }
