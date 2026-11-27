@@ -128,7 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a renderer that draws the title itself, such as the metric card, returns
   `true` so the engine adds none), `svg::is_attr_name`, `HtmlTag::name`,
   `layout::labels::TEXT_ASCENT_FRACTION`, `TextMetrics::from_theme_data_label`,
-  `GridConfig::from_config_with_defaults` and `from_theme_data_label`,
+  `GridConfig::from_config_with_defaults`,
   `MarginConfig::bottom_legend_extent`; and `ColumnAlign`, `ColumnWidth` and
   `AutoWidth` in `spec`.
 - **`chartml-chart-metric`** (CHA-14): a metric card shorter than 150px uses a
