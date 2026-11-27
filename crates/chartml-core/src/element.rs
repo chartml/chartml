@@ -126,6 +126,12 @@ pub enum ChartElement {
         attrs: Vec<(String, String)>,
         children: Vec<ChartElement>,
     },
+    /// The SVG `<title>` of its parent element: the full text a viewer sees
+    /// on hover when the parent's visible text was shortened with an ellipsis.
+    /// Valid only inside an SVG element ([`ChartElement::Group`]).
+    Title {
+        content: String,
+    },
     /// Raw text node (for metric values, labels in div-based charts)
     Span {
         class: String,

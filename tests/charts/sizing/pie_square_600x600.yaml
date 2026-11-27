@@ -36,7 +36,7 @@ assertions:
     svg_width: 600
     svg_height: 600
     slices: 5
-    title_in_svg: false
+    title_in_svg: true
     legend: true
     legend_entries: 5
 

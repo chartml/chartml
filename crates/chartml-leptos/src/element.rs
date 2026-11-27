@@ -271,6 +271,12 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             view
         }
 
+        ChartElement::Title { content } => {
+            // The SVG <title> (not the HTML one): leptos::svg::title builds it
+            // in the SVG namespace so browsers show it as the parent's tooltip.
+            leptos::svg::title().child(content.clone()).into_any()
+        }
+
         ChartElement::Span { class, style, content } => {
             let class = class.clone();
             let mut pairs: Vec<_> = style.iter().collect();

@@ -50,16 +50,29 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     // Step 1b: Pre-compute domain for left margin estimation (matches JS two-pass approach).
     let prelim_values: Vec<f64> = (0..data.num_rows()).filter_map(|i| data.get_f64(i, &value_field)).collect();
     let prelim_min = prelim_values.iter().cloned().fold(f64::INFINITY, f64::min);
-    let prelim_max = prelim_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let prelim_max = if prelim_max <= 0.0 { 1.0 } else { prelim_max };
-    // When data has negative values, use the actual minimum; otherwise anchor at 0
-    let prelim_domain_min = if prelim_min < 0.0 { prelim_min } else { 0.0 };
-    let (prelim_nice_min, prelim_nice_max) = crate::helpers::nice_domain(prelim_domain_min, prelim_max, 5);
-    let area_prelim_fmt = if is_normalized { Some(".0%") } else { y_fmt_ref };
-    let area_prelim_labels = vec![
-        crate::helpers::format_value(prelim_nice_min, area_prelim_fmt),
-        crate::helpers::format_value(prelim_nice_max, area_prelim_fmt),
-    ];
+    let single_max = prelim_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    // A stacked area's axis runs to the tallest stack, the sum of the series
+    // at one category, not to the tallest single value.
+    let prelim_max = if is_stacked {
+        let mut stacks: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+        for i in 0..data.num_rows() {
+            if let (Some(category), Some(value)) = (data.get_string(i, &category_field), data.get_f64(i, &value_field)) {
+                *stacks.entry(category).or_insert(0.0) += value;
+            }
+        }
+        stacks.values().cloned().fold(single_max, f64::max)
+    } else {
+        single_max
+    };
+    let (prelim_nice_min, prelim_nice_max) =
+        crate::helpers::y_axis_domain(prelim_min, prelim_max, crate::helpers::get_y_axis_bounds(config));
+    // The axis is 0 to 100% only where the chart really normalizes: more than
+    // one colour series (a single series, or none, draws its raw values).
+    let drawn_normalized = is_normalized
+        && color_field.as_ref().is_some_and(|c| data.unique_values(c).len() > 1);
+    let area_prelim_fmt = if drawn_normalized { Some(".0%") } else { y_fmt_ref };
+    let area_prelim_domain = if drawn_normalized { (0.0, 1.0) } else { (prelim_nice_min, prelim_nice_max) };
+    let area_prelim_labels = crate::helpers::y_axis_tick_labels(area_prelim_domain, area_prelim_fmt);
 
     // Lay out the legend first so the margins keep room for it.
     let legend = match color_field {
@@ -104,7 +117,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
 
     let mut children = Vec::new();
 
-    // Title is rendered as HTML outside the SVG — not added here.
+    // The title is not drawn here: the host draws it as a heading, or the engine
+    // draws it above this chart (chartml_core::title).
 
     let area_gen = AreaGenerator::new().curve(chartml_core::shapes::CurveType::MonotoneX);
     let mut area_elements = Vec::new();
@@ -159,10 +173,10 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     .iter()
                     .map(|p| p.y1)
                     .fold(0.0_f64, f64::max);
-                let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
                 // Match JS: yLeft.nice() uses default count=10 for domain rounding.
-                let (_, nice_max) = crate::helpers::nice_domain(0.0, raw_value_max, 5);
-                (0.0, nice_max, y_fmt_ref)
+                let (domain_min, domain_max) =
+                    crate::helpers::y_axis_domain(0.0, raw_value_max, crate::helpers::get_y_axis_bounds(config));
+                (domain_min, domain_max, y_fmt_ref)
             };
             let linear = ScaleLinear::new((value_min, value_max), (inner_height, 0.0));
             y_domain_min = value_min;
@@ -249,6 +263,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     chart_height: Some(inner_height),
                     grid: &grid,
                     axis_label: bottom_axis_label,
+                    margin_left: margins.left,
+                    margin_bottom: margins.bottom - margin_config.bottom_legend_extent(),
                     theme: &config.theme,
                 });
             let y_axis_elements =
@@ -303,10 +319,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 .collect();
             let raw_value_min = values.iter().cloned().fold(f64::INFINITY, f64::min);
             let raw_value_max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-            let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
-            // When data has negative values, use the actual minimum; otherwise anchor at 0
-            let domain_min = if raw_value_min < 0.0 { raw_value_min } else { 0.0 };
-            let (value_min, value_max) = crate::helpers::nice_domain(domain_min, raw_value_max, 5);
+            let (value_min, value_max) =
+                crate::helpers::y_axis_domain(raw_value_min, raw_value_max, crate::helpers::get_y_axis_bounds(config));
             let linear = ScaleLinear::new((value_min, value_max), (inner_height, 0.0));
             y_domain_min = value_min;
             y_domain_max = value_max;
@@ -397,6 +411,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     chart_height: Some(inner_height),
                     grid: &grid,
                     axis_label: bottom_axis_label,
+                    margin_left: margins.left,
+                    margin_bottom: margins.bottom - margin_config.bottom_legend_extent(),
                     theme: &config.theme,
                 });
             let y_axis_elements =
@@ -404,7 +420,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     domain: (value_min, value_max),
                     range: (inner_height, 0.0),
                     x_position: margins.left,
-                    fmt: None,
+                    fmt: y_fmt_ref,
                     tick_count: 5,
                     chart_width: Some(inner_width),
                     grid: &grid,
@@ -453,10 +469,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             .collect();
         let raw_value_min = values.iter().cloned().fold(f64::INFINITY, f64::min);
         let raw_value_max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let raw_value_max = if raw_value_max <= 0.0 { 1.0 } else { raw_value_max };
-        // When data has negative values, use the actual minimum; otherwise anchor at 0
-        let domain_min = if raw_value_min < 0.0 { raw_value_min } else { 0.0 };
-        let (value_min, value_max) = crate::helpers::nice_domain(domain_min, raw_value_max, 5);
+        let (value_min, value_max) =
+            crate::helpers::y_axis_domain(raw_value_min, raw_value_max, crate::helpers::get_y_axis_bounds(config));
         let linear = ScaleLinear::new((value_min, value_max), (inner_height, 0.0));
         y_domain_min = value_min;
         y_domain_max = value_max;
@@ -537,6 +551,8 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                     chart_height: Some(inner_height),
                     grid: &grid,
                     axis_label: bottom_axis_label,
+                    margin_left: margins.left,
+                    margin_bottom: margins.bottom - margin_config.bottom_legend_extent(),
                     theme: &config.theme,
                 });
         let y_axis_elements =
@@ -544,7 +560,7 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 domain: (value_min, value_max),
                 range: (inner_height, 0.0),
                 x_position: margins.left,
-                fmt: None,
+                fmt: y_fmt_ref,
                 tick_count: 5,
                 chart_width: Some(inner_width),
                 grid: &grid,

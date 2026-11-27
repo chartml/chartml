@@ -95,6 +95,10 @@ impl MetricRenderer {
 }
 
 impl ChartRenderer for MetricRenderer {
+    fn draws_own_title(&self) -> bool {
+        true
+    }
+
     fn render(&self, data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
         let viz = &config.visualize;
         let layout = Layout::for_height(config.height);

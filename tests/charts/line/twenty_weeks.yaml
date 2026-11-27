@@ -62,7 +62,7 @@ assertions:
   structure:
     root: svg
     lines: 1
-    title_in_svg: false
+    title_in_svg: true
     legend: false
 
   scale:

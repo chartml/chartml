@@ -12,7 +12,7 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetri
 
 use chartml_core::layout::legend::{LegendBlock, LegendConfig, LegendMark};
 
-use crate::helpers::{cartesian_grid, bar_data_label, horizontal_label_position, point_data_labels, DATA_LABEL_OFFSET, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, nice_domain, offset_element};
+use crate::helpers::{cartesian_grid, bar_data_label, horizontal_label_position, point_data_labels, DATA_LABEL_OFFSET, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_x_axis_numeric, generate_x_axis_with_display, generate_y_axis_with_display, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_data_labels_config, get_field_name, get_x_format, get_y_axis_bounds, get_y_format, offset_element};
 
 /// Position of a bar segment within a stacked bar group.
 ///
@@ -518,7 +518,7 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     let x_format = get_x_format(config);
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
-    let (axis_min, axis_max) = get_y_axis_bounds(config);
+    let y_bounds = get_y_axis_bounds(config);
 
     // Format labels the same way generate_x_axis will — margin estimation must
     // use the actual display strings, not raw data values.
@@ -577,22 +577,18 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
     // Keep data_min at 0 when all values are non-negative (standard bar chart behavior)
     let prelim_data_min = if prelim_data_min >= 0.0 { 0.0 } else { prelim_data_min };
 
-    let prelim_domain_max = if is_normalized {
-        1.0
+    // The margin is estimated over the domain the axis will draw.
+    let (prelim_domain_min, prelim_domain_max) = if is_normalized {
+        (0.0, 1.0)
     } else {
-        let raw_max = axis_max.unwrap_or(prelim_data_max);
-        if axis_max.is_none() { nice_domain(axis_min.unwrap_or(prelim_data_min), raw_max, 5).1 } else { raw_max }
+        crate::helpers::y_axis_domain(prelim_data_min, prelim_data_max, y_bounds)
     };
-    let prelim_domain_min = if is_normalized { 0.0 } else { axis_min.unwrap_or(prelim_data_min) };
 
     // Generate representative tick label (domain max is typically widest label).
     // For horizontal charts the y-axis shows categories, so use those for left margin.
     let y_tick_labels_for_margin: Vec<String> = if !is_horizontal {
         let prelim_fmt = if is_normalized { Some(".0%") } else { y_fmt_ref };
-        vec![
-            format_value(prelim_domain_max, prelim_fmt),
-            format_value(prelim_domain_min, prelim_fmt),
-        ]
+        crate::helpers::y_axis_tick_labels((prelim_domain_min, prelim_domain_max), prelim_fmt)
     } else {
         let display = display_labels.as_deref().unwrap_or(&categories);
         display.to_vec()
@@ -665,24 +661,8 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
 
     let _tick_count = adaptive_tick_count(inner_height);
 
-    // Compute final domain (same as prelim for vertical bars).
-    let raw_data_max = prelim_data_max;
-
-    // For normalized mode, domain is always 0-1 (the NumberFormatter handles % display).
-    let (domain_min, domain_max) = if is_normalized {
-        (0.0, 1.0)
-    } else {
-        let raw_domain_min = axis_min.unwrap_or(prelim_data_min);
-        let raw_domain_max = axis_max.unwrap_or(raw_data_max);
-        // Apply nice rounding to domain so ticks are round numbers with headroom (Regressions 2 & 3).
-        // Only apply when no explicit axis bounds are set by the user.
-        if axis_min.is_none() && axis_max.is_none() {
-            // Match JS: yLeft.nice() uses default count=10 for domain rounding.
-            nice_domain(raw_domain_min, raw_domain_max, 5)
-        } else {
-            (raw_domain_min, raw_domain_max)
-        }
-    };
+    // The final domain is the one the margin was estimated over.
+    let (domain_min, domain_max) = (prelim_domain_min, prelim_domain_max);
     // For normalized mode, override Y-axis format to show percentages.
     // Otherwise, use the format from config (axes.left.format).
     let effective_y_fmt: Option<String> = if is_normalized {
@@ -774,6 +754,8 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
             chart_height: Some(inner_height),
             grid: &grid,
             axis_label: bottom_axis_label,
+            margin_left: margins.left,
+            margin_bottom: margins.bottom - margin_config.bottom_legend_extent(),
             theme: &config.theme,
         });
         let left_axis_label = config.visualize.axes.as_ref()
@@ -1451,57 +1433,6 @@ fn render_combo(
         .and_then(|a| a.right.as_ref())
         .and_then(|a| a.format.as_deref());
 
-    // Pre-compute right tick labels to measure their width
-    let right_tick_labels: Vec<String> = if has_right {
-        // Estimate right-axis values for label width measurement
-        let right_max = fields.iter()
-            .filter(|f| f.axis.as_deref() == Some("right"))
-            .filter_map(|f| f.field.as_deref())
-            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
-            .fold(0.0_f64, f64::max);
-        let right_domain_max = config.visualize.axes.as_ref()
-            .and_then(|a| a.right.as_ref())
-            .and_then(|a| a.max)
-            .unwrap_or(if right_max <= 0.0 { 1.0 } else { right_max });
-        let tmp_scale = ScaleLinear::new((0.0, right_domain_max), (0.0, 100.0));
-        tmp_scale.ticks(5).iter().map(|v| format_value(*v, right_fmt)).collect()
-    } else {
-        vec![]
-    };
-
-    let has_x_axis_label = config.visualize.axes.as_ref()
-        .and_then(|a| a.x.as_ref())
-        .and_then(|a| a.label.as_ref())
-        .is_some();
-    // Lay out the legend first so the margins keep room for it.
-    let legend_entries = combo_legend_entries(data, config, fields, is_stacked, color_field.as_deref());
-    let (names, colors): (Vec<String>, Vec<String>) =
-        legend_entries.iter().map(|(n, c, _)| (n.clone(), c.clone())).unzip();
-    // Combo legend items are spaced a little wider than the other charts'.
-    let legend_config = LegendConfig { item_padding: 16.0, ..LegendConfig::for_theme(&config.theme) };
-    let legend = LegendBlock::for_series(config, &names, &colors, legend_config)?;
-    let mut margin_config = MarginConfig {
-        has_title: config.title.is_some(),
-        // Left Y-axis label is not rendered for combo charts (see comment below),
-        // so do not reserve extra left-margin space for it.
-        has_y_axis_label: false,
-        has_x_axis_label,
-        has_right_axis: has_right,
-        right_tick_labels,
-        tick_value_metrics: TextMetrics::from_theme_tick_value(&config.theme),
-        axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
-        ..Default::default()
-    };
-    let legend_reserve = legend.as_ref().map(|l| l.reserve()).unwrap_or_default();
-    legend_reserve.apply_to(&mut margin_config);
-    let margins = calculate_margins(&margin_config);
-    let inner_width = margins.inner_width(config.width);
-    let inner_height = margins.inner_height(config.height);
-
-    let band = ScaleBand::new(categories.clone(), (0.0, inner_width))
-        .padding(crate::helpers::adaptive_bar_padding(categories.len()));
-    let bandwidth = band.bandwidth();
-
     // Separate fields by axis
     let left_fields: Vec<&chartml_core::spec::FieldSpec> = fields.iter()
         .filter(|f| f.axis.as_deref() != Some("right"))
@@ -1547,47 +1478,67 @@ fn render_combo(
     // Keep data_min at 0 when all values are non-negative (standard bar chart behavior)
     let left_data_min = if left_data_min >= 0.0 { 0.0 } else { left_data_min };
     let axes_left = config.visualize.axes.as_ref().and_then(|a| a.left.as_ref());
-    let left_explicit_min = axes_left.and_then(|a| a.min);
-    let left_explicit_max = axes_left.and_then(|a| a.max);
-    let raw_left_domain_min = left_explicit_min.unwrap_or(left_data_min);
-    let raw_left_domain_max = left_explicit_max.unwrap_or(if left_max <= 0.0 { 1.0 } else { left_max });
-    let (left_domain_min, left_domain_max) = if left_explicit_min.is_none() && left_explicit_max.is_none() {
-        // Use count=5 to align with generate_y_axis_numeric's hardcoded tick count of 5.
-        nice_domain(raw_left_domain_min, raw_left_domain_max, 5)
-    } else {
-        (raw_left_domain_min, raw_left_domain_max)
-    };
-    let left_scale = ScaleLinear::new((left_domain_min, left_domain_max), (inner_height, 0.0));
-
-    // Compute right-axis domain with D3-style nice rounding (Regressions 2 & 3).
-    let right_scale = if !right_fields.is_empty() {
-        let right_max = right_fields.iter()
-            .filter_map(|f| f.field.as_deref())
-            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
-            .fold(0.0_f64, f64::max);
-        let right_data_min = right_fields.iter()
-            .filter_map(|f| f.field.as_deref())
-            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
-            .fold(0.0_f64, f64::min);
-        let axes_right = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref());
-        let right_explicit_min = axes_right.and_then(|a| a.min);
-        let right_explicit_max = axes_right.and_then(|a| a.max);
-        let raw_right_domain_min = right_explicit_min.unwrap_or(if right_data_min < 0.0 { right_data_min } else { 0.0 });
-        let raw_right_domain_max = right_explicit_max.unwrap_or(if right_max <= 0.0 { 1.0 } else { right_max });
-        let (right_domain_min, right_domain_max) = if right_explicit_min.is_none() && right_explicit_max.is_none() {
-            // Use count=5 to align with generate_y_axis_numeric's hardcoded tick count of 5.
-            nice_domain(raw_right_domain_min, raw_right_domain_max, 5)
-        } else {
-            (raw_right_domain_min, raw_right_domain_max)
-        };
-        Some(ScaleLinear::new((right_domain_min, right_domain_max), (inner_height, 0.0)))
-    } else {
+    let (left_domain_min, left_domain_max) =
+        crate::helpers::y_axis_domain(left_data_min, left_max, get_y_axis_bounds(config));
+    // The right axis's domain, derived with the left's (and measured for the
+    // margin below): its fields' extent and `axes.right.min/max/nice`.
+    let right_domain: Option<(f64, f64)> = if right_fields.is_empty() {
         None
+    } else {
+        let right_values: Vec<f64> = right_fields.iter()
+            .filter_map(|f| f.field.as_deref())
+            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
+            .collect();
+        let right_max = right_values.iter().cloned().fold(0.0_f64, f64::max);
+        let right_data_min = right_values.iter().cloned().fold(0.0_f64, f64::min);
+        Some(crate::helpers::y_axis_domain(right_data_min, right_max, crate::helpers::get_right_axis_bounds(config)))
     };
+    let right_tick_labels: Vec<String> = match right_domain {
+        Some(domain) => crate::helpers::y_axis_tick_labels(domain, right_fmt),
+        None => vec![],
+    };
+
+    let has_x_axis_label = config.visualize.axes.as_ref()
+        .and_then(|a| a.x.as_ref())
+        .and_then(|a| a.label.as_ref())
+        .is_some();
+    // Lay out the legend first so the margins keep room for it.
+    let legend_entries = combo_legend_entries(data, config, fields, is_stacked, color_field.as_deref());
+    let (names, colors): (Vec<String>, Vec<String>) =
+        legend_entries.iter().map(|(n, c, _)| (n.clone(), c.clone())).unzip();
+    // Combo legend items are spaced a little wider than the other charts'.
+    let legend_config = LegendConfig { item_padding: 16.0, ..LegendConfig::for_theme(&config.theme) };
+    let legend = LegendBlock::for_series(config, &names, &colors, legend_config)?;
+    let mut margin_config = MarginConfig {
+        has_title: config.title.is_some(),
+        // The left axis title is drawn left of the tick labels: reserve its room.
+        has_y_axis_label: axes_left.and_then(|a| a.label.as_ref()).is_some(),
+        has_x_axis_label,
+        has_right_axis: has_right,
+        right_tick_labels,
+        // The labels the left axis draws, so the left margin holds the widest.
+        y_tick_labels: crate::helpers::y_axis_tick_labels((left_domain_min, left_domain_max), y_fmt_ref),
+        tick_value_metrics: TextMetrics::from_theme_tick_value(&config.theme),
+        axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
+        ..Default::default()
+    };
+    let legend_reserve = legend.as_ref().map(|l| l.reserve()).unwrap_or_default();
+    legend_reserve.apply_to(&mut margin_config);
+    let margins = calculate_margins(&margin_config);
+    let inner_width = margins.inner_width(config.width);
+    let inner_height = margins.inner_height(config.height);
+
+    let band = ScaleBand::new(categories.clone(), (0.0, inner_width))
+        .padding(crate::helpers::adaptive_bar_padding(categories.len()));
+    let bandwidth = band.bandwidth();
+
+    let left_scale = ScaleLinear::new((left_domain_min, left_domain_max), (inner_height, 0.0));
+    let right_scale = right_domain.map(|(min, max)| ScaleLinear::new((min, max), (inner_height, 0.0)));
 
     let mut children = Vec::new();
 
-    // Title is rendered as HTML outside the SVG — not added here.
+    // The title is not drawn here: the host draws it as a heading, or the engine
+    // draws it above this chart (chartml_core::title).
 
     // Axes
     let bottom_axis_label = config.visualize.axes.as_ref()
@@ -1603,6 +1554,8 @@ fn render_combo(
         chart_height: Some(inner_height),
         grid: &grid,
         axis_label: bottom_axis_label,
+        margin_left: margins.left,
+        margin_bottom: margins.bottom - margin_config.bottom_legend_extent(),
         theme: &config.theme,
     });
     let left_axis_label = axes_left.and_then(|a| a.label.as_deref());

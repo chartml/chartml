@@ -38,7 +38,7 @@ assertions:
     svg_width: 3000
     svg_height: 1500
     bars: 6
-    title_in_svg: false
+    title_in_svg: true
     legend: false
 
   bars:

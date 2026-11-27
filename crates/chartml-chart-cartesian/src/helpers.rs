@@ -3,7 +3,7 @@ use chartml_core::error::ChartError;
 use chartml_core::format::NumberFormatter;
 pub use chartml_core::format::format_value;
 use chartml_core::format::{detect_date_format, reformat_date_label};
-use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics, measure_text, truncate_label_with_metrics};
+use chartml_core::layout::labels::{TEXT_ASCENT_FRACTION, LabelStrategy, LabelStrategyConfig, TextMetrics, measure_text, truncate_label_with_metrics};
 use chartml_core::plugin::ChartConfig;
 use chartml_core::scales::{ScaleBand, ScaleLinear};
 use chartml_core::spec::{AnnotationSpec, FieldRef, FieldRefItem, MarkEncoding};
@@ -108,6 +108,12 @@ pub struct XAxisParams<'a> {
     pub grid: &'a GridConfig,
     pub axis_label: Option<&'a str>,
     pub theme: &'a Theme,
+    /// Space between the SVG's left edge and `range.0`: how far a rotated
+    /// label may reach left of the plot before it leaves the SVG.
+    pub margin_left: f64,
+    /// Space between the x axis line and the SVG's bottom edge: how far
+    /// rotated labels may descend below the axis.
+    pub margin_bottom: f64,
 }
 
 /// Parameters for generating a numeric y-axis.
@@ -138,16 +144,43 @@ pub fn adaptive_bar_padding(num_categories: usize) -> f64 {
     }
 }
 
-pub fn get_y_axis_bounds(config: &ChartConfig) -> (Option<f64>, Option<f64>) {
-    let axes = match &config.visualize.axes {
-        Some(a) => a,
-        None => return (None, None),
-    };
-    let axis = match &axes.left {
-        Some(a) => a,
-        None => return (None, None),
-    };
-    (axis.min, axis.max)
+/// A y axis's `min`, `max` and `nice` settings (`axes.left` / `axes.right`).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct YAxisBounds {
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub nice: Option<bool>,
+}
+
+fn axis_bounds(axis: Option<&chartml_core::spec::AxisSpec>) -> YAxisBounds {
+    axis.map_or_else(YAxisBounds::default, |a| YAxisBounds { min: a.min, max: a.max, nice: a.nice })
+}
+
+/// The left axis's settings (`axes.left`, also written `axes.rows`).
+pub fn get_y_axis_bounds(config: &ChartConfig) -> YAxisBounds {
+    axis_bounds(config.visualize.axes.as_ref().and_then(|a| a.left.as_ref()))
+}
+
+/// The right axis's settings (`axes.right`).
+pub fn get_right_axis_bounds(config: &ChartConfig) -> YAxisBounds {
+    axis_bounds(config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()))
+}
+
+/// The domain of a numeric y axis for data spanning `data_min..=data_max`:
+/// the data's extent anchored at zero (an all-non-positive maximum falls
+/// back to 1), each bound replaced by the user's when set, then rounded to
+/// nice values when `nice` says so. `nice` defaults to true only when the
+/// user set neither bound, so a bound the user chose is drawn as given
+/// unless they also ask for `nice: true`. The one derivation bar, line and
+/// area charts share, for the margin estimate and the drawn axis alike.
+pub fn y_axis_domain(data_min: f64, data_max: f64, bounds: YAxisBounds) -> (f64, f64) {
+    let min = bounds.min.unwrap_or(if data_min < 0.0 { data_min } else { 0.0 });
+    let max = bounds.max.unwrap_or(if data_max <= 0.0 { 1.0 } else { data_max });
+    if bounds.nice.unwrap_or(bounds.min.is_none() && bounds.max.is_none()) {
+        nice_domain(min, max, 5)
+    } else {
+        (min, max)
+    }
 }
 
 /// Get dataLabels config from the rows field spec.
@@ -351,6 +384,40 @@ pub fn format_display_labels(
     }
 }
 
+/// The longest a `-45°`, end-anchored tick label may be (px of text) and
+/// stay inside the SVG.
+///
+/// The label's baseline starts `ROTATED_LABEL_OFFSET` below the axis line and
+/// runs up and to the right to its anchor, so the text reaches
+/// `(length + ascent)·cos45°` left of the anchor and
+/// `ROTATED_LABEL_OFFSET + (length + descent)·sin45°` below the axis
+/// line. `room_left` is the space from the SVG's left edge to the anchor,
+/// `room_below` the space from the axis line to the SVG's bottom edge; with an
+/// x axis title, its row stays clear of the labels too.
+fn rotated_label_max_length(
+    room_left: f64,
+    room_below: f64,
+    has_axis_title: bool,
+    metrics: &TextMetrics,
+) -> f64 {
+    let font = metrics.font_size_px;
+    // sin 45° = cos 45°.
+    let diag = std::f64::consts::FRAC_1_SQRT_2;
+    let title_row = if has_axis_title { X_AXIS_TITLE_ROW } else { 0.0 };
+    let by_left = (room_left - ROTATED_LABEL_EDGE_PAD - TEXT_ASCENT_FRACTION * font * diag) / diag;
+    let by_bottom = (room_below - title_row - ROTATED_LABEL_OFFSET - ROTATED_LABEL_EDGE_PAD
+        - (1.0 - TEXT_ASCENT_FRACTION) * font * diag)
+        / diag;
+    by_left.min(by_bottom).max(0.0)
+}
+
+/// Gap between the x axis line and a rotated label's anchor.
+const ROTATED_LABEL_OFFSET: f64 = 10.0;
+/// Space kept between a rotated label and the SVG's edge.
+const ROTATED_LABEL_EDGE_PAD: f64 = 2.0;
+/// Height of the row an x axis title takes below the tick labels.
+const X_AXIS_TITLE_ROW: f64 = 20.0;
+
 /// Result of x-axis generation, including the computed label strategy.
 pub struct XAxisResult {
     pub elements: Vec<ChartElement>,
@@ -487,13 +554,21 @@ pub fn generate_x_axis_with_display(
                     None => true,
                 };
                 if should_show {
-                    // Rotated labels preserve full text — the whole point of
-                    // rotation is to fit longer labels. Overflow/clipping is
-                    // handled by the SVG viewport, not by pre-truncation.
+                    // A rotated label runs from its anchor down and to the
+                    // left. It keeps its full text while that fits inside the
+                    // SVG; a longer one is cut with an ellipsis (the full text
+                    // stays as its <title>) so it never leaves the SVG.
                     let ts = TextStyle::for_role(theme, TextRole::AxisLabel);
-                    elements.push(ChartElement::Text {
+                    let max_length = rotated_label_max_length(
+                        x + params.margin_left,
+                        params.margin_bottom,
+                        axis_label.is_some(),
+                        &label_config.text_metrics,
+                    );
+                    let shown = truncate_label_with_metrics(label, max_length, &label_config.text_metrics);
+                    let text = ChartElement::Text {
                         x, y: y_position + 10.0,
-                        content: label.clone(),
+                        content: shown.clone(),
                         anchor: TextAnchor::End,
                         dominant_baseline: None,
                         transform: Some(Transform::Rotate(-45.0, x, y_position + 10.0)),
@@ -505,7 +580,16 @@ pub fn generate_x_axis_with_display(
                         fill: Some(theme.axis_text_color().to_string()),
                         class: paint_class("tick-label axis-label", theme.axis_label_color.is_some()),
                         data: None,
-                    });
+                    };
+                    if shown == *label {
+                        elements.push(text);
+                    } else {
+                        elements.push(ChartElement::Group {
+                            class: "tick-label-shortened".to_string(),
+                            transform: None,
+                            children: vec![text, ChartElement::Title { content: label.clone() }],
+                        });
+                    }
                 }
             }
         }
@@ -706,6 +790,34 @@ pub fn generate_y_axis_with_display(
     elements
 }
 
+/// A numeric y axis tick's label: an explicit format with SI abbreviation for
+/// large values, else D3-style auto-formatting at the axis's tick step.
+fn y_tick_label(value: f64, fmt: Option<&str>, tick_step: f64) -> String {
+    match fmt {
+        Some(f) => format_tick_value_si(value, tick_step, f),
+        None => format_tick_value(value, tick_step),
+    }
+}
+
+/// The labels a numeric y axis over `domain` draws at five ticks (a short
+/// plot draws fewer, never wider ones). Callers measure these to give the left margin room for the widest
+/// label actually drawn (an axis shows `0.5` and `1.0` where the domain's
+/// ends alone would be `0` and `3`).
+pub fn y_axis_tick_labels(domain: (f64, f64), fmt: Option<&str>) -> Vec<String> {
+    let ticks = d3_ticks(domain.0, domain.1, 5);
+    let tick_step = compute_tick_step(&ticks, domain);
+    ticks.iter().map(|v| y_tick_label(*v, fmt, tick_step)).collect()
+}
+
+/// How many ticks a numeric y axis aims for: 5, or fewer when the axis is too
+/// short to give each label two lines of its font size, so tick labels of a
+/// short plot (a small chart, or one with a title band) never touch.
+fn y_tick_target(range: (f64, f64), theme: &Theme) -> usize {
+    let length = (range.0 - range.1).abs();
+    let per_tick = 2.0 * TextMetrics::from_theme_tick_value(theme).font_size_px;
+    ((length / per_tick).floor() as usize).clamp(2, 5)
+}
+
 /// Generate y-axis elements for numeric data (used by bar, line, and area charts).
 /// Grid lines are controlled by `grid` config and `chart_width`.
 pub fn generate_y_axis_numeric(
@@ -721,10 +833,10 @@ pub fn generate_y_axis_numeric(
     let axis_label = params.axis_label;
     let theme = params.theme;
     let scale = ScaleLinear::new(domain, range);
-    // Match JS: d3.axisLeft(yLeft).ticks(5) — fixed count of 5 regardless of tick_count param.
-    // tick_count is kept for future use / callers that may pass it.
+    // Match JS: d3.axisLeft(yLeft).ticks(5) — a count of 5 regardless of the
+    // tick_count param, fewer only when 5 would not leave the labels room.
     let _ = tick_count;
-    let ticks = d3_ticks(domain.0, domain.1, 5);
+    let ticks = d3_ticks(domain.0, domain.1, y_tick_target(range, theme));
     // Compute the tick step for automatic formatting (D3's tickStep)
     let tick_step = compute_tick_step(&ticks, domain);
     let mut elements = Vec::new();
@@ -746,10 +858,7 @@ pub fn generate_y_axis_numeric(
         // When an explicit format string is provided (e.g. ".0%" for normalized
         // stacked charts), use it with SI abbreviation for large values.
         // Otherwise fall back to D3-style auto-formatting.
-        let label = match fmt {
-            Some(f) => format_tick_value_si(*val, tick_step, f),
-            None => format_tick_value(*val, tick_step),
-        };
+        let label = y_tick_label(*val, fmt, tick_step);
 
         // Horizontal grid line
         if grid.show_y && should_draw_horizontal_grid(&theme.grid_style) {
@@ -846,7 +955,7 @@ pub fn generate_y_axis_numeric_right(
 ) -> Vec<ChartElement> {
     let scale = ScaleLinear::new(domain, range);
     let _ = tick_count;
-    let ticks = d3_ticks(domain.0, domain.1, 5);
+    let ticks = d3_ticks(domain.0, domain.1, y_tick_target(range, theme));
     let tick_step = compute_tick_step(&ticks, domain);
     let mut elements = Vec::new();
 
@@ -860,10 +969,7 @@ pub fn generate_y_axis_numeric_right(
 
     for val in &ticks {
         let y = scale.map(*val);
-        let label = match fmt {
-            Some(f) => format_tick_value_si(*val, tick_step, f),
-            None => format_tick_value(*val, tick_step),
-        };
+        let label = y_tick_label(*val, fmt, tick_step);
 
         // Tick mark (to the right)
         elements.push(ChartElement::Line {
@@ -964,10 +1070,7 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
         // stacked charts), use it with SI abbreviation for large values.
         // Otherwise fall back to D3-style auto-formatting with comma separators,
         // matching the vertical y-axis behavior.
-        let label = match fmt {
-            Some(f) => format_tick_value_si(*val, tick_step, f),
-            None => format_tick_value(*val, tick_step),
-        };
+        let label = y_tick_label(*val, fmt, tick_step);
 
         // Vertical grid line
         if grid.show_x && should_draw_vertical_grid(&theme.grid_style) {
@@ -1644,4 +1747,21 @@ pub(crate) fn point_data_labels(
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod y_tick_target_tests {
+    use super::y_tick_target;
+    use chartml_core::theme::Theme;
+
+    #[test]
+    fn y_tick_target_is_five_until_the_axis_is_too_short_for_the_labels() {
+        let theme = Theme::default();
+        // Two lines of the 12px tick font per tick: 120px holds five.
+        assert_eq!(y_tick_target((330.0, 0.0), &theme), 5);
+        assert_eq!(y_tick_target((120.0, 0.0), &theme), 5);
+        assert_eq!(y_tick_target((119.0, 0.0), &theme), 4);
+        assert_eq!(y_tick_target((60.0, 0.0), &theme), 2);
+        assert_eq!(y_tick_target((10.0, 0.0), &theme), 2);
+    }
 }

@@ -33,7 +33,7 @@ chart:
 assertions:
   structure:
     root: svg
-    title_in_svg: false
+    title_in_svg: true
     legend: false
 
   scale:

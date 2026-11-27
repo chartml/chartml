@@ -68,7 +68,7 @@ assertions:
   structure:
     root: svg
     bars: 12
-    title_in_svg: false
+    title_in_svg: true
     legend: true
     legend_entries: 3
 

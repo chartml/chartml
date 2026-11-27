@@ -301,6 +301,12 @@ fn write_element(buf: &mut String, element: &ChartElement) {
             write!(buf, "</{name}>").expect("writing to String is infallible");
         }
 
+        ChartElement::Title { content } => {
+            buf.push_str("<title>");
+            buf.push_str(&xml_escape(content));
+            buf.push_str("</title>");
+        }
+
         ChartElement::Span { class, style, content } => {
             buf.push_str("<span");
             if !class.is_empty() {

@@ -33,7 +33,7 @@ assertions:
   structure:
     root: svg
     slices: 6
-    title_in_svg: false
+    title_in_svg: true
     legend: true
     legend_entries: 6
 

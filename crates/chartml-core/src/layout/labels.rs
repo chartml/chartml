@@ -333,9 +333,10 @@ impl LabelStrategy {
             let angle_rad = config.rotation_angle_deg.to_radians();
             let skip_factor = compute_skip_factor(labels, available_width, config.rotation_angle_deg, &config.text_metrics);
 
-            // Rotated labels render at full length (generate_x_axis does not
-            // truncate them), so the vertical descent comes from the widest
-            // label that will actually be visible after skip sampling.
+            // The margin is reserved for the widest label that will be visible
+            // after skip sampling, at full length. generate_x_axis cuts a
+            // label only when even this margin cannot hold it, so the reserve
+            // is never smaller than a drawn label needs.
             let visible_max_width = match skip_factor {
                 Some(f) if f > 1 => widths.iter().enumerate()
                     .filter(|(i, _)| i % f == 0)
@@ -539,6 +540,10 @@ pub fn strategic_indices(total: usize, target: usize) -> Vec<usize> {
     indices
 }
 
+/// Share of a font's size that rises above the text baseline (the rest is
+/// descent). Text layout estimates that need a height use it.
+pub const TEXT_ASCENT_FRACTION: f64 = 0.8;
+
 /// Truncate a label to fit within max_width, adding ellipsis.
 ///
 /// Uses the legacy calibration. Call `truncate_label_with_metrics` when the
@@ -634,9 +639,9 @@ mod tests {
 
     #[test]
     fn rotated_margin_covers_full_label_descent() {
-        // Rotated labels render at full length (no post-rotation truncation
-        // in generate_x_axis), so the reserved margin must cover the descent
-        // of the longest visible label — not a truncation-capped width.
+        // The reserved margin must cover the descent of the longest visible
+        // label at full length (generate_x_axis cuts a label only when the
+        // margin cannot hold it), not a truncation-capped width.
         let labels: Vec<String> = vec![
             "UNKNOWN".into(), "GOOGLE".into(), "DIRECT".into(), "LINKEDIN".into(),
             "PRODUCTHUNT".into(), "TWITTER".into(), "OTHER".into(),

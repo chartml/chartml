@@ -11,7 +11,7 @@ use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetri
 use chartml_core::layout::legend::{LegendBlock, LegendConfig};
 
 
-use crate::helpers::{cartesian_grid, point_data_labels, LegendMark, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_field_name, get_x_format, get_y_format, nice_domain, offset_element};
+use crate::helpers::{cartesian_grid, point_data_labels, LegendMark, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, get_field_name, get_x_format, get_y_format, offset_element};
 
 pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
@@ -65,62 +65,60 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     // Detect dual-axis: check if any multi-field spec has axis: "right"
     let has_right = is_multi_field && multi_fields.iter().any(|f| f.axis.as_deref() == Some("right"));
 
-    // Step 1b: Pre-compute domain for left margin estimation (matches JS two-pass approach).
-    // When dual-axis, only left-axis fields contribute to the left prelim domain.
-    let all_value_fields_prelim: Vec<String> = if is_multi_field {
-        let mut fields: Vec<String> = multi_fields.iter()
-            .filter(|f| f.mark.as_deref() != Some("range"))
-            .filter(|f| !has_right || f.axis.as_deref() != Some("right"))
-            .filter_map(|f| f.field.clone())
-            .collect();
-        // Include upper/lower bound fields from range marks for domain calculation
-        for f in &multi_fields {
-            if f.mark.as_deref() == Some("range") {
-                if let Some(ref upper) = f.upper { fields.push(upper.clone()); }
-                if let Some(ref lower) = f.lower { fields.push(lower.clone()); }
+    // The y domains, derived once: the margin is estimated over them and the
+    // axes are drawn over them. A range mark contributes its upper and lower
+    // fields (the band is drawn on the axis its mark names), a dual-axis
+    // chart splits its fields between the left and right axes.
+    let side_values = |right: Option<bool>| -> Vec<f64> {
+        let mut names: Vec<&str> = Vec::new();
+        if is_multi_field {
+            for f in &multi_fields {
+                if let Some(right) = right {
+                    if (f.axis.as_deref() == Some("right")) != right {
+                        continue;
+                    }
+                }
+                if f.mark.as_deref() == Some("range") {
+                    names.extend(f.upper.as_deref());
+                    names.extend(f.lower.as_deref());
+                } else {
+                    names.extend(f.field.as_deref());
+                }
             }
+        } else {
+            names.push(value_field.as_str());
         }
-        fields
-    } else {
-        vec![value_field.clone()]
+        names.iter()
+            .flat_map(|name| (0..data.num_rows()).filter_map(move |i| data.get_f64(i, name)))
+            .collect()
     };
-    let mut all_values_prelim: Vec<f64> = Vec::new();
-    for field in &all_value_fields_prelim {
-        for i in 0..data.num_rows() {
-            if let Some(v) = data.get_f64(i, field) {
-                all_values_prelim.push(v);
-            }
-        }
-    }
-    let prelim_value_max = all_values_prelim.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let prelim_value_min = all_values_prelim.iter().cloned().fold(f64::INFINITY, f64::min);
-    let prelim_domain_min = if prelim_value_min >= 0.0 { 0.0 } else { prelim_value_min };
-    let prelim_domain_max = if prelim_value_max <= 0.0 { 1.0 } else { prelim_value_max };
-    let (prelim_domain_min, prelim_domain_max) = nice_domain(prelim_domain_min, prelim_domain_max, 5);
+    let extent = |values: &[f64]| {
+        (
+            values.iter().cloned().fold(f64::INFINITY, f64::min),
+            values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+        )
+    };
+    let (domain_min, domain_max, right_domain): (f64, f64, Option<(f64, f64)>) = if has_right {
+        let (left_min, left_max) = extent(&side_values(Some(false)));
+        let (dm, dx) = crate::helpers::y_axis_domain(left_min, left_max, crate::helpers::get_y_axis_bounds(config));
+        let (right_min, right_max) = extent(&side_values(Some(true)));
+        let right = crate::helpers::y_axis_domain(right_min, right_max, crate::helpers::get_right_axis_bounds(config));
+        (dm, dx, Some(right))
+    } else {
+        let (value_min, value_max) = extent(&side_values(None));
+        let (dm, dx) = crate::helpers::y_axis_domain(value_min, value_max, crate::helpers::get_y_axis_bounds(config));
+        (dm, dx, None)
+    };
     let y_fmt = get_y_format(config);
     let y_fmt_ref = y_fmt.as_deref();
-    let prelim_labels = vec![
-        format_value(prelim_domain_max, y_fmt_ref),
-        format_value(prelim_domain_min, y_fmt_ref),
-    ];
+    let prelim_labels = crate::helpers::y_axis_tick_labels((domain_min, domain_max), y_fmt_ref);
 
-    // Pre-compute right tick labels for margin estimation (mirrors bar.rs render_combo)
     let right_fmt = config.visualize.axes.as_ref()
         .and_then(|a| a.right.as_ref())
         .and_then(|a| a.format.as_deref());
-    let right_tick_labels: Vec<String> = if has_right {
-        let right_max = multi_fields.iter()
-            .filter(|f| f.axis.as_deref() == Some("right"))
-            .flat_map(|f| {
-                let name = f.field.as_deref().unwrap_or("").to_string();
-                (0..data.num_rows()).filter_map(move |i| data.get_f64(i, &name))
-            })
-            .fold(0.0_f64, f64::max);
-        let right_domain_max = if right_max <= 0.0 { 1.0 } else { right_max };
-        let tmp_scale = ScaleLinear::new((0.0, right_domain_max), (0.0, 100.0));
-        tmp_scale.ticks(5).iter().map(|v| format_value(*v, right_fmt)).collect()
-    } else {
-        vec![]
+    let right_tick_labels: Vec<String> = match right_domain {
+        Some(domain) => crate::helpers::y_axis_tick_labels(domain, right_fmt),
+        None => vec![],
     };
 
     // Lay out the legend first so the margins keep room for it, from the
@@ -173,76 +171,14 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     let inner_width = margins.inner_width(config.width);
     let inner_height = margins.inner_height(config.height);
 
-    // Find value extent — when dual-axis, compute separate domains for left and right
-    let (domain_min, domain_max, right_domain): (f64, f64, Option<(f64, f64)>) = if has_right {
-        // Left-axis fields only (range marks excluded — they use upper/lower,
-        // which are included in the prelim domain computation above).
-        let left_fields: Vec<&str> = multi_fields.iter()
-            .filter(|f| f.axis.as_deref() != Some("right") && f.mark.as_deref() != Some("range"))
-            .filter_map(|f| f.field.as_deref())
-            .collect();
-        let mut left_vals: Vec<f64> = Vec::new();
-        for field in &left_fields {
-            for i in 0..data.num_rows() {
-                if let Some(v) = data.get_f64(i, field) { left_vals.push(v); }
-            }
-        }
-        let left_min = left_vals.iter().cloned().fold(f64::INFINITY, f64::min);
-        let left_max = left_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let left_domain_min = if left_min >= 0.0 { 0.0 } else { left_min };
-        let left_domain_max = if left_max <= 0.0 { 1.0 } else { left_max };
-        let (left_domain_min, left_domain_max) = nice_domain(left_domain_min, left_domain_max, 5);
-
-        // Right-axis fields only
-        let right_fields: Vec<&str> = multi_fields.iter()
-            .filter(|f| f.axis.as_deref() == Some("right"))
-            .filter_map(|f| f.field.as_deref())
-            .collect();
-        let mut right_vals: Vec<f64> = Vec::new();
-        for field in &right_fields {
-            for i in 0..data.num_rows() {
-                if let Some(v) = data.get_f64(i, field) { right_vals.push(v); }
-            }
-        }
-        let right_min = right_vals.iter().cloned().fold(f64::INFINITY, f64::min);
-        let right_max = right_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let right_domain_min = if right_min >= 0.0 { 0.0 } else { right_min };
-        let right_domain_max = if right_max <= 0.0 { 1.0 } else { right_max };
-        let (right_domain_min, right_domain_max) = nice_domain(right_domain_min, right_domain_max, 5);
-
-        (left_domain_min, left_domain_max, Some((right_domain_min, right_domain_max)))
-    } else {
-        // Single-axis: all scalar fields share one domain. Range marks are
-        // picked up separately via their upper/lower fields — skip them here.
-        let all_value_fields: Vec<String> = if is_multi_field {
-            multi_fields.iter()
-                .filter(|f| f.mark.as_deref() != Some("range"))
-                .filter_map(|f| f.field.clone())
-                .collect()
-        } else {
-            vec![value_field.clone()]
-        };
-        let mut all_values: Vec<f64> = Vec::new();
-        for field in &all_value_fields {
-            for i in 0..data.num_rows() {
-                if let Some(v) = data.get_f64(i, field) { all_values.push(v); }
-            }
-        }
-        let value_min = all_values.iter().cloned().fold(f64::INFINITY, f64::min);
-        let value_max = all_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let dm = if value_min >= 0.0 { 0.0 } else { value_min };
-        let dx = if value_max <= 0.0 { 1.0 } else { value_max };
-        let (dm, dx) = nice_domain(dm, dx, 5);
-        (dm, dx, None)
-    };
-
     let band = ScaleBand::new(categories.clone(), (0.0, inner_width));
     let linear = ScaleLinear::new((domain_min, domain_max), (inner_height, 0.0));
     let right_scale = right_domain.map(|(rmin, rmax)| ScaleLinear::new((rmin, rmax), (inner_height, 0.0)));
 
     let mut children = Vec::new();
 
-    // Title is rendered as HTML outside the SVG — not added here.
+    // The title is not drawn here: the host draws it as a heading, or the engine
+    // draws it above this chart (chartml_core::title).
 
     // Axes — read format string from spec
     let grid = cartesian_grid(config);
@@ -260,6 +196,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         chart_height: Some(inner_height),
         grid: &grid,
         axis_label: bottom_axis_label,
+        margin_left: margins.left,
+        margin_bottom: margins.bottom - margin_config.bottom_legend_extent(),
         theme: &config.theme,
     });
     let left_axis_label = config.visualize.axes.as_ref()
@@ -386,6 +324,13 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             if field_spec.mark.as_deref() == Some("range") {
                 if let (Some(ref upper_field), Some(ref lower_field)) = (&field_spec.upper, &field_spec.lower) {
                     let fill_opacity = field_spec.opacity.unwrap_or(0.15);
+                    // The band is drawn on the axis its mark names, as its
+                    // upper and lower values are part of that axis's domain.
+                    let band_scale = if field_spec.axis.as_deref() == Some("right") {
+                        right_scale.as_ref().unwrap_or(&linear)
+                    } else {
+                        &linear
+                    };
                     let mut area_points: Vec<(f64, f64, f64)> = Vec::new(); // (x, y_upper, y_lower)
 
                     for cat in &categories {
@@ -406,7 +351,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                             Some(x) => x + bandwidth / 2.0,
                             None => continue,
                         };
-                        area_points.push((x, linear.map(upper_val), linear.map(lower_val)));
+                        area_points.push((x, band_scale.map(upper_val), band_scale.map(lower_val)));
                     }
 
                     if !area_points.is_empty() {

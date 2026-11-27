@@ -745,7 +745,10 @@ fn axis_fonts_do_not_reach_tables() {
     let styled = serde_json::to_value(with(&[CORPORATE]).render_from_yaml(&chart("style: corporate", table)).expect("table"))
         .expect("json");
     assert!(!styled.to_string().contains("Courier New"), "fonts.axis must not reach table cells");
-    assert_eq!(plain, styled, "a table renders the same with or without an axis-font style");
+    // The engine's title heading (CHA-59) follows `fonts.title`, which the
+    // corporate style sets; the table under it is the same either way.
+    let body = |v: &serde_json::Value| v["children"][1].clone();
+    assert_eq!(body(&plain), body(&styled), "a table renders the same with or without an axis-font style");
 }
 
 #[test]
@@ -1109,4 +1112,19 @@ fn the_final_render_stage_checks_font_families_too() {
     prepared.spec.visualize.style = Some(style);
     let err = c.render_prepared_to_svg(&prepared, &opts).expect_err("injected family");
     assert!(err.to_string().contains("visualize.style.fonts.axis.family"), "{err}");
+}
+
+// --- The engine's title follows the chart's resolved title font (CHA-59) ------
+
+#[test]
+fn the_title_the_engine_draws_uses_the_resolved_title_font() {
+    let svg = render_ok(&with(&[CORPORATE]), &chart("style: corporate", BAR));
+    let title = tags(&svg, "chart-title");
+    assert_eq!(title.len(), 1, "{svg}");
+    assert_eq!(attr(title[0], "font-family"), Some("Georgia, serif"), "{}", title[0]);
+    assert_eq!(attr(title[0], "font-size"), Some("21px"), "{}", title[0]);
+    assert_eq!(attr(title[0], "font-weight"), Some("800"), "{}", title[0]);
+    assert_eq!(attr(title[0], "fill"), Some("#112233"), "{}", title[0]);
+    // Inside the style's requested height, not above it.
+    assert_eq!(attr(svg.split('>').next().expect("root"), "height"), Some("333"), "{svg}");
 }

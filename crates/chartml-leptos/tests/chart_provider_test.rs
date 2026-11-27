@@ -692,3 +692,29 @@ async fn test_title_only_metric_shows_its_title_once() {
     let whole = root.text_content().unwrap_or_default();
     assert_eq!(whole.matches(TITLE).count(), 1, "the title appears once in the component, got: {whole}");
 }
+
+/// CHA-59: a bar chart with a `title` shows it once in the browser: as the
+/// component's heading above the SVG, and not again inside the SVG (the engine
+/// draws a title only where no host heading exists).
+#[wasm_bindgen_test]
+async fn test_titled_bar_chart_shows_its_title_once() {
+    const TITLE: &str = "Regional Sales";
+    let root = fresh_mount_root();
+    let provider_ref: ProviderRef = Arc::new(RecordingProvider::new(sample_table()));
+
+    let _handle = mount_chart_with_provider(
+        &root,
+        build_chartml(),
+        provider_ref,
+        "type: chart\nversion: 1\ntitle: \"Regional Sales\"\ndata:\n  provider: inline\n  rows:\n    - { region: North, sales: 10 }\n    - { region: South, sales: 14 }\nvisualize:\n  type: bar\n  columns: region\n  rows: sales\n",
+    );
+    yield_to_event_loop(250).await;
+
+    let host = rendered_svg_host(&root).expect("bar svg host should be populated");
+    let svg_text = host.text_content().unwrap_or_default();
+    assert!(!svg_text.contains(TITLE), "the SVG must not repeat the heading, got: {svg_text}");
+    let headings = root.query_selector_all(".chart-title").expect("query headings");
+    assert_eq!(headings.length(), 1, "exactly one heading");
+    let whole = root.text_content().unwrap_or_default();
+    assert_eq!(whole.matches(TITLE).count(), 1, "the title appears once in the component, got: {whole}");
+}

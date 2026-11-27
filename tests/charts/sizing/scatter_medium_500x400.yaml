@@ -42,7 +42,7 @@ assertions:
     svg_width: 500
     svg_height: 400
     circles: 8
-    title_in_svg: false
+    title_in_svg: true
     legend: false
 
   points:
