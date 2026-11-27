@@ -582,3 +582,53 @@ fn cut_rotated_labels_stay_clear_of_a_bottom_legend() {
         }
     }
 }
+
+/// The left margin is the widest label plus 15px; the labels end 8px left of
+/// the axis, leaving 7px between the widest label and the SVG's edge.
+const Y_LABEL_CLEARANCE: f64 = 7.0 - 1e-6;
+
+fn leftmost_y_label_edge(chart: &str) -> f64 {
+    let element = chartml().render_from_yaml(chart).expect("render");
+    y_tick_label_left_edges(&element)
+        .into_iter()
+        .map(|(_, left)| left)
+        .fold(f64::INFINITY, f64::min)
+}
+
+#[test]
+fn a_stacked_area_leaves_room_for_the_stack_top_labels() {
+    // Three series of 400 stack to 1,200: the axis labels are wider than any
+    // single value's.
+    let mut rows = String::new();
+    for category in ["Jan", "Feb", "Mar"] {
+        for series in ["a", "b", "c"] {
+            rows.push_str(&format!("    - {{ month: {category}, series: {series}, v: 400 }}\n"));
+        }
+    }
+    let chart = format!(
+        "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n{rows}visualize:\n  type: area\n  mode: stacked\n  columns: month\n  rows: v\n  marks:\n    color: series\n"
+    );
+    assert!(leftmost_y_label_edge(&chart) >= Y_LABEL_CLEARANCE, "the widest label is clear of the SVG's edge by the margin's padding");
+}
+
+#[test]
+fn a_bar_chart_with_a_negative_minimum_leaves_room_for_the_rounded_down_label() {
+    // -95..100 draws a domain of -100..100, so a `-100` label.
+    let chart = "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n    - { k: a, v: -95 }\n    - { k: b, v: 100 }\nvisualize:\n  type: bar\n  columns: k\n  rows: v\n";
+    assert!(leftmost_y_label_edge(chart) >= Y_LABEL_CLEARANCE, "the widest label is clear of the SVG's edge by the margin's padding");
+}
+
+#[test]
+fn a_normalized_area_leaves_room_for_the_hundred_percent_label() {
+    // Shares of 0.1 would estimate a `10%` label; the axis draws 0 to 100%.
+    let mut rows = String::new();
+    for category in ["Jan", "Feb", "Mar"] {
+        for series in ["a", "b"] {
+            rows.push_str(&format!("    - {{ month: {category}, series: {series}, v: 0.1 }}\n"));
+        }
+    }
+    let chart = format!(
+        "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n{rows}visualize:\n  type: area\n  mode: normalized\n  columns: month\n  rows: v\n  marks:\n    color: series\n"
+    );
+    assert!(leftmost_y_label_edge(&chart) >= Y_LABEL_CLEARANCE, "the widest label is clear of the SVG's edge by the margin's padding");
+}

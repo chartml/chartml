@@ -772,8 +772,8 @@ fn y_tick_label(value: f64, fmt: Option<&str>, tick_step: f64) -> String {
     }
 }
 
-/// The labels a numeric y axis over `domain` draws at its target of five
-/// ticks. Callers measure these to give the left margin room for the widest
+/// The labels a numeric y axis over `domain` draws at five ticks (a short
+/// plot draws fewer, never wider ones). Callers measure these to give the left margin room for the widest
 /// label actually drawn (an axis shows `0.5` and `1.0` where the domain's
 /// ends alone would be `0` and `3`).
 pub fn y_axis_tick_labels(domain: (f64, f64), fmt: Option<&str>) -> Vec<String> {
@@ -1043,10 +1043,7 @@ pub fn generate_x_axis_numeric(params: &XAxisNumericParams) -> Vec<ChartElement>
         // stacked charts), use it with SI abbreviation for large values.
         // Otherwise fall back to D3-style auto-formatting with comma separators,
         // matching the vertical y-axis behavior.
-        let label = match fmt {
-            Some(f) => format_tick_value_si(*val, tick_step, f),
-            None => format_tick_value(*val, tick_step),
-        };
+        let label = y_tick_label(*val, fmt, tick_step);
 
         // Vertical grid line
         if grid.show_x && should_draw_vertical_grid(&theme.grid_style) {

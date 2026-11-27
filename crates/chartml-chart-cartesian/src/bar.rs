@@ -583,7 +583,14 @@ pub fn render_bar(data: &DataTable, config: &ChartConfig) -> Result<ChartElement
         let raw_max = axis_max.unwrap_or(prelim_data_max);
         if axis_max.is_none() { nice_domain(axis_min.unwrap_or(prelim_data_min), raw_max, 5).1 } else { raw_max }
     };
-    let prelim_domain_min = if is_normalized { 0.0 } else { axis_min.unwrap_or(prelim_data_min) };
+    // The drawn domain rounds its minimum down (nice) when no axis bound is set.
+    let prelim_domain_min = if is_normalized {
+        0.0
+    } else if axis_min.is_none() && axis_max.is_none() {
+        nice_domain(prelim_data_min, prelim_data_max, 5).0
+    } else {
+        axis_min.unwrap_or(prelim_data_min)
+    };
 
     // Generate representative tick label (domain max is typically widest label).
     // For horizontal charts the y-axis shows categories, so use those for left margin.
