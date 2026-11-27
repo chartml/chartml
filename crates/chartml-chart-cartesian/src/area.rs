@@ -66,9 +66,12 @@ pub fn render_area(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     };
     let (prelim_nice_min, prelim_nice_max) =
         crate::helpers::y_axis_domain(prelim_min, prelim_max, crate::helpers::get_y_axis_bounds(config));
-    let area_prelim_fmt = if is_normalized { Some(".0%") } else { y_fmt_ref };
-    // A normalized area's axis is always 0 to 100%, whatever the data's shares.
-    let area_prelim_domain = if is_normalized { (0.0, 1.0) } else { (prelim_nice_min, prelim_nice_max) };
+    // The axis is 0 to 100% only where the chart really normalizes: more than
+    // one colour series (a single series, or none, draws its raw values).
+    let drawn_normalized = is_normalized
+        && color_field.as_ref().is_some_and(|c| data.unique_values(c).len() > 1);
+    let area_prelim_fmt = if drawn_normalized { Some(".0%") } else { y_fmt_ref };
+    let area_prelim_domain = if drawn_normalized { (0.0, 1.0) } else { (prelim_nice_min, prelim_nice_max) };
     let area_prelim_labels = crate::helpers::y_axis_tick_labels(area_prelim_domain, area_prelim_fmt);
 
     // Lay out the legend first so the margins keep room for it.

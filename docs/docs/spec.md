@@ -553,6 +553,8 @@ visualize:
     right:              # Secondary measure axis (dual-axis charts)
       label: "Label"
       format: ",.0f"
+      min: 0            # Optional - as for the left axis
+      max: 100
 
   annotations:        # Optional - reference lines, bands, markers
     - type: line | band

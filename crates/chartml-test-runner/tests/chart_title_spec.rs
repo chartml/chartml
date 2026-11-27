@@ -707,3 +707,63 @@ fn a_dual_axis_line_chart_honours_both_axes_bounds() {
     assert_domain(&y_tick_label_texts(&chart), "-100", "100", "left bounds");
     assert_domain(&right_tick_label_texts(&chart), "-10", "10", "right bounds");
 }
+
+#[test]
+fn wide_axis_bounds_leave_room_for_their_labels() {
+    // `max: 1000000` over data of 40: the labels drawn are `1,000,000`, much
+    // wider than the data's, and the left margin must hold them.
+    for viz in [
+        "  type: line\n  columns: month\n  rows: v\n",
+        "  type: area\n  columns: month\n  rows: v\n",
+        "  type: area\n  mode: stacked\n  columns: month\n  rows: v\n  marks:\n    color: series\n",
+    ] {
+        let chart = bounded_chart(viz, "    left:\n      max: 1000000\n");
+        let labels = y_tick_label_texts(&chart);
+        assert_eq!(labels.last().map(String::as_str), Some("1,000,000"), "{viz}: {labels:?}");
+        assert!(leftmost_y_label_edge(&chart) >= Y_LABEL_CLEARANCE, "{viz}: the widest label is inside the SVG");
+    }
+}
+
+#[test]
+fn a_wide_right_axis_bound_leaves_room_on_the_right() {
+    let viz = "  type: line\n  columns: month\n  rows:\n    - field: v\n    - field: w\n      axis: right\n";
+    let chart = bounded_chart(viz, "    right:\n      max: 1000000\n");
+    let element = chartml().render_from_yaml(&chart).expect("render");
+    let ChartElement::Svg { viewbox, width, .. } = &element else { panic!("svg root") };
+    let canvas = width.unwrap_or(viewbox.width);
+    let mut rightmost = 0.0_f64;
+    fn walk(element: &ChartElement, dx: f64, rightmost: &mut f64) {
+        match element {
+            ChartElement::Svg { children, .. } => children.iter().for_each(|c| walk(c, dx, rightmost)),
+            ChartElement::Group { transform, children, .. } => {
+                let tx = match transform {
+                    Some(Transform::Translate(x, _)) => *x,
+                    _ => 0.0,
+                };
+                children.iter().for_each(|c| walk(c, dx + tx, rightmost));
+            }
+            ChartElement::Text { x, content, anchor: TextAnchor::Start, class, .. }
+                if class.split_whitespace().any(|c| c == "tick-value") =>
+            {
+                let metrics = TextMetrics::from_theme_tick_value(&Theme::default());
+                *rightmost = rightmost.max(dx + x + measure_text(content, &metrics));
+            }
+            _ => {}
+        }
+    }
+    walk(&element, 0.0, &mut rightmost);
+    assert!(rightmost > 0.0 && rightmost <= canvas, "right tick labels end at {rightmost}, canvas {canvas}");
+}
+
+#[test]
+fn a_single_series_normalized_area_leaves_room_for_its_raw_labels() {
+    // One series cannot be normalized: the axis draws the raw values.
+    let mut rows = String::new();
+    for (category, v) in [("Jan", 1_500_000), ("Feb", 2_500_000), ("Mar", 3_500_000)] {
+        rows.push_str(&format!("    - {{ month: {category}, series: a, v: {v} }}\n"));
+    }
+    let chart = format!(
+        "type: chart\nversion: 1\ndata:\n  provider: inline\n  rows:\n{rows}visualize:\n  type: area\n  mode: normalized\n  columns: month\n  rows: v\n  marks:\n    color: series\n"
+    );
+    assert!(leftmost_y_label_edge(&chart) >= Y_LABEL_CLEARANCE, "the widest raw label is inside the SVG");
+}

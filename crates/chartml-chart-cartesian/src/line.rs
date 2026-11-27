@@ -105,16 +105,20 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         .and_then(|a| a.right.as_ref())
         .and_then(|a| a.format.as_deref());
     let right_tick_labels: Vec<String> = if has_right {
-        let right_max = multi_fields.iter()
+        // The labels the right axis draws: its domain is derived as the
+        // drawn one is (the right fields' extent and `axes.right.min/max`).
+        let right_values: Vec<f64> = multi_fields.iter()
             .filter(|f| f.axis.as_deref() == Some("right"))
             .flat_map(|f| {
                 let name = f.field.as_deref().unwrap_or("").to_string();
                 (0..data.num_rows()).filter_map(move |i| data.get_f64(i, &name))
             })
-            .fold(0.0_f64, f64::max);
-        let right_domain_max = if right_max <= 0.0 { 1.0 } else { right_max };
-        let tmp_scale = ScaleLinear::new((0.0, right_domain_max), (0.0, 100.0));
-        tmp_scale.ticks(5).iter().map(|v| format_value(*v, right_fmt)).collect()
+            .collect();
+        let right_min = right_values.iter().cloned().fold(f64::INFINITY, f64::min);
+        let right_max = right_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let right_domain =
+            crate::helpers::y_axis_domain(right_min, right_max, crate::helpers::get_right_axis_bounds(config));
+        crate::helpers::y_axis_tick_labels(right_domain, right_fmt)
     } else {
         vec![]
     };
