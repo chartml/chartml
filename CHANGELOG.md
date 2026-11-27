@@ -99,15 +99,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `lighter`, as the renderer accepts (keywords are lowercase). The renderer
   also keeps accepting a number written as a string (`"600"`) for stored
   specs; the schema does not list that form.
+- **`chartml-chart-table`** (CHA-22): per-column `align` (`left`, `center`,
+  `right`) and `width` (pixels, or `auto`) are drawn, and the cell padding
+  reads `--chartml-table-cell-padding` with the theme's value as the default;
+  all three were in the schema and ignored. `style.pageSize` is in the schema
+  (an integer of 1 or more, default 50). A non-positive pixel width fails with
+  an error.
+- **`chartml-chart-table`**, **`chartml-core`**, **`chartml-leptos`**,
+  **`@chartml/core`**, **`@chartml/react`**, **`@chartml/markdown-react`**
+  (CHA-30): a table with more rows than `style.pageSize` renders one page at a
+  time, with Previous and Next buttons and a status line. The page is chosen
+  by `RenderOptions.table_page` / `ChartConfig.table_page` (`tablePage` in
+  JS, counted from 0; a page past the last is an error) and
+  `ChartML::render_from_yaml_with_params_page`. A host controller moves
+  between pages: `chartml_leptos::TablePager` (used by the Leptos component),
+  `attachTablePager(container, onPageChange)` in `@chartml/core` (used by the
+  React and markdown-react components). Static output (an SVG file, PNG,
+  markdown) shows page 1 with disabled buttons. New in `chartml-core`:
+  `ChartElement::Html` and `HtmlTag`, and the `table_pager` module that holds
+  the `data-chartml-*` names the controllers read.
+- **`chartml-core`**: new public `paint` module (`is_safe_paint`,
+  `validate_chart_spec`, `validate_palette`), the colour and font family
+  check described under Security, and a `title` module (`TitleBand`,
+  `TITLE_CLASS`) that draws the SVG title (CHA-59). New `Theme` methods
+  `table_header_letter_spacing_em`, `validate_table_header_letter_spacing`
+  and `validate_table_cell_padding`.
+- **`chartml-core`**: `ChartRenderer::draws_own_title` (a default method, `false`;
+  a renderer that draws the title itself, such as the metric card, returns
+  `true` so the engine adds none), `svg::is_attr_name`, `HtmlTag::name`,
+  `layout::labels::TEXT_ASCENT_FRACTION`, `TextMetrics::from_theme_data_label`,
+  `GridConfig::from_config_with_defaults`,
+  `MarginConfig::bottom_legend_extent`; and `ColumnAlign`, `ColumnWidth` and
+  `AutoWidth` in `spec`.
+- **`chartml-chart-metric`** (CHA-14): a metric card shorter than 150px uses a
+  compact layout (smaller padding and type) and keeps its trend inside the
+  card; cards with and without a trend keep the same value band. Taller cards
+  are unchanged.
+- **Schema** (CHA-51): the published JSON Schema accepts what the renderer
+  accepts. Data is a name, one descriptor or a map of names to descriptors;
+  sources may be inline, http or host-registered; a chart's `style` is a name
+  or an inline object (with `width`, `curveType` and `fillOpacity`); range-mark
+  rows take `mark`, `upper` and `lower` instead of `field`; the `bubble` chart
+  type, a named `params` block and the axis `nice` flag are accepted. A
+  `type: config` must name a style, as the parser already required.
 
 ### Changed
 
-- **`chartml-core`** (breaking for code that builds these with a struct
-  literal or matches them exhaustively): `ChartElement::Line` has a new
-  `opacity: Option<f64>` field (serialized only when set), `TextRole` has a
-  new `DataLabel` variant, and `MarginConfig` has new `legend_top_height`,
-  `legend_left_width` and `legend_right_width` fields (`Default` still
-  available).
+- **`chartml-core`: breaking Rust API changes since 5.2.0 (the latest
+  crates.io release).** `cargo semver-checks` reports every item in the first
+  three groups; the fourth is a field type change it does not check. A chart
+  crate published before this release does not compile against this
+  `chartml-core`, so every chart crate is released together with it and
+  requires the new core version (CHA-58).
+  - **Struct literals that need new fields** (add the field, or build from
+    `Default`/`..Default::default()` where it exists): `FieldSpec` has new
+    `align: Option<ColumnAlign>` and `width: Option<ColumnWidth>` (table
+    column settings, CHA-22); `ChartConfig` and `RenderOptions` have new
+    `table_page: Option<usize>` (CHA-30) and `title_heading: bool` (CHA-49;
+    `RenderOptions` is still `Default`, `title_heading` is `false`, and on
+    `ChartConfig` it is `#[serde(default)]`); `MarginConfig` has new
+    `legend_top_height`, `legend_left_width` and `legend_right_width`
+    (`Default` still available).
+  - **Enum variants and fields that need handling**: `ChartElement::Line` has
+    a new `opacity: Option<f64>` field (serialized only when set);
+    `ChartElement` has new variants `Html` (with the new `HtmlTag`, CHA-30)
+    and `Title` (CHA-59), so an exhaustive `match` needs arms for them, and
+    the discriminant of `ChartElement::Span` changed (8 to 10), which matters
+    only to code that casts it with `as`; `TextRole` has a new `DataLabel`
+    variant.
+  - **Type change**: `FontSpec.weight` is `Option<FontWeight>`, not
+    `Option<String>` (CHA-47). `FontWeight` is `Number(f64)` or
+    `Text(String)`, so a weight read as text now needs a `match`; building
+    one from a string is `FontWeight::Text(..)`.
+  - **Failures that used to render**: a colour or font family that is unsafe
+    to copy into SVG now fails with `ChartError::InvalidSpec` (see Security),
+    and a style name that is not registered, a font weight outside 1 to 1000,
+    and the other style values listed under Added now fail the same way.
 - **`chartml-chart-cartesian`**: bar, line, area and combo charts reserve
   legend room only when they draw a legend (two or more entries), sized from
   the entries they draw. A chart with a single colour series (or a
@@ -131,6 +198,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`chartml-render`**: `render_to_png` and `render_to_png_async` size the
   PNG canvas from the rendered chart (a style's height beats the requested
   height), so the image is no longer cropped or padded with blank space.
+- **`chartml-chart-metric`**: a metric card with a `title` and no `label` shows
+  the title once. Where the host draws the title as a heading above the card
+  (the Leptos component) the card holds no label of its own; where the SVG is
+  shown alone (`renderToSvg`, `render_to_png`) the title is the in-card label.
+  The value field's name is the label only when there is neither a title nor a
+  label.
 
 ### Security
 
@@ -152,19 +225,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   references. A value outside that (external `url(...)`, `javascript:`,
   `data:`, `var()`) now fails the render with `ChartError::InvalidSpec`
   naming the field; it is not replaced by a default colour.
-
-### Changed
-
-- **`chartml-chart-metric`**: a metric card with a `title` and no `label` shows
-  the title once. Where the host draws the title as a heading above the card
-  (the Leptos component) the card holds no label of its own; where the SVG is
-  shown alone (`renderToSvg`, `render_to_png`) the title is the in-card label.
-  The value field's name is the label only when there is neither a title nor a
-  label.
-- **`chartml-core`**: new public field `title_heading: bool` on `RenderOptions`
-  (still `Default`, `false`) and on `ChartConfig` (`#[serde(default)]`). Set it
-  to `true` when your host draws `title` itself above the rendered SVG. Code
-  that builds `ChartConfig` with a struct literal must add the field.
 
 ## [4.1.0] - 2026-04-18
 
