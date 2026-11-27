@@ -64,6 +64,11 @@ impl StyleScope {
         Ok(())
     }
 
+    /// Remove every registered config. Named styles stay registered.
+    pub(crate) fn clear_configs(&mut self) {
+        self.configs.clear();
+    }
+
     /// Return `chart` with its effective style resolved into
     /// `visualize.style` and its top-level `style` cleared. Rendering the
     /// result reads every style setting from `visualize.style` alone.
@@ -270,7 +275,8 @@ fn font_weight(weight: &FontWeight, inherited: u16) -> Result<u16, String> {
     };
     match weight {
         FontWeight::Number(n) => numeric(*n),
-        FontWeight::Text(s) => match s.trim().to_ascii_lowercase().as_str() {
+        // Keywords are lowercase, as the schema's `FontWeight` lists them.
+        FontWeight::Text(s) => match s.as_str() {
             "normal" => Ok(400),
             "bold" => Ok(700),
             "bolder" => Ok(match inherited {
@@ -393,7 +399,8 @@ mod tests {
     fn keyword_weights_follow_css() {
         let kw = |s: &str, inherited| font_weight(&FontWeight::Text(s.into()), inherited);
         assert_eq!(kw("normal", 900), Ok(400));
-        assert_eq!(kw("Bold", 100), Ok(700));
+        assert_eq!(kw("bold", 100), Ok(700));
+        assert!(kw("Bold", 100).is_err(), "keywords are lowercase, as in the schema");
         // CSS Fonts 4 relative weights.
         assert_eq!(kw("bolder", 300), Ok(400));
         assert_eq!(kw("bolder", 400), Ok(700));

@@ -1008,3 +1008,32 @@ fn combo_line_labels_follow_their_position() {
         assert_eq!(*label, dot + 15.0, "a bottom label sits below its point");
     }
 }
+
+// --- Configs can be cleared and registered again ----------------------------
+
+#[test]
+fn a_host_clears_and_re_registers_configs_after_a_settings_change() {
+    let workspace = "type: config\nversion: 1\nstyle:\n  colors: [\"#111111\"]\n  height: 300\n";
+    let user_before = "type: config\nversion: 1\nstyle:\n  height: 250\n  grid:\n    color: \"#00ff00\"\n";
+    let user_after = "type: config\nversion: 1\nstyle:\n  height: 260\n";
+    let mut c = with(&[CORPORATE, workspace, user_before]);
+    let svg = render_ok(&c, &chart("", BAR));
+    assert_eq!(svg_height(&svg), 250.0);
+    assert!(tags(&svg, "grid-line").iter().all(|g| attr(g, "stroke") == Some("#00ff00")));
+
+    // The user changes their settings: the host clears its configs and
+    // registers the current ones again. The old user config's fields are gone.
+    c.clear_configs();
+    c.register_component(workspace).expect("workspace config");
+    c.register_component(user_after).expect("new user config");
+    let svg = render_ok(&c, &chart("", BAR));
+    assert_eq!(svg_height(&svg), 260.0, "the new user config's height");
+    assert!(bar_fills(&svg).iter().all(|f| f == "#111111"), "the workspace palette");
+    assert!(
+        tags(&svg, "grid-line").iter().all(|g| attr(g, "stroke") != Some("#00ff00")),
+        "the old user config's grid colour is gone"
+    );
+
+    // Named styles stay registered.
+    assert_eq!(svg_height(&render_ok(&c, &chart("style: corporate", BAR))), 333.0);
+}

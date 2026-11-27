@@ -121,6 +121,15 @@ export class ChartML {
     this.inner.registerComponent(yaml);
   }
 
+  /**
+   * Remove every registered config, keeping styles, sources and params.
+   * Configs cascade, so re-register the current ones (in order) after a
+   * host's defaults change.
+   */
+  clearConfigs(): void {
+    this.inner.clearConfigs();
+  }
+
   // -----------------------------------------------------------------------
   // chartml 5.0 — DataSourceProvider + cache + hooks + async pipeline
   // -----------------------------------------------------------------------

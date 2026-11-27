@@ -983,7 +983,7 @@ A chart's `style` is the name of a Style component or an inline object with thes
 - `fonts.axis` - Axis label font configuration
 - `fonts.dataLabel` - Data label font configuration (family, size, weight, color)
 
-Each font takes `family` (a CSS font family list), `size` (pixels, greater than 0), `weight` and `color`. `weight` is a whole number from 1 to 1000, the form the [JSON schema](/schema/) documents. The CSS keywords `normal` (400), `bold` (700), `bolder` and `lighter` (relative to the default weight for that text, as in CSS) are also accepted, as is a number written as a string (`"600"`). Any other weight, or a size of 0 or less, fails the render with an error naming the field.
+Each font takes `family` (a CSS font family list), `size` (pixels, greater than 0), `weight` and `color`. `weight` is a whole number from 1 to 1000, or one of the CSS keywords `normal` (400), `bold` (700), `bolder` and `lighter` (relative to the default weight for that text, as in CSS). A number written as a string (`"600"`) is also accepted, for specs stored before numeric weights. Any other weight, or a size of 0 or less, fails the render with an error naming the field.
 
 Where each font applies:
 - `fonts.title` - the chart title wherever it is drawn: the heading a host draws above the chart (the Leptos component; hosts read it from the chart's resolved theme), and the in-card title of a metric card shown without a heading (family, weight and colour; the card sizes its own text to fit).
@@ -1220,6 +1220,7 @@ When resolving a chart's style, the system cascades through six levels of specif
 **What the engine applies**: for every chart the rendering engine merges, in order: each registered Config's style, in the order the Configs were registered (a host registers its system, workspace and user defaults as Config components, in that order: levels 1 to 3), then a Config in the chart's own document (the dashboard's, level 4), then the chart's own `style:` (a style name or an inline object, level 5), then `visualize.style` (level 6). The engine's theme and default palette sit beneath every level.
 
 - Configs cascade: a later Config overrides only the fields its style sets, so a dashboard Config that sets only `height` keeps the workspace palette and fonts.
+- A host whose defaults change (for example, a user edits their chart style settings) calls `clear_configs()` (`clearConfigs()` in JavaScript) and registers the current Configs again, in order. Registered Styles stay.
 - Registering a Style with a name already in use replaces the earlier one.
 - A Config may be registered before the Style it names; names are looked up when a chart renders.
 - A chart, or a Config, that names a Style that is not registered fails the render with an error naming the style and where it was referenced. It never falls back to the defaults.

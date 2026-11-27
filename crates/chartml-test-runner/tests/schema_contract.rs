@@ -416,3 +416,36 @@ fn every_chart_spec_in_the_repository_validates() {
         .collect();
     assert!(failures.is_empty(), "{} specs fail the schema:\n{}", failures.len(), failures.join("\n"));
 }
+
+/// CHA-48: the schema's `FontWeight` accepts the weights the renderer accepts
+/// (a whole number from 1 to 1000, or normal, bold, bolder, lighter) and
+/// rejects the ones it rejects, in a Style component and an inline style. The
+/// renderer alone also takes a number written as a string (`"600"`), kept for
+/// stored specs.
+#[test]
+fn font_weight_schema_matches_the_renderer() {
+    let v = validator();
+    let style = |w: &str| format!("type: style\nversion: 1\nname: w\nfonts:\n  title:\n    weight: {w}\n");
+    let inline = |w: &str| {
+        chart(&format!(
+            "data:\n  provider: inline\n  rows: [{{ a: x, b: 1 }}]\nvisualize:\n  type: bar\n  columns: a\n  rows: b\n  style:\n    fonts:\n      axis:\n        weight: {w}\n"
+        ))
+    };
+    for good in ["1", "600", "1000", "normal", "bold", "bolder", "lighter"] {
+        for yaml in [style(good), inline(good)] {
+            assert!(schema_errors(&v, &yaml).is_empty(), "schema rejects weight {good}: {yaml}");
+        }
+        chartml_core::ChartML::new()
+            .register_component(&style(good))
+            .unwrap_or_else(|e| panic!("renderer rejects weight {good}: {e}"));
+    }
+    for bad in ["0", "1001", "550.5", "heavy", "\"BOLDEST\""] {
+        for yaml in [style(bad), inline(bad)] {
+            assert!(!schema_errors(&v, &yaml).is_empty(), "schema accepts weight {bad}: {yaml}");
+        }
+        assert!(
+            chartml_core::ChartML::new().register_component(&style(bad)).is_err(),
+            "renderer accepts weight {bad}"
+        );
+    }
+}

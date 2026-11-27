@@ -134,7 +134,7 @@
               "properties": {
                 "family": { "type": "string" },
                 "size": { "type": "number" },
-                "weight": { "type": "number" },
+                "weight": { "$ref": "#/definitions/FontWeight" },
                 "color": { "type": "string" }
               }
             },
@@ -143,7 +143,7 @@
               "properties": {
                 "family": { "type": "string" },
                 "size": { "type": "number" },
-                "weight": { "type": "number" },
+                "weight": { "$ref": "#/definitions/FontWeight" },
                 "color": { "type": "string" }
               }
             },
@@ -152,7 +152,7 @@
               "properties": {
                 "family": { "type": "string" },
                 "size": { "type": "number" },
-                "weight": { "type": "number" },
+                "weight": { "$ref": "#/definitions/FontWeight" },
                 "color": { "type": "string" }
               }
             }
@@ -895,6 +895,13 @@
         }
       }
     },
+    "FontWeight": {
+      "description": "Font weight: a whole number from 1 to 1000, or a CSS keyword (normal = 400, bold = 700; bolder and lighter are relative to the default weight for that text)",
+      "oneOf": [
+        { "type": "number", "minimum": 1, "maximum": 1000, "multipleOf": 1 },
+        { "type": "string", "enum": ["normal", "bold", "bolder", "lighter"] }
+      ]
+    },
     "StyleProperties": {
       "type": "object",
       "description": "Inline style properties. The parser ignores keys it does not know, so this definition is open; Style closes it.",
@@ -967,7 +974,7 @@
               "properties": {
                 "family": { "type": "string" },
                 "size": { "type": "number" },
-                "weight": { "type": "number" },
+                "weight": { "$ref": "#/definitions/FontWeight" },
                 "color": { "type": "string" }
               }
             },
@@ -976,7 +983,7 @@
               "properties": {
                 "family": { "type": "string" },
                 "size": { "type": "number" },
-                "weight": { "type": "number" },
+                "weight": { "$ref": "#/definitions/FontWeight" },
                 "color": { "type": "string" }
               }
             },
@@ -985,7 +992,7 @@
               "properties": {
                 "family": { "type": "string" },
                 "size": { "type": "number" },
-                "weight": { "type": "number" },
+                "weight": { "$ref": "#/definitions/FontWeight" },
                 "color": { "type": "string" }
               }
             }

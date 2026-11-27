@@ -145,9 +145,10 @@ fn examples_md_style_block_parses() {
     }
 }
 
-/// Every `weight` property in the published schema is a number (the documented
-/// form), and the parser accepts a number there. Strings stay accepted for
-/// compatibility but are deliberately not in the schema.
+/// Every `weight` property in the published schema is the shared `FontWeight`
+/// definition (a whole number from 1 to 1000, or a CSS keyword), and the
+/// parser accepts a number there. schema_contract.rs checks the schema and the
+/// renderer agree on each form.
 #[test]
 fn schema_and_parser_agree_on_weight() {
     let schema: serde_json::Value = serde_json::from_str(
@@ -174,7 +175,7 @@ fn schema_and_parser_agree_on_weight() {
     // title, axis and dataLabel, in both the Style component and inline styles.
     assert!(weights.len() == 6, "expected the schema's font weight properties, found {}", weights.len());
     for w in &weights {
-        assert_eq!(w["type"], "number", "schema weight must be a number: {w}");
+        assert_eq!(w["$ref"], "#/definitions/FontWeight", "schema weight must use FontWeight: {w}");
     }
 
     assert!(spec::parse(&style_yaml("600")).is_ok());

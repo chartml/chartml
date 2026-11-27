@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   too. A chart or config naming a style that is not registered fails with
   `ChartError::InvalidSpec` naming the style; it never falls back to the
   defaults. A re-registered style replaces the earlier one of that name.
+  `ChartML::clear_configs` (`clearConfigs()` in `@chartml/core`) removes the
+  registered configs so a host can register its current defaults again.
   `register_component` with several components registers all of them or,
   when one fails, none.
 - **`chartml-core`**: style fields that were parsed but never drawn now take
@@ -76,7 +78,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   font and colour, and the loading placeholder reserves the resolved style's
   height, including a height from a named or config style.
 - **Schema**: `fonts.axis.weight` and `fonts.dataLabel.color`, which the
-  engine applies, are documented.
+  engine applies, are documented. Every font `weight` is the new `FontWeight`
+  definition: a whole number from 1 to 1000, or `normal`, `bold`, `bolder` or
+  `lighter`, as the renderer accepts (keywords are lowercase). The renderer
+  also keeps accepting a number written as a string (`"600"`) for stored
+  specs; the schema does not list that form.
 
 ### Changed
 

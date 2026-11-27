@@ -997,8 +997,8 @@ fn render_single_series_bars(
             if let Some(dl) = get_data_labels_config(config).filter(|dl| dl.show == Some(true)) {
                 let label_y = match dl.position.as_deref() {
                     Some("center") => rect_y + bar_height / 2.0,
-                    Some("bottom") => rect_y + bar_height - 5.0,
-                    _ => if val >= 0.0 { rect_y - 5.0 } else { rect_y + bar_height + 12.0 }, // "top" or default
+                    Some("bottom") => rect_y + bar_height - DATA_LABEL_OFFSET,
+                    _ => if val >= 0.0 { rect_y - DATA_LABEL_OFFSET } else { rect_y + bar_height + 12.0 }, // "top" or default
                 };
                 elements.push(bar_data_label(
                     (x + band.bandwidth() / 2.0, label_y),

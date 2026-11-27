@@ -191,6 +191,15 @@ impl ChartML {
         Ok(())
     }
 
+    /// Remove every registered `type: config`, keeping registered styles,
+    /// sources and params. Configs cascade (each merges over the ones
+    /// registered before it), so a host whose defaults change, for example a
+    /// user editing their chart style settings, clears the configs and
+    /// registers the current ones again, in order (system, workspace, user).
+    pub fn clear_configs(&mut self) {
+        self.styles.clear_configs();
+    }
+
     /// Register a named source directly from a DataTable.
     pub fn register_source(&mut self, name: &str, data: DataTable) {
         self.sources.insert(name.to_string(), data);
