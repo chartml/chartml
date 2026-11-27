@@ -102,6 +102,103 @@ pub fn accept() {
     );
 }
 
+/// Result of comparing a directory of rendered SVGs with the golden baseline.
+pub struct Comparison {
+    pub unchanged: u32,
+    /// Charts whose SVG differs from the golden, with a short description of what changed.
+    pub changed: Vec<(String, Vec<String>)>,
+    /// Charts rendered with no golden SVG to compare against.
+    pub new_specs: Vec<String>,
+    /// Golden SVGs for which no chart was rendered.
+    pub removed: Vec<String>,
+}
+
+impl Comparison {
+    pub fn total_changes(&self) -> usize {
+        self.changed.len() + self.new_specs.len() + self.removed.len()
+    }
+
+    /// The human-readable report `--diff` prints. It names every chart that differs.
+    pub fn report(&self) -> String {
+        use std::fmt::Write;
+        let mut out = String::new();
+        let _ = writeln!(out, "=== Regression Check ===\n");
+        let _ = writeln!(out, "Unchanged: {}", self.unchanged);
+        let _ = writeln!(out, "Changed:   {}", self.changed.len());
+        let _ = writeln!(out, "New:       {}", self.new_specs.len());
+        let _ = writeln!(out, "Removed:   {}", self.removed.len());
+
+        if !self.changed.is_empty() {
+            let _ = writeln!(out, "\nChanged specs:");
+            for (spec, diffs) in &self.changed {
+                let spec_name = spec.replace(".svg", "");
+                if diffs.is_empty() {
+                    let _ = writeln!(out, "  {} — content changed (no specific attributes identified)", spec_name);
+                } else {
+                    let _ = writeln!(out, "  {} — {}", spec_name, diffs.join(", "));
+                }
+            }
+        }
+
+        if !self.new_specs.is_empty() {
+            let _ = writeln!(out, "\nNew specs (no golden baseline):");
+            for spec in &self.new_specs {
+                let _ = writeln!(out, "  {}", spec.replace(".svg", ""));
+            }
+        }
+
+        if !self.removed.is_empty() {
+            let _ = writeln!(out, "\nRemoved specs (in golden but not current):");
+            for spec in &self.removed {
+                let _ = writeln!(out, "  {}", spec.replace(".svg", ""));
+            }
+        }
+
+        if self.total_changes() == 0 {
+            let _ = writeln!(out, "\nNo regressions detected.");
+        } else {
+            let _ = writeln!(out, "\n{} spec(s) differ from golden baseline.", self.total_changes());
+            let _ = writeln!(out, "Review changes, then run --accept to update the baseline.");
+        }
+        out
+    }
+}
+
+/// Compare the SVGs under `current_path` with those under `golden_path`.
+pub fn compare(current_path: &Path, golden_path: &Path) -> Comparison {
+    let mut current_svgs = BTreeMap::new();
+    let mut golden_svgs = BTreeMap::new();
+    collect_svgs(current_path, current_path, &mut current_svgs);
+    collect_svgs(golden_path, golden_path, &mut golden_svgs);
+
+    let mut comparison = Comparison { unchanged: 0, changed: Vec::new(), new_specs: Vec::new(), removed: Vec::new() };
+
+    for (rel, current_file) in &current_svgs {
+        if let Some(golden_file) = golden_svgs.get(rel) {
+            let current_bytes = fs::read(current_file).unwrap_or_default();
+            let golden_bytes = fs::read(golden_file).unwrap_or_default();
+
+            if current_bytes == golden_bytes {
+                comparison.unchanged += 1;
+            } else {
+                let current_str = String::from_utf8_lossy(&current_bytes);
+                let golden_str = String::from_utf8_lossy(&golden_bytes);
+                let diffs = describe_svg_changes(&golden_str, &current_str);
+                comparison.changed.push((rel.clone(), diffs));
+            }
+        } else {
+            comparison.new_specs.push(rel.clone());
+        }
+    }
+
+    for rel in golden_svgs.keys() {
+        if !current_svgs.contains_key(rel) {
+            comparison.removed.push(rel.clone());
+        }
+    }
+    comparison
+}
+
 /// Compare current SVGs against golden baseline. Returns true if there are changes.
 pub fn diff() -> bool {
     let current_path = Path::new(CURRENT_DIR);
@@ -117,85 +214,9 @@ pub fn diff() -> bool {
         std::process::exit(1);
     }
 
-    let mut current_svgs = BTreeMap::new();
-    let mut golden_svgs = BTreeMap::new();
-    collect_svgs(current_path, current_path, &mut current_svgs);
-    collect_svgs(golden_path, golden_path, &mut golden_svgs);
-
-    let mut unchanged = 0u32;
-    let mut changed: Vec<(String, Vec<String>)> = Vec::new();
-    let mut new_specs: Vec<String> = Vec::new();
-    let mut removed: Vec<String> = Vec::new();
-
-    // Check all current SVGs against golden
-    for (rel, current_file) in &current_svgs {
-        if let Some(golden_file) = golden_svgs.get(rel) {
-            let current_bytes = fs::read(current_file).unwrap_or_default();
-            let golden_bytes = fs::read(golden_file).unwrap_or_default();
-
-            if current_bytes == golden_bytes {
-                unchanged += 1;
-            } else {
-                let current_str = String::from_utf8_lossy(&current_bytes);
-                let golden_str = String::from_utf8_lossy(&golden_bytes);
-                let diffs = describe_svg_changes(&golden_str, &current_str);
-                changed.push((rel.clone(), diffs));
-            }
-        } else {
-            new_specs.push(rel.clone());
-        }
-    }
-
-    // Check for removed specs (in golden but not current)
-    for rel in golden_svgs.keys() {
-        if !current_svgs.contains_key(rel) {
-            removed.push(rel.clone());
-        }
-    }
-
-    // Report
-    let total_changes = changed.len() + new_specs.len() + removed.len();
-
-    println!("=== Regression Check ===\n");
-    println!("Unchanged: {}", unchanged);
-    println!("Changed:   {}", changed.len());
-    println!("New:       {}", new_specs.len());
-    println!("Removed:   {}", removed.len());
-
-    if !changed.is_empty() {
-        println!("\nChanged specs:");
-        for (spec, diffs) in &changed {
-            let spec_name = spec.replace(".svg", "");
-            if diffs.is_empty() {
-                println!("  {} — content changed (no specific attributes identified)", spec_name);
-            } else {
-                println!("  {} — {}", spec_name, diffs.join(", "));
-            }
-        }
-    }
-
-    if !new_specs.is_empty() {
-        println!("\nNew specs (no golden baseline):");
-        for spec in &new_specs {
-            println!("  {}", spec.replace(".svg", ""));
-        }
-    }
-
-    if !removed.is_empty() {
-        println!("\nRemoved specs (in golden but not current):");
-        for spec in &removed {
-            println!("  {}", spec.replace(".svg", ""));
-        }
-    }
-
-    if total_changes == 0 {
-        println!("\nNo regressions detected.");
-    } else {
-        println!("\n{} spec(s) differ from golden baseline.", total_changes);
-        println!("Review changes, then run --accept to update the baseline.");
-    }
-
-    total_changes > 0
+    let comparison = compare(current_path, golden_path);
+    print!("{}", comparison.report());
+    comparison.total_changes() > 0
 }
 
 /// Compare two SVG strings and describe what changed in human-readable terms.
