@@ -358,7 +358,7 @@ data:
 
 **Option 5: Named sources (map)**
 
-A map from names you choose to data descriptors. Each entry takes the keys of a data descriptor (`provider`, `rows`, `url`, `endpoint`, `datasource`, `query`, `cache`) and no others. A transform joins the sources.
+A map from names you choose to data descriptors. Each entry takes the keys of a data descriptor (`provider`, `rows`, `url`, `endpoint`, `datasource`, `query`, `cache`) and no others. A transform joins the sources. To load data an entry needs `rows`, a `url`, a `datasource` or a `provider` the host registered.
 ```yaml
 data:
   visitors:
@@ -966,13 +966,13 @@ fonts:
 - `strokeWidth` - Line thickness (number)
 - `legend` - Legend configuration (position, orientation)
 
-**Chart-level properties** (an inline `style` on a chart or in `visualize`, or in a Config; not in a Style component):
+**Inline style properties** (accepted in an inline `style` on a chart, in `visualize.style`, or in a Config; not in a Style component). The engine reads them from `visualize.style`:
 - `width` - Chart width in pixels
 - `curveType` - Line curve: `linear` or `step`; anything else draws the default smooth curve
 - `fillOpacity` - Fill opacity, 0 to 1
 - `pageSize` - Table-only rows per page (see Table)
 
-A chart's `style` is the name of a Style component or an inline object with these properties. A Config's `style` takes the same two forms.
+A chart's `style` is the name of a Style component or an inline object with these properties. A Config's `style` takes the same two forms. The schema accepts both forms; where a host applies a chart-level or Config style is up to the host.
 
 **Typography (Optional):**
 - `fonts.title` - Title font configuration (family, size, weight, color)

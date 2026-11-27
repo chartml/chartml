@@ -19,7 +19,7 @@
         "version": { "const": 1 },
         "name": { "type": "string", "description": "Unique source identifier" },
         "provider": { "type": "string", "description": "Data provider: inline, http, or a provider the host registers" },
-        "rows": { "type": "array", "description": "Inline data rows (provider: inline)" },
+        "rows": { "type": "array", "items": { "type": "object" }, "description": "Inline data rows, each an object (provider: inline)" },
         "url": { "type": "string", "description": "Request URL (provider: http)" },
         "endpoint": { "type": "string", "description": "API endpoint URL, for a host-registered provider that reads it" },
         "cache": { "$ref": "#/definitions/Cache" }
@@ -318,11 +318,11 @@
     },
     "DataDescriptor": {
       "type": "object",
-      "description": "Where one source's data comes from: inline rows, a url, an endpoint, or a datasource with a query. Every key is optional; the provider is inferred from the keys when it is omitted.",
+      "description": "Where one source's data comes from: inline rows, a url, an endpoint, or a datasource with a query. Every key is optional and the provider may be omitted, but to load data a descriptor needs `rows`, a `url`, a `datasource`, or a `provider` the host registered.",
       "additionalProperties": false,
       "properties": {
         "provider": { "type": "string", "description": "Data provider: inline, http, datasource, or a provider the host registers" },
-        "rows": { "type": "array", "description": "Inline data rows" },
+        "rows": { "type": "array", "items": { "type": "object" }, "description": "Inline data rows, each an object" },
         "url": { "type": "string", "description": "Request URL (provider: http)" },
         "endpoint": { "type": "string", "description": "API endpoint URL, for a host-registered provider that reads it" },
         "datasource": { "type": "string", "description": "Name of a datasource the host resolves" },
@@ -788,6 +788,18 @@
         },
         "x": {
           "$ref": "#/definitions/Axis"
+        },
+        "columns": {
+          "$ref": "#/definitions/Axis",
+          "description": "Alias of x: the category axis"
+        },
+        "bottom": {
+          "$ref": "#/definitions/Axis",
+          "description": "Alias of x: the category axis"
+        },
+        "rows": {
+          "$ref": "#/definitions/Axis",
+          "description": "Alias of left: the measure axis"
         }
       }
     },

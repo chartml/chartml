@@ -276,6 +276,16 @@ fn axis_nice_and_axis_aliases() {
 }
 
 #[test]
+fn axis_aliases_are_checked_like_the_axes_they_stand_for() {
+    for alias in ["bottom", "columns", "rows"] {
+        let bad = chart(&format!(
+            "data: d\nvisualize:\n  type: bar\n  columns: month\n  rows: revenue\n  axes:\n    {alias}:\n      min: low\n"
+        ));
+        assert_rejected(&format!("axes.{alias} with a text min"), &bad);
+    }
+}
+
+#[test]
 fn row_line_style_and_annotation_style() {
     let yaml = chart(
         "data: d\nvisualize:\n  type: line\n  columns: month\n  rows:\n    - field: revenue\n      lineStyle: dashed\n  annotations:\n    - type: line\n      axis: left\n      value: 100\n      style: dotted\n",
@@ -285,6 +295,8 @@ fn row_line_style_and_annotation_style() {
 
 #[test]
 fn version_must_be_the_integer_one() {
+    // The language version is 1. The parser reads any integer and does not
+    // enforce it, so the pin to 1 is the schema's published contract only.
     assert_rejected("text version", &format!("type: chart\nversion: \"one\"\ndata: d\n{BAR}"));
     let two = format!("type: chart\nversion: 2\ndata: d\n{BAR}");
     assert!(!schema_errors(&validator(), &two).is_empty(), "the language version is 1");
@@ -313,32 +325,71 @@ fn yaml_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// Split a multi-document YAML file the way `spec::parse` does: on a line that
+/// is exactly `---` (trailing whitespace ignored).
+fn documents(text: &str) -> Vec<String> {
+    let mut docs = vec![String::new()];
+    for line in text.lines() {
+        if line.trim_end() == "---" {
+            docs.push(String::new());
+        } else if let Some(last) = docs.last_mut() {
+            last.push_str(line);
+            last.push('\n');
+        }
+    }
+    docs.into_iter().filter(|d| !d.trim().is_empty()).collect()
+}
+
+/// Every chart spec the repository renders in its tests validates against the
+/// schema: the `chart:` block of each `tests/charts` spec (except the ones that
+/// expect an error) and each document of `fixtures/`.
 #[test]
 fn every_chart_spec_in_the_repository_validates() {
     let v = validator();
+    let mut instances: Vec<(String, serde_json::Value)> = Vec::new();
+
     let mut files = Vec::new();
     yaml_files(&workspace_root().join("tests/charts"), &mut files);
-    yaml_files(&workspace_root().join("fixtures"), &mut files);
     files.sort();
-    assert!(files.len() > 100, "found only {} spec files", files.len());
-    let mut failures = Vec::new();
+    let chart_spec_files = files.len();
     for file in &files {
         let text = fs::read_to_string(file).expect("read spec");
-        if spec::parse(&text).is_err() {
-            continue; // not a spec the parser supports; covered by the negative cases
+        let value: serde_yaml::Value =
+            serde_yaml::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
+        let expects_error = value
+            .get("assertions")
+            .and_then(|a| a.get("expect_error"))
+            .and_then(serde_yaml::Value::as_bool)
+            .unwrap_or(false);
+        if expects_error {
+            continue;
         }
-        let docs: Vec<&str> = text.split("\n---").collect();
-        for doc in docs.iter().filter(|d| !d.trim().is_empty()) {
-            let value: serde_yaml::Value = match serde_yaml::from_str(doc) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let json = serde_json::to_value(value).expect("to json");
-            let errors: Vec<String> = v.iter_errors(&json).map(|e| e.to_string()).collect();
-            if !errors.is_empty() {
-                failures.push(format!("{}: {}", file.display(), errors.join("; ")));
-            }
+        let chart = value.get("chart").unwrap_or_else(|| panic!("{}: no `chart` key", file.display()));
+        instances.push((file.display().to_string(), serde_json::to_value(chart).expect("to json")));
+    }
+
+    let mut fixtures = Vec::new();
+    yaml_files(&workspace_root().join("fixtures"), &mut fixtures);
+    fixtures.sort();
+    for file in &fixtures {
+        for doc in documents(&fs::read_to_string(file).expect("read fixture")) {
+            let value: serde_yaml::Value =
+                serde_yaml::from_str(&doc).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
+            instances.push((file.display().to_string(), serde_json::to_value(value).expect("to json")));
         }
     }
-    assert!(failures.is_empty(), "{} specs the parser accepts fail the schema:\n{}", failures.len(), failures.join("\n"));
+
+    assert!(
+        instances.len() > 150 && chart_spec_files > 150,
+        "only {} specs were validated, from {chart_spec_files} chart spec files",
+        instances.len()
+    );
+    let failures: Vec<String> = instances
+        .iter()
+        .filter_map(|(name, json)| {
+            let errors: Vec<String> = v.iter_errors(json).map(|e| e.to_string()).collect();
+            (!errors.is_empty()).then(|| format!("{name}: {}", errors.join("; ")))
+        })
+        .collect();
+    assert!(failures.is_empty(), "{} specs fail the schema:\n{}", failures.len(), failures.join("\n"));
 }
