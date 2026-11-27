@@ -83,14 +83,17 @@ pub fn parse(input: &str) -> Result<ChartMLSpec, ChartError> {
             if trimmed.is_empty() {
                 continue;
             }
-            // A mapping is one component; a sequence is several (e.g. multiple
-            // charts in one document). Parsing by shape keeps a component's
-            // own error, which names the bad field.
-            if matches!(serde_yaml::from_str::<serde_yaml::Value>(trimmed), Ok(serde_yaml::Value::Sequence(_))) {
-                let array: Vec<Component> = serde_yaml::from_str(trimmed)?;
-                components.extend(array);
-            } else {
-                components.push(serde_yaml::from_str::<Component>(trimmed)?);
+            // A sequence is several components (e.g. multiple charts in one
+            // document), a document with no content (only comments) none, and
+            // anything else one component. Parsing by shape keeps a
+            // component's own error, which names the bad field.
+            match serde_yaml::from_str::<serde_yaml::Value>(trimmed) {
+                Ok(serde_yaml::Value::Null) => {}
+                Ok(serde_yaml::Value::Sequence(_)) => {
+                    let array: Vec<Component> = serde_yaml::from_str(trimmed)?;
+                    components.extend(array);
+                }
+                _ => components.push(serde_yaml::from_str::<Component>(trimmed)?),
             }
         }
         Ok(ChartMLSpec::Array(components))
@@ -411,6 +414,16 @@ style: custom_theme
             }
             other => panic!("Expected Config, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn a_comment_only_document_before_a_separator_adds_nothing() {
+        let yaml = "# Revenue dashboard\n---\ntype: chart\nversion: 1\ndata: sales\nvisualize:\n  type: bar\n  columns: month\n  rows: revenue\n";
+        let ChartMLSpec::Array(components) = parse(yaml).expect("parses") else {
+            panic!("multi-document input parses as an array");
+        };
+        assert_eq!(components.len(), 1);
+        assert!(matches!(components[0], Component::Chart(_)));
     }
 
     #[test]

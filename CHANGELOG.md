@@ -101,9 +101,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`chartml-core`**: a named `type: style` component rejects fields it does
   not know (the schema's `StyleComponent` was already closed), so a misspelled
   theme field fails instead of silently doing nothing. Inline and config
-  styles stay open. A single component that fails to parse now reports its
-  own error (naming the field) instead of "did not match any variant of
-  untagged enum".
+  styles stay open. A component that fails to parse, alone or in a
+  multi-document spec, now reports its own error (naming the field) instead
+  of "did not match any variant of untagged enum".
 - **`chartml-core`**: `fetch` (and so the async render paths, including
   `render_from_yaml_with_data_async`, and the Leptos component) resolves
   `type: params` defaults from the chart's own document,
@@ -120,7 +120,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`chartml-core`**: a font family in a chart spec (`fonts.title`,
   `fonts.axis`, `fonts.dataLabel`, at any style level) may hold only letters,
-  digits, spaces, commas, hyphens, underscores and paired quotes. Families
+  digits, spaces, commas, hyphens and underscores, with each family name
+  optionally in one pair of matching quotes. The check sits with the colour
+  check, so every place colours are checked (including the final render
+  stage) checks families too. Families
   reach SVG attributes and HTML inline `style` strings (the Leptos title
   heading, a metric card's title), so anything else, which could inject CSS
   such as a `background-image: url(...)` that makes the browser fetch a URL,
