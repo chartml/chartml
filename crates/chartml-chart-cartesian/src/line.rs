@@ -9,9 +9,8 @@ use chartml_core::shapes::LineGenerator;
 
 use chartml_core::layout::labels::{LabelStrategy, LabelStrategyConfig, TextMetrics};
 
-use chartml_core::layout::legend::{calculate_legend_layout, LegendConfig};
 
-use crate::helpers::{GridConfig, LegendMark, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, generate_legend_with_mark, get_color_field, get_field_name, get_x_format, get_y_format, nice_domain, offset_element};
+use crate::helpers::{cartesian_grid, LegendMark, emit_zero_line_if_crosses, format_value, generate_annotations, generate_x_axis, generate_y_axis_numeric, generate_y_axis_numeric_right, get_color_field, legend_group, plan_legend, theme_legend_config, get_field_name, get_x_format, get_y_format, nice_domain, offset_element};
 
 pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElement, ChartError> {
     use chartml_core::spec::{FieldRef, FieldRefItem, FieldSpec};
@@ -124,8 +123,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         vec![]
     };
 
-    // Pre-compute legend height so the bottom margin accounts for multi-row legends.
-    let legend_height = if has_series {
+    // Lay out the legend first so the margins keep room for it.
+    let legend = if has_series {
         let legend_series_names: Vec<String> = if is_multi_field {
             multi_fields.iter()
                 // Range marks render as shaded bands, not a legend entry; skip them.
@@ -138,14 +137,11 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         } else {
             vec![]
         };
-        let legend_config = LegendConfig {
-            text_metrics: TextMetrics::from_theme_legend(&config.theme),
-            ..LegendConfig::default()
-        };
-        calculate_legend_layout(&legend_series_names, &config.colors, config.width, &legend_config).total_height
+        plan_legend(config, &legend_series_names, &config.colors, theme_legend_config(&config.theme))?
     } else {
-        0.0
+        None
     };
+    let legend_reserve = legend.as_ref().map(|l| l.reserve()).unwrap_or_default();
 
     let has_y_axis_label = config.visualize.axes.as_ref()
         .and_then(|a| a.left.as_ref())
@@ -155,9 +151,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         .and_then(|a| a.x.as_ref())
         .and_then(|a| a.label.as_ref())
         .is_some();
-    let margin_config = MarginConfig {
+    let mut margin_config = MarginConfig {
         has_title: config.title.is_some(),
-        legend_height,
         has_y_axis_label,
         has_x_axis_label,
         x_label_strategy_margin: x_extra_margin,
@@ -168,6 +163,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
         ..Default::default()
     };
+    legend_reserve.apply_to(&mut margin_config);
     let margins = calculate_margins(&margin_config);
 
     let inner_width = margins.inner_width(config.width);
@@ -245,7 +241,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     // Title is rendered as HTML outside the SVG — not added here.
 
     // Axes — read format string from spec
-    let grid = GridConfig::from_config(config);
+    let grid = cartesian_grid(config);
 
     let bottom_axis_label = config.visualize.axes.as_ref()
         .and_then(|a| a.x.as_ref())
@@ -314,7 +310,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
     // Right axis title label — rendered manually with absolute positioning
     if has_right {
         if let Some(label) = config.visualize.axes.as_ref().and_then(|a| a.right.as_ref()).and_then(|a| a.label.clone()) {
-            let rx = config.width - 12.0;
+            let rx = config.width - 12.0 - legend_reserve.right_inset();
             let ts = TextStyle::for_role(&config.theme, TextRole::AxisLabel);
             axis_elements.push(ChartElement::Text {
                 x: rx,
@@ -328,7 +324,7 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                 font_weight: ts.font_weight,
                 letter_spacing: ts.letter_spacing,
                 text_transform: ts.text_transform,
-                fill: Some(config.theme.text_secondary.clone()),
+                fill: Some(config.theme.axis_text_color().to_string()),
                 class: "axis-label".to_string(),
                 data: None,
             });
@@ -371,6 +367,8 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
         _ => chartml_core::shapes::CurveType::MonotoneX,
     };
     let line_gen = LineGenerator::new().curve(curve_type);
+    // `style.showDots: false` draws no point markers on lines (default: drawn).
+    let show_dots = config.visualize.style.as_ref().and_then(|s| s.show_dots).unwrap_or(true);
     let bandwidth = band.bandwidth();
     let mut line_elements = Vec::new();
 
@@ -515,19 +513,21 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             }
 
             // Hover dots
-            let dot_r = config.theme.dot_radius as f64;
-            for (i, &(px, py)) in points.iter().enumerate() {
-                let (ref cat, val) = point_data[i];
-                if let Some(halo) = emit_dot_halo_if_enabled(&config.theme, px, py, dot_r) {
-                    line_elements.push(halo);
+            if show_dots {
+                let dot_r = config.theme.dot_radius as f64;
+                for (i, &(px, py)) in points.iter().enumerate() {
+                    let (ref cat, val) = point_data[i];
+                    if let Some(halo) = emit_dot_halo_if_enabled(&config.theme, px, py, dot_r) {
+                        line_elements.push(halo);
+                    }
+                    line_elements.push(ChartElement::Circle {
+                        cx: px, cy: py, r: dot_r,
+                        fill: color.clone(),
+                        stroke: Some(config.theme.bg.clone()),
+                        class: "chartml-line-dot dot-marker".to_string(),
+                        data: Some(ElementData::new(cat, format_value(val, fmt_for_field)).with_series(&label)),
+                    });
                 }
-                line_elements.push(ChartElement::Circle {
-                    cx: px, cy: py, r: dot_r,
-                    fill: color.clone(),
-                    stroke: Some(config.theme.bg.clone()),
-                    class: "chartml-line-dot dot-marker".to_string(),
-                    data: Some(ElementData::new(cat, format_value(val, fmt_for_field)).with_series(&label)),
-                });
             }
 
             // Data labels (if configured on this field spec)
@@ -540,18 +540,19 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
                             Some("bottom") => py + 15.0,
                             _ => py - 10.0,
                         };
+                        let dl_ts = TextStyle::data_label(&config.theme, dl.font_size);
                         line_elements.push(ChartElement::Text {
                             x: px, y: label_y,
                             content: format_value(*val, dl_fmt),
                             anchor: TextAnchor::Middle,
                             dominant_baseline: None,
                             transform: None,
-                            font_family: None,
-                            font_size: Some(dl.font_size.map(|s| format!("{}px", s)).unwrap_or_else(|| "12px".to_string())),
-                            font_weight: None,
+                            font_family: dl_ts.font_family,
+                            font_size: dl_ts.font_size,
+                            font_weight: dl_ts.font_weight,
                             letter_spacing: None,
                             text_transform: None,
-                            fill: Some(dl.color.clone().unwrap_or_else(|| color.clone())),
+                            fill: Some(dl.color.clone().unwrap_or_else(|| config.theme.data_label_color.clone().unwrap_or_else(|| color.clone()))),
                             class: "data-label".to_string(),
                             data: None,
                         });
@@ -563,19 +564,10 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             series_colors.push(color);
         }
 
-        // Legend
-        let legend_config = LegendConfig {
-            text_metrics: TextMetrics::from_theme_legend(&config.theme),
-            ..LegendConfig::default()
-        };
-        let legend_layout = calculate_legend_layout(&series_names, &series_colors, config.width, &legend_config);
-        let legend_y = config.height - legend_layout.total_height - 8.0;
-        let legend_elements = generate_legend_with_mark(&series_names, &series_colors, config.width, legend_y, LegendMark::Line, &config.theme);
-        children.push(ChartElement::Group {
-            class: "legend".to_string(),
-            transform: None,
-            children: legend_elements,
-        });
+        // Legend, in each field's own colour
+        if let Some(legend) = plan_legend(config, &series_names, &series_colors, theme_legend_config(&config.theme))? {
+            children.push(legend_group(&legend, config, LegendMark::Line));
+        }
     } else if let Some(ref color_f) = color_field {
         let series_names = data.unique_values(color_f);
         let groups = data.group_by(color_f);
@@ -637,38 +629,30 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             }
 
             // Hover dots at each data point
-            let dot_r = config.theme.dot_radius as f64;
-            for (i, &(px, py)) in points.iter().enumerate() {
-                let (ref cat, val) = point_data[i];
-                if let Some(halo) = emit_dot_halo_if_enabled(&config.theme, px, py, dot_r) {
-                    line_elements.push(halo);
+            if show_dots {
+                let dot_r = config.theme.dot_radius as f64;
+                for (i, &(px, py)) in points.iter().enumerate() {
+                    let (ref cat, val) = point_data[i];
+                    if let Some(halo) = emit_dot_halo_if_enabled(&config.theme, px, py, dot_r) {
+                        line_elements.push(halo);
+                    }
+                    line_elements.push(ChartElement::Circle {
+                        cx: px,
+                        cy: py,
+                        r: dot_r,
+                        fill: color.clone(),
+                        stroke: Some(config.theme.bg.clone()),
+                        class: "chartml-line-dot dot-marker".to_string(),
+                        data: Some(ElementData::new(cat, format_value(val, y_fmt_ref)).with_series(series_name)),
+                    });
                 }
-                line_elements.push(ChartElement::Circle {
-                    cx: px,
-                    cy: py,
-                    r: dot_r,
-                    fill: color.clone(),
-                    stroke: Some(config.theme.bg.clone()),
-                    class: "chartml-line-dot dot-marker".to_string(),
-                    data: Some(ElementData::new(cat, format_value(val, y_fmt_ref)).with_series(series_name)),
-                });
             }
         }
 
         // Legend
-        let legend_config = LegendConfig {
-            text_metrics: TextMetrics::from_theme_legend(&config.theme),
-            ..LegendConfig::default()
-        };
-        let legend_layout = calculate_legend_layout(&series_names, &config.colors, config.width, &legend_config);
-        let legend_y = config.height - legend_layout.total_height - 8.0;
-        let legend_elements =
-            generate_legend_with_mark(&series_names, &config.colors, config.width, legend_y, LegendMark::Line, &config.theme);
-        children.push(ChartElement::Group {
-            class: "legend".to_string(),
-            transform: None,
-            children: legend_elements,
-        });
+        if let Some(ref legend) = legend {
+            children.push(legend_group(legend, config, LegendMark::Line));
+        }
     } else {
         // Single series
         let mut points: Vec<(f64, f64)> = Vec::new();
@@ -719,21 +703,23 @@ pub fn render_line(data: &DataTable, config: &ChartConfig) -> Result<ChartElemen
             }
 
             // Hover dots at each data point
-            let dot_r = config.theme.dot_radius as f64;
-            for (i, &(px, py)) in points.iter().enumerate() {
-                let (ref cat, val) = point_data[i];
-                if let Some(halo) = emit_dot_halo_if_enabled(&config.theme, px, py, dot_r) {
-                    line_elements.push(halo);
+            if show_dots {
+                let dot_r = config.theme.dot_radius as f64;
+                for (i, &(px, py)) in points.iter().enumerate() {
+                    let (ref cat, val) = point_data[i];
+                    if let Some(halo) = emit_dot_halo_if_enabled(&config.theme, px, py, dot_r) {
+                        line_elements.push(halo);
+                    }
+                    line_elements.push(ChartElement::Circle {
+                        cx: px,
+                        cy: py,
+                        r: dot_r,
+                        fill: color.clone(),
+                        stroke: Some(config.theme.bg.clone()),
+                        class: "chartml-line-dot dot-marker".to_string(),
+                        data: Some(ElementData::new(cat, format_value(val, y_fmt_ref))),
+                    });
                 }
-                line_elements.push(ChartElement::Circle {
-                    cx: px,
-                    cy: py,
-                    r: dot_r,
-                    fill: color.clone(),
-                    stroke: Some(config.theme.bg.clone()),
-                    class: "chartml-line-dot dot-marker".to_string(),
-                    data: Some(ElementData::new(cat, format_value(val, y_fmt_ref))),
-                });
             }
         }
     }

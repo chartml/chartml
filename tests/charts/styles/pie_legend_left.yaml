@@ -1,0 +1,40 @@
+name: "Named style: pie with the legend on the left"
+tags: [style, named-style, legend, legend-left, pie]
+description: >
+  A pie chart whose named style puts the legend at the left. The legend is
+  a vertically centred single column at the left edge; the pie is centred
+  in the space to its right, clear of the legend.
+
+chart:
+  - type: style
+    version: 1
+    name: left_legend
+    colors: ["#1f5aa6", "#d9534f", "#f0a030", "#5cb85c"]
+    legend:
+      position: left
+  - type: chart
+    version: 1
+    title: "Revenue by Region"
+    style: left_legend
+    data:
+      provider: inline
+      rows:
+        - { region: "North America", revenue: 85 }
+        - { region: "Europe", revenue: 67 }
+        - { region: "Asia Pacific", revenue: 52 }
+        - { region: "Latin America", revenue: 31 }
+    visualize:
+      type: pie
+      columns: region
+      rows: revenue
+
+assertions:
+  structure:
+    root: svg
+    slices: 4
+    legend: true
+    legend_entries: 4
+  style:
+    slice_colors: ["#1f5aa6", "#d9534f", "#f0a030", "#5cb85c"]
+    legend_position: left
+    legend_orientation: vertical

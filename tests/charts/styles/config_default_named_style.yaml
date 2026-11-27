@@ -1,0 +1,70 @@
+name: "Config makes a named style the default"
+tags: [style, config, named-style, bar, fonts, grid, data-labels]
+description: >
+  A named style (corporate) is registered with a palette, a grid, a height
+  and axis and data-label fonts, and a config makes it the default. The
+  chart names no style of its own, so it renders with the whole theme:
+  bars in the style's first colour (blue), both grid directions in light
+  green, dashed and at quarter opacity, axis tick labels in 13px Courier
+  New at weight 600 in slate, data labels above the bars in 15px Verdana
+  at weight 700, and a 360px tall chart.
+
+chart:
+  - type: style
+    version: 1
+    name: corporate
+    colors: ["#1f5aa6", "#d9534f"]
+    grid:
+      x: true
+      y: true
+      color: "#7bc47f"
+      opacity: 0.25
+      dashArray: "3,3"
+    height: 360
+    fonts:
+      axis:
+        family: "Courier New, monospace"
+        size: 13
+        weight: 600
+        color: "#445566"
+      dataLabel:
+        family: "Verdana, sans-serif"
+        size: 15
+        weight: 700
+  - type: config
+    version: 1
+    style: corporate
+  - type: chart
+    version: 1
+    title: "Monthly Revenue"
+    data:
+      provider: inline
+      rows:
+        - { month: "Jan", revenue: 120 }
+        - { month: "Feb", revenue: 140 }
+        - { month: "Mar", revenue: 155 }
+        - { month: "Apr", revenue: 130 }
+    visualize:
+      type: bar
+      columns: month
+      rows:
+        field: revenue
+        dataLabels:
+          show: true
+
+assertions:
+  structure:
+    root: svg
+    title_in_svg: false
+    legend: false
+    bars: 4
+    data_labels: 4
+  style:
+    height: 360
+    bar_colors: ["#1f5aa6"]
+    grid_color: "#7bc47f"
+    grid_opacity: 0.25
+    grid_dasharray: "3,3"
+    vertical_grid: true
+    axis_font: { family: "Courier New, monospace", size: "13px", weight: "600", color: "#445566" }
+    data_label_font: { family: "Verdana, sans-serif", size: "15px", weight: "700" }

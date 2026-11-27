@@ -963,9 +963,12 @@ fonts:
 - Colour values (in `colors` and every other `color` field) must be a hex colour, `rgb()`/`rgba()`, `hsl()`/`hsla()`, a CSS colour name, or a same-document reference such as `url(#my-gradient)`. External `url(...)`, `javascript:` and `data:` values fail the render with an error naming the field; they are never replaced by a default.
 - `grid` - Grid line configuration (x/y visibility, color, opacity, dashArray)
 - `height` - Default chart height in pixels
-- `showDots` - Show dots on line charts (boolean)
-- `strokeWidth` - Line thickness (number)
-- `legend` - Legend configuration (position, orientation)
+- `showDots` - Show dots on line charts (boolean, default `true`; `false` draws no point markers)
+- `strokeWidth` - Line thickness in pixels for line paths and area outlines (number, 0 or more)
+- `legend` - Legend configuration:
+  - `position` - `top`, `right`, `bottom` (default), `left` or `none` (no legend, and no room kept for one)
+  - `orientation` - `horizontal` (items side by side, wrapping onto up to three rows) or `vertical` (one item per row). Defaults to `vertical` at the left or right and `horizontal` at the top or bottom. A left or right legend takes at most 30% of the chart width; longer labels end in an ellipsis.
+  - Any other value fails the render with an error naming the field.
 
 **Inline style properties** (accepted in an inline `style` on a chart, in `visualize.style`, or in a Config; not in a Style component). The engine reads them from `visualize.style`:
 - `width` - Chart width in pixels
@@ -973,12 +976,19 @@ fonts:
 - `fillOpacity` - Fill opacity, 0 to 1
 - `pageSize` - Table-only rows per page (see Table)
 
-A chart's `style` is the name of a Style component or an inline object with these properties. A Config's `style` takes the same two forms. The schema accepts both forms; where a host applies a chart-level or Config style is up to the host.
+A chart's `style` is the name of a Style component or an inline object with these properties. A Config's `style` takes the same two forms. The engine applies both as described in [Resolution Order](#resolution-order).
 
 **Typography (Optional):**
 - `fonts.title` - Title font configuration (family, size, weight, color)
 - `fonts.axis` - Axis label font configuration
-- `fonts.dataLabel` - Data label font configuration
+- `fonts.dataLabel` - Data label font configuration (family, size, weight, color)
+
+Each font takes `family` (a CSS font family list), `size` (pixels, greater than 0), `weight` and `color`. `weight` is a whole number from 1 to 1000, or `normal` (400), `bold` (700), `bolder` or `lighter` (relative to the default weight for that text, as in CSS). Any other weight, or a size of 0 or less, fails the render with an error naming the field.
+
+Where each font applies:
+- `fonts.title` - the chart title wherever it is drawn: the heading a host draws above the chart (the Leptos component; hosts read it from the chart's resolved theme), and the in-card title of a metric card shown without a heading (family, weight and colour; the card sizes its own text to fit).
+- `fonts.axis` - axis titles and tick labels on bar, line, area, scatter and bubble charts. Table cells are not axis text and keep the table's own typography.
+- `fonts.dataLabel` - values drawn on bars and line points. A field's own `dataLabels.fontSize` and `dataLabels.color` take precedence.
 
 ### Built-in Color Palettes
 
@@ -1205,7 +1215,15 @@ When resolving a chart's style, the system cascades through six levels of specif
          colors: ["#ff0000"]   # Override just colors
      ```
 
-**Deep Merge Behavior**: Each level is deep-merged with the previous, so you only override what you specify. All other properties are inherited.
+**Deep Merge Behavior**: Each level is deep-merged with the previous, so you only override what you specify. All other properties are inherited. `grid`, each `fonts` role and `legend` merge field by field; a list such as `colors` is replaced whole.
+
+**What the engine applies**: the rendering engine resolves levels 4 to 6 for every chart: the registered (or same-document) Config's style, then the chart's own `style:` (a style name or an inline object), then `visualize.style`. Levels 1 to 3 are a host's: it registers its system, workspace and user defaults as Style and Config components, or sets the engine's theme and default palette, which sit beneath every level.
+
+- Registering a Style with a name already in use replaces the earlier one. Registering a Config replaces the earlier Config.
+- A Config may be registered before the Style it names; names are looked up when a chart renders.
+- A chart, or the Config, that names a Style that is not registered fails the render with an error naming the style and where it was referenced. It never falls back to the defaults.
+- A resolved `height` (from any level) sets the chart's height even when the host passes a container height, as an inline `visualize.style.height` does.
+- Every level's colours pass the same colour check as inline colours, and its font weights, sizes and legend values are validated; an invalid value fails with an error naming the style it came from (for example `style 'corporate_theme'.fonts.title.weight`).
 
 ---
 

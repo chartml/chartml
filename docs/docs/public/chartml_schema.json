@@ -143,6 +143,7 @@
               "properties": {
                 "family": { "type": "string" },
                 "size": { "type": "number" },
+                "weight": { "type": "number" },
                 "color": { "type": "string" }
               }
             },
@@ -151,7 +152,8 @@
               "properties": {
                 "family": { "type": "string" },
                 "size": { "type": "number" },
-                "weight": { "type": "number" }
+                "weight": { "type": "number" },
+                "color": { "type": "string" }
               }
             }
           }
@@ -974,6 +976,7 @@
               "properties": {
                 "family": { "type": "string" },
                 "size": { "type": "number" },
+                "weight": { "type": "number" },
                 "color": { "type": "string" }
               }
             },
@@ -982,7 +985,8 @@
               "properties": {
                 "family": { "type": "string" },
                 "size": { "type": "number" },
-                "weight": { "type": "number" }
+                "weight": { "type": "number" },
+                "color": { "type": "string" }
               }
             }
           }

@@ -6,8 +6,9 @@ use chartml_core::scales::{ScaleLinear, ScaleSqrt};
 use chartml_core::spec::{VisualizeSpec, FieldRef, MarkEncoding};
 use chartml_core::layout::margins::{MarginConfig, calculate_margins};
 use chartml_core::layout::labels::{TextMetrics, approximate_text_width_at, format_tick_value_si, measure_text};
-use chartml_core::layout::legend::{LegendMark, LegendConfig, calculate_legend_layout, generate_legend_elements};
+use chartml_core::layout::legend::{LegendBlock, LegendConfig, LegendMark, LegendPlacement, LEGEND_GAP};
 use chartml_core::theme::GridStyle;
+use chartml_core::layout::GridConfig;
 
 /// Whether horizontal (constant-y) gridlines should be drawn.
 #[inline]
@@ -52,23 +53,26 @@ impl ChartRenderer for ScatterRenderer {
             vec![]
         };
 
-        let has_legend = color_categories.len() > 1;
-        let legend_height = if has_legend {
+        // Lay out the legend first so the margins keep room for it.
+        let legend = if color_categories.len() > 1 {
+            let placement = LegendPlacement::from_style(config.visualize.style.as_ref())?;
             let legend_config = LegendConfig {
                 text_metrics: TextMetrics::from_theme_legend(&config.theme),
                 ..LegendConfig::default()
             };
-            calculate_legend_layout(&color_categories, &config.colors, width, &legend_config).total_height
+            LegendBlock::new(&color_categories, &config.colors, placement, width, height, legend_config)
         } else {
-            0.0
+            None
         };
-        let margin_config = MarginConfig {
-            legend_height,
+        let mut margin_config = MarginConfig {
             chart_height: height,
             tick_value_metrics: TextMetrics::from_theme_tick_value(&config.theme),
             axis_label_metrics: TextMetrics::from_theme_axis_label(&config.theme),
             ..Default::default()
         };
+        if let Some(ref legend) = legend {
+            legend.reserve().apply_to(&mut margin_config);
+        }
         let margins = calculate_margins(&margin_config);
         let inner_width = margins.inner_width(width);
         let inner_height = margins.inner_height(height);
@@ -186,23 +190,26 @@ impl ChartRenderer for ScatterRenderer {
         }.max(1);
 
         // Horizontal grid lines + y-axis ticks
-        let draw_h_grid = should_draw_horizontal_grid(&config.theme.grid_style);
-        let draw_v_grid = should_draw_vertical_grid(&config.theme.grid_style);
+        // Scatter draws both grids by default; `style.grid` overrides that and
+        // sets their colour, opacity and dash pattern.
+        let grid = GridConfig::from_config_with_defaults(config, true, true);
+        let draw_h_grid = grid.show_y && should_draw_horizontal_grid(&config.theme.grid_style);
+        let draw_v_grid = grid.show_x && should_draw_vertical_grid(&config.theme.grid_style);
         for (i, &val) in y_ticks.iter().enumerate() {
             let y = y_scale.map(val);
             // Grid line — gated on grid_style (horizontal: constant y)
             if draw_h_grid {
                 axis_elements.push(ChartElement::Line {
                     x1: margins.left, y1: y, x2: margins.left + inner_width, y2: y,
-                    stroke: config.theme.grid.clone(), stroke_width: Some(config.theme.grid_line_weight as f64),
-                    stroke_dasharray: None, class: "grid-line".to_string(),
+                    stroke: grid.color.clone(), stroke_width: Some(config.theme.grid_line_weight as f64),
+                    stroke_dasharray: grid.dash_array.clone(), opacity: grid.opacity, class: "grid-line".to_string(),
                 });
             }
             // Tick mark — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: margins.left - 5.0, y1: y, x2: margins.left, y2: y,
                 stroke: config.theme.tick.clone(), stroke_width: Some(config.theme.axis_line_weight as f64),
-                stroke_dasharray: None, class: "tick".to_string(),
+                stroke_dasharray: None, opacity: None, class: "tick".to_string(),
             });
             // Label — only if not skipped
             if i % y_skip == 0 {
@@ -218,7 +225,7 @@ impl ChartRenderer for ScatterRenderer {
                     font_weight: ts.font_weight,
                     letter_spacing: ts.letter_spacing,
                     text_transform: ts.text_transform,
-                    fill: Some(config.theme.text_secondary.clone()), class: "tick-label tick-value".to_string(), data: None,
+                    fill: Some(config.theme.axis_text_color().to_string()), class: "tick-label tick-value".to_string(), data: None,
                 });
             }
         }
@@ -256,15 +263,15 @@ impl ChartRenderer for ScatterRenderer {
             if draw_v_grid {
                 axis_elements.push(ChartElement::Line {
                     x1: x, y1: margins.top, x2: x, y2: x_axis_y,
-                    stroke: config.theme.grid.clone(), stroke_width: Some(config.theme.grid_line_weight as f64),
-                    stroke_dasharray: None, class: "grid-line".to_string(),
+                    stroke: grid.color.clone(), stroke_width: Some(config.theme.grid_line_weight as f64),
+                    stroke_dasharray: grid.dash_array.clone(), opacity: grid.opacity, class: "grid-line".to_string(),
                 });
             }
             // Tick mark — always rendered
             axis_elements.push(ChartElement::Line {
                 x1: x, y1: x_axis_y, x2: x, y2: x_axis_y + 5.0,
                 stroke: config.theme.tick.clone(), stroke_width: Some(config.theme.axis_line_weight as f64),
-                stroke_dasharray: None, class: "tick".to_string(),
+                stroke_dasharray: None, opacity: None, class: "tick".to_string(),
             });
             // Label — only if not skipped
             if i % x_skip == 0 {
@@ -279,7 +286,7 @@ impl ChartRenderer for ScatterRenderer {
                     font_weight: ts.font_weight,
                     letter_spacing: ts.letter_spacing,
                     text_transform: ts.text_transform,
-                    fill: Some(config.theme.text_secondary.clone()),
+                    fill: Some(config.theme.axis_text_color().to_string()),
                     class: "tick-label tick-value".to_string(), data: None,
                 });
             }
@@ -289,12 +296,12 @@ impl ChartRenderer for ScatterRenderer {
         axis_elements.push(ChartElement::Line {
             x1: margins.left, y1: margins.top, x2: margins.left, y2: x_axis_y,
             stroke: config.theme.axis_line.clone(), stroke_width: Some(config.theme.axis_line_weight as f64),
-            stroke_dasharray: None, class: "axis-line".to_string(),
+            stroke_dasharray: None, opacity: None, class: "axis-line".to_string(),
         });
         axis_elements.push(ChartElement::Line {
             x1: margins.left, y1: x_axis_y, x2: margins.left + inner_width, y2: x_axis_y,
             stroke: config.theme.axis_line.clone(), stroke_width: Some(config.theme.axis_line_weight as f64),
-            stroke_dasharray: None, class: "axis-line".to_string(),
+            stroke_dasharray: None, opacity: None, class: "axis-line".to_string(),
         });
 
         children.push(ChartElement::Group {
@@ -312,22 +319,10 @@ impl ChartRenderer for ScatterRenderer {
             children: point_elements,
         });
 
-        // Legend — reuse color_categories computed earlier
-        if color_categories.len() > 1 {
-            let legend_config = LegendConfig {
-                text_metrics: TextMetrics::from_theme_legend(&config.theme),
-                ..LegendConfig::default()
-            };
-            let legend_layout = calculate_legend_layout(&color_categories, &config.colors, width, &legend_config);
-            let legend_y = height - legend_layout.total_height - 8.0;
-            let legend_elements = generate_legend_elements(
-                &color_categories,
-                &config.colors,
-                width,
-                legend_y,
-                LegendMark::Circle,
-                &config.theme,
-            );
+        // Legend
+        if let Some(ref legend) = legend {
+            let origin = legend.origin(width, height, LEGEND_GAP);
+            let legend_elements = legend.elements(origin, |_| LegendMark::Circle, &config.theme);
             children.push(ChartElement::Group {
                 class: "legend".to_string(),
                 transform: None,

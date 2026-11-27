@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`chartml-core`**: named styles and config defaults now apply to charts
+  (CHA-48). `register_component` stores a `type: style` component by name and
+  a `type: config` as the default; until now both were accepted and
+  discarded. Each chart renders with its config's style, then its own
+  `style:` (a name or an inline object), then `visualize.style`, deep-merged
+  field by field (spec.md "Resolution Order"). Style and config components in
+  the same document as a chart apply to it too. A chart or config naming a
+  style that is not registered fails with `ChartError::InvalidSpec` naming the
+  style; it never falls back to the defaults. A re-registered style or config
+  replaces the earlier one.
+- **`chartml-core`**: style fields that were parsed but never drawn now take
+  effect, inline or from a named style: `fonts.title` / `fonts.axis` /
+  `fonts.dataLabel` (family, size, weight, colour), `showDots: false`,
+  `strokeWidth`, `grid.opacity`, and `legend.position` (`top`, `right`,
+  `bottom`, `left`, `none`) with `legend.orientation` (`horizontal`,
+  `vertical`) on bar, line, area, combo, scatter, bubble, pie and doughnut
+  charts. Font weights must be a whole number from 1 to 1000 or `normal`,
+  `bold`, `bolder` or `lighter` (a number written as a string, such as
+  `"600"`, stays accepted); any other weight, a font size of 0 or less, a
+  negative `strokeWidth` or an unknown legend value fails with
+  `ChartError::InvalidSpec` naming the field. Named and config styles pass the
+  same colour check as inline styles.
+- **`chartml-core`**: `ChartML::resolve_chart_style`,
+  `ChartML::resolve_chart_from_yaml` and `ChartML::chart_theme`, for hosts that
+  lay out around a chart (its height, its title font) before its data
+  arrives.
+- **`chartml-core`**: new `Theme` fields `title_color`, `axis_label_color`,
+  `data_label_font_family`, `data_label_font_size`, `data_label_font_weight`
+  and `data_label_color`, with `Theme::axis_text_color()` and
+  `Theme::data_label_text_color()`; `TextStyle::data_label`. Defaults leave
+  output unchanged.
+- **`chartml-core`**: legend placement in `layout::legend`
+  (`LegendPlacement`, `LegendPosition`, `LegendOrientation`, `LegendBlock`,
+  `LegendReserve`, `LEGEND_GAP`, `SIDE_LEGEND_MAX_WIDTH_FRACTION`,
+  `calculate_vertical_legend_layout`, `legend_item_elements`) and
+  `layout::GridConfig`, shared by the chart crates. `ChartStyleSpec`,
+  `GridSpec`, `FontsSpec`, `FontSpec` and `LegendSpec` implement `Default`;
+  `LegendConfig` implements `Debug` and `Clone`.
+- **`chartml-chart-cartesian`**: area charts read `style.fillOpacity` (0 to
+  1, default 0.6), as spec.md documented; they always drew 0.6. A value
+  outside 0 to 1 fails with `ChartError::InvalidSpec`.
+- **`chartml-chart-scatter`**: scatter and bubble charts read `style.grid`
+  (visibility, colour, opacity, dash pattern), which they ignored.
+- **`chartml-leptos`**: the title heading uses the chart's resolved title
+  font and colour, and the loading placeholder reserves the resolved style's
+  height, including a height from a named or config style.
+- **Schema**: `fonts.axis.weight` and `fonts.dataLabel.color`, which the
+  engine applies, are documented.
+
+### Changed
+
+- **`chartml-core`** (breaking for code that builds these with a struct
+  literal or matches them exhaustively): `ChartElement::Line` has a new
+  `opacity: Option<f64>` field (serialized only when set), `TextRole` has a
+  new `DataLabel` variant, and `MarginConfig` has new `legend_top_height`,
+  `legend_left_width` and `legend_right_width` fields (`Default` still
+  available).
+- **`chartml-chart-cartesian`**: a combo chart reserves legend room only when
+  it draws a legend (two or more entries), computed from the same entries it
+  draws.
+
 ### Security
 
 - **`chartml-core`**: every colour in a chart spec (`style.colors`, field

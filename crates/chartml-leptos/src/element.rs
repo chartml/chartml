@@ -158,7 +158,7 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             }
         }
 
-        ChartElement::Line { x1, y1, x2, y2, stroke, stroke_width, stroke_dasharray, class } => {
+        ChartElement::Line { x1, y1, x2, y2, stroke, stroke_width, stroke_dasharray, opacity, class } => {
             let x1 = x1.to_string();
             let y1 = y1.to_string();
             let x2 = x2.to_string();
@@ -166,12 +166,13 @@ pub fn render_element(element: &ChartElement) -> AnyView {
             let stroke = stroke.clone();
             let sw = stroke_width.map(|w| w.to_string()).unwrap_or_default();
             let sda = stroke_dasharray.clone().unwrap_or_default();
+            let op = opacity.map(|o| o.to_string());
             let class = class.clone();
 
             view! {
                 <line
                     x1=x1 y1=y1 x2=x2 y2=y2
-                    stroke=stroke stroke-width=sw stroke-dasharray=sda class=class
+                    stroke=stroke stroke-width=sw stroke-dasharray=sda opacity=op class=class
                 />
             }.into_any()
         }

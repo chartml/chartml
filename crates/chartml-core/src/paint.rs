@@ -143,7 +143,7 @@ fn check_font(path: &str, f: &Option<FontSpec>) -> Result<(), ChartError> {
     }
 }
 
-fn check_style(path: &str, s: &ChartStyleSpec) -> Result<(), ChartError> {
+pub(crate) fn validate_style(path: &str, s: &ChartStyleSpec) -> Result<(), ChartError> {
     for (i, c) in s.colors.iter().flatten().enumerate() {
         check(&format!("{path}.colors[{i}]"), c)?;
     }
@@ -171,7 +171,7 @@ fn check_visualize(v: &VisualizeSpec) -> Result<(), ChartError> {
         check_annotation(&format!("visualize.annotations[{i}]"), a)?;
     }
     if let Some(style) = &v.style {
-        check_style("visualize.style", style)?;
+        validate_style("visualize.style", style)?;
     }
     Ok(())
 }
@@ -181,7 +181,7 @@ fn check_visualize(v: &VisualizeSpec) -> Result<(), ChartError> {
 pub fn validate_chart_spec(spec: &ChartSpec) -> Result<(), ChartError> {
     check_visualize(&spec.visualize)?;
     if let Some(StyleRefOrInline::Inline(style)) = &spec.style {
-        check_style("style", style)?;
+        validate_style("style", style)?;
     }
     Ok(())
 }

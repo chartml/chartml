@@ -14,7 +14,7 @@ pub struct StyleSpec {
     pub legend: Option<LegendSpec>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GridSpec {
     pub x: Option<bool>,
@@ -24,7 +24,7 @@ pub struct GridSpec {
     pub dash_array: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontsSpec {
     pub title: Option<FontSpec>,
@@ -32,7 +32,7 @@ pub struct FontsSpec {
     pub data_label: Option<FontSpec>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontSpec {
     pub family: Option<String>,
@@ -52,7 +52,7 @@ pub enum FontWeight {
     Text(String),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LegendSpec {
     pub position: Option<String>,

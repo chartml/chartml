@@ -124,7 +124,7 @@ fn examples_md_style_block_parses() {
     let mut current: Option<String> = None;
     for line in md.lines() {
         match (&mut current, line.trim_end()) {
-            (None, "```yaml") => current = Some(String::new()),
+            (None, "```yaml" | "```chartml") => current = Some(String::new()),
             (Some(buf), "```") => {
                 blocks.push(std::mem::take(buf));
                 current = None;
@@ -171,7 +171,8 @@ fn schema_and_parser_agree_on_weight() {
     }
     let mut weights = Vec::new();
     collect(&schema, &mut weights);
-    assert!(weights.len() == 4, "expected the schema's font weight properties, found {}", weights.len());
+    // title, axis and dataLabel, in both the Style component and inline styles.
+    assert!(weights.len() == 6, "expected the schema's font weight properties, found {}", weights.len());
     for w in &weights {
         assert_eq!(w["type"], "number", "schema weight must be a number: {w}");
     }

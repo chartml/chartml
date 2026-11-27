@@ -280,7 +280,7 @@ pub struct AnnotationSpec {
 
 // --- ChartStyleSpec ---
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartStyleSpec {
     pub height: Option<f64>,
