@@ -89,6 +89,7 @@ rows: [...]                 # Required for provider: inline
 url: "https://..."          # Required for provider: http
 cache:                      # Optional - cache configuration
   ttl: 6h                   # Time-to-live: <number><unit> where unit is s/m/h/d
+  autoRefresh: true         # Optional - fetch again when the TTL ends
 ```
 
 **Cache TTL Format:**
@@ -128,6 +129,7 @@ Dashboard parameter definitions that create interactive controls.
 ```yaml
 type: params
 version: 1
+name: dashboard_filters       # Optional - names the block, referenced as $dashboard_filters.param_id
 params:
   - id: param_id              # Required - unique parameter identifier
     type: multiselect | select | daterange | number | text
@@ -279,12 +281,19 @@ params:                       # Optional - chart-level parameters
 
 data: source_name             # Reference named Source (string)
 # OR
-data:                         # Inline Source definition (object)
-  provider: inline | http     # Built-in providers (or custom plugin)
-  rows: [...]                 # For provider: inline
+data:                         # One data descriptor (object); every key is optional
+  provider: inline | http     # Built-in providers (or custom plugin); omit to infer from the keys
+  rows: [...]                 # Inline rows (provider: inline)
   url: "https://..."          # For provider: http
+  datasource: slug            # A datasource the host resolves
+  query: "SELECT ..."         # The query to run against the datasource
   cache:                      # Optional
     ttl: 6h
+    autoRefresh: true
+# OR
+data:                         # Named sources: names you choose, each a descriptor
+  visitors: { datasource: web, query: "SELECT ..." }
+  revenue:  { datasource: billing, query: "SELECT ..." }
 
 transform:                    # Optional - data transformation pipeline
   aggregate:                  # Declarative aggregation stage
@@ -295,7 +304,7 @@ transform:                    # Optional - data transformation pipeline
     limit: 100
 
 visualize:                    # Required - chart rendering
-  type: bar | line | area | scatter | pie | doughnut | table | metric
+  type: bar | line | area | scatter | bubble | pie | doughnut | table | metric
   columns: field_name
   rows: field_name
   # ... chart-specific options
@@ -303,13 +312,15 @@ visualize:                    # Required - chart rendering
 layout:                       # Optional - grid layout
   colSpan: 12                 # Grid columns (1-12)
 
-style:                        # Optional - visual styling
+style:                        # Optional - visual styling: an inline object ...
   height: 400
+# OR
+style: corporate_theme        # ... or the name of a Style component
 ```
 
 ### Data Layer
 
-Specifies the data source. The `data` attribute is always of type **Source** and can be:
+Specifies the data source. The `data` attribute can be a Source reference, one data descriptor, or a map of named sources:
 
 **Option 1: Reference Source (string)**
 ```yaml
@@ -334,6 +345,30 @@ data:
   url: "https://api.example.com/sales"
   cache:
     ttl: 6h
+```
+
+**Option 4: Datasource and query (object)**
+
+`provider` is optional. A descriptor with a `datasource` and a `query` is resolved by the host app's datasource provider, and one with only `rows` is inline data.
+```yaml
+data:
+  datasource: production-postgres
+  query: SELECT month, revenue FROM monthly_sales
+```
+
+**Option 5: Named sources (map)**
+
+A map from names you choose to data descriptors. Each entry takes the keys of a data descriptor (`provider`, `rows`, `url`, `endpoint`, `datasource`, `query`, `cache`) and no others. A transform joins the sources.
+```yaml
+data:
+  visitors:
+    datasource: plausible-analytics
+    query: SELECT date, COUNT(*) AS visitors FROM sessions GROUP BY 1
+    cache:
+      ttl: 6h
+  revenue:
+    datasource: billing-postgres
+    query: SELECT date, sum(amount) AS revenue FROM charges GROUP BY 1
 ```
 
 #### HTTP response decoding
@@ -486,7 +521,7 @@ rows: region         # Wrong - region is a category, not a value
 **Basic Structure:**
 ```yaml
 visualize:
-  type: bar | line | area | scatter | pie | doughnut | table | metric
+  type: bar | line | area | scatter | bubble | pie | doughnut | table | metric
   mode: stacked | grouped | normalized  # Optional, for bar/area
   orientation: vertical | horizontal   # Optional, for bar charts
 
@@ -506,6 +541,7 @@ visualize:
       format: "$,.0f"
       min: 0
       max: 100
+      nice: true        # Round the ends to nice values
     right:              # Secondary measure axis (dual-axis charts)
       label: "Label"
       format: ",.0f"
@@ -556,6 +592,22 @@ visualize:
       format: "$,.0f"
   style:
     height: 400
+```
+
+**Range marks** shade the band between two fields, such as a forecast confidence band. A range mark has no `field`; it names an `upper` and a `lower` field:
+```yaml
+visualize:
+  type: line
+  columns: date
+  rows:
+    - field: visitors
+    - field: forecast
+      lineStyle: dashed       # solid (default) | dashed | dotted
+    - mark: range
+      upper: upper_bound
+      lower: lower_bound
+      color: "#4285f4"
+      opacity: 0.15           # Optional (default 0.15)
 ```
 
 3. **Pie/Doughnut Chart**
@@ -913,6 +965,14 @@ fonts:
 - `showDots` - Show dots on line charts (boolean)
 - `strokeWidth` - Line thickness (number)
 - `legend` - Legend configuration (position, orientation)
+
+**Chart-level properties** (an inline `style` on a chart or in `visualize`, or in a Config; not in a Style component):
+- `width` - Chart width in pixels
+- `curveType` - Line curve: `linear` or `step`; anything else draws the default smooth curve
+- `fillOpacity` - Fill opacity, 0 to 1
+- `pageSize` - Table-only rows per page (see Table)
+
+A chart's `style` is the name of a Style component or an inline object with these properties. A Config's `style` takes the same two forms.
 
 **Typography (Optional):**
 - `fonts.title` - Title font configuration (family, size, weight, color)

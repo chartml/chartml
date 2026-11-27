@@ -26,16 +26,38 @@ version: 1
 title: "Chart Title"       # Optional - shown above chart
 
 data:
-  - category: "A"
-    value: 100
-  - category: "B"
-    value: 200
+  provider: inline
+  rows:
+    - category: "A"
+      value: 100
+    - category: "B"
+      value: 200
 
 visualize:
-  type: bar | line | area | scatter | pie | doughnut | table | metric
+  type: bar | line | area | scatter | bubble | pie | doughnut | table | metric
   columns: field_name      # X-axis / categories
   rows: field_name         # Y-axis / values
 ```
+
+### Data shapes
+
+```yaml
+data: sales                     # The name of a registered Source
+
+data:                           # One descriptor; every key is optional
+  provider: inline | http       # Omit to infer from the keys
+  rows: [...]                   # Inline rows
+  url: "https://..."            # provider: http
+  datasource: slug              # A datasource the host resolves ...
+  query: "SELECT ..."           # ... and the query to run on it
+  cache: { ttl: 6h }
+
+data:                           # Named sources: your names, each a descriptor
+  visitors: { datasource: web, query: "SELECT ..." }
+  revenue:  { datasource: billing, query: "SELECT ..." }
+```
+
+A chart's `style` is the name of a Style component (`style: brand`) or an inline object (`style: { height: 320 }`). Line charts can shade a band with a range row that has no `field`: `- { mark: range, upper: upper_bound, lower: lower_bound }`.
 
 ---
 

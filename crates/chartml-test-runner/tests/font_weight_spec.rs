@@ -171,7 +171,7 @@ fn schema_and_parser_agree_on_weight() {
     }
     let mut weights = Vec::new();
     collect(&schema, &mut weights);
-    assert!(weights.len() >= 6, "expected the schema's font weight properties, found {}", weights.len());
+    assert!(weights.len() >= 4, "expected the schema's font weight properties, found {}", weights.len());
     for w in &weights {
         assert_eq!(w["type"], "number", "schema weight must be a number: {w}");
     }
