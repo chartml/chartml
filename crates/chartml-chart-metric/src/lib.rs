@@ -125,10 +125,21 @@ impl ChartRenderer for MetricRenderer {
             }
         };
 
-        // Get label (from viz.label, or config.title, or the field name)
-        let label = viz.label.clone()
-            .or_else(|| config.title.clone())
-            .unwrap_or_else(|| value_field.clone());
+        // The in-card label: `visualize.label`; else, with a title, the title
+        // only when the host shows the card without a heading of its own (so
+        // the title appears exactly once, never twice); else, with no title
+        // at all, the value field's name so that a card always has a label.
+        // A host heading is drawn only for a non-blank title, so a blank
+        // title counts as none. A card whose heading carries the title keeps
+        // its label row, empty, so that its value lines up with the value of
+        // a labelled card beside it (CHA-11).
+        let title = config.title.as_deref().map(str::trim).filter(|t| !t.is_empty());
+        let label = match (&viz.label, title) {
+            (Some(label), _) => label.clone(),
+            (None, Some(_)) if config.title_heading => String::new(),
+            (None, Some(title)) => title.to_string(),
+            (None, None) => value_field.clone(),
+        };
 
         // Build the metric card using Div/Span elements
         let mut card_children: Vec<ChartElement> = Vec::new();
@@ -295,6 +306,7 @@ mod tests {
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+                title_heading: false,
         }
     }
 
@@ -331,6 +343,7 @@ mod tests {
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         };
 
         let element = MetricRenderer::new()
@@ -347,9 +360,9 @@ mod tests {
         }
     }
 
-    /// Render a metric card with the given title/label and return the label
-    /// span's content (the card's first child).
-    fn rendered_card(title: Option<&str>, label: Option<&str>) -> ChartElement {
+    /// Render a metric card. `title_heading` says whether the host draws the
+    /// title as a heading above the card (the Leptos component does).
+    fn rendered_card(title: Option<&str>, label: Option<&str>, title_heading: bool) -> ChartElement {
         let label_line = label.map(|l| format!("label: \"{l}\"\n")).unwrap_or_default();
         let viz: chartml_core::spec::VisualizeSpec =
             serde_yaml::from_str(&format!("type: metric\nvalue: total_revenue\n{label_line}"))
@@ -362,6 +375,7 @@ mod tests {
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading,
         };
         let rows: Vec<Row> = vec![[("total_revenue".to_string(), json!(1234567))].into_iter().collect()];
         let data = DataTable::from_rows(&rows).expect("DataTable::from_rows should succeed");
@@ -369,8 +383,8 @@ mod tests {
     }
 
     /// The label span's content (the card's first child).
-    fn rendered_label(title: Option<&str>, label: Option<&str>) -> String {
-        let children = match rendered_card(title, label) {
+    fn rendered_label(title: Option<&str>, label: Option<&str>, title_heading: bool) -> String {
+        let children = match rendered_card(title, label, title_heading) {
             ChartElement::Div { children, .. } => children,
             other => panic!("root must be Div, got {other:?}"),
         };
@@ -383,25 +397,65 @@ mod tests {
         }
     }
 
+    fn count_text(card: &ChartElement, text: &str) -> usize {
+        count_elements(card, &|e| matches!(e, ChartElement::Span { content, .. } if content == text))
+    }
+
     #[test]
-    fn metric_label_falls_back_to_the_field_name() {
-        // CHA-41: `docs/docs/spec.md` states that with neither `visualize.label`
-        // nor a chart title the card shows the value field's name as its label.
-        assert_eq!(rendered_label(None, None), "total_revenue");
-        // Precedence (docs/docs/spec.md, schema `label`): label, then title,
-        // then field name. A title-only card uses the title as its in-card
-        // label; the title is drawn above the card by the browser components,
-        // not by this renderer, so the card itself holds it only once.
-        assert_eq!(rendered_label(Some("Q3"), None), "Q3");
-        assert_eq!(rendered_label(Some("Q3"), Some("Revenue")), "Revenue");
-        assert_eq!(rendered_label(None, Some("Revenue")), "Revenue");
-        // The renderer emits no chart-title element: the title reaches the
-        // card only as the in-card label, once, and never beside a `label`.
-        let titled = rendered_card(Some("Q3"), None);
-        assert_eq!(count_elements(&titled, &|e| matches!(e, ChartElement::Text { class, .. } if class == "chart-title")), 0);
-        assert_eq!(count_elements(&titled, &|e| matches!(e, ChartElement::Span { content, .. } if content == "Q3")), 1);
-        let both = rendered_card(Some("Q3"), Some("Revenue"));
-        assert_eq!(count_elements(&both, &|e| matches!(e, ChartElement::Span { content, .. } if content == "Q3")), 0);
+    fn metric_label_falls_back_to_the_field_name_only_with_no_title() {
+        // CHA-41: with neither `visualize.label` nor a chart title the card
+        // shows the value field's name, so a card always has a label.
+        for heading in [false, true] {
+            assert_eq!(rendered_label(None, None, heading), "total_revenue");
+            // A label always wins, and the title never appears beside it.
+            assert_eq!(rendered_label(Some("Q3"), Some("Revenue"), heading), "Revenue");
+            assert_eq!(rendered_label(None, Some("Revenue"), heading), "Revenue");
+            assert_eq!(count_text(&rendered_card(Some("Q3"), Some("Revenue"), heading), "Q3"), 0);
+        }
+    }
+
+    #[test]
+    fn title_only_metric_shows_its_title_once_whether_or_not_the_host_draws_a_heading() {
+        // CHA-49: the renderer emits no chart-title element. A host that draws
+        // the heading (title_heading) shows the title there, so the card has
+        // an empty label and no field name; a host that shows the SVG alone
+        // (React, markdown, PNG, the test runner) gets the title in the card.
+        let with_heading = rendered_card(Some("Q3"), None, true);
+        assert_eq!(rendered_label(Some("Q3"), None, true), "");
+        assert_eq!(count_text(&with_heading, "Q3"), 0);
+        assert_eq!(count_text(&with_heading, "total_revenue"), 0);
+
+        let alone = rendered_card(Some("Q3"), None, false);
+        assert_eq!(rendered_label(Some("Q3"), None, false), "Q3");
+        assert_eq!(count_text(&alone, "Q3"), 1);
+        assert_eq!(count_elements(&alone, &|e| matches!(e, ChartElement::Text { class, .. } if class == "chart-title")), 0);
+
+        // A blank title is no title: the host draws no heading for it.
+        assert_eq!(rendered_label(Some("  "), None, true), "total_revenue");
+        assert_eq!(rendered_label(Some("  "), None, false), "total_revenue");
+    }
+
+    #[test]
+    fn title_only_card_keeps_the_label_row_so_values_align_with_a_labelled_card() {
+        // CHA-49 / CHA-11: a title-only card (heading above) beside a labelled
+        // card must keep the same grid and the same label span, only empty, so
+        // the two value bands stay on one line.
+        let strip = |card: ChartElement| match card {
+            ChartElement::Div { style, children, .. } => {
+                let kids: Vec<(String, HashMap<String, String>)> = children
+                    .into_iter()
+                    .map(|c| match c {
+                        ChartElement::Span { class, style, .. } => (class, style),
+                        other => panic!("card child must be Span, got {other:?}"),
+                    })
+                    .collect();
+                (style, kids)
+            }
+            other => panic!("root must be Div, got {other:?}"),
+        };
+        let labelled = strip(rendered_card(None, Some("Revenue"), true));
+        let title_only = strip(rendered_card(Some("Q3"), None, true));
+        assert_eq!(labelled, title_only);
     }
 
     #[test]
@@ -469,6 +523,7 @@ mod tests {
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         };
         // Error rate going down (0.023 < 0.031) should be green with invertTrend
         let rows: Vec<Row> = vec![
@@ -516,6 +571,7 @@ mod tests {
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         };
 
         let renderer = MetricRenderer::new();
@@ -564,6 +620,7 @@ mod tests {
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         };
 
         let renderer = MetricRenderer::new();
@@ -680,6 +737,7 @@ mod tests {
             colors: vec![],
             theme: chartml_core::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         };
 
         let rows: Vec<Row> = vec![[

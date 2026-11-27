@@ -632,9 +632,9 @@ visualize:
 ```
 
 **Metric Labeling:**
-- `chart.title` (optional) → Title shown **above** the card by the browser components, as for all chart types. It is not part of the rendered SVG. When `visualize.label` is not set, the title is also used as the in-card label
-- `visualize.label` (optional) → Label shown **inside** card (metric-specific); takes precedence over the title for the in-card label
-- If neither is specified, the in-card label is the name of the `value` field (e.g. `total_revenue`), so a card always shows a label
+- `chart.title` (optional) → Title shown **above** the card by the Leptos component, as for all chart types; it is not part of the rendered SVG. When `visualize.label` is not set, a title-only card shows the title once, as that heading, with no label inside the card (the label row stays, empty, so cards side by side keep their values lined up). Where the SVG is shown on its own, with no heading (`renderToSvg` in the npm components and markdown plugins, `render_to_png`), the title is shown inside the card instead, still once
+- `visualize.label` (optional) → Label shown **inside** card (metric-specific); the title never appears beside it
+- If neither a title nor a label is specified → the in-card label is the name of the `value` field (e.g. `total_revenue`), so a card always shows a label
 
 **Metric Value Formatting:**
 

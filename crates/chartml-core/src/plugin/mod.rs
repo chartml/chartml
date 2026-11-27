@@ -51,6 +51,7 @@ mod tests {
             colors: vec!["#ff0000".to_string(), "#00ff00".to_string()],
             theme: crate::theme::Theme::default(),
             table_page: None,
+            title_heading: false,
         };
         assert_eq!(config.title, Some("Test Chart".to_string()));
         assert_eq!(config.width, 800.0);

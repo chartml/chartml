@@ -538,7 +538,7 @@ impl ChartML {
         let data = self.run_sync_transform_pipeline(chart_spec, &chart_sources)?;
 
         let (element, _, _) =
-            self.build_and_render(chart_spec, &data, container_width, container_height, table_page)?;
+            self.build_and_render(chart_spec, &data, container_width, container_height, table_page, false)?;
         Ok(element)
     }
 
@@ -1133,6 +1133,7 @@ impl ChartML {
             opts.width,
             opts.height,
             opts.table_page,
+            opts.title_heading,
         )?;
         Ok(svg::element_to_svg(&element, svg_width, svg_height))
     }
@@ -1174,6 +1175,7 @@ impl ChartML {
             height: container_height,
             params: param_overrides.cloned(),
             table_page: None,
+            title_heading: false,
         };
         let fetched = self.fetch(yaml, &opts).await?;
         let prepared = self.transform(fetched, &opts).await?;
@@ -1183,6 +1185,7 @@ impl ChartML {
             opts.width,
             opts.height,
             opts.table_page,
+            opts.title_heading,
         )?;
         Ok(element)
     }
@@ -1336,7 +1339,7 @@ impl ChartML {
         };
 
         let (element, _, _) =
-            self.build_and_render(chart_spec, &transformed_data, None, None, None)?;
+            self.build_and_render(chart_spec, &transformed_data, None, None, None, false)?;
         Ok(element)
     }
 
@@ -1400,6 +1403,7 @@ impl ChartML {
         container_width: Option<f64>,
         container_height: Option<f64>,
         table_page: Option<usize>,
+        title_heading: bool,
     ) -> Result<(ChartElement, f64, f64), ChartError> {
         paint::validate_chart_spec(chart_spec)?;
 
@@ -1435,6 +1439,7 @@ impl ChartML {
             colors,
             theme: self.theme.clone(),
             table_page,
+            title_heading,
         };
 
         let element = renderer.render(data, &config)?;

@@ -798,6 +798,8 @@ pub fn ChartMLChart(
                     params: params_owned,
                     // The pager is driven by this component, from page 0.
                     table_page: Some(0),
+                    // The component draws the title as an HTML heading above the SVG.
+                    title_heading: true,
                 };
                 let fetch_result = chartml_async.fetch(&yaml_owned, &opts).await;
                 if gen_ref.get() != my_gen { return; }
@@ -873,6 +875,7 @@ pub fn ChartMLChart(
             }
             let opts = RenderOptions {
                 table_page: Some(page),
+                title_heading: true,
                 ..RenderOptions::with_size(Some(width), None)
             };
             match chartml.render_prepared_to_svg(&current.prepared, &opts) {

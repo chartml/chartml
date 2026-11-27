@@ -30,6 +30,13 @@ pub struct ChartConfig {
     /// one is an error, never clamped (CHA-30).
     #[serde(default)]
     pub table_page: Option<usize>,
+    /// The host draws `title` itself, as a heading above the rendered chart.
+    /// `false` means the chart is shown alone. A renderer that has a place for
+    /// the title inside the chart (only `metric` does) shows it there when the
+    /// host does not, and never when the host does, so the title appears once
+    /// (CHA-49).
+    #[serde(default)]
+    pub title_heading: bool,
 }
 
 /// Chart renderer plugin — converts data + config into a ChartElement tree.

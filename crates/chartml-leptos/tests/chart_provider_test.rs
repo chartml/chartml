@@ -31,6 +31,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use chartml_chart_cartesian::CartesianRenderer;
+use chartml_chart_metric::MetricRenderer;
 use chartml_core::data::DataTable;
 use chartml_core::resolver::{DataSourceProvider, FetchError, FetchRequest, FetchResult};
 use chartml_core::ChartML;
@@ -191,6 +192,7 @@ visualize:
 fn build_chartml() -> ChartMLRef {
     let mut c = ChartML::new();
     c.register_renderer("bar", CartesianRenderer::new());
+    c.register_renderer("metric", MetricRenderer::new());
     ChartMLRef::new(c)
 }
 
@@ -660,4 +662,33 @@ fn dispatch_visibility_change() {
     document
         .dispatch_event(&event)
         .expect("dispatch the synthetic visibilitychange event");
+}
+
+/// CHA-49: a metric with a `title` and no `label` shows the title once in the
+/// browser: as the component's heading above the card, with no copy inside the
+/// card and no field-name label either.
+#[wasm_bindgen_test]
+async fn test_title_only_metric_shows_its_title_once() {
+    const TITLE: &str = "Quarterly Signups";
+    let root = fresh_mount_root();
+    let provider_ref: ProviderRef = Arc::new(RecordingProvider::new(sample_table()));
+
+    let _handle = mount_chart_with_provider(
+        &root,
+        build_chartml(),
+        provider_ref,
+        "type: chart\nversion: 1\ntitle: \"Quarterly Signups\"\ndata:\n  provider: inline\n  rows:\n    - { new_signups: 4827 }\nvisualize:\n  type: metric\n  value: new_signups\n",
+    );
+    yield_to_event_loop(250).await;
+
+    let host = rendered_svg_host(&root).expect("metric svg host should be populated");
+    let card_text = host.text_content().unwrap_or_default();
+    assert!(card_text.contains("4827"), "the card shows its value, got: {card_text}");
+    assert!(!card_text.contains(TITLE), "the card must not repeat the title, got: {card_text}");
+    assert!(!card_text.contains("new_signups"), "a titled card has no field-name label, got: {card_text}");
+
+    let headings = root.query_selector_all(".chart-title").expect("query headings");
+    assert_eq!(headings.length(), 1, "exactly one heading");
+    let whole = root.text_content().unwrap_or_default();
+    assert_eq!(whole.matches(TITLE).count(), 1, "the title appears once in the component, got: {whole}");
 }
