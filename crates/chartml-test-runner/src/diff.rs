@@ -389,3 +389,48 @@ fn extract_attr_value(s: &str, attr: &str) -> Option<String> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::compare;
+    use std::fs;
+
+    fn write(dir: &std::path::Path, rel: &str, svg: &str) {
+        let path = dir.join(rel);
+        fs::create_dir_all(path.parent().expect("rel has a parent")).expect("create subdir");
+        fs::write(path, svg).expect("write svg");
+    }
+
+    #[test]
+    fn compare_names_changed_new_and_removed_charts() {
+        let current = tempfile::tempdir().expect("temp dir");
+        let golden = tempfile::tempdir().expect("temp dir");
+        write(current.path(), "bar/same.svg", "<svg><rect x=\"1\"/></svg>");
+        write(golden.path(), "bar/same.svg", "<svg><rect x=\"1\"/></svg>");
+        write(current.path(), "bar/moved.svg", "<svg><rect x=\"2\"/></svg>");
+        write(golden.path(), "bar/moved.svg", "<svg><rect x=\"1\"/></svg>");
+        write(current.path(), "line/added.svg", "<svg/>");
+        write(golden.path(), "pie/gone.svg", "<svg/>");
+
+        let comparison = compare(current.path(), golden.path());
+        assert_eq!(comparison.unchanged, 1);
+        assert_eq!(comparison.total_changes(), 3);
+
+        let report = comparison.report();
+        assert!(report.contains("  bar/moved —"), "{report}");
+        assert!(report.contains("New specs (no golden baseline):\n  line/added\n"), "{report}");
+        assert!(report.contains("Removed specs (in golden but not current):\n  pie/gone\n"), "{report}");
+        assert!(!report.contains("bar/same"), "{report}");
+    }
+
+    #[test]
+    fn identical_directories_report_no_changes() {
+        let current = tempfile::tempdir().expect("temp dir");
+        let golden = tempfile::tempdir().expect("temp dir");
+        write(current.path(), "bar/a.svg", "<svg/>");
+        write(golden.path(), "bar/a.svg", "<svg/>");
+        let comparison = compare(current.path(), golden.path());
+        assert_eq!(comparison.total_changes(), 0);
+        assert!(comparison.report().contains("No regressions detected."));
+    }
+}
